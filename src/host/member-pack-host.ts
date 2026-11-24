@@ -1421,10 +1421,18 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
   async function qualifiedPinPurposes(pack: EnterpriseDomainPack, projectId: string, construction: boolean, revision?: EnterpriseDomainPack['packRevisions'][number]) {
     const subjectGrants = projectGrants(pack.enterpriseId, projectId);
     const legacyPeriods = await resolveLegacyGrantPeriods(pack.enterpriseId, subjectGrants);
+    const eligibleSummaryGrantIds = new Set<string>();
+    for (const g of subjectGrants) {
+      if (g.resourceRef && await summaryGrantEligible(pack.enterpriseId, g)) eligibleSummaryGrantIds.add(g.id);
+    }
     return (revision?.purposeManifests ?? []).flatMap(purpose => {
       if (purpose.status !== 'eligible') return [];
       if (construction) return [purpose];
       const access = evaluatePurposeAccessForSubject(subjectGrants, purpose, legacyPeriods);
+      if (!access) return [];
+      if (access.canSummary.allowed && !access.canSummary.matchedGrantIds.some(id => eligibleSummaryGrantIds.has(id))) {
+        access.canSummary.allowed = false;
+      }
       return access ? [{ purposeId: purpose.purposeId, dependencies: access.visibleDeps }] : [];
     });
   }

@@ -449,7 +449,7 @@ export function createStudioFeature(options: StudioHostOptions) {
         const asset = system.assets.find(a => a.id === ref.id);
         const revNum = Number(ref.version);
         const revision = asset?.revisions.find(r => r.revision === revNum);
-        if (!asset || !revision) throw new StudioError('summary_authority_not_published', 404);
+        if (!asset || !revision || asset.formalRevision === null) throw new StudioError('summary_authority_not_published', 404);
         if (asset.issue?.affectedRevision === revNum) throw new StudioError('summary_authority_restricted', 409);
         if (ref.sha256 && revision.sha256 !== ref.sha256) throw new StudioError('summary_authority_hash_mismatch', 409);
         const { verifiedScopeSummary, sourcePeriodFrom, sourcePeriodTo } = assertSummaryScopeMatchesAsset(revision.body, revision.scope, scope);

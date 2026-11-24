@@ -189,3 +189,8 @@ PM 接管后独立复核发现三组阻断问题，退回原领取方。已在�
 
 1. **停用来源不再列入目录。** 新增 `summaryGrantEligible` 异步核验，调用 `verifySummaryAuthority` 确认来源当前仍有效。`buildPackCatalogSummary` 预计算 `eligibleSummaryGrantIds`，目录只展示资格通过的汇总授权。
 2. **准确历史版本兼容。** `verifySummaryAuthority` 的版本检查从 `asset.formalRevision !== revNum` 改为仅检查 revision 存在（`!asset || !revision`），合法历史版继续可读。`asset.issue?.affectedRevision === revNum` 的原限制保留。
+
+### PM 十四次返工（固定用途资格与发布校验）
+
+1. **停用来源不能固定用途。** `qualifiedPinPurposes` 增加 `eligibleSummaryGrantIds` 预计算，仅 `summaryGrantEligible` 通过的汇总授权可用于固定用途。无资格时 `canSummary.allowed = false`，pin 返回 403。
+2. **未发布候选不能签发授权。** `verifySummaryAuthority` 增加 `asset.formalRevision === null` 检查，未正式发布（formalRevision 为空）的资产拒绝签发汇总授权。合法历史发布版（formalRevision 非空）继续可读。
