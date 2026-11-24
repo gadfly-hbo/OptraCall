@@ -1345,6 +1345,14 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     });
   }
 
+  async function summaryGrantEligible(enterpriseId: string, grant?: ReturnType<typeof projectGrants>[number]): Promise<boolean> {
+    if (!grant?.resourceRef || !options.verifySummaryAuthority) return false;
+    try {
+      await options.verifySummaryAuthority(enterpriseId, { resourceRef: grant.resourceRef, grain: grant.scope.grain });
+      return true;
+    } catch { return false; }
+  }
+
   async function resolveLegacyGrantPeriods(enterpriseId: string, grants: ReturnType<typeof projectGrants>): Promise<Map<string, { sourcePeriodFrom?: string; sourcePeriodTo?: string }>> {
     const resolved = new Map<string, { sourcePeriodFrom?: string; sourcePeriodTo?: string }>();
     if (!options.verifySummaryAuthority) return resolved;
@@ -1509,6 +1517,12 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
         continue;
       }
 
+      const eligibleSummaryGrantIds = new Set<string>();
+      if (options.verifySummaryAuthority) {
+        for (const g of subjectGrants) {
+          if (g.resourceRef && await summaryGrantEligible(enterpriseId, g)) eligibleSummaryGrantIds.add(g.id);
+        }
+      }
       const visiblePurposes = (pinnedManifest?.purposeManifests ?? [])
         .filter(pm => pm.status === 'eligible')
         .map(pm => {
@@ -1535,7 +1549,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
 
           const matchedDetailGrants = subjectGrants.filter(g => canDetail.matchedGrantIds.includes(g.id));
           const allowedDataPaths = [...new Set(matchedDetailGrants.flatMap(g => g.scope.allowedDataPaths ?? []))];
-          const summaryGrant = canSummary.allowed ? subjectGrants.find(g => canSummary.matchedGrantIds.includes(g.id)) : undefined;
+          const summaryGrant = canSummary.allowed && subjectGrants.some(g => canSummary.matchedGrantIds.includes(g.id) && eligibleSummaryGrantIds.has(g.id)) ? subjectGrants.find(g => canSummary.matchedGrantIds.includes(g.id) && eligibleSummaryGrantIds.has(g.id)) : undefined;
 
           return {
             purposeId: pm.purposeId,

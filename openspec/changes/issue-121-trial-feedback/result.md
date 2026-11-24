@@ -184,3 +184,8 @@ PM 接管后独立复核发现三组阻断问题，退回原领取方。已在�
 
 1. **倒序范围按待核拒绝。** 范围表达式检测到 `startMs > endMs` 时直接返回 `undefined`（不回退到单日/单月提取），有限授权不再把倒序首日当完整期间。
 2. **旧授权贯通目录、固定用途和精读。** `qualifiedPinPurposes` 改为 async 并调用 `resolveLegacyGrantPeriods`，与目录和精读共用同一旧授权期间证据。固定用途不再因缺 `legacyPeriods` 而拒绝。`verifySummaryAuthority` 失败时仅有限期间拒绝；核验成功但来源无期间时按无期限兼容放行。
+
+### PM 十三次返工（来源资格与历史版本）
+
+1. **停用来源不再列入目录。** 新增 `summaryGrantEligible` 异步核验，调用 `verifySummaryAuthority` 确认来源当前仍有效。`buildPackCatalogSummary` 预计算 `eligibleSummaryGrantIds`，目录只展示资格通过的汇总授权。
+2. **准确历史版本兼容。** `verifySummaryAuthority` 的版本检查从 `asset.formalRevision !== revNum` 改为仅检查 revision 存在（`!asset || !revision`），合法历史版继续可读。`asset.issue?.affectedRevision === revNum` 的原限制保留。
