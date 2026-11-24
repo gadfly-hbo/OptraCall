@@ -545,7 +545,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           if (lines.join('\n').length + line.length > 8000) { lines.push('目录摘要未列全，请沿 studio_assets catalog 的实际分页继续按需发现。'); break; }
           lines.push(line);
         }
-        const packSummaries = studio.memberPack.buildPackCatalogSummary(enterpriseId, projectId, taskId);
+        const packSummaries = await studio.memberPack.buildPackCatalogSummary(enterpriseId, projectId, taskId);
         for (const packSummary of packSummaries) {
           const line = JSON.stringify({ kind: 'enterprise-domain-pack', ...packSummary });
           if (lines.join('\n').length + line.length <= 8000) lines.push(line);

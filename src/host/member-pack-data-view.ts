@@ -80,7 +80,7 @@ export function isSourcePeriodCovered(sourcePeriodFrom?: string, sourcePeriodTo?
   }
   const sourceStart = dataPeriodBounds(sourcePeriodFrom)?.start;
   const sourceEnd = dataPeriodBounds(sourcePeriodTo)?.end;
-  if (sourceStart === undefined || sourceEnd === undefined) return false;
+  if (sourceStart === undefined || sourceEnd === undefined || sourceStart > sourceEnd) return false;
   const grantStart = grantPeriodFrom ? dataPeriodBounds(grantPeriodFrom)?.start : Number.NEGATIVE_INFINITY;
   const grantEnd = grantPeriodTo ? dataPeriodBounds(grantPeriodTo)?.end : Number.POSITIVE_INFINITY;
   return grantStart !== undefined && grantEnd !== undefined && sourceStart >= grantStart && sourceEnd <= grantEnd;

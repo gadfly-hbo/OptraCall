@@ -143,22 +143,14 @@ export function createStudioFeature(options: StudioHostOptions) {
       }
     } catch { /* non-JSON body */ }
     if (!sourcePeriodFrom && !sourcePeriodTo) {
-      const periodKeywords = /(?:统计期间|数据期间|期间范围|期间|统计范围|数据范围|覆盖期间)/;
-      const nonPeriodKeywords = /(?:生成日期|生成时间|修订日期|修订时间|样例日期|创建日期|创建时间|截止日期|截止时间|发布日期|发布时间|更新日期|更新时间)/;
-      const qualifyingLines = combined.split(/[\n\r]+/).filter(line => periodKeywords.test(line));
+      const periodKeyword = '(?:统计期间|数据期间|期间范围|期间|统计范围|数据范围|覆盖期间)';
       const qualifyingDates: string[] = [];
       const qualifyingMonths: string[] = [];
-      for (const line of qualifyingLines) {
-        const dateMatches = [...line.matchAll(/\b(20\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01]))\b/g)];
-        for (const match of dateMatches) {
-          const before = line.slice(Math.max(0, match.index! - 20), match.index!);
-          if (!nonPeriodKeywords.test(before)) qualifyingDates.push(match[1]!);
-        }
-        const monthMatches = [...line.matchAll(/\b(20\d{2}-(?:0[1-9]|1[0-2]))(?![/-]\d{2})\b/g)];
-        for (const match of monthMatches) {
-          const before = line.slice(Math.max(0, match.index! - 20), match.index!);
-          if (!nonPeriodKeywords.test(before)) qualifyingMonths.push(match[1]!);
-        }
+      for (const line of combined.split(/[\n\r]+/)) {
+        const datePattern = new RegExp(`${periodKeyword}[:：]?\\s*(20\\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\\d|3[01]))`, 'g');
+        for (const match of line.matchAll(datePattern)) qualifyingDates.push(match[1]!);
+        const monthPattern = new RegExp(`${periodKeyword}[:：]?\\s*(20\\d{2}-(?:0[1-9]|1[0-2]))(?![/-]\\d{2})`, 'g');
+        for (const match of line.matchAll(monthPattern)) qualifyingMonths.push(match[1]!);
       }
       const sourceDates = [...new Set(qualifyingDates)].sort();
       const sourceMonths = [...new Set(qualifyingMonths)].sort();
@@ -942,7 +934,7 @@ export function createStudioFeature(options: StudioHostOptions) {
           const systems = store.list().filter(system => availableFor(system, projectId)).map(system => ({ id: system.id, name: system.name, projectId: system.projectId, taskId: system.taskId, executionOwner: studioExecutionOwner(system), topics: system.topics.map(({ id, title }) => ({ id, title })), construction: construction?.id === system.id }));
           const items = enterpriseId ? (await enterpriseCatalog.catalog(enterpriseId, projectId)).items.filter(item => item.eligible && item.ref) : [];
           const inputs = (await sources.inventory(projectId)).filter(item => item.ref.authority === 'data');
-          const memberPacks = enterpriseId ? memberPack.buildPackCatalogSummary(enterpriseId, projectId, taskId) : [];
+          const memberPacks = enterpriseId ? await memberPack.buildPackCatalogSummary(enterpriseId, projectId, taskId) : [];
           const directory = [...systems.map(system => ({ kind: 'system' as const, system })), ...items.map(item => ({ kind: 'source' as const, item })), ...inputs.map(input => ({ kind: 'input' as const, input }))];
           const catalogSha256 = digest(directory);
           if (payload.expectedCatalogSha256 !== undefined && payload.expectedCatalogSha256 !== catalogSha256) throw new StudioError('studio_catalog_changed', 409);
@@ -962,7 +954,7 @@ export function createStudioFeature(options: StudioHostOptions) {
             const found = memberPack.packs.list(enterpriseId).find(p => p.domain === domain) ?? null;
             return reply(action, { enterpriseId, mode: 'construction', pack: found ? { id: found.id, packCode: found.packCode, domain: found.domain, name: found.name, revision: found.revision, panorama: found.panorama ?? null, entries: found.entries, purposes: found.purposes, packRevisions: found.packRevisions.map(r => ({ version: r.version, status: r.status, confirmedAt: r.confirmedAt, dataCutoffAt: r.dataCutoffAt })) } : null });
           }
-          const summary = memberPack.buildPackCatalogSummary(enterpriseId, projectId, taskId).filter((p: any) => p.domain === domain);
+          const summary = (await memberPack.buildPackCatalogSummary(enterpriseId, projectId, taskId)).filter((p: any) => p.domain === domain);
           return reply(action, { enterpriseId, mode: 'analysis', packs: summary });
         }
         const exactSourceSystem = ['read-source', 'reason'].includes(action) && object(payload.ref) && payload.ref.authority === 'studio-source' ? payload.ref.locator : undefined;

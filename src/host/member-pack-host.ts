@@ -1345,9 +1345,23 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     });
   }
 
+  async function resolveLegacyGrantPeriods(enterpriseId: string, grants: ReturnType<typeof projectGrants>): Promise<Map<string, { sourcePeriodFrom?: string; sourcePeriodTo?: string }>> {
+    const resolved = new Map<string, { sourcePeriodFrom?: string; sourcePeriodTo?: string }>();
+    if (!options.verifySummaryAuthority) return resolved;
+    for (const grant of grants) {
+      if (grant.scope.sourcePeriodVerified || !grant.resourceRef || resolved.has(grant.id)) continue;
+      try {
+        const verified = await options.verifySummaryAuthority(enterpriseId, { resourceRef: grant.resourceRef, grain: grant.scope.grain });
+        resolved.set(grant.id, { sourcePeriodFrom: verified.sourcePeriodFrom, sourcePeriodTo: verified.sourcePeriodTo });
+      } catch { resolved.set(grant.id, {}); }
+    }
+    return resolved;
+  }
+
   function evaluatePurposeAccessForSubject(
     subjectGrants: readonly import('../../extensions/business-plugins/studio/enterprise-pack.ts').ResourceAuthorizationGrant[],
     pm: EnterpriseDomainPack['packRevisions'][number]['purposeManifests'][number],
+    legacyPeriods?: Map<string, { sourcePeriodFrom?: string; sourcePeriodTo?: string }>,
   ) {
     if (pm.status !== 'eligible') return null;
     const canDef = evaluateResourceAccess(subjectGrants, {
@@ -1365,7 +1379,11 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     const canSummary = canSummaryRaw.allowed
       ? { ...canSummaryRaw, matchedGrantIds: canSummaryRaw.matchedGrantIds.filter(id => {
           const g = subjectGrants.find(g => g.id === id);
-          return g ? isSourcePeriodCovered(g.scope.sourcePeriodFrom, g.scope.sourcePeriodTo, g.scope.periodFrom, g.scope.periodTo, pm.scope.period, g.scope.sourcePeriodVerified) : false;
+          if (!g) return false;
+          const legacy = !g.scope.sourcePeriodVerified ? legacyPeriods?.get(g.id) : undefined;
+          const from = g.scope.sourcePeriodVerified ? g.scope.sourcePeriodFrom : legacy?.sourcePeriodFrom;
+          const to = g.scope.sourcePeriodVerified ? g.scope.sourcePeriodTo : legacy?.sourcePeriodTo;
+          return isSourcePeriodCovered(from, to, g.scope.periodFrom, g.scope.periodTo, undefined, true);
         }) }
       : canSummaryRaw;
     if (canSummary.matchedGrantIds.length === 0) canSummary.allowed = false;
@@ -1408,9 +1426,10 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
     return false;
   }
 
-  function buildPackCatalogSummary(enterpriseId: string, projectId?: string, taskId?: string) {
+  async function buildPackCatalogSummary(enterpriseId: string, projectId?: string, taskId?: string) {
     const list = packs.list(enterpriseId);
     const subjectGrants = projectId ? projectGrants(enterpriseId, projectId) : [];
+    const legacyPeriods = projectId ? await resolveLegacyGrantPeriods(enterpriseId, subjectGrants) : new Map<string, { sourcePeriodFrom?: string; sourcePeriodTo?: string }>();
     const summaries: Record<string, unknown>[] = [];
 
     for (const pack of list) {
@@ -1509,7 +1528,7 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               accessLevels: ['read-definition', 'cite-summary', 'read-detail-recalculate'] as ResourceGrantOperation[],
             };
           }
-          const access = evaluatePurposeAccessForSubject(subjectGrants, pm);
+          const access = evaluatePurposeAccessForSubject(subjectGrants, pm, legacyPeriods);
           if (!access) return null;
           const { canDef, canSummary, canDetail, hasPartialOrFullDetail, visibleDeps } = access;
 
@@ -1624,7 +1643,8 @@ export function createMemberPackFeature(options: MemberPackHostOptions) {
               const verified = await options.verifySummaryAuthority(pack.enterpriseId, { resourceRef: grant.resourceRef, grain: grant.scope.grain });
               sourcePeriodFrom = verified.sourcePeriodFrom;
               sourcePeriodTo = verified.sourcePeriodTo;
-            } catch { /* legacy grant cannot resolve source period */ }
+            } catch { continue; }
+            if (!sourcePeriodFrom || !sourcePeriodTo) continue;
           }
           const applicablePurposes = grant.purposeKeys?.length
             ? (grant.purposeKeys.includes('*') ? eligiblePurposes : eligiblePurposes.filter(pm => grant.purposeKeys!.includes(pm.purposeKey)))

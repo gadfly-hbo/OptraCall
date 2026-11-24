@@ -169,3 +169,8 @@ PM 接管后独立复核发现三组阻断问题，退回原领取方。已在�
    - 单日声明：`YYYY-MM-DD` 优先使用（不再被同月的 `YYYY-MM` 覆盖）。
    - 同行附注：不再因含"生成日期"等关键词丢弃整行，改为逐日期检查前 20 字符是否含非期间关键词，只排除附注日期。
    - 月份匹配增加负向前瞻 `(?![/-]\d{2})`，避免 `YYYY-MM` 匹配到 `YYYY-MM-DD` 的前缀。
+
+### PM 十次返工（目录精读统一与附注隔离）
+
+1. **目录与精读统一旧授权证据。** 新增 `resolveLegacyGrantPeriods` 异步辅助，预调用 `verifySummaryAuthority` 获取旧授权来源期间。`buildPackCatalogSummary` 改为 async，`evaluatePurposeAccessForSubject` 增加 `legacyPeriods` 参数。目录和精读共用同一来源期间判定。精读时 `verifySummaryAuthority` 失败或无结果 → `continue`（不再回退用途日期）。
+2. **附注日期不参与替换统计范围。** 文本提取改为只匹配紧邻期间关键词的日期（`期间[:：]?\s*(date)`），同行其他日期（样本核对、生成等）不再被误取。`isSourcePeriodCovered` 增加 `sourceStart > sourceEnd` 校验，倒序范围按待核处理。
