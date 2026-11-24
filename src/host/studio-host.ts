@@ -154,6 +154,10 @@ export function createStudioFeature(options: StudioHostOptions) {
         if (Number.isFinite(startMs) && Number.isFinite(endMs) && startMs <= endMs) {
           sourcePeriodFrom = start;
           sourcePeriodTo = end;
+        } else {
+          sourcePeriodFrom = undefined;
+          sourcePeriodTo = undefined;
+          return { verifiedScopeSummary: `粒度:${trimmedGrain} · 期间:${periodSummary}`, sourcePeriodFrom: undefined, sourcePeriodTo: undefined };
         }
       }
       if (!sourcePeriodFrom && !sourcePeriodTo) {
