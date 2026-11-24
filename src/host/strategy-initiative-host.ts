@@ -265,7 +265,7 @@ export function createStrategyInitiativeHost(options: {
     const n = owner.sessionFile ? await readNativeSessionSnapshot(owner.sessionFile, nativeDirectory(owner), workspaceDirectory(owner)).catch(() => null) : null;
     const snapshot = live.snapshot ?? (owner.sessionFile ? {sessionId: n?.manager.getSessionId() ?? '', sessionFile: owner.sessionFile, messages: [], tools: [], status: 'idle' as const, sdkVersion: '1.4.0', capabilities: {}} : null);
     const messages = n ? presentContextMessages(n.manager.buildSessionContext().messages, n.manager.getBranch(), n.manager.getSessionId()) : [];
-    return {session: owner, busy: live.busy, reports: reports.viewForScope(id, scopeKey), files: files.list(id, scopeKey), snapshot: snapshot ? {...snapshot, messages} : null};
+    return {session: owner, busy: live.busy, live: live.live, reports: reports.viewForScope(id, scopeKey), files: files.list(id, scopeKey), snapshot: snapshot ? {...snapshot, messages} : null};
   }
 
   async function send(id: string, scopeKey: string, input: Record<string, unknown>) {

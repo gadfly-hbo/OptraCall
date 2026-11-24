@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import os from 'node:os';
 import {setTimeout as delay} from 'node:timers/promises';
 import {startTestHost} from './fixtures/host-process.ts';
-import {startToolProvider} from './fixtures/tool-provider.ts';
+import {startToolProvider, providerMessageText} from './fixtures/tool-provider.ts';
 
 const stores = {kind: 'department' as const, id: 'east-retail', name: '华东零售事业部', enterpriseId: 'ent-1'};
 const scopeKey = 'department:ent-1:east-retail';
@@ -81,13 +81,26 @@ test('真实 Host+Pi：事项主会话开题保存草稿、幂等回读与负例
   assert.equal(replay.replayed, true);
   assert.equal(provider.requests.length, count, 'replaying exact request does not call model');
 
-  provider.setResponder(ctx => ctx.recentToolResults.length
-    ? {text: '依据不足，暂不保存。'}
-    : {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-kickoff', operationId: randomUUID(), kickoffFields: {...kickoffFields, propositions: kickoffFields.propositions.slice(0, 2)}, kickoffSources: []}}]});
-  await req(messageRoute, 'POST', {requestId: randomUUID(), text: '再试一次开题。', expectedRevision: detail.session.revision}, 202);
+  let correctionEvidence = '';
+  const invalidOperation = randomUUID();
+  provider.setResponder(ctx => {
+    const step = ctx.recentToolResults.length;
+    if (step === 0) return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-kickoff', operationId: invalidOperation, kickoffFields: {...kickoffFields, propositions: kickoffFields.propositions.slice(0, 2)}, kickoffSources: []}}]};
+    if (step === 1) {
+      correctionEvidence = providerMessageText(ctx.recentToolResults[0]?.content);
+      return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-kickoff', operationId: randomUUID(), kickoffFields}}]};
+    }
+    return {text: '已按字段定位补足命题，并无来源保存。'};
+  });
+  await req(messageRoute, 'POST', {requestId: randomUUID(), text: '再试一次开题；如果校验失败，请按工具回包定位修正。', expectedRevision: detail.session.revision}, 202);
   detail = await settled();
   assert.equal(detail.session.lastRun.status, 'completed');
-  assert.equal(detail.reports.versions.length, 1, 'invalid schema never writes a version');
+  assert.match(correctionEvidence, /strategy_kickoff_schema_invalid/);
+  assert.match(correctionEvidence, /proposition_count/);
+  assert.match(correctionEvidence, /fields\.propositions/);
+  assert.equal(detail.reports.versions.length, 2, 'invalid attempt writes nothing; the corrected save writes one new version');
+  assert.equal(detail.reports.versions.some((version: any) => version.generation.operationId === invalidOperation), false);
+  assert.deepEqual(detail.reports.versions[1].sources, []);
   assert.deepEqual(provider.errors, []);
 });
 

@@ -6,14 +6,14 @@ import { projectDiscussionSnapshot, projectDiscussionStreaming } from './strateg
 import { fileBase64 } from './runtime-client.ts';
 import type { NativeMessage, PublicModelConfiguration } from './project-types.ts';
 import type { GoalScope } from '../strategy-goals-types.ts';
-import type { CandidateVersion } from '../strategy-initiative-types.ts';
+import type { CandidateVersion, KickoffAnchor, VerificationSourceRef } from '../strategy-initiative-types.ts';
 import { initiativeScopeKey } from '../strategy-initiative-types.ts';
 import type { ManagementStage, StrategyStage } from './ManagementTabs.tsx';
 import * as api from './strategy-initiative-client.ts';
-import type { CandidateDetail, InitiativeFile, InitiativeHistory, InitiativePublication, InitiativeRecord, InitiativeSessionDetail, ReportsView } from './strategy-initiative-client.ts';
-import { Badge, CandidateBody, InitiativeFilePanel, KickoffBody, LifecyclePlaceholderDialog, candidateLabel, candidateStatus, kickoffPatchTargets, latestBatch, publicationFor } from './strategy-initiative-view.tsx';
+import type { CandidateDetail, InitiativeFile, InitiativeHistory, InitiativePublication, InitiativeRecord, InitiativeSessionDetail, KickoffReportReadback, KickoffReportVersion, ReportsView } from './strategy-initiative-client.ts';
+import { Badge, CandidateBody, InitiativeFilePanel, KickoffBody, LifecyclePlaceholderDialog, candidateLabel, candidateStatus, kickoffPatchTargets, latestBatch, mainSessionPresentation, publicationFor } from './strategy-initiative-view.tsx';
 import type { PatchTarget, ReportFileEntry } from './strategy-initiative-view.tsx';
-import { StrategyCheckPanel, StrategyReleaseReview, StrategyVersionsPanel, LegacyDiscussionReadback } from './StrategyInitiativeGovernance.tsx';
+import { StrategyCheckPanel, StrategyReleaseReview, StrategyVersionsPanel, LegacyDiscussionReadback, ReportVersionDialog, VersionReceiptDialog, verificationSourceLabels } from './StrategyInitiativeGovernance.tsx';
 import type { CandidateRef, LegacyDiscussionAccess } from './StrategyInitiativeGovernance.tsx';
 import { listStrategyDiscussions } from './strategy-discussion-client.ts';
 import './strategy-initiative.css';
@@ -26,6 +26,11 @@ const journalKey = (id: string, scopeKey: string) => `optracall.strategy-initiat
 const readDraft = (id: string, scopeKey: string): string => { try { return sessionStorage.getItem(draftKey(id, scopeKey)) || ''; } catch { return ''; } };
 const saveDraft = (id: string, scopeKey: string, text: string) => { try { sessionStorage.setItem(draftKey(id, scopeKey), text); } catch { /* input stays in memory */ } };
 const sameRef = (candidate: CandidateVersion, ref: CandidateRef | null) => Boolean(ref && candidate.candidateId === ref.candidateId && candidate.no === ref.no);
+type SourcePreview =
+  | { kind: 'report'; source: VerificationSourceRef; version: KickoffReportReadback; anchor?: KickoffAnchor }
+  | { kind: 'candidate'; source: VerificationSourceRef; candidate: CandidateVersion; anchorReport?: Pick<KickoffReportVersion, 'no' | 'contentSha256'> }
+  | { kind: 'file'; source: VerificationSourceRef; name: string; content: string; actualSha256: string }
+  | { kind: 'unavailable'; source: VerificationSourceRef; reason: string; actualSha256?: string };
 
 export interface StrategyInitiativeWorkbenchProps {
   stage: StrategyStage; onStage: (stage: ManagementStage) => void; active: boolean;
@@ -168,8 +173,10 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
   const [pending, setPending] = useState<{ requestId: string; text: string } | null>(null);
   const pendingRef = useRef<typeof pending>(null), terminalRequestId = useRef<string | null>(null);
   const [busy, setBusy] = useState(false), [connection, setConnection] = useState(0);
+  const [dispatching, setDispatching] = useState(false), [observationDisconnected, setObservationDisconnected] = useState(false);
   const [dialog, setDialog] = useState<'new-candidate' | 'lock-report' | 'lock-candidate' | 'revise-report' | 'revise-candidate' | 'candidate-session' | null>(null);
   const [preview, setPreview] = useState<{ title: string; content: string } | null>(null);
+  const [sourcePreview, setSourcePreview] = useState<SourcePreview | null>(null);
   const [fileBusy, setFileBusy] = useState(false), [fileError, setFileError] = useState('');
   const [legacyId, setLegacyId] = useState('');
   const alive = useRef(true), presentedSnapshot = useRef<InitiativeSessionDetail['snapshot']>(null);
@@ -256,8 +263,10 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
   useEffect(() => {
     if (!active || stage !== 'co-create' || !session) return;
     const controller = new AbortController();
+    setObservationDisconnected(false);
     void api.watchInitiativeEvents(id, scopeKey, event => {
       if (controller.signal.aborted || !alive.current) return;
+      setObservationDisconnected(false);
       const previous = presentedSnapshot.current;
       if (event.type === 'snapshot' && event.snapshot) { presentedSnapshot.current = event.snapshot; setSession(old => old ? { ...old, snapshot: event.snapshot, busy: event.snapshot.status === 'running' } : old); }
       setStreaming(old => projectDiscussionStreaming(old, event.type === 'snapshot' ? { ...event, snapshot: event.snapshot ?? { sessionId: '', messages: [], tools: [], status: 'idle', sdkVersion: '', capabilities: {} } } as any : event, previous ?? undefined));
@@ -268,7 +277,7 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
         if (event.outcome === 'failed') setError(event.error || '本轮讨论未完成，已保存的记录保留。');
         void refresh();
       }
-    }, controller.signal).catch(() => { if (!controller.signal.aborted && alive.current) setNotice('实时连接暂不可用，可刷新讨论记录；未重发消息。'); });
+    }, controller.signal).catch(() => { if (!controller.signal.aborted && alive.current) { setObservationDisconnected(true); setNotice('实时连接暂不可用，可刷新讨论记录；未重发消息。'); } });
     return () => controller.abort();
   }, [active, stage, session?.session.scopeKey, connection]);
 
@@ -277,13 +286,18 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
   const report = scopedVersions.find(version => version.no === reportNo) ?? scopedVersions.at(-1);
   const current = candidates.find(candidate => sameRef(candidate, selectedCandidate)) ?? candidates.at(-1);
   const sessionBusy = Boolean(session?.busy || session?.snapshot?.status === 'running');
+  const mainPresentation = mainSessionPresentation({
+    dispatching, pending, lastRun: session?.session.lastRun,
+    busy: session?.busy ?? false, live: session?.live ?? false,
+    snapshotRunning: session?.snapshot?.status === 'running', disconnected: observationDisconnected,
+  });
   const locked = busy || Boolean(pending) || sessionBusy;
   const modelLabel = configurations.find(item => session ? item.id === session.session.configurationId && item.revision === session.session.configurationRevision : item.id === selectedConfigurationId)?.model ?? '模型待核对';
 
   const sendMain = async (text: string, replacePendingRequestId?: string) => {
     const priorPending = pendingRef.current;
     if (busy || sessionBusy || priorPending?.requestId !== replacePendingRequestId || !text.trim()) return;
-    setBusy(true); setError(''); setNotice('');
+    setBusy(true); setDispatching(true); setError(''); setNotice('');
     let requestId: string | undefined;
     let accepted = false;
     try {
@@ -313,7 +327,7 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
         }
         setError(errorText(fault));
       }
-    } finally { if (alive.current) setBusy(false); }
+    } finally { if (alive.current) { setBusy(false); setDispatching(false); } }
   };
   const recover = async () => {
     if (!pending || busy) return;
@@ -348,16 +362,51 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
       if (alive.current) { setFiles(result.files); setNotice('资料已加入当前事项；上传本身不调用模型。'); }
     } catch (fault) { if (alive.current) setFileError(errorText(fault)); } finally { if (alive.current) setFileBusy(false); }
   };
+  const decodeFilePreview = (name: string, contentBase64: string) => {
+    const bytes = Uint8Array.from(atob(contentBase64), char => char.charCodeAt(0));
+    let text: string;
+    try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { return { title: name, content: '二进制原件暂不支持文本预览；请按元数据引用，需要正文时提供文本版本。' }; }
+    if (bytes.includes(0)) return { title: name, content: '二进制原件暂不支持文本预览；请按元数据引用。' };
+    return { title: name, content: text };
+  };
   const openFile = async (file: InitiativeFile) => {
     setFileError('');
     try {
       const result = await api.readInitiativeFile(id, file.fileId, file.scopeKey ?? scopeKey);
-      const bytes = Uint8Array.from(atob(result.contentBase64), char => char.charCodeAt(0));
-      let text: string;
-      try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { setPreview({ title: file.name, content: '二进制原件暂不支持文本预览；请按元数据引用，需要正文时提供文本版本。' }); return; }
-      if (bytes.includes(0)) { setPreview({ title: file.name, content: '二进制原件暂不支持文本预览；请按元数据引用。' }); return; }
-      setPreview({ title: file.name, content: text });
+      setPreview(decodeFilePreview(file.name, result.contentBase64));
     } catch (fault) { setFileError(errorText(fault)); }
+  };
+  const openSource = async (source: VerificationSourceRef) => {
+    setSourcePreview(null);
+    const unavailable = (reason: string, actualSha256?: string) => setSourcePreview({ kind: 'unavailable', source, reason, ...(actualSha256 ? { actualSha256 } : {}) });
+    try {
+      if (source.kind === 'kickoff') {
+        if (!/^[1-9]\d*$/.test(source.ref)) return unavailable('开题引用不是准确正整数版本号；未替换为当前版本。');
+        const view = await api.readKickoffReports(id, scopeKey);
+        const version = view.versions.find(item => item.no === Number(source.ref));
+        if (!version) return unavailable('所引用开题版本不存在或已不可读；未替换为当前版本。');
+        if (!api.isReadableKickoffReport(version)) return unavailable('所引用开题版本不在当前可读范围；仅保留身份和指纹。', version.contentSha256);
+        if (source.sha256 && source.sha256 !== version.contentSha256) return unavailable('开题版本内容指纹与检验引用不符；未展示可能已变化的正文。', version.contentSha256);
+        setSourcePreview({ kind: 'report', source, version, anchor: view.anchors[scopeKey] });
+      } else if (source.kind === 'candidate') {
+        const match = source.ref.match(/^([a-f0-9-]{36}):([1-9]\d*)$/);
+        if (!match) return unavailable('候选引用不是准确的 candidateId:no；未替换为最新版本。');
+        const result = await api.listCandidates(id, scopeKey);
+        const candidate = result.candidates.find(item => item.candidateId === match[1] && item.no === Number(match[2]) && item.scopeKey === scopeKey);
+        if (!candidate) return unavailable('所引用候选版本不存在或当前范围不可读；未替换为最新版本。');
+        if (source.sha256 && source.sha256 !== candidate.contentSha256) return unavailable('候选版本内容指纹与检验引用不符；未展示可能已变化的正文。', candidate.contentSha256);
+        const anchorReport = reports.versions.find(item => item.no === candidate.anchor.reportNo);
+        setSourcePreview({ kind: 'candidate', source, candidate, anchorReport });
+      } else if (source.kind === 'file') {
+        if (!source.fileId) return unavailable('检验引用缺少准确 fileId，未按名称猜测文件。');
+        const result = await api.readInitiativeFile(id, source.fileId, scopeKey);
+        if (source.sha256 && source.sha256 !== result.file.sha256) return unavailable('文件实际内容指纹与检验引用不符；未展示可能已变化的正文。', result.file.sha256);
+        const preview = decodeFilePreview(result.file.name, result.contentBase64);
+        setSourcePreview({ kind: 'file', source, name: result.file.name, content: preview.content, actualSha256: result.file.sha256 });
+      } else {
+        unavailable('公开来源仅保留原引用，未留存可证明一致的准确快照；不访问当前网页替代历史依据。');
+      }
+    } catch (fault) { unavailable(errorText(fault)); }
   };
 
   const comparable = (() => {
@@ -378,7 +427,12 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
         {sessionBusy ? <button type="button" className="secondary-button" disabled={busy} onClick={() => { void control('stop'); }}>停止本轮讨论</button> : <button type="submit" className="primary-button" disabled={!draft.trim() || locked}>发送讨论</button>}
       </div>
     </form>
-    {pending && <div className="sg-unknown"><p>原请求结果待核，输入与原编号保留；未重发模型。</p><button type="button" className="secondary-button" disabled={busy} onClick={() => { void recover(); }}>核对原请求</button>{(['failed', 'cancelled'].includes(session?.session.lastRun?.status ?? '') || (session?.session.lastRun?.status === 'accepted' && !sessionBusy)) && <button type="button" className="secondary-button" disabled={busy || !(draft || pending.text).trim()} onClick={() => { void sendMain(draft || pending.text, pending.requestId); }}>替换原请求并发送</button>}<details><summary>原请求编号</summary><code>{pending.requestId}</code></details></div>}
+    {mainPresentation.kind !== 'idle' && !(mainPresentation.kind === 'running' && !pending) && <div className={mainPresentation.tone === 'positive' ? 'si-notice si-notice-positive' : mainPresentation.tone === 'warning' || mainPresentation.tone === 'error' ? 'si-notice si-notice-warning' : 'si-notice'} role="status">
+      <p><strong>{mainPresentation.label}</strong> · {mainPresentation.detail}</p>
+      {pending && mainPresentation.canRecover && <button type="button" className="secondary-button" disabled={busy} onClick={() => { void recover(); }}>核对原请求</button>}
+      {pending && mainPresentation.canReplace && <button type="button" className="secondary-button" disabled={busy || !(draft || pending.text).trim()} onClick={() => { void sendMain(draft || pending.text, pending.requestId); }}>替换原请求并发送</button>}
+      {pending && <details><summary>原请求编号</summary><code>{pending.requestId}</code></details>}
+    </div>}
     {!session && !loading && <p className="si-muted">首次发送将为本范围创建主会话；模型沿当前选择。<button type="button" className="text-button" onClick={onSettings}>前往模型设置</button></p>}
   </section>;
 
@@ -430,7 +484,7 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
         </div>
         {phase === 'kickoff' ? <>{kickoff}{conversation('访谈与研究', '围绕战略命题继续追问，或补充依据。', '补充一个事实，或继续追问一个战略命题…')}</> : plans}
       </>}
-      {stage === 'strategy-check' && <StrategyCheckPanel initiativeId={id} candidates={candidates} batches={history?.verifications ?? []} selected={selectedCandidate} onSelect={setSelectedCandidate} onStage={onStage} onRevise={candidate => { setSelectedCandidate({ candidateId: candidate.candidateId, no: candidate.no }); setDialog('revise-candidate'); }} onRefresh={refresh} />}
+      {stage === 'strategy-check' && <StrategyCheckPanel initiativeId={id} candidates={candidates} batches={history?.verifications ?? []} selected={selectedCandidate} onSelect={setSelectedCandidate} onStage={onStage} onRevise={candidate => { setSelectedCandidate({ candidateId: candidate.candidateId, no: candidate.no }); setDialog('revise-candidate'); }} onRefresh={refresh} onOpenSource={source => { void openSource(source); }} />}
       {stage === 'strategy-release' && <StrategyReleaseReview initiativeId={id} scope={scope} scopes={access.scopes} candidates={candidates} batches={history?.verifications ?? []} publications={publications} selected={selectedCandidate} onSelect={setSelectedCandidate} onStage={onStage} onRefresh={refresh} onGoalsChanged={async () => { await access.onGoalsChanged(); }} />}
       {stage === 'strategy-versions' && <StrategyVersionsPanel initiativeId={id} scopeKey={scopeKey} history={history} access={access} legacyId={legacyId} onLegacySelect={setLegacyId} legacyFocus={legacyFocus} onOpenSession={ref => { setSelectedCandidate(ref); setDialog('candidate-session'); }} />}
     </div>
@@ -457,6 +511,16 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
       onSubmit={input => api.reviseCandidate(id, current.candidateId, current.no, input)}
       onDone={async result => { setDialog(null); await refresh(); setSelectedCandidate({ candidateId: result.candidate.candidateId, no: result.candidate.no }); setNotice(`已另存新候选 v${result.candidate.no}；每版使用新的独立会话，重新进入候选态。`); }} onClose={() => setDialog(null)} />}
     {dialog === 'candidate-session' && current && <CandidateSessionDialog initiativeId={id} candidateRef={{ candidateId: current.candidateId, no: current.no }} onClose={() => setDialog(null)} onChanged={refresh} modelLabel={modelLabel} />}
+    {sourcePreview?.kind === 'report' && <ReportVersionDialog version={sourcePreview.version} anchor={sourcePreview.anchor} onClose={() => setSourcePreview(null)} />}
+    {sourcePreview?.kind === 'candidate' && <VersionReceiptDialog candidate={sourcePreview.candidate} anchorReport={sourcePreview.anchorReport} batch={latestBatch(history?.verifications ?? [], sourcePreview.candidate)} publication={publicationFor(publications, sourcePreview.candidate)} onClose={() => setSourcePreview(null)} />}
+    {sourcePreview?.kind === 'file' && <CaseDialog title={`检验依据 · ${sourcePreview.name}`} subtitle={`准确文件 · ${sourcePreview.source.fileId}`} onClose={() => setSourcePreview(null)} className="si-version-dialog">
+      <div className="si-dialog-scroll"><p className="si-muted">引用指纹 <code>{sourcePreview.source.sha256 ?? '未记录'}</code></p><p className="si-muted">实际指纹 <code>{sourcePreview.actualSha256}</code></p><p className="si-file-preview">{sourcePreview.content}</p></div>
+      <div className="case-dialog-actions"><button type="button" className="secondary-button" onClick={() => setSourcePreview(null)}>关闭</button></div>
+    </CaseDialog>}
+    {sourcePreview?.kind === 'unavailable' && <CaseDialog title={`核对依据 · ${verificationSourceLabels[sourcePreview.source.kind]}`} subtitle={sourcePreview.source.ref} onClose={() => setSourcePreview(null)} className="si-version-dialog">
+      <div className="si-dialog-scroll"><p className="si-notice si-notice-warning" role="status">{sourcePreview.reason}</p>{sourcePreview.source.fileId && <p className="si-muted">文件身份 <code>{sourcePreview.source.fileId}</code></p>}<p className="si-muted">引用指纹 <code>{sourcePreview.source.sha256 ?? '未记录'}</code></p>{sourcePreview.actualSha256 && <p className="si-muted">实际指纹 <code>{sourcePreview.actualSha256}</code></p>}</div>
+      <div className="case-dialog-actions"><button type="button" className="secondary-button" onClick={() => setSourcePreview(null)}>关闭</button></div>
+    </CaseDialog>}
     {preview && <CaseDialog title={preview.title} subtitle="资料预览 · 原字节保留" onClose={() => setPreview(null)} className="si-version-dialog"><div className="si-dialog-scroll"><p className="si-file-preview">{preview.content}</p></div><div className="case-dialog-actions"><button type="button" className="secondary-button" onClick={() => setPreview(null)}>关闭</button></div></CaseDialog>}
   </div>;
 }
