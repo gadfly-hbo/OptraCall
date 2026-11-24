@@ -123,6 +123,9 @@ export function StudioMemberPackPanel({
   const [grantOp, setGrantOp] = useState<ResourceGrantOperation>('read-definition');
   const [grantStores, setGrantStores] = useState('');
   const [grantAllowedPaths, setGrantAllowedPaths] = useState('');
+  const [grantPurposeKeys, setGrantPurposeKeys] = useState('*');
+  const [grantPeriodFrom, setGrantPeriodFrom] = useState('');
+  const [grantPeriodTo, setGrantPeriodTo] = useState('');
   const [grantGrain, setGrantGrain] = useState('store-month');
   const [grantSummaryAssetId, setGrantSummaryAssetId] = useState('');
   const [grantSummaryVer, setGrantSummaryVer] = useState('1');
@@ -550,6 +553,8 @@ export function StudioMemberPackPanel({
           : ['read-definition', 'read-detail-recalculate'];
       const stores = grantStores.split(/[、,，\s]+/).map(s => s.trim()).filter(Boolean);
       const allowedDataPaths = grantAllowedPaths.split(/[、,，\s]+/).map(s => s.trim()).filter(Boolean);
+      const purposeKeys = grantPurposeKeys.split(/[、,，]+/).map(s => s.trim()).filter(Boolean);
+      if (!purposeKeys.length) { setError('授权用途不能为空；请填写至少一个 purposeKey 或 * 表示全部用途。'); setBusy(false); return; }
       await createResourceGrant({
         requestId: crypto.randomUUID(),
         enterpriseId,
@@ -562,9 +567,12 @@ export function StudioMemberPackPanel({
         subjectId: grantProjectId,
         resourceKind: grantOp === 'read-definition' ? 'definition' : grantOp === 'cite-summary' ? 'summary' : 'detail',
         operations: ops,
+        purposeKeys,
         scope: {
           ...(stores.length ? { stores } : {}),
           ...(allowedDataPaths.length ? { allowedDataPaths } : {}),
+          ...(grantPeriodFrom.trim() ? { periodFrom: grantPeriodFrom.trim() } : {}),
+          ...(grantPeriodTo.trim() ? { periodTo: grantPeriodTo.trim() } : {}),
           ...(grantOp === 'cite-summary' ? { summaryAssetId: grantSummaryAssetId.trim(), summaryVersion: grantSummaryVer.trim() || '1', grain: grantGrain.trim() || 'store-month' } : {}),
         },
       });
@@ -1269,6 +1277,8 @@ export function StudioMemberPackPanel({
                           <td>
                             {g.scope.stores?.length ? `门店：${g.scope.stores.join('、')}` : '无门店明细范围'}
                             {g.scope.allowedDataPaths?.length ? ` · 路径：${g.scope.allowedDataPaths.join('、')}` : ''}
+                            {g.purposeKeys?.length ? ` · 用途：${g.purposeKeys.join('、')}` : ''}
+                            {g.scope.periodFrom || g.scope.periodTo ? ` · 期间：${g.scope.periodFrom || '不限'} 至 ${g.scope.periodTo || '不限'}` : ''}
                             {g.scope.grain ? ` · 粒度：${g.scope.grain}` : ''}
                             {g.scope.summaryAssetId ? ` · 汇总 ${g.scope.summaryAssetId}@${g.scope.summaryVersion || ''}` : ''}
                           </td>
@@ -1320,6 +1330,9 @@ export function StudioMemberPackPanel({
                       <label className="studio-field"><span>允许读取的 020_clean 路径（顿号或逗号分隔）</span><input value={grantAllowedPaths} onChange={e => setGrantAllowedPaths(e.target.value)} placeholder="如：020_clean/starbridge_orders.csv" /></label>
                     </>
                   )}
+                  <label className="studio-field"><span>授权用途 purposeKeys（逗号分隔，* 表示全部）</span><input required value={grantPurposeKeys} onChange={e => setGrantPurposeKeys(e.target.value)} /></label>
+                  <label className="studio-field"><span>数据期间起（YYYY-MM-DD）</span><input type="date" value={grantPeriodFrom} onChange={e => setGrantPeriodFrom(e.target.value)} /></label>
+                  <label className="studio-field"><span>数据期间止（YYYY-MM-DD）</span><input type="date" value={grantPeriodTo} onChange={e => setGrantPeriodTo(e.target.value)} /></label>
                   <label className="studio-field"><span>授权依据</span><input required value={grantBasis} onChange={e => setGrantBasis(e.target.value)} /></label>
                   <button type="submit" className="secondary-button" disabled={busy || !grantProjectId}>保存资源授权</button>
                 </form>

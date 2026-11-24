@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { DomainReferenceStore } from '../src/host/domain-reference-store.ts';
+import { isPeriodCovered, isSourcePeriodCovered } from '../src/host/member-pack-data-view.ts';
 import { ResourceGrantStore } from '../src/host/resource-grant-store.ts';
 import { EnterprisePackStore } from '../src/host/enterprise-pack-store.ts';
 import {
@@ -468,6 +469,22 @@ test('EnterprisePackStore handles panorama, two-route single-decision entries, c
       evidenceNote: { projectId: projA, taskId: taskA, note: '星桥 4 账号首购凭证已核', sourceRefs: [policyRef] },
     });
     assert.equal(pFirst.created, true);
+
+    const invalidPurposeList = {
+      purposeKey: 'invalid-remaining-gaps-probe', title: '字段类型反例', businessQuestion: '验证 remainingGaps 必须为数组',
+      subjectUnit: 'brand_account' as const, scope: { scopeKey: 'synthetic:invalid-list' }, tier: 'definition-reference' as const,
+      businessStatus: 'active' as const, originalGoal: '工程字段校验', completionCriteria: '错误可定位且改正后继续',
+      remainingGaps: '北岭缺档与南湾首购锚点未知' as unknown as string[], exclusions: [], dependencies: [],
+    };
+    assert.throws(() => store.upsertPurpose(pack1.id, invalidPurposeList), error => {
+      const fault = error as Error & { code?: string; details?: { issues?: { reason: string; path?: string }[] } };
+      assert.equal(fault.code, 'invalid_purpose_remaining_gaps');
+      assert.match(fault.message, /remainingGaps.*数组/);
+      assert.deepEqual(fault.details?.issues, [{ reason: 'expected_string_array', path: 'payload.remainingGaps' }]);
+      return true;
+    });
+    const correctedPurposeList = store.upsertPurpose(pack1.id, { ...invalidPurposeList, remainingGaps: ['北岭缺档与南湾首购锚点未知'] });
+    assert.equal(correctedPurposeList.created, true);
 
     // Same purpose+scope from Project B merges into SAME purpose ID, adds evidence once
     const pSecond = store.upsertPurpose(pack1.id, {
@@ -1997,6 +2014,49 @@ test('Round-7 counterexamples: contradictory targetPurposeId refuses auto-match 
     assert.equal(closed.feedback.revisionLink?.itemVerification?.newCutoffChecked, '2026-11-15');
     assert.equal(closed.feedback.revisionLink?.itemVerification?.postCutoffNewEvents?.length, 1);
     assert.equal(closed.feedback.revisionLink?.itemVerification?.postCutoffNewEvents?.[0]?.itemId, 'C21');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('purposeKeys wildcard * grants access to any purpose; empty purposeKeys means unrestricted (legacy); precise keys do not expand', () => {
+  const root = tempRoot('purpose-wildcard');
+  try {
+    const grants = new ResourceGrantStore(root);
+    const entId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const projW = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const projP = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const projU = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    const base = { enterpriseId: entId, grantor: 'owner', grantBasis: 'test', subjectType: 'project' as const, subjectId: projW, resourceKind: 'definition' as const, operations: ['read-definition' as const], scope: {} };
+    const wildcard = grants.grant({ ...base, purposeKeys: ['*'], operations: ['read-definition', 'cite-summary'], resourceKind: 'summary', scope: { summaryAssetId: 'asset-1', summaryVersion: '1', summaryAuthority: 'studio-source', grain: 'store-month' }, resourceRef: { authority: 'studio-source', id: 'asset-1', version: '1' } });
+    const precise = grants.grant({ ...base, subjectId: projP, purposeKeys: ['specific-purpose'], operations: ['read-definition'] });
+    const unrestricted = grants.grant({ ...base, subjectId: projU, operations: ['read-definition'] });
+    const all = grants.list(entId);
+    const wGrant = all.find(g => g.id === wildcard.id)!;
+    const pGrant = all.find(g => g.id === precise.id)!;
+    const uGrant = all.find(g => g.id === unrestricted.id)!;
+    assert.ok(evaluateResourceAccess([wGrant], { operation: 'read-definition', purposeKey: 'any-purpose-at-all' }).allowed, '* must match any purpose');
+    assert.ok(evaluateResourceAccess([wGrant], { operation: 'cite-summary', purposeKey: 'another-purpose', grain: 'store-month', summaryVersion: '1' }).allowed, '* must match any purpose for summary');
+    assert.ok(evaluateResourceAccess([pGrant], { operation: 'read-definition', purposeKey: 'specific-purpose' }).allowed, 'precise key matches');
+    assert.equal(evaluateResourceAccess([pGrant], { operation: 'read-definition', purposeKey: 'other-purpose' }).allowed, false, 'precise key must not expand');
+    assert.ok(evaluateResourceAccess([uGrant], { operation: 'read-definition', purposeKey: 'anything' }).allowed, 'empty purposeKeys means unrestricted (legacy)');
+    assert.throws(() => grants.grant({ ...base, subjectId: projU, purposeKeys: [] }), /invalid_grant_purpose_keys/, 'explicit empty purposeKeys array must be rejected');
+    assert.throws(() => grants.grant({ ...base, subjectId: projU, purposeKeys: null as unknown as string[] }), /invalid_grant_purpose_keys/, 'explicit null purposeKeys must be rejected');
+    const brandGrant = grants.grant({ ...base, subjectId: projP, purposeKeys: ['brand-a-purpose'], operations: ['read-definition', 'cite-summary'], resourceKind: 'summary', scope: { brand: 'BrandA', summaryAssetId: 'asset-1', summaryVersion: '1', summaryAuthority: 'studio-source', grain: 'store-month' }, resourceRef: { authority: 'studio-source', id: 'asset-1', version: '1' } });
+    const bGrant = grants.get(brandGrant.id);
+    assert.ok(evaluateResourceAccess([bGrant], { operation: 'cite-summary', purposeKey: 'brand-a-purpose', brand: 'BrandA', grain: 'store-month', summaryVersion: '1' }).allowed, 'matching brand passes');
+    assert.equal(evaluateResourceAccess([bGrant], { operation: 'cite-summary', purposeKey: 'brand-a-purpose', brand: 'DifferentBrand', grain: 'store-month', summaryVersion: '1' }).allowed, false, 'brand mismatch must deny');
+    const periodGrant = grants.grant({ ...base, subjectId: projU, purposeKeys: ['*'], operations: ['read-definition', 'cite-summary'], resourceKind: 'summary', scope: { periodFrom: '2026-09-01', periodTo: '2026-09-15', summaryAssetId: 'asset-1', summaryVersion: '1', summaryAuthority: 'studio-source', grain: 'store-month' }, resourceRef: { authority: 'studio-source', id: 'asset-1', version: '1' } });
+    const pGrant2 = grants.get(periodGrant.id);
+    assert.equal(isPeriodCovered('2026-09', pGrant2.scope.periodFrom, pGrant2.scope.periodTo), false, 'half-month grant must not cover full September');
+    assert.equal(isPeriodCovered('2026-09-01', pGrant2.scope.periodFrom, pGrant2.scope.periodTo), true, 'single day within grant passes');
+    assert.equal(isSourcePeriodCovered('2026-08', '2026-09', '2026-08-01', '2026-08-31'), false, 'A grant for August cannot cover an August–September source');
+    assert.equal(isSourcePeriodCovered('2026-08', '2026-09', '2026-08-01', '2026-09-30'), true);
+    assert.equal(isSourcePeriodCovered('2026-09-15', '2026-09-15', '2026-09-15', '2026-09-15'), true);
+    assert.equal(isSourcePeriodCovered('2026-09-15', '2026-09-15', '2026-09-01', '2026-09-30'), true);
+    assert.equal(isSourcePeriodCovered(undefined, undefined, undefined, undefined), true, 'A qualified source with unknown dates remains available with an unrestricted grant');
+    assert.equal(isSourcePeriodCovered(undefined, undefined, '2026-09-01', '2026-09-30'), false, 'Finite grants require dates from the source itself');
+    assert.equal(isSourcePeriodCovered('2026-10', '2026-09', '2026-09-01', '2026-10-31'), false, 'Reversed source periods cannot qualify');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

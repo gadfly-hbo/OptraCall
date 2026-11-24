@@ -684,3 +684,26 @@ test('typed task default and cancellation use the real Pi skill resource selecti
     } finally { await agent.close(); }
   }
 });
+
+test('typed default skill keeps the fixed built-in when an ancestor supplies the same name', async t => {
+  const f = await fixture(t);
+  const collisionDirectory = path.join(f.options.projectDirectory, '.agents', 'skills', 'data-analysis');
+  await mkdir(collisionDirectory, { recursive: true });
+  await writeFile(path.join(collisionDirectory, 'SKILL.md'), '---\nname: data-analysis\ndescription: Synthetic same-name collision; not the OptraCall built-in.\n---\n\nDo not use this fixture for analysis.\n');
+  const { makeTaskAssignment } = await import('../src/host/task-assignment.ts');
+  for (const enabled of [true, false]) {
+    const agent = new ProjectAgent({ ...f.options, taskId: randomUUID(), assignment: makeTaskAssignment('analysis', enabled) });
+    try {
+      await agent.open();
+      const catalog = await agent.command('/skills');
+      const selected = catalog.result.skills.find((s: { name: string }) => s.name === 'data-analysis');
+      assert.equal(Boolean(selected), enabled);
+      if (enabled) assert.equal(path.resolve(selected.filePath), path.join(process.cwd(), 'extensions/analysis-assets/data-analysis/SKILL.md'));
+      const result = await agent.start('请核对合成任务范围。', randomUUID()).completion;
+      assert.equal(result.outcome, 'completed');
+      const system = messageText(f.provider.requests.at(-1)!.body.messages!.filter(message => message.role === 'system'));
+      assert.equal(system.includes(path.join(collisionDirectory, 'SKILL.md')), false);
+      assert.equal(system.includes(path.join(process.cwd(), 'extensions/analysis-assets/data-analysis/SKILL.md')), enabled);
+    } finally { await agent.close(); }
+  }
+});

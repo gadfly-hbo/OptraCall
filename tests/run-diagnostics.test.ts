@@ -20,6 +20,11 @@ test('ER01: diagnostic classification only reports explicit failure facts and ne
   assert.equal(runtimeDiagnostic({ code: 'runtime_process_stopped', cause: 'synthetic-private-detail' }).code, 'runtime_stopped');
   assert.equal(runtimeDiagnostic({ code: 'runtime_start_failed', cause: 'synthetic-private-detail' }).code, 'runtime_start_failed');
   assert.equal(runtimeDiagnostic({ code: 'runtime_start_timeout', cause: 'synthetic-private-detail' }).code, 'runtime_start_timeout');
+  const skillDiagnostic = runtimeDiagnostic({ code: 'sdk_operation_failed', cause: { message: 'task_skill_version_changed', private: 'synthetic-private-detail' } });
+  assert.equal(skillDiagnostic.code, 'task_skill_version_changed');
+  assert.match(skillDiagnostic.message, /明确取消该 Skill/);
+  assert.equal(readRunDiagnostic(skillDiagnostic, 'failed')?.code, 'task_skill_version_changed');
+  assert.ok(!JSON.stringify(skillDiagnostic).includes('synthetic-private-detail'));
   assert.ok(!JSON.stringify(runtimeDiagnostic(new Error('synthetic-private-detail'))).includes('synthetic-private-detail'));
 });
 

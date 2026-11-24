@@ -119,7 +119,9 @@ export class ResourceGrantStore {
     if (!Array.isArray(input.operations) || !input.operations.length || input.operations.some(op => !OPS.includes(op))) fail('invalid_grant_operations');
     const operations = [...new Set(input.operations)];
     const resourceRef = input.resourceRef ? sourceRef(input.resourceRef) : undefined;
+    if (input.purposeKeys !== undefined && !Array.isArray(input.purposeKeys)) fail('invalid_grant_purpose_keys');
     const purposeKeys = input.purposeKeys?.map(k => text(k, 200, false).trim());
+    if (input.purposeKeys !== undefined && Array.isArray(input.purposeKeys) && input.purposeKeys.length === 0) fail('invalid_grant_purpose_keys');
 
     const scope = input.scope ?? {};
     if (operations.includes('cite-summary')) {
@@ -163,6 +165,9 @@ export class ResourceGrantStore {
         ...(scope.summaryAuthority ? { summaryAuthority: text(scope.summaryAuthority, 200, false) } : {}),
         ...(scope.summarySha256 ? { summarySha256: text(scope.summarySha256, 128, false) } : {}),
         ...(scope.verifiedScopeSummary ? { verifiedScopeSummary: text(scope.verifiedScopeSummary, 500, false) } : {}),
+        ...(scope.sourcePeriodFrom ? { sourcePeriodFrom: text(scope.sourcePeriodFrom, 100, false) } : {}),
+        ...(scope.sourcePeriodTo ? { sourcePeriodTo: text(scope.sourcePeriodTo, 100, false) } : {}),
+        ...(scope.sourcePeriodVerified !== undefined ? { sourcePeriodVerified: scope.sourcePeriodVerified } : {}),
         ...(scope.metricRef ? { metricRef: sourceRef(scope.metricRef) } : {}),
         ...(scope.allowedDataPaths?.length ? { allowedDataPaths: [...new Set(scope.allowedDataPaths.map(p => text(p, 1000, false)))] } : {}),
       },

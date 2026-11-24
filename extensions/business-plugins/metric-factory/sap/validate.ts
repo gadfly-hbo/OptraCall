@@ -39,7 +39,7 @@ const text = (value: unknown, path: string): string => { if (typeof value !== 's
 const list = (value: unknown, path: string): unknown[] => { if (!Array.isArray(value) || value.length > 4096) return fail('SAP_STRUCTURE', path); return value; };
 const strings = (value: unknown, path: string): string[] => list(value, path).map((item, index) => text(item, `${path}.${index}`));
 const one = (value: unknown, allowed: readonly string[], path: string) => { if (!allowed.includes(String(value))) fail('SAP_STRUCTURE', path); };
-const keys = (value: Record<string, unknown>, allowed: readonly string[], path: string) => { for (const key of Object.keys(value)) if (!allowed.includes(key)) fail('SAP_UNKNOWN_FIELD', `${path}.${key}`); };
+const keys = (value: Record<string, unknown>, allowed: readonly string[], path: string) => { for (const key of Object.keys(value)) if (!allowed.includes(key)) fail('SAP_UNKNOWN_FIELD', path); };
 
 /** Exactly SAP 0.2 canonical form: recursive UTF-16 key sort, NFC scalars, LF, two-space block YAML. */
 export function canonicalSapYaml(value: unknown): string {
@@ -94,7 +94,9 @@ function checkShape(raw: unknown): SapDocument {
   keys(p, ['id', 'version', 'namespace', 'fingerprint'], 'package');
   for (const key of ['id', 'version', 'namespace']) text(p[key], `package.${key}`);
   if (typeof p.fingerprint !== 'string' || (p.fingerprint !== '' && !sha256Pattern.test(p.fingerprint))) fail('SAP_STRUCTURE', 'package.fingerprint');
-  if (!packageIdPattern.test(p.id as string) || !semverPattern.test(p.version as string) || p.namespace !== `mf.${p.id}`) fail('SAP_STRUCTURE', 'package');
+  if (!packageIdPattern.test(p.id as string)) fail('SAP_STRUCTURE', 'package.id');
+  if (!semverPattern.test(p.version as string)) fail('SAP_STRUCTURE', 'package.version');
+  if (p.namespace !== `mf.${p.id}`) fail('SAP_STRUCTURE', 'package.namespace');
 
   const dimensions = strings(root.dimensions, 'dimensions');
   if (!dimensions.length || new Set(dimensions).size !== dimensions.length || dimensions.some(name => !identifierPattern.test(name))) fail('SAP_STRUCTURE', 'dimensions');
@@ -114,7 +116,7 @@ function checkShape(raw: unknown): SapDocument {
     const grains = strings(m.time_grains, `${path}.time_grains`);
     if (!grains.length || new Set(grains).size !== grains.length || grains.some(grain => !TIME_GRAINS.includes(grain))) fail('SAP_STRUCTURE', `${path}.time_grains`);
     const switches = isObject(m.caliber_switches) ? m.caliber_switches : fail('SAP_STRUCTURE', `${path}.caliber_switches`);
-    for (const [key, entry] of Object.entries(switches)) { text(key, `${path}.caliber_switches`); if (typeof entry !== 'boolean') fail('SAP_STRUCTURE', `${path}.caliber_switches.${key}`); }
+    for (const [key, entry] of Object.entries(switches)) { text(key, `${path}.caliber_switches`); if (typeof entry !== 'boolean') fail('SAP_STRUCTURE', `${path}.caliber_switches`); }
     let typeParams: Record<string, string> | undefined;
     if (m.type_params !== undefined) {
       const params = isObject(m.type_params) ? m.type_params : fail('SAP_STRUCTURE', `${path}.type_params`);

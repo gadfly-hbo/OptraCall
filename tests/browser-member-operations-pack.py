@@ -117,6 +117,10 @@ try:
     proj_consumer = api('/api/projects', 'POST', {'name': '门店分析项目（非原权责）'})['project']
     api('/api/studio/enterprise-associations', 'POST', {'kind': 'project', 'entityId': proj_consumer['id'], 'enterpriseId': eid})
 
+    # Restore the original owner project in the API context before binding the new Studio system.
+    api('/api/studio/operators/session', 'POST', {
+        'action': 'login', 'operatorId': 'ops-lead', 'passcode': 'ops-pass-2026', 'activeProjectId': proj['id'],
+    })
     api('/api/studio/systems', 'POST', {
         'requestId': str(_uuid.uuid4()),
         'enterpriseId': eid,
@@ -146,6 +150,7 @@ try:
                     pass
         page.on('request', on_request)
         page.goto(base, wait_until='networkidle')
+        page.get_by_role('button', name='织屿会员建设', exact=True).click()
 
         # 1. Open Settings -> 领域资产包
         page.get_by_role('button', name='设置').first.click()
@@ -170,6 +175,13 @@ try:
         page.get_by_role('button', name='体系工作台').click()
         page.get_by_label('当前企业').select_option(eid)
         page.get_by_role('heading', name='企业会员运营资产包').wait_for(timeout=10_000)
+
+        # Current Host requires the original authority before initializing a pack.
+        # Establish that existing operator session in the browser's own cookie context.
+        owner_login = page.request.post(base + '/api/studio/operators/session', headers=headers, data={
+            'action': 'login', 'operatorId': 'ops-lead', 'passcode': 'ops-pass-2026', 'activeProjectId': proj['id'],
+        })
+        assert owner_login.status == 200, owner_login.text()
 
         # Initialize Enterprise Member Pack from UI
         page.get_by_role('button', name='初始化本企业会员运营包').click()
@@ -497,6 +509,7 @@ try:
         # Reload page: most recently created project (proj_consumer) is active by default!
         # First verify R2 in real Chromium: consumer project gets read-only Grants view with NO grant creation form!
         page.reload(wait_until='networkidle')
+        page.get_by_role('button', name='门店分析项目（非原权责）', exact=True).click()
         page.get_by_role('button', name='设置').first.click()
         page.get_by_role('button', name='领域资产包').click()
         page.get_by_text('原文可回查').first.wait_for(timeout=10_000)
@@ -658,7 +671,11 @@ try:
 
         # 3. R2 (Round-7): Verify real-product browser operator isolation + Host operator authentication switcher!
         page.get_by_role('button', name='三层资源授权 (0)').click()
-        # 3a. Before authenticating as `ops-lead`, this fresh browser session MUST NOT obtain grantAuthority!
+        page.get_by_label('业务操作者标识').fill('store-analyst')
+        page.get_by_label('操作者口令').fill('analyst-pass-2026')
+        page.get_by_role('button', name='注册/切换认证操作者').click()
+        page.get_by_text('已切换 Host 认证操作者：门店分析师（op:store-analyst）').wait_for(timeout=10_000)
+        # 3a. Before switching back to `ops-lead`, this non-owner browser session MUST NOT obtain grantAuthority!
         page.get_by_text('当前操作者或项目不是该企业包/体系的原权责维护主体').wait_for(timeout=10_000)
         assert page.get_by_role('heading', name='新增项目资源授权').count() == 0, 'Unauthenticated/non-owner browser session MUST NOT see grant creation form!'
 
@@ -674,9 +691,12 @@ try:
         page.get_by_label('最高操作层次').select_option('read-detail-recalculate')
         page.get_by_label('允许读取的门店（顿号或逗号分隔）').fill('星桥直营店')
         page.get_by_label('允许读取的 020_clean 路径（顿号或逗号分隔）').fill('020_clean/starbridge_orders.csv')
+        page.get_by_label('授权用途 purposeKeys（逗号分隔，* 表示全部）').fill('store-first-purchase-30d-repurchase')
+        page.get_by_label('数据期间起（YYYY-MM-DD）').fill('2026-09-01')
+        page.get_by_label('数据期间止（YYYY-MM-DD）').fill('2026-09-30')
         page.get_by_role('button', name='保存资源授权').click()
         page.get_by_text('原权责项目').first.wait_for(timeout=10_000)
-        page.get_by_role('cell', name='门店：星桥直营店 · 路径：020_clean/starbridge_orders.csv').wait_for(timeout=10_000)
+        page.get_by_role('cell', name='门店：星桥直营店 · 路径：020_clean/starbridge_orders.csv · 用途：store-first-purchase-30d-repurchase · 期间：2026-09-01 至 2026-09-30').wait_for(timeout=10_000)
         page.get_by_role('button', name='撤回授权').first.click()
         page.get_by_text('已撤回').first.wait_for(timeout=10_000)
 

@@ -179,42 +179,69 @@ export function parseStudioAssessmentEvidence(raw: unknown): StudioAssessmentEvi
   }
 }
 
-export function readStudioEvidence(read: NativeEvidenceResult): {
-  ref: StudioSourceRef; complete: boolean; range?: { start: number; end: number; total: number }; body?: string;
-}[] {
+interface SourceReadPage {
+  ref: StudioSourceRef;
+  complete: boolean;
+  range?: { start: number; end: number; total: number; unit: 'utf16' | 'unicode-codepoints' };
+  body?: string;
+}
+
+function sourceBodyRange(range: unknown, body: string, unit: NonNullable<SourceReadPage['range']>['unit']): SourceReadPage['range'] {
+  if (!object(range)) return;
+  const { start, end, total } = range;
+  const length = unit === 'utf16' ? body.length : Array.from(body).length;
+  if (!length || ![start, end, total].every(Number.isSafeInteger) || start < 0 || end > total || end - start !== length) return;
+  return { start, end, total, unit };
+}
+
+export function readStudioEvidence(read: NativeEvidenceResult): SourceReadPage[] {
   const { call, message } = read;
   const details = message.details;
   try {
     if (call.name === 'studio_assets' && details?.type === 'optracall.studio' &&
         call.args.action === details.action && ['read-source', 'read'].includes(details.action)) {
       const result = details.result;
-      if (!result?.ref || typeof result.text !== 'string' || result.itemId || result.metricName) return [];
-      return [{ ref: sourceRef(result.ref), complete: result.complete === true, body: result.text,
-        ...(result.range?.unit === 'unicode-codepoints' ? { range: result.range } : {}) }];
+      if (!result?.ref || typeof result.text !== 'string' || !result.text.length || result.itemId || result.metricName) return [];
+      const range = result.range?.unit === 'unicode-codepoints' ? sourceBodyRange(result.range, result.text, 'unicode-codepoints') : undefined;
+      return [{ ref: sourceRef(result.ref), body: result.text, range,
+        complete: result.complete === true && (!result.range || Boolean(range && range.start === 0 && range.end === range.total)) }];
     }
     if (call.name !== 'read_semantic_context' || details?.type !== 'optracall.semantic-context-result' ||
         !['read', 'trace'].includes(details.action)) return [];
-    return (details.items ?? []).flatMap((item: any) => {
+    // unknownTime describes recorded time. A returned body is still a read,
+    // and its receipt makes no claim about the material's effective date.
+    return [...(details.items ?? []), ...(details.unknownTime ?? [])].flatMap((item: any) => {
       const target = item?.target;
-      if (typeof item?.body !== 'string' || !target || typeof item.sha256 !== 'string') return [];
+      if (typeof item?.body !== 'string' || !item.body.length || !target || typeof item.sha256 !== 'string'
+        || !['available', 'partial'].includes(item.state)) return [];
       const base = { sha256: item.sha256 };
       const ref = target.kind === 'sap' ? { ...base, authority: 'sap-metric', id: target.packageId, version: target.version }
         : target.kind === 'sap-method' ? { ...base, authority: 'sap-method', id: target.methodId, version: String(target.version) }
         : target.kind === 'enterprise' ? { ...base, authority: 'enterprise', id: target.materialId, version: target.revisionId, locator: target.storeId }
         : target.kind === 'studio-source' ? { ...base, authority: 'studio-source', id: target.assetId, version: String(target.version), locator: target.systemId }
         : undefined;
-      return ref ? [{ ref: sourceRef(ref), complete: item.complete === true, body: item.body }] : [];
+      if (!ref) return [];
+      // A location selects an excerpt before pagination, so its offsets are
+      // relative to that selection rather than to the source revision.
+      const range = target.location ? undefined : sourceBodyRange(item.range, item.body, 'utf16');
+      return [{ ref: sourceRef(ref), body: item.body, range, complete: Boolean(range && range.start === 0 && range.end === range.total) }];
     });
   } catch {
     return [];
   }
 }
 
-export function studioPagesComplete(reads: readonly ReturnType<typeof readStudioEvidence>[number][]): boolean {
+export function sourceReadPageKey(read: SourceReadPage): string {
+  const ref = read.ref;
+  return JSON.stringify([ref.authority, ref.id, ref.version, ref.sha256, ref.projectId, ref.taskId, ref.locator, read.range?.unit]);
+}
+
+export function studioPagesComplete(reads: readonly SourceReadPage[]): boolean {
+  const first = reads[0];
+  if (!first || !reads.every(read => sourceReadPageKey(read) === sourceReadPageKey(first))) return false;
   if (reads.some(read => read.complete)) return true;
-  const ranges = reads.flatMap(read => read.range && read.body !== undefined &&
-    Number.isSafeInteger(read.range.total) && read.range.start >= 0 && read.range.end <= read.range.total &&
-    read.range.end - read.range.start === Array.from(read.body).length ? [read.range] : []);
+  const ranges = reads.flatMap(read => read.range && read.body !== undefined
+    ? sourceBodyRange(read.range, read.body, read.range.unit) ?? [] : []);
   ranges.sort((a, b) => a.start - b.start);
   const total = ranges[0]?.total;
   if (!total || ranges.some(range => range.total !== total)) return false;

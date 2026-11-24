@@ -1,12 +1,20 @@
 import { createHash } from 'node:crypto';
 import type { StudioAuthority, StudioCheck, StudioSourceRef, StudioFeedbackOrigin } from './contracts.ts';
 
+export type StudioErrorIssue = { reason: string; path?: string };
 export class StudioError extends Error {
   readonly code: string;
   readonly status: number;
-  constructor(code: string, status = 400) { super(code); this.code = code; this.status = status; }
+  readonly exposure = 'safe-tool-error-v1' as const;
+  readonly details?: { issues: StudioErrorIssue[] };
+  constructor(code: string, status = 400, options: { message?: string; details?: { issues: StudioErrorIssue[] } } = {}) {
+    super(options.message ?? code);
+    this.code = code;
+    this.status = status;
+    this.details = options.details;
+  }
 }
-export function fail(code: string, status = 400): never { throw new StudioError(code, status); }
+export function fail(code: string, status = 400, options: { message?: string; details?: { issues: StudioErrorIssue[] } } = {}): never { throw new StudioError(code, status, options); }
 export function text(value: unknown, limit = 20_000, empty = true): string {
   if (typeof value !== 'string' || value.includes('\0') || Buffer.byteLength(value, 'utf8') > limit || Buffer.from(value).toString('utf8') !== value || (!empty && !value.trim())) fail('invalid_studio_text');
   return value as string;
@@ -34,7 +42,17 @@ export function sourceRef(value: unknown): StudioSourceRef {
   for (const key of ['title', 'projectId', 'taskId', 'locator'] as const) if (ref[key] !== undefined) result[key] = text(ref[key], 2000, false);
   return result;
 }
-export function sources(value: unknown): StudioSourceRef[] { if (!Array.isArray(value) || value.length > 200) fail('invalid_studio_sources'); return (value as unknown[]).map(sourceRef); }
+export function sources(value: unknown): StudioSourceRef[] {
+  if (!Array.isArray(value)) fail('invalid_studio_sources', 400, { message: 'payload.sources 必须是 SourceRef JSON 数组；请直接传数组，不要包装成 item 对象。', details: { issues: [{ reason: 'expected_array', path: 'payload.sources' }] } });
+  if (value.length > 200) fail('invalid_studio_sources', 400, { message: 'payload.sources 最多允许 200 个 SourceRef；请减少到 200 个以内后重试。', details: { issues: [{ reason: 'too_many_items', path: 'payload.sources' }] } });
+  return value.map((item, index) => {
+    try { return sourceRef(item); }
+    catch (error) {
+      if (error instanceof StudioError && !error.details) throw new StudioError(error.code, error.status, { message: `payload.sources[${index}] 不是有效 SourceRef；请提供 authority、id、version，并只保留支持的引用字段。`, details: { issues: [{ reason: error.code, path: `payload.sources[${index}]` }] } });
+      throw error;
+    }
+  });
+}
 export function checks(value: unknown): StudioCheck[] {
   if (!Array.isArray(value) || value.length > 100) fail('invalid_studio_checks');
   return (value as unknown[]).map(v => { if (!object(v) || !['pass', 'fail', 'unknown'].includes(v.status as string)) fail('invalid_studio_check'); return { name: text(v.name, 200, false), status: v.status as StudioCheck['status'], detail: text(v.detail) }; });

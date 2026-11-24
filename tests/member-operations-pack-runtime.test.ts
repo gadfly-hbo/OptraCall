@@ -160,6 +160,7 @@ test('R3 · Normal construction session via real Pi SDK 1.4.0 reads 3 materials 
 
   let step = 0;
   let packReadResultText = '';
+  let missingScopeErrorText = '';
   provider.setResponder(context => {
     step += 1;
     if (step === 1) return { calls: [{ name: 'read_input', arguments: { filename: 'member_policy.md' } }] };
@@ -282,6 +283,19 @@ test('R3 · Normal construction session via real Pi SDK 1.4.0 reads 3 materials 
           arguments: {
             action: 'pack-upsert-purpose',
             systemId: system.id,
+            payload: { purposeKey: 'missing-scope-probe' },
+          },
+        }],
+      };
+    }
+    if (step === 8) {
+      missingScopeErrorText = providerMessageText(context.recentToolResults.at(-1)!.content);
+      return {
+        calls: [{
+          name: 'studio_assets',
+          arguments: {
+            action: 'pack-upsert-purpose',
+            systemId: system.id,
             payload: {
               purposeKey: 'store-first-purchase-30d-repurchase',
               title: '门店首购后 30 日有效复购率',
@@ -305,7 +319,7 @@ test('R3 · Normal construction session via real Pi SDK 1.4.0 reads 3 materials 
         }],
       };
     }
-    if (step === 8) {
+    if (step === 9) {
       return { calls: [{ name: 'studio_assets', arguments: { action: 'pack-read', systemId: system.id } }] };
     }
     packReadResultText = providerMessageText(context.recentToolResults.at(-1)!.content);
@@ -334,6 +348,10 @@ test('R3 · Normal construction session via real Pi SDK 1.4.0 reads 3 materials 
   assert.equal(pack.entries[0].enterpriseSourceRefs.length, 1);
   assert.equal(pack.entries[0].referenceLinks.length, 1);
   assert.equal(pack.purposes.length, 1);
+  assert.match(missingScopeErrorText, /invalid_purpose_scope/);
+  assert.match(missingScopeErrorText, /"reason":"required"/);
+  assert.match(missingScopeErrorText, /"path":"payload\.scope"/);
+  assert.match(missingScopeErrorText, /scope/);
   assert.equal(pack.purposes[0].purposeKey, 'store-first-purchase-30d-repurchase');
   assert.match(packReadResultText, /store-first-purchase-30d-repurchase/);
 });
@@ -554,6 +572,8 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   await waitIdle(host, projUngranted.id, taskU.id);
   assert.match(catalogU, /"authorizationRequired":true/);
   assert.match(catalogU, /"purposes":\[\]/);
+  assert.match(catalogU, /三层资源授权/);
+  assert.match(catalogU, /原权责维护主体/);
 
   // Seed an UNRELATED enabled enterprise material (NOT in pack dependencies) to test R5.1 unrelated-read counterexample!
   const unrelatedMat = await json(await host.request('/api/enterprise-materials', 'POST', {
@@ -593,6 +613,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   const { task: taskD } = await json(await host.request(`/api/projects/${projMerch.id}/tasks`, 'POST', { name: '商品部仅看目录反例' }), 201);
   let stepD = 0;
   let merchDetailBlocked = false;
+  let merchDetailGuidance = '';
   provider.setResponder(context => {
     stepD += 1;
     if (stepD === 1) return { calls: [{ name: 'studio_assets', arguments: { action: 'catalog' } }] };
@@ -602,6 +623,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
         : { calls: [{ name: 'read_input', arguments: { filename: 'starbridge_orders.csv' } }] };
     }
     const readResText = providerMessageText(context.recentToolResults.at(-1)!.content);
+    merchDetailGuidance = readResText;
     merchDetailBlocked = readResText.includes('detail_access_not_authorized') || readResText.includes('禁止读取项目 020_clean') || readResText.includes('resource_detail_not_authorized') || readResText.includes('no_active_grant_for_read_detail_recalculate') || readResText.includes('not_authorized');
     return { text: '仅查看了目录，未读取任何原资产，且无权读取明细文件。' };
   });
@@ -610,6 +632,10 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   }), 202);
   const stateD = await waitIdle(host, projMerch.id, taskD.id);
   assert.equal(merchDetailBlocked, true, 'Definition-only project MUST be blocked from reading 020_clean CSV!');
+  assert.match(merchDetailGuidance, /read-detail-recalculate/);
+  assert.match(merchDetailGuidance, /三层资源授权/);
+  assert.match(merchDetailGuidance, /原权责维护主体/);
+  assert.match(merchDetailGuidance, /missing_detail_recalculate_grant|no_active_grant_for_read_detail_recalculate|detail_access_not_authorized/);
   if (!hasOsSandbox) {
     for (const rawTool of ['bash', 'read', 'write', 'edit', 'ls', 'grep', 'find', 'codemode', 'subagent']) {
       assert.equal((stateD.snapshot.tools ?? []).includes(rawTool), false, `Without OS sandbox, restricted session MUST withhold raw tool ${rawTool}!`);
@@ -662,9 +688,17 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
     requestId: randomUUID(), enterpriseId, grantorProjectId: projBuild.id, authorityToken: buildAuth.authorityToken, grantBasis: '星桥店长仅读本店明细',
     subjectType: 'project', subjectId: projStar.id, resourceKind: 'detail',
     purposeKeys: ['store-first-purchase-30d-repurchase'], operations: ['read-definition', 'read-detail-recalculate'],
-    scope: { brand: '岚线', channel: '直营', stores: ['星桥直营店'], allowedDataPaths: ['020_clean/starbridge_orders.csv'] },
+    scope: { brand: '岚线', channel: '直营', stores: ['星桥直营店'], allowedDataPaths: ['020_clean/starbridge_orders.csv'], periodFrom: '2026-09-01', periodTo: '2026-09-30' },
   }));
   const starGrantId = starGrantCreated.grant.id;
+  assert.equal(starGrantCreated.grant.scope.periodFrom, '2026-09-01');
+  assert.equal(starGrantCreated.grant.scope.periodTo, '2026-09-30');
+  const restrictedConnector = await projectReq(projStar.id, `/api/projects/${projStar.id}/db-link/sources`);
+  assert.equal(restrictedConnector.status, 403);
+  const restrictedConnectorBody = await restrictedConnector.json();
+  assert.equal(restrictedConnectorBody.code, 'member_pack_connector_restricted');
+  assert.match(restrictedConnectorBody.message, /三层资源授权/);
+  assert.match(restrictedConnectorBody.message, /read_input|受控工具/);
 
   const { task: taskA } = await json(await host.request(`/api/projects/${projStar.id}/tasks`, 'POST', { name: '星桥首版复购分析' }), 201);
   let stepA = 0;
@@ -1600,6 +1634,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   assert.equal(fs.existsSync(path.join(sandboxCleanDir, 'starbridge_orders.csv')), false, 'Revoking detail grant MUST leave zero starbridge_orders.csv in active restricted task sandbox!');
   let stepA4 = 0;
   let afterRevokeBlocked = false;
+  let afterRevokeGuidance = '';
   provider.setResponder(context => {
     stepA4 += 1;
     if (stepA4 === 1) {
@@ -1608,6 +1643,7 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
         : { calls: [{ name: 'read_input', arguments: { filename: 'starbridge_orders.csv' } }] };
     }
     const txt = providerMessageText(context.recentToolResults.at(-1)!.content);
+    afterRevokeGuidance = txt;
     afterRevokeBlocked = txt.includes('detail_access_not_authorized') || txt.includes('禁止读取项目 020_clean') || txt.includes('no_active_grant_for_read_detail_recalculate') || txt.includes('not_authorized') || txt.includes('ENOENT') || txt.includes('No such file');
     return { text: '授权撤回后实时会话已立即拦截明细读取。' };
   });
@@ -1616,6 +1652,9 @@ test('R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native rea
   }), 202);
   await waitIdle(host, projStar.id, taskA.id, stateATurn3.snapshot.messages.length + 2);
   assert.equal(afterRevokeBlocked, true, 'Revoking detail grant MUST immediately block detail reads in the active session!');
+  assert.match(afterRevokeGuidance, /read-detail-recalculate/);
+  assert.match(afterRevokeGuidance, /三层资源授权/);
+  assert.match(afterRevokeGuidance, /原权责维护主体/);
   const oldReport = await fetch(host.baseUrl + boundFile, { headers: { ...host.headers, cookie: scopedCookie } });
   assert.equal(oldReport.status, 403);
   const staleResults = await json(await fetch(host.baseUrl + taskResultsUrl, { headers: resultHeaders }));
@@ -2632,5 +2671,316 @@ test('R2 (Round-8) · Real Pi SDK 1.4.0 live in-flight wide+narrow grant coexist
   for (let attempt = 0; attempt < 140 && !held.closedEarly; attempt++) await new Promise(resolve => setTimeout(resolve, 100));
   assert.equal(held.closedEarly, true, 'Natural expiry retires an already admitted active operation');
   assert.equal(fs.existsSync(path.join(projConsumer.rootPath, '060_reports', 'held.md')), false, 'A late staged report is never published after retirement');
+  assert.deepEqual(provider.errors, []);
+});
+
+test('Summary citations follow the active source and preserve independent purpose grants across Host upgrades', { timeout: 90_000 }, async t => {
+  const provider = await startToolProvider();
+  t.after(() => provider.close());
+  let host = await startTestHost();
+  t.after(() => host.close());
+  await json(await host.request('/api/configuration', 'PUT', {
+    name: '合成汇总核对', provider: 'openai-compatible', baseUrl: provider.baseUrl,
+    model: 'synthetic-summary', apiKey: 'synthetic-only',
+  }));
+  const enterprise = await json(await host.request('/api/studio/enterprises', 'POST', { requestId: randomUUID(), name: '合成月报企业' }), 201);
+  const enterpriseId = enterprise.id;
+  const credentials = { operatorId: 'monthly-owner', passcode: 'monthly-owner-synthetic' };
+  let cookie = '';
+  function bind(response: Response) {
+    const header = response.headers.get('set-cookie');
+    assert.ok(header);
+    cookie = header.split(';')[0]!;
+    return response;
+  }
+  const owner = (route: string, method = 'GET', body?: unknown) => fetch(host.baseUrl + route, {
+    method, headers: { ...host.headers, cookie }, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  await json(bind(await host.request('/api/studio/operators/session', 'POST', {
+    action: 'register', displayName: '月报负责人', ...credentials,
+  })));
+  const { project: builder } = await json(bind(await owner('/api/projects', 'POST', { name: '汇总建设' })), 201);
+  async function associate(kind: string, entityId: string) {
+    await json(await host.request('/api/studio/enterprise-associations', 'POST', {
+      requestId: randomUUID(), enterpriseId, kind, entityId, ...(kind === 'asset' ? { authority: 'enterprise' } : {}),
+    }));
+  }
+  await associate('project', builder.id);
+  async function borrower(name: string) {
+    const { project } = await json(await host.request('/api/projects', 'POST', { name }), 201);
+    await associate('project', project.id);
+    return project.id as string;
+  }
+  const monthly = await borrower('月报引用');
+  const legacy = await borrower('升级前已授权');
+  const mixed = await borrower('另有定义与明细授权');
+  const historical = await borrower('历史正式月报引用');
+  async function material(title: string, body: string) {
+    const { material: created } = await json(await host.request('/api/enterprise-materials', 'POST', { title, body }), 201);
+    const { material: enabled, storeId } = await json(await host.request(`/api/enterprise-materials/${created.id}/enable`, 'POST', { expectedVersion: created.version }));
+    await associate('asset', created.id);
+    const revision = enabled.revisions[0];
+    return { enabled, ref: { authority: 'enterprise', id: created.id, version: revision.revisionId, sha256: revision.bodySha256, locator: storeId } };
+  }
+  const definition = await material('月报口径', '按门店与月份归集合成月报');
+  const month = await material('合成门店九月月报', JSON.stringify({ grain: 'store-month', period: '2026-09', total: 173 }));
+  const { system } = await json(await owner('/api/studio/systems', 'POST', {
+    requestId: randomUUID(), enterpriseId, name: '门店月报', projectId: builder.id, goal: '引用门店月报', topicTitle: '月报',
+  }), 201);
+  const sys = `/api/studio/systems/${system.id}`;
+  const { pack } = await json(await owner('/api/studio/enterprise-packs', 'POST', {
+    requestId: randomUUID(), enterpriseId, systemId: system.id, domain: 'member-operations', name: '月报包',
+  }));
+  const packPath = `/api/studio/enterprise-packs/${pack.id}`;
+  const scope = { brand: '合成品牌', stores: ['合成门店'], period: '2026-09', scopeKey: 'store:month' };
+  const { purpose } = await json(await owner(packPath + '/purposes', 'POST', {
+    requestId: randomUUID(), projectId: builder.id, purposeKey: 'monthly-reference', title: '月报引用', businessQuestion: '门店月报口径',
+    subjectUnit: 'brand_account', scope, tier: 'definition-reference', businessStatus: 'active',
+    originalGoal: '读取九月月报', completionCriteria: '核对正式版本', evidenceReadiness: { definition: 'pass' },
+    dependencies: [{ id: 'definition', role: 'member-rule', authority: 'enterprise', ref: definition.ref, requiredFor: ['definition-reference'] }],
+  }));
+  const { preview } = await json(await owner(packPath + '/previews', 'POST', {
+    requestId: randomUUID(), projectId: builder.id, version: '1.0', purposeIds: [purpose.id], dataCutoffAt: '2026-09-30', summary: '九月口径',
+  }));
+  const { revision } = await json(await owner(packPath + '/confirm', 'POST', {
+    requestId: randomUUID(), projectId: builder.id, previewId: preview.id, fingerprint: preview.fingerprint,
+  }));
+  assert.equal(revision.purposeManifests[0].status, 'eligible');
+  const authority = async () => (await json(await owner(`/api/studio/resource-grants/authority?enterpriseId=${enterpriseId}&projectId=${builder.id}`))).grantAuthority.authorityToken;
+  async function grant(subjectId: string, resourceKind: string, operations: string[], grantScope: object, resourceRef?: object) {
+    const result = await json(await owner('/api/studio/resource-grants', 'POST', {
+      requestId: randomUUID(), enterpriseId, grantorProjectId: builder.id, authorityToken: await authority(),
+      grantBasis: '门店月报合成用途', subjectType: 'project', subjectId, purposeKeys: [purpose.purposeKey],
+      resourceKind, operations, scope: grantScope, resourceRef,
+    }));
+    return result.grant;
+  }
+  const monthScope = { grain: 'store-month', summaryAssetId: month.ref.id, summaryVersion: month.ref.version };
+  await grant(monthly, 'summary', ['cite-summary'], monthScope, month.ref);
+  const oldGrant = await grant(legacy, 'summary', ['cite-summary'], monthScope, month.ref);
+  await grant(mixed, 'summary', ['cite-summary'], monthScope, month.ref);
+  await grant(mixed, 'definition', ['read-definition'], { brand: scope.brand });
+  await grant(mixed, 'detail', ['read-detail-recalculate'], { stores: scope.stores, allowedDataPaths: ['020_clean/month.csv'] });
+
+  // Restore one pre-source-period grant in the isolated, stopped Host while retaining its original authority and subject.
+  const { dataRoot, projectsRoot } = host;
+  await host.close();
+  const grantFile = path.join(dataRoot, 'member-packs', 'resource-grants.json');
+  const index = JSON.parse(fs.readFileSync(grantFile, 'utf8'));
+  const oldScope = index.grants.find((item: { id: string }) => item.id === oldGrant.id).scope;
+  assert.equal(oldScope.sourcePeriodVerified, true);
+  delete oldScope.sourcePeriodVerified;
+  delete oldScope.sourcePeriodFrom;
+  delete oldScope.sourcePeriodTo;
+  const legacyBytes = JSON.stringify(index);
+  fs.writeFileSync(grantFile, legacyBytes);
+  host = await startTestHost({ dataRoot, projectsRoot });
+  await json(bind(await host.request('/api/studio/operators/session', 'POST', { action: 'login', ...credentials, activeProjectId: builder.id })));
+
+  const taskFor = async (projectId: string) => (await json(await host.request(`/api/projects/${projectId}/tasks`, 'POST', { name: '查看获准月报' }), 201)).task.id as string;
+  async function studio(projectId: string, taskId: string, action: string, payload?: object) {
+    let result = '';
+    provider.setResponder(context => {
+      if (!context.recentToolResults.length) return { calls: [{ name: 'studio_assets', arguments: { action, systemId: system.id, payload } }] };
+      result = providerMessageText(context.recentToolResults.at(-1)!.content);
+      return { text: '月报核对完成。' };
+    });
+    await json(await host.request(`/api/projects/${projectId}/tasks/${taskId}/messages`, 'POST', { requestId: randomUUID(), text: action }), 202);
+    await waitIdle(host, projectId, taskId);
+    assert.ok(result.length, action);
+    return result;
+  }
+  async function catalog(projectId: string, taskId: string) {
+    const result = JSON.parse(await studio(projectId, taskId, 'catalog'));
+    const entry = result.memberPacks.find((item: { packId: string }) => item.packId === pack.id);
+    assert.ok(entry);
+    return entry;
+  }
+
+  async function subjectProject(projectId: string) {
+    const selected = await host.request(`/api/projects/${projectId}`);
+    const subjectCookie = selected.headers.get('set-cookie')!.split(';')[0]!;
+    return (route: string, body?: unknown) => fetch(host.baseUrl + route, {
+      method: body === undefined ? 'GET' : 'POST', headers: { ...host.headers, cookie: subjectCookie },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  }
+  async function recordUse(projectId: string, taskId: string, text: string) {
+    const post = await subjectProject(projectId);
+    const { pin } = await json(await post(packPath + '/pin', { requestId: randomUUID(), projectId, taskId }));
+    assert.equal(pin.packVersion, '1.0');
+    const { file } = await json(await post(`/api/projects/${projectId}/files/save-report`, { name: '月报说明.md', text }), 201);
+    const reportRef = { authority: 'task', id: taskId, projectId, taskId, version: sha(text), sha256: sha(text), locator: file.path };
+    const { use } = await json(await post(packPath + '/uses', { requestId: randomUUID(), projectId, taskId, purposeId: purpose.id, reportRef }));
+    return use;
+  }
+  for (const projectId of [monthly, legacy]) {
+    const taskId = await taskFor(projectId);
+    const entry = await catalog(projectId, taskId);
+    assert.equal(entry.pinnedVersion, '1.0');
+    assert.deepEqual(entry.purposes[0].accessLevels, ['cite-summary']);
+    assert.equal(entry.purposes[0].authorizedSummary.summarySha256, month.ref.sha256);
+    const read = await studio(projectId, taskId, 'read-source', { ref: entry.purposes[0].authorizedSummary.ref });
+    assert.equal(JSON.parse(JSON.parse(read).text).total, 173);
+    if (projectId === legacy) {
+      const registered = await recordUse(projectId, taskId, '合成九月月报共 173。');
+      assert.equal(registered.accessLevel, 'summary');
+      assert.equal(registered.authorDeclaration, undefined);
+      assert.equal(registered.independentVerification.status, 'pending');
+    }
+  }
+  assert.equal(fs.readFileSync(grantFile, 'utf8'), legacyBytes, 'Resolving the existing grant does not rewrite it');
+
+  assert.equal(revision.purposeManifests[0].summaryAccess, undefined);
+  const projectView = await subjectProject(monthly);
+  const author = await taskFor(monthly);
+  const targetText = JSON.stringify({ total: 173 });
+  const { file: targetFile } = await json(await projectView(`/api/projects/${monthly}/files/save-report`, {
+    name: 'september-summary.md', text: targetText,
+  }), 201);
+  const target = { authority: 'task', id: author, projectId: monthly, taskId: author, version: sha(targetText), sha256: sha(targetText), locator: targetFile.path };
+  const call = (action: string, payload?: object) => ({ name: 'studio_assets', arguments: { action, systemId: system.id, payload } });
+  const containsMonth = (refs: typeof month.ref[]) => refs.some(ref => ref.authority === 'enterprise' && ref.id === month.ref.id && ref.version === month.ref.version && ref.sha256 === month.ref.sha256);
+  let supplied = month.ref;
+  let declarationId: string | undefined;
+  provider.setResponder(context => {
+    const results = context.recentToolResults;
+    if (results.length === 0) return { calls: [call('catalog')] };
+    const receipt = JSON.parse(providerMessageText(results.at(-1)!.content));
+    if (results.length === 1) {
+      const item = receipt.memberPacks.find((item: { packId: string }) => item.packId === pack.id);
+      supplied = item.purposes[0].authorizedSummary.ref;
+      assert.ok(containsMonth([supplied]));
+      return { calls: [call('read-source', { ref: item.purposes[0].dependencies[0].ref })] };
+    }
+    if (results.length === 2) {
+      assert.equal(receipt.ref.sha256, definition.ref.sha256);
+      return { calls: [call('read-source', { ref: supplied })] };
+    }
+    if (results.length === 3) {
+      assert.equal(JSON.parse(receipt.text).total, 173);
+      return { calls: [call('declare-use', { report: target, sources: [definition.ref, receipt.ref], result: '九月汇总共 173。' })] };
+    }
+    declarationId = receipt.use.id;
+    return { text: '已按九月正式月报登记引用。' };
+  });
+  async function runTurn(taskId: string, text: string) {
+    await json(await host.request(`/api/projects/${monthly}/tasks/${taskId}/messages`, 'POST', { requestId: randomUUID(), text }), 202);
+    await waitIdle(host, monthly, taskId);
+  }
+  await runTurn(author, '查看用途目录，读取正式汇总并声明采用。');
+  assert.ok(declarationId);
+  const projected = async () => (await json(await projectView(packPath))).pack;
+  const afterDeclaration = await projected();
+  const actual = afterDeclaration.useRecords.find((item: { taskId: string }) => item.taskId === author);
+  assert.ok(actual);
+  assert.equal(actual.accessLevel, 'summary');
+  assert.equal(actual.authorDeclaration?.studioUseId, declarationId, 'The borrower can review its own native declaration');
+  assert.ok(containsMonth(actual.authorDeclaration.declaredRefs));
+  assert.ok(actual.actualReads.some((read: { complete: boolean; ref: typeof month.ref }) => read.complete && containsMonth([read.ref])));
+  assert.ok(containsMonth(actual.catalogSupplied.assetRefs));
+  const authorPin = afterDeclaration.taskPins.find((item: { taskId: string }) => item.taskId === author);
+  assert.ok(containsMonth(authorPin.pinnedAuthorityRefs));
+  assert.equal(actual.independentVerification.status, 'pending');
+  const query = new URLSearchParams({ projectId: monthly, taskId: author, locator: target.locator, sha256: target.sha256 });
+  const snapshot = await json(await projectView(packPath + '/report-snapshot?' + query));
+  assert.equal(snapshot.text, targetText);
+  assert.equal(snapshot.sha256, target.sha256);
+
+  const verifier = await taskFor(monthly);
+  const assessmentName = 'september-comparison.md';
+  let sourceTotal: number;
+  let reportedTotal: number;
+  let assessmentText = '';
+  provider.setResponder(context => {
+    const results = context.recentToolResults;
+    if (results.length === 0) return { calls: [call('read-source', { ref: definition.ref })] };
+    if (results.length === 1) return { calls: [call('read-source', { ref: supplied })] };
+    if (results.length === 2) {
+      sourceTotal = JSON.parse(JSON.parse(providerMessageText(results.at(-1)!.content)).text).total;
+      return { calls: [call('read-source', { ref: target })] };
+    }
+    if (results.length === 3) {
+      reportedTotal = JSON.parse(JSON.parse(providerMessageText(results.at(-1)!.content)).text).total;
+      assert.equal(reportedTotal, sourceTotal);
+      assessmentText = JSON.stringify({ targetSha256: target.sha256, sourceTotal, reportedTotal });
+      return { calls: [context.availableTools.includes('write')
+        ? { name: 'write', arguments: { path: '../060_reports/' + assessmentName, content: assessmentText } }
+        : { name: 'write_report', arguments: { filename: assessmentName, content: assessmentText } }] };
+    }
+    if (results.length === 4) {
+      const report = { authority: 'task', id: verifier, projectId: monthly, taskId: verifier, locator: '060_reports/' + assessmentName,
+        version: sha(assessmentText), sha256: sha(assessmentText) };
+      return { calls: [call('assess-use', {
+        useId: declarationId, status: 'pass', report, sources: [definition.ref, supplied], result: '正式月报数值与引用报告一致。',
+        evidence: { targetReport: target, coverage: { inputPaths: [], scope: '合成门店九月月报', detail: '正式月报与报告逐项对照', summaryRef: supplied },
+          comparison: { metrics: [{ name: '合计', reported: reportedTotal, recomputed: sourceTotal }], facts: '从准确的两份原件分别读取合计。' } },
+      })] };
+    }
+    const assessment = JSON.parse(providerMessageText(results.at(-1)!.content));
+    assert.ok(assessment.use, JSON.stringify(assessment));
+    return { text: '独立月报对照已完成。' };
+  });
+  await runTurn(verifier, '读取月报与目标报告，独立对照合计。');
+  const verified = (await projected()).useRecords.find((item: { id: string }) => item.id === actual.id).independentVerification;
+  assert.equal(verified.status, 'pass', JSON.stringify(verified));
+  assert.equal(verified.verifierTaskId, verifier);
+  assert.equal(verified.verifierEvidenceSummary.targetReportChecked, true);
+  assert.equal(verified.verifierEvidenceSummary.hadDataOrCalcEvidence, true);
+  assert.ok(verified.verifierActualReads.some((read: { complete: boolean; ref: typeof month.ref }) => read.complete && containsMonth([read.ref])));
+
+  await json(await host.request(`/api/enterprise-materials/${month.ref.id}/disable`, 'POST', { expectedVersion: month.enabled.version }));
+  for (const projectId of [monthly, legacy]) {
+    const entry = await catalog(projectId, await taskFor(projectId));
+    assert.deepEqual(entry.purposes, [], 'A summary-only borrower sees no available purpose after its source is withdrawn');
+    assert.equal(entry.pinnedVersion, null);
+  }
+  const previous = (await projected()).useRecords.find((item: { id: string }) => item.id === actual.id);
+  assert.equal(previous.independentVerification.status, 'pass');
+  assert.deepEqual(previous.actualReads, []);
+  assert.equal(previous.authorDeclaration, undefined);
+  assert.ok(!containsMonth(previous.catalogSupplied.assetRefs));
+  const mixedTask = await taskFor(mixed);
+  const retained = await catalog(mixed, mixedTask);
+  assert.equal(retained.pinnedVersion, '1.0');
+  assert.deepEqual(retained.purposes[0].accessLevels, ['read-definition', 'read-detail-recalculate']);
+  assert.equal(retained.purposes[0].authorizedSummary, undefined);
+  assert.equal((await recordUse(mixed, mixedTask, '继续引用门店月报定义。')).accessLevel, 'definition');
+
+  // Use the normal construction session and publish revisions 1 and 3 of the same Studio asset.
+  async function saveEdition(number: number, assetId?: string) {
+    const result = JSON.parse(await studio(builder.id, system.taskId, 'save-asset', {
+      requestId: randomUUID(), kind: 'concept', title: '门店正式月报', scope: '门店月度',
+      body: JSON.stringify({ period: '2026-09', grain: 'store-month', edition: number }),
+      sources: [definition.ref], readyForPublication: true, checks: [],
+      ...(assetId ? { assetId, expectedRevision: number - 1 } : {}),
+    }));
+    assert.equal(result.asset.candidateRevision, number);
+    return result.asset;
+  }
+  async function publish(assetId: string) {
+    const { preview } = await json(await owner(sys + '/preview', 'POST', {
+      requestId: randomUUID(), assetIds: [assetId], refs: [], summary: '确认本版月报', scope: '门店月度', checks: [],
+    }));
+    return json(await owner(sys + '/publications', 'POST', { requestId: randomUUID(), previewId: preview.id, fingerprint: preview.fingerprint }));
+  }
+  const first = await saveEdition(1);
+  await publish(first.id);
+  await saveEdition(2, first.id);
+  await saveEdition(3, first.id);
+  const published = await publish(first.id);
+  assert.equal(published.system.assets.find((item: { id: string }) => item.id === first.id).formalRevision, 3);
+  const firstRef = { authority: 'studio-source', id: first.id, version: '1', sha256: first.revisions[0].sha256, locator: system.id, projectId: builder.id };
+  const historicalGrant = await grant(historical, 'summary', ['cite-summary'], {
+    summaryAssetId: first.id, summaryVersion: '1', grain: 'store-month', periodFrom: '2026-09-01', periodTo: '2026-09-30',
+  }, firstRef);
+  assert.equal(historicalGrant.resourceRef.sha256, firstRef.sha256);
+  const taskId = await taskFor(historical);
+  const exact = (await catalog(historical, taskId)).purposes[0].authorizedSummary;
+  assert.equal(exact.ref.version, '1');
+  assert.equal(exact.summarySha256, firstRef.sha256);
+  const read = JSON.parse(await studio(historical, taskId, 'read-source', { ref: exact.ref }));
+  assert.equal(typeof read.text, 'string', JSON.stringify(read));
+  assert.equal(JSON.parse(read.text).edition, 1);
   assert.deepEqual(provider.errors, []);
 });

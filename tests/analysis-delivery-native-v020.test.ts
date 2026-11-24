@@ -98,9 +98,41 @@ test('a schema-valid over-budget declaration is rejected before saving; repeated
   let saved: Awaited<ReturnType<typeof f.read>> | undefined; const deadline = Date.now() + 15_000;
   do { saved = await f.read(); if (saved.state.task.lastRun?.status !== 'running' && saved.state.snapshot.status === 'idle') break; await delay(20); } while (Date.now() < deadline);
   assert.equal(saved!.state.task.lastRun?.status, 'completed'); assert.deepEqual(filesAfterRejected, [], 'no report may be created before both rejected oversized callbacks');
-  assert.equal(replies.length, 4); for (const reply of replies.slice(0, 2)) assert.match(reply, /analysis_delivery_payload_limit/);
+  assert.equal(replies.length, 4);
+  for (const reply of replies.slice(0, 2)) {
+    assert.match(reply, /analysis_delivery_payload_limit/);
+    assert.match(reply, /"reason":"payload_too_large"/);
+    assert.match(reply, /"path":"declaration"/);
+    assert.match(reply, /32[_,]?768|32,768/);
+    assert.equal(reply.includes(large.limitations[0]), false, 'validation feedback must not echo the original declaration text');
+  }
   const declarations = saved!.native.filter(entry => entry.customType === 'optracall.analysis-delivery'), reports = saved!.native.filter(entry => entry.customType === 'optracall.project-report-write');
   assert.equal(declarations.length, 2); assert.equal(reports.length, 1); assert.equal(declarations[0].data.save.status, 'saved'); assert.equal(declarations[1].data.save.status, 'reused'); assert.equal(reports[0].data.requestId, f.requestId); assert.equal(declarations[1].data.reports[0].toolCallId, reports[0].data.toolCallId);
   assert.deepEqual(await readdir(path.join(f.project.rootPath, '060_reports')), [filename]); assert.equal(await readFile(path.join(f.project.rootPath, '060_reports', filename), 'utf8'), content); assert.deepEqual(f.provider.errors, []);
   await writeFile(path.join(f.root, 'receipt.json'), JSON.stringify({ native: saved!.state.task.sessionFile, requestId: f.requestId, rejectedBeforeSave: 2, filesAfterRejected, boundReports: reports.length, exactDeclarations: declarations.length, saveStatuses: declarations.map(entry => entry.data.save.status), originalReportCallId: reports[0].data.toolCallId, reusedReportCallId: declarations[1].data.reports[0].toolCallId, workerBudgetExpanded: false }, null, 2));
+});
+
+test('reviewBasis referencing a nonexistent file returns a safe locatable error; corrected declaration succeeds', { timeout: 25_000 }, async t => {
+  const f = await environment(t, 'basis-unavailable', { save: false });
+  const badBasis = { ...declaration, reviewBasis: [{ relativePath: '020_clean/nonexistent-basis.md', sha256: 'a'.repeat(64) }] };
+  const replies: string[] = [];
+  f.provider.setResponder(context => {
+    const count = context.recentToolResults.length;
+    if (count) replies.push(providerMessageText(context.recentToolResults.at(-1)!.content));
+    if (count === 0) return { calls: [{ name: 'declare_analysis_delivery', arguments: badBasis }] };
+    if (count === 1) return { calls: [{ name: 'declare_analysis_delivery', arguments: declaration }] };
+    return { text: '合成缺文件反例结束。' };
+  });
+  await f.request(f.route + '/messages', 'POST', { requestId: f.requestId, text: '声明交付；reviewBasis 引用不存在的文件。' }, 202);
+  let saved: Awaited<ReturnType<typeof f.read>> | undefined; const deadline = Date.now() + 15_000;
+  do { saved = await f.read(); if (saved.state.task.lastRun?.status !== 'running' && saved.state.snapshot.status === 'idle') break; await delay(20); } while (Date.now() < deadline);
+  assert.equal(saved!.state.task.lastRun?.status, 'completed');
+  assert.equal(replies.length, 2);
+  assert.match(replies[0], /analysis_delivery_basis_unavailable/);
+  assert.match(replies[0], /"reason":"basis_file_unavailable"/);
+  assert.match(replies[0], /"path":"reviewBasis"/);
+  assert.equal(replies[0].includes('nonexistent-basis.md'), false, 'must not echo the missing file path');
+  assert.equal(replies[0].includes(f.root), false, 'must not echo local paths');
+  assert.match(replies[1], /optracall\.analysis-delivery/);
+  assert.deepEqual(f.provider.errors, []);
 });

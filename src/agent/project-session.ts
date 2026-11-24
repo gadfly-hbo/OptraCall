@@ -19,7 +19,7 @@ import { presentContextMessages } from './context-presentation.ts';
 import path from 'node:path';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync, renameSync, unlinkSync, constants, openSync, fstatSync, fsyncSync, closeSync, readSync, lstatSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
-import { createAgentSessionRuntime, createAgentSessionServices, createAgentSessionFromServices, ModelRuntime, SessionManager, SettingsManager, createCodemodeExtension, createToolSearchExtension, createMcpExtension, getSdkMcpConfigLoader, getAgentDir, getDocsPath, VERSION, defineTool, type AgentSession, type AgentSessionRuntime, type CreateAgentSessionRuntimeFactory, type ExtensionFactory, type ExtensionToolContext } from './sdk.ts';
+import { createAgentSessionRuntime, createAgentSessionServices, createAgentSessionFromServices, ModelRuntime, SessionManager, SettingsManager, createCodemodeExtension, createToolSearchExtension, createMcpExtension, getSdkMcpConfigLoader, getAgentDir, getDocsPath, VERSION, defineTool, loadSkills, type AgentSession, type AgentSessionRuntime, type CreateAgentSessionRuntimeFactory, type ExtensionFactory, type ExtensionToolContext } from './sdk.ts';
 import type { ProjectAgentWireOptions, ProjectSnapshot, ProvidedContextInput } from './project-runtime.ts';
 import { runDiagnostic, readRunDiagnostic, type RunDiagnostic } from './run-diagnostics.ts';
 import { createBrowserUIContext, type BrowserUIResponse } from './browser-ui-context.ts';
@@ -836,11 +836,13 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       const selectedTaskSkills = (skills: Parameters<typeof snapshotProtectedSkills>[0]) => {
         if (!o.assignment) return [...skills];
         const { type, skill } = o.assignment;
-        const matching = skills.filter(item => item.name === taskPurpose[type].skill);
         if (!skill) return skills.filter(item => item.name !== taskPurpose[type].skill);
         const fixed = approvedTaskSkills[type];
-        if (!fixed || fixed.sha256 !== skill.sha256 || fixed.version !== skill.version || matching.length !== 1 || path.resolve(matching[0]!.filePath) !== path.join(analysisAssetsDir, skill.id, 'SKILL.md') || packageIdentity(matching[0]!.filePath) !== skill.sha256) throw new Error('task_skill_version_changed');
-        return [...skills];
+        if (!fixed || fixed.sha256 !== skill.sha256 || fixed.version !== skill.version) throw new Error('task_skill_version_changed');
+        const fixedPath = path.join(analysisAssetsDir, skill.id, 'SKILL.md');
+        const matching = loadSkills({ cwd: targetCwd, agentDir, skillPaths: [fixedPath], includeDefaults: false }).skills.filter(item => item.name === taskPurpose[type].skill);
+        if (matching.length !== 1 || path.resolve(matching[0]!.filePath) !== fixedPath || packageIdentity(matching[0]!.filePath) !== skill.sha256) throw new Error('task_skill_version_changed');
+        return [...skills.filter(item => item.name !== taskPurpose[type].skill), matching[0]!];
       };
       const taskInstruction = () => {
         if (!o.assignment) return [];

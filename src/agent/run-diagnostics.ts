@@ -1,7 +1,10 @@
 import type { Outcome } from './events.ts';
+import { approvedTaskSkills } from '../host/task-assignment.ts';
 
-export type RunDiagnosticCode = 'authentication_failed' | 'rate_limited' | 'request_terminated' | 'request_failed' | 'http_body_timeout' | 'http_headers_timeout' | 'http_connect_timeout' | 'http_connection_closed' | 'command_failed' | 'runtime_stopped' | 'runtime_start_failed' | 'runtime_start_timeout' | 'cancelled' | 'strategy_action_loop' | 'completed_after_retry' | 'verification_source_changed' | 'verification_source_missing';
+export type RunDiagnosticCode = 'authentication_failed' | 'rate_limited' | 'request_terminated' | 'request_failed' | 'http_body_timeout' | 'http_headers_timeout' | 'http_connect_timeout' | 'http_connection_closed' | 'command_failed' | 'runtime_stopped' | 'runtime_start_failed' | 'runtime_start_timeout' | 'cancelled' | 'strategy_action_loop' | 'completed_after_retry' | 'verification_source_changed' | 'verification_source_missing' | 'task_skill_version_changed' | 'task_skill_unavailable';
 export type RunDiagnostic = { code: RunDiagnosticCode; stage: 'native_request' | 'native_command' | 'runtime'; message: string; retryCount: number };
+const fixedTaskSkills = Object.values(approvedTaskSkills).flatMap(skill => skill ? [`${skill.id} ${skill.version}`] : []).join('、');
+export const taskSkillVersionChangedMessage = `默认 Skill 的版本或文件与任务固定版本不一致。请恢复 ${fixedTaskSkills} 后重试，或编辑任务并明确取消该 Skill；无需删除其他同名用户 Skill。`;
 const messages: Record<RunDiagnosticCode, string> = {
   authentication_failed: '原生模型请求被拒绝认证，请检查该任务的模型配置。',
   rate_limited: '原生模型请求收到限流响应；本次操作未能完成。',
@@ -20,6 +23,8 @@ const messages: Record<RunDiagnosticCode, string> = {
   completed_after_retry: '本次操作经原生重试后完成。',
   verification_source_changed: '本次核对的原始文件已变化，修订交付失败；原冻结证据保留。',
   verification_source_missing: '本次核对的原始文件或项目目录已缺失，修订交付失败；原冻结证据保留。',
+  task_skill_version_changed: taskSkillVersionChangedMessage,
+  task_skill_unavailable: '默认 Skill 当前不可用。请在分析资产中核对安装，或编辑任务并明确取消该 Skill 后重试。',
 };
 const count = (value: unknown): number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
 function diagnostic(code: RunDiagnosticCode, stage: RunDiagnostic['stage'], retryCount: number): RunDiagnostic { return { code, stage, message: messages[code], retryCount: count(retryCount) }; }
@@ -42,11 +47,13 @@ export function runDiagnostic(input: { outcome: Outcome; kind: 'prompt' | 'comma
   return diagnostic(code, stage, retryCount);
 }
 
-/** Runtime exceptions can occur before a native terminal result exists. Do not
- * inspect cause/stack or emit the original exception message. */
+/** Map only whitelisted runtime codes; arbitrary cause/stack text is never copied. */
 export function runtimeDiagnostic(error: unknown): RunDiagnostic {
   const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
-  const observed: RunDiagnosticCode = code === 'verification_source_changed' || code === 'verification_source_missing' ? code
+  const cause = error && typeof error === 'object' && 'cause' in error ? error.cause : undefined;
+  const causeMessage = cause && typeof cause === 'object' && 'message' in cause ? cause.message : undefined;
+  const observed: RunDiagnosticCode = causeMessage === 'task_skill_version_changed' || causeMessage === 'task_skill_unavailable' ? causeMessage
+    : code === 'verification_source_changed' || code === 'verification_source_missing' ? code
     : code === 'runtime_process_stopped' || code === 'runtime_closed' ? 'runtime_stopped'
     : code === 'runtime_start_failed' || code === 'runtime_start_timeout' ? code : 'request_failed';
   return diagnostic(observed, 'runtime', 0);

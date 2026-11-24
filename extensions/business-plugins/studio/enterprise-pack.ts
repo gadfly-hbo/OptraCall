@@ -94,6 +94,9 @@ export interface ResourceGrantScope {
   summaryAuthority?: string;
   summarySha256?: string;
   verifiedScopeSummary?: string;
+  sourcePeriodFrom?: string;
+  sourcePeriodTo?: string;
+  sourcePeriodVerified?: boolean;
   metricRef?: StudioSourceRef;
   allowedDataPaths?: string[];
 }

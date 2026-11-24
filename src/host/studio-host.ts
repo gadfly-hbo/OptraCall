@@ -29,10 +29,78 @@ import { createStudioEnterpriseCatalog } from './studio-enterprise-catalog.ts';
 import { CaseStoreError, type CaseStore } from './case-store.ts';
 import { reasonWithStudioSources, type StudioRuleCommand, type StudioRuleResult } from './studio-rule-reasoning.ts';
 import { createMemberPackFeature } from './member-pack-host.ts';
+import { dataPeriodBounds } from './member-pack-data-view.ts';
 
 function json(response: ServerResponse, status: number, value: unknown) {
   response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); response.end(JSON.stringify(value));
 }
+
+export function getPublishedSummaryRevision(store: StudioStore, systemId: string, assetId: string, version: string, expectedSha256?: string) {
+  if (!/^[1-9]\d*$/.test(version)) throw new StudioError('studio_source_version_invalid', 400);
+  const revision = store.getPublishedAsset(systemId, assetId, Number(version));
+  if (revision.issue) throw new StudioError('summary_authority_restricted', 409);
+  if (expectedSha256 !== undefined && expectedSha256 !== revision.sha256) throw new StudioError('summary_authority_hash_mismatch', 409);
+  return revision;
+}
+
+function summaryPeriodRange(from: unknown, to: unknown) {
+  if (typeof from !== 'string' || typeof to !== 'string') return undefined;
+  const sourcePeriodFrom = from.trim().replaceAll('/', '-');
+  const sourcePeriodTo = to.trim().replaceAll('/', '-');
+  const start = dataPeriodBounds(sourcePeriodFrom)?.start;
+  const end = dataPeriodBounds(sourcePeriodTo)?.end;
+  if (start === undefined || end === undefined || start > end) return undefined;
+  return { sourcePeriodFrom, sourcePeriodTo, start, end };
+}
+
+function parseSummaryPeriod(value: string, prose: boolean) {
+  const declaration = value.trim();
+  const single = summaryPeriodRange(declaration, declaration);
+  if (single) return single;
+  // Take complete numeric components before validating the calendar. A dangling
+  // range separator or a malformed end never qualifies its start as a singleton.
+  const match = /^(\d{4}[-/]\d+(?:[-/]\d+)?)(?:\s*(?:\.\.|~|～|—|–|至|到|to|\s-\s)\s*(\d{4}[-/]\d+(?:[-/]\d+)?))?/i.exec(declaration);
+  if (!match) return undefined;
+  const remainder = declaration.slice(match[0].length);
+  if (remainder.trim()) {
+    if (!prose) return undefined;
+    // Free text qualifies only when the period ends at a recognizable boundary.
+    // An unsupported continuation must not shrink a statement to its first month.
+    const [sameLine, ...laterLines] = remainder.split(/\r?\n/);
+    const suffix = sameLine!.trim();
+    const nextField = /^[,，;；。]\s*[\p{L}_][\p{L}\p{N}_ -]{0,30}[:：]/u;
+    const note = /^[,，;；。]?\s*[（(]?\s*(?:(?:生成|修订|更新)(?:于|时间|日期)|首批样本|样本|备注|附注|核对日)/u;
+    if (suffix && !/^[;；。]$/.test(suffix) && !nextField.test(suffix) && !note.test(suffix)) return undefined;
+    if (!suffix && /^(?:\d{4}[-/]|[,，、~～—–-]|(?:及|和|与|至|到)\s*\d)/u.test(laterLines.join('\n').trimStart())) return undefined;
+  }
+  return summaryPeriodRange(match[1], match[2] ?? match[1]);
+}
+
+export function summarySourcePeriod(structured: Record<string, unknown> | undefined, text: string) {
+  if (structured && ('periodFrom' in structured || 'periodTo' in structured)) {
+    return summaryPeriodRange(structured.periodFrom, structured.periodTo);
+  }
+  if (structured && 'period' in structured) {
+    return typeof structured.period === 'string' ? parseSummaryPeriod(structured.period, false) : undefined;
+  }
+  let result: ReturnType<typeof summaryPeriodRange>;
+  const labels = /(?:统计期间|数据期间|期间范围|期间|统计范围|数据范围|覆盖期间)\s*(?:[:：]\s*|(?=\d))/g;
+  for (const label of text.matchAll(labels)) {
+    const period = parseSummaryPeriod(text.slice(label.index + label[0].length), true);
+    if (!period) return undefined;
+    result ??= { ...period };
+    if (period.start < result.start) {
+      result.start = period.start;
+      result.sourcePeriodFrom = period.sourcePeriodFrom;
+    }
+    if (period.end > result.end) {
+      result.end = period.end;
+      result.sourcePeriodTo = period.sourcePeriodTo;
+    }
+  }
+  return result;
+}
+
 export type StudioHostOptions = {
   dataRoot: string; codeRoot?: string; memberPackEnabled?: boolean; projects: ProjectStore; enterpriseMaterials: EnterpriseMaterialsStore;
   cases?: CaseStore;
@@ -62,49 +130,36 @@ export function createStudioFeature(options: StudioHostOptions) {
     assetText: string,
     assetScope: string | undefined,
     requested: { grain?: string; periodFrom?: string; periodTo?: string },
-  ): string {
+  ): { verifiedScopeSummary: string; sourcePeriodFrom?: string; sourcePeriodTo?: string } {
     const combined = `${assetScope ?? ''}\n${assetText}`;
     const trimmedGrain = requested.grain?.trim();
     if (!trimmedGrain) throw new StudioError('invalid_summary_grant_scope', 400);
 
-    // 1. If asset body is structured JSON with explicit grain/period fields, enforce exact match
+    let structured: Record<string, unknown> | undefined;
     try {
-      const parsed = JSON.parse(assetText);
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        if (typeof parsed.grain === 'string' && parsed.grain.trim() && parsed.grain.trim() !== trimmedGrain) {
-          throw new StudioError('summary_scope_mismatch', 409);
-        }
-        if (typeof parsed.periodFrom === 'string' && requested.periodFrom && parsed.periodFrom !== requested.periodFrom) {
-          throw new StudioError('summary_scope_mismatch', 409);
-        }
-        if (typeof parsed.periodTo === 'string' && requested.periodTo && parsed.periodTo !== requested.periodTo) {
-          throw new StudioError('summary_scope_mismatch', 409);
-        }
-        if (typeof parsed.period === 'string' && parsed.period.trim()) {
-          const p = parsed.period.trim();
-          if (requested.periodFrom && !requested.periodFrom.startsWith(p) && !p.includes(requested.periodFrom.slice(0, 7))) {
-            throw new StudioError('summary_scope_mismatch', 409);
-          }
-          if (requested.periodTo && !requested.periodTo.startsWith(p) && !p.includes(requested.periodTo.slice(0, 7))) {
-            throw new StudioError('summary_scope_mismatch', 409);
-          }
-        }
-      }
-    } catch (error) {
-      if (error instanceof StudioError) throw error;
-      // Non-JSON text body; validate prose period & grain markers below
+      const parsed: unknown = JSON.parse(assetText);
+      if (object(parsed)) structured = parsed;
+    } catch { /* Free text can declare its own statistics period. */ }
+    if (typeof structured?.grain === 'string' && structured.grain.trim() && structured.grain.trim() !== trimmedGrain) {
+      throw new StudioError('summary_scope_mismatch', 409);
     }
-
-    // 2. If text explicitly names YYYY-MM period(s) and requested periodFrom/periodTo don't overlap them, reject!
+    const period = summarySourcePeriod(structured, combined);
     const textMonths = [...new Set([...combined.matchAll(/\b(20\d{2}-(?:0[1-9]|1[0-2]))\b/g)].map(m => m[1]!))];
-    if (textMonths.length > 0 && (requested.periodFrom || requested.periodTo)) {
-      const reqFromMonth = requested.periodFrom?.slice(0, 7);
-      const reqToMonth = requested.periodTo?.slice(0, 7);
-      const overlaps = textMonths.some(m => (!reqFromMonth || m >= reqFromMonth) && (!reqToMonth || m <= reqToMonth));
-      if (!overlaps) throw new StudioError('summary_scope_mismatch', 409);
+    if (requested.periodFrom || requested.periodTo) {
+      if (period) {
+        const lower = requested.periodFrom ? dataPeriodBounds(requested.periodFrom)?.start : -Infinity;
+        const upper = requested.periodTo ? dataPeriodBounds(requested.periodTo)?.end : Infinity;
+        if (lower === undefined || upper === undefined || period.end < lower || period.start > upper) throw new StudioError('summary_scope_mismatch', 409);
+      } else if (textMonths.length) {
+        // The existing coarse mismatch diagnostic is separate from evidence
+        // of a declared source period, which is required for bounded reads.
+        const from = requested.periodFrom?.slice(0, 7);
+        const to = requested.periodTo?.slice(0, 7);
+        if (!textMonths.some(month => (!from || month >= from) && (!to || month <= to))) throw new StudioError('summary_scope_mismatch', 409);
+      }
     }
 
-    // 3. Verify grain compatibility against explicit or inferred asset grain markers
+    // Verify grain compatibility against explicit or inferred asset grain markers.
     const lowerCombined = combined.toLowerCase();
     const lowerGrain = trimmedGrain.toLowerCase();
     const explicitGrainMatch = /粒度\s*[:：]\s*([a-z0-9_\u4e00-\u9fa5-]+)/i.exec(combined);
@@ -121,8 +176,11 @@ export function createStudioFeature(options: StudioHostOptions) {
 
     const periodSummary = requested.periodFrom || requested.periodTo
       ? `${requested.periodFrom ?? '*'}..${requested.periodTo ?? '*'}`
-      : (textMonths.join(',') || '未声明期间');
-    return `粒度:${trimmedGrain} · 期间:${periodSummary}`;
+      : period ? `${period.sourcePeriodFrom}..${period.sourcePeriodTo}` : '未声明期间';
+    return {
+      verifiedScopeSummary: `粒度:${trimmedGrain} · 期间:${periodSummary}`,
+      ...(period && { sourcePeriodFrom: period.sourcePeriodFrom, sourcePeriodTo: period.sourcePeriodTo }),
+    };
   }
 
   async function inspectAuthorityDependency(
@@ -385,29 +443,27 @@ export function createStudioFeature(options: StudioHostOptions) {
     scope: { summaryAssetId?: string; summaryVersion?: string; resourceRef?: StudioSourceRef; grain?: string; periodFrom?: string; periodTo?: string },
   ): Promise<import('./member-pack-host.ts').VerifiedSummaryAuthority> {
     const ref = scope.resourceRef;
-    // 1. Explicit resourceRef pointing to Studio formal asset, Enterprise enabled material, or SAP metric
+    const targetId = ref?.id ?? scope.summaryAssetId?.trim();
+    const targetVer = ref?.version ?? scope.summaryVersion?.trim();
+    if (!targetId || !targetVer) throw new StudioError('invalid_summary_grant_scope', 400);
+
+    const studioSystem = ref
+      ? (ref.authority === 'studio-source' ? store.get(uuid(ref.locator)) : undefined)
+      : store.list().find(system => system.enterpriseId === enterpriseId && system.assets.some(asset => asset.id === targetId));
+    if (studioSystem) {
+      if (studioSystem.enterpriseId !== enterpriseId || ref?.projectId !== undefined && ref.projectId !== studioSystem.projectId) throw new StudioError('studio_owner_mismatch', 403);
+      const revision = getPublishedSummaryRevision(store, studioSystem.id, targetId, targetVer, ref?.sha256);
+      return {
+        summaryAssetId: targetId,
+        summaryVersion: targetVer,
+        summaryAuthority: `Studio·${studioSystem.name}`,
+        summarySha256: revision.sha256,
+        ...assertSummaryScopeMatchesAsset(revision.body, revision.scope, scope),
+        ...resolveAssetAuthorityOwner(enterpriseId, 'studio-source', targetId, studioSystem),
+        resourceRef: ref ? { ...ref, sha256: revision.sha256 } : { authority: 'studio-source', id: targetId, version: targetVer, sha256: revision.sha256, projectId: studioSystem.projectId, locator: studioSystem.id, title: revision.title },
+      };
+    }
     if (ref) {
-      if (ref.authority === 'studio-source') {
-        const system = store.get(uuid(ref.locator));
-        if (system.enterpriseId !== enterpriseId) throw new StudioError('studio_owner_mismatch', 403);
-        const asset = system.assets.find(a => a.id === ref.id);
-        const revNum = Number(ref.version);
-        const revision = asset?.revisions.find(r => r.revision === revNum);
-        if (!asset || !revision || asset.formalRevision !== revNum) throw new StudioError('summary_authority_not_published', 404);
-        if (asset.issue?.affectedRevision === revNum) throw new StudioError('summary_authority_restricted', 409);
-        if (ref.sha256 && revision.sha256 !== ref.sha256) throw new StudioError('summary_authority_hash_mismatch', 409);
-        const verifiedScopeSummary = assertSummaryScopeMatchesAsset(revision.body, revision.scope, scope);
-        const owner = resolveAssetAuthorityOwner(enterpriseId, 'studio-source', asset.id, system);
-        return {
-          summaryAssetId: asset.id,
-          summaryVersion: String(revNum),
-          summaryAuthority: `Studio·${system.name}`,
-          summarySha256: revision.sha256,
-          verifiedScopeSummary,
-          ...owner,
-          resourceRef: { ...ref, sha256: revision.sha256 },
-        };
-      }
       if (ref.authority === 'enterprise') {
         await assertNativeEnterprise('enterprise', ref.id, enterpriseId);
         const mat = await options.enterpriseMaterials.get(uuid(ref.id));
@@ -415,7 +471,9 @@ export function createStudioFeature(options: StudioHostOptions) {
         const rev = mat.material.revisions.find(r => r.revisionId === ref.version);
         if (!rev) throw new StudioError('summary_authority_not_found', 404);
         const revSha = rev.bodySha256 || createHash('sha256').update(rev.body ?? '').digest('hex');
-        const verifiedScopeSummary = assertSummaryScopeMatchesAsset(rev.body ?? '', rev.title, scope);
+        if (ref.locator !== undefined && ref.locator !== mat.storeId) throw new StudioError('studio_source_changed', 409);
+        if (ref.sha256 !== undefined && ref.sha256 !== revSha) throw new StudioError('summary_authority_hash_mismatch', 409);
+        const { verifiedScopeSummary, sourcePeriodFrom, sourcePeriodTo } = assertSummaryScopeMatchesAsset(rev.body ?? '', rev.title, scope);
         const owner = resolveAssetAuthorityOwner(enterpriseId, 'enterprise', mat.material.id);
         return {
           summaryAssetId: mat.material.id,
@@ -423,6 +481,7 @@ export function createStudioFeature(options: StudioHostOptions) {
           summaryAuthority: `企业资料库·${rev.title}`,
           summarySha256: revSha,
           verifiedScopeSummary,
+          ...(sourcePeriodFrom ? { sourcePeriodFrom, sourcePeriodTo } : {}),
           ...owner,
           resourceRef: { ...ref, sha256: revSha, locator: mat.storeId },
         };
@@ -431,7 +490,7 @@ export function createStudioFeature(options: StudioHostOptions) {
         await assertNativeEnterprise('sap-metric', ref.id, enterpriseId);
         const known = library.read(ref.id, ref.version);
         if (ref.sha256 && known.entry.bytesSha256 !== ref.sha256) throw new StudioError('summary_authority_hash_mismatch', 409);
-        const verifiedScopeSummary = assertSummaryScopeMatchesAsset(known.canonicalYaml, known.entry.id, scope);
+        const { verifiedScopeSummary, sourcePeriodFrom, sourcePeriodTo } = assertSummaryScopeMatchesAsset(known.canonicalYaml, known.entry.id, scope);
         const owner = resolveAssetAuthorityOwner(enterpriseId, 'sap-metric', ref.id);
         return {
           summaryAssetId: ref.id,
@@ -439,6 +498,7 @@ export function createStudioFeature(options: StudioHostOptions) {
           summaryAuthority: '原 SAP 指标库',
           summarySha256: known.entry.bytesSha256,
           verifiedScopeSummary,
+          ...(sourcePeriodFrom ? { sourcePeriodFrom, sourcePeriodTo } : {}),
           ...owner,
           resourceRef: { ...ref, sha256: known.entry.bytesSha256 },
         };
@@ -446,35 +506,13 @@ export function createStudioFeature(options: StudioHostOptions) {
       throw new StudioError('invalid_summary_authority', 400);
     }
 
-    // 2. Lookup by summaryAssetId + summaryVersion in enterprise Studio formal assets, EnterpriseMaterials, or SAP MetricLibrary
-    const targetId = scope.summaryAssetId?.trim();
-    const targetVer = scope.summaryVersion?.trim();
-    if (!targetId || !targetVer) throw new StudioError('invalid_summary_grant_scope', 400);
-
-    for (const system of store.list().filter(s => s.enterpriseId === enterpriseId)) {
-      const asset = system.assets.find(a => a.id === targetId);
-      const rev = asset?.revisions.find(r => String(r.revision) === targetVer);
-      if (asset && rev && asset.formalRevision === rev.revision && asset.issue?.affectedRevision !== rev.revision) {
-        const verifiedScopeSummary = assertSummaryScopeMatchesAsset(rev.body, rev.scope, scope);
-        const owner = resolveAssetAuthorityOwner(enterpriseId, 'studio-source', asset.id, system);
-        return {
-          summaryAssetId: asset.id,
-          summaryVersion: String(rev.revision),
-          summaryAuthority: `Studio·${system.name}`,
-          summarySha256: rev.sha256,
-          verifiedScopeSummary,
-          ...owner,
-          resourceRef: { authority: 'studio-source', id: asset.id, version: String(rev.revision), sha256: rev.sha256, projectId: system.projectId, locator: system.id, title: rev.title },
-        };
-      }
-    }
     try {
       const mat = await options.enterpriseMaterials.get(uuid(targetId));
       await assertNativeEnterprise('enterprise', targetId, enterpriseId);
       const rev = mat.material.revisions.find(r => r.revisionId === targetVer);
       if (mat.material.enabled && rev) {
         const revSha = rev.bodySha256 || createHash('sha256').update(rev.body ?? '').digest('hex');
-        const verifiedScopeSummary = assertSummaryScopeMatchesAsset(rev.body ?? '', rev.title, scope);
+        const { verifiedScopeSummary, sourcePeriodFrom, sourcePeriodTo } = assertSummaryScopeMatchesAsset(rev.body ?? '', rev.title, scope);
         const owner = resolveAssetAuthorityOwner(enterpriseId, 'enterprise', mat.material.id);
         return {
           summaryAssetId: mat.material.id,
@@ -482,6 +520,7 @@ export function createStudioFeature(options: StudioHostOptions) {
           summaryAuthority: `企业资料库·${rev.title}`,
           summarySha256: revSha,
           verifiedScopeSummary,
+          ...(sourcePeriodFrom ? { sourcePeriodFrom, sourcePeriodTo } : {}),
           ...owner,
           resourceRef: { authority: 'enterprise', id: mat.material.id, version: rev.revisionId, sha256: revSha, locator: mat.storeId, title: rev.title },
         };
@@ -492,7 +531,7 @@ export function createStudioFeature(options: StudioHostOptions) {
     try {
       await assertNativeEnterprise('sap-metric', targetId, enterpriseId);
       const known = library.read(targetId, targetVer);
-      const verifiedScopeSummary = assertSummaryScopeMatchesAsset(known.canonicalYaml, known.entry.id, scope);
+      const { verifiedScopeSummary, sourcePeriodFrom, sourcePeriodTo } = assertSummaryScopeMatchesAsset(known.canonicalYaml, known.entry.id, scope);
       const owner = resolveAssetAuthorityOwner(enterpriseId, 'sap-metric', targetId);
       return {
         summaryAssetId: targetId,
@@ -500,6 +539,7 @@ export function createStudioFeature(options: StudioHostOptions) {
         summaryAuthority: '原 SAP 指标库',
         summarySha256: known.entry.bytesSha256,
         verifiedScopeSummary,
+          ...(sourcePeriodFrom ? { sourcePeriodFrom, sourcePeriodTo } : {}),
         ...owner,
         resourceRef: { authority: 'sap-metric', id: targetId, version: targetVer, sha256: known.entry.bytesSha256 },
       };
@@ -890,7 +930,7 @@ export function createStudioFeature(options: StudioHostOptions) {
           const systems = store.list().filter(system => availableFor(system, projectId)).map(system => ({ id: system.id, name: system.name, projectId: system.projectId, taskId: system.taskId, executionOwner: studioExecutionOwner(system), topics: system.topics.map(({ id, title }) => ({ id, title })), construction: construction?.id === system.id }));
           const items = enterpriseId ? (await enterpriseCatalog.catalog(enterpriseId, projectId)).items.filter(item => item.eligible && item.ref) : [];
           const inputs = (await sources.inventory(projectId)).filter(item => item.ref.authority === 'data');
-          const memberPacks = enterpriseId ? memberPack.buildPackCatalogSummary(enterpriseId, projectId, taskId) : [];
+          const memberPacks = enterpriseId ? await memberPack.buildPackCatalogSummary(enterpriseId, projectId, taskId) : [];
           const directory = [...systems.map(system => ({ kind: 'system' as const, system })), ...items.map(item => ({ kind: 'source' as const, item })), ...inputs.map(input => ({ kind: 'input' as const, input }))];
           const catalogSha256 = digest(directory);
           if (payload.expectedCatalogSha256 !== undefined && payload.expectedCatalogSha256 !== catalogSha256) throw new StudioError('studio_catalog_changed', 409);
@@ -910,7 +950,7 @@ export function createStudioFeature(options: StudioHostOptions) {
             const found = memberPack.packs.list(enterpriseId).find(p => p.domain === domain) ?? null;
             return reply(action, { enterpriseId, mode: 'construction', pack: found ? { id: found.id, packCode: found.packCode, domain: found.domain, name: found.name, revision: found.revision, panorama: found.panorama ?? null, entries: found.entries, purposes: found.purposes, packRevisions: found.packRevisions.map(r => ({ version: r.version, status: r.status, confirmedAt: r.confirmedAt, dataCutoffAt: r.dataCutoffAt })) } : null });
           }
-          const summary = memberPack.buildPackCatalogSummary(enterpriseId, projectId, taskId).filter((p: any) => p.domain === domain);
+          const summary = (await memberPack.buildPackCatalogSummary(enterpriseId, projectId, taskId)).filter((p: any) => p.domain === domain);
           return reply(action, { enterpriseId, mode: 'analysis', packs: summary });
         }
         const exactSourceSystem = ['read-source', 'reason'].includes(action) && object(payload.ref) && payload.ref.authority === 'studio-source' ? payload.ref.locator : undefined;
@@ -920,7 +960,7 @@ export function createStudioFeature(options: StudioHostOptions) {
           if (!['enterprise','sap-metric','sap-method'].includes(ref.authority) || ref.locator?.startsWith('020_clean/')) throw new StudioError('studio_system_required');
           return options.mutate(async () => {
             await assertCurrent();
-            const pinnedCheck = memberPack.inspectPinnedSourceRead(projectId, taskId, ref);
+            const pinnedCheck = await memberPack.inspectPinnedSourceRead(projectId, taskId, ref);
             const read = await sources.read(ref, projectId, undefined, { taskId, ...(pinnedCheck.matchedPack ? { historical: true } : {}) });
             context.assertCurrent(); context.signal.throwIfAborted(); if (options.closing()) throw new StudioError('host_closing', 503);
             const { text: _body, ...metadata } = read, selected = selectFoundationSource(read, payload), page = studioTextPage(selected.text, { ...payload, length: payload.length === undefined ? 16_000 : payload.length }, { ...metadata, ...(pinnedCheck.matchedPack ? { pinnedPack: pinnedCheck.matchedPack } : {}), ...selected.selection }, { ref: read.ref, ...selected.selection });
@@ -1007,7 +1047,7 @@ export function createStudioFeature(options: StudioHostOptions) {
           const ref = sourceRef(payload.ref);
           return options.mutate(async () => {
             await assertCurrent();
-            const pinnedCheck = !isConstruction ? memberPack.inspectPinnedSourceRead(projectId, taskId, ref) : {};
+            const pinnedCheck = !isConstruction ? await memberPack.inspectPinnedSourceRead(projectId, taskId, ref) : {};
             const read = await sources.read(ref, projectId, id, { construction: isConstruction, taskId, ...(pinnedCheck.matchedPack ? { historical: true } : {}) });
             context.assertCurrent(); context.signal.throwIfAborted(); if (options.closing()) throw new StudioError('host_closing', 503);
             const { text: _body, ...metadata } = read, selected = selectFoundationSource(read, payload), qualifications = !isConstruction ? { publications: publicationFacts(store.get(id), projectId, [read.ref]).map(publication => publicationIndex(id, publication)) } : {}, page = studioTextPage(selected.text, { ...payload, length: payload.length === undefined ? 16_000 : payload.length }, { ...metadata, ...qualifications, ...(pinnedCheck.matchedPack ? { pinnedPack: pinnedCheck.matchedPack } : {}), ...selected.selection }, { ref: read.ref, ...selected.selection });
@@ -1140,8 +1180,11 @@ export function createStudioFeature(options: StudioHostOptions) {
           }
           if (action === 'register-sap-metric') {
             const locator = text(payload.path, 1024, false);
-            if (!/^020_clean\/.+\.ya?ml$/.test(locator)) throw new StudioError('studio_metric_candidate_unavailable');
-            const file = await options.projects.readFile(projectId, locator), publication = prepareSapPublication(new Uint8Array(file.bytes)); context.assertCurrent(); context.signal.throwIfAborted();
+            if (!/^020_clean\/.+\.ya?ml$/.test(locator)) throw new StudioError('studio_metric_candidate_unavailable', 400, { message: 'payload.path 必须指向 020_clean 下的 SAP YAML 候选文件；请先写入准确文件后注册。', details: { issues: [{ reason: 'candidate_path_invalid', path: 'payload.path' }] } });
+            let file: Awaited<ReturnType<typeof options.projects.readFile>>;
+            try { file = await options.projects.readFile(projectId, locator); }
+            catch { throw new StudioError('studio_metric_candidate_unavailable', 400, { message: 'payload.path 指向的 SAP 候选文件当前不存在或不可读；请先写入 020_clean 下的准确 YAML 后重试。', details: { issues: [{ reason: 'candidate_file_unavailable', path: 'payload.path' }] } }); }
+            const publication = prepareSapPublication(new Uint8Array(file.bytes)); context.assertCurrent(); context.signal.throwIfAborted();
             if (enterpriseScope.active()) await assertNativeEnterprise('sap-metric', publication.document.package.id, system.enterpriseId ?? enterpriseScopes.enterpriseIdForProject(projectId));
             context.assertCurrent(); context.signal.throwIfAborted();
             const ref: StudioSourceRef = { authority: 'sap-metric', id: publication.document.package.id, version: publication.document.package.version, sha256: publication.bytesSha256, projectId, locator, title: publication.document.package.id };
@@ -1202,7 +1245,21 @@ export function createStudioFeature(options: StudioHostOptions) {
           }
           throw new StudioError('studio_action_not_available', 409);
         }).catch(error => {
-          if (error instanceof SapFault || error instanceof MetricLibraryFault || error instanceof SapMethodStoreError) throw new StudioError(error.code.toLowerCase(), 'status' in error && typeof error.status === 'number' ? error.status : 409);
+          if (error instanceof SapFault) {
+            const segments = error.path ? error.path.split('.') : [];
+            let safeCount = 0;
+            for (const segment of segments) { if (/^[a-z][a-z_]*$|^\d+$/.test(segment)) safeCount++; else break; }
+            const safePath = segments.slice(0, safeCount).join('.');
+            const message = safePath === 'package.id'
+              ? 'SAP package.id 必须匹配 ^[a-z][a-z0-9-]*$：小写字母开头，仅含小写字母、数字和连字符；例如 studio-retail-flow。请修正后重试。'
+              : safePath === 'package.version'
+                ? 'SAP package.version 必须是 x.y.z 数字语义版本，例如 1.0.0。请修正后重试。'
+                : error.code === 'SAP_UNKNOWN_FIELD'
+                  ? `SAP ${safePath || 'document'} 含有不认识的字段；请移除未知键后重试。`
+                  : `SAP ${safePath || 'document'} 未通过结构校验；请按 SAP 0.2 规则修正该字段后重试。`;
+            throw new StudioError(error.code.toLowerCase(), 400, { message, details: { issues: [{ reason: error.code.toLowerCase(), ...(safePath ? { path: safePath } : {}) }] } });
+          }
+          if (error instanceof MetricLibraryFault || error instanceof SapMethodStoreError) throw new StudioError(error.code.toLowerCase(), 'status' in error && typeof error.status === 'number' ? error.status : 409);
           throw error;
         });
       };

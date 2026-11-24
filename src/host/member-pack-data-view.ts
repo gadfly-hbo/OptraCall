@@ -69,6 +69,17 @@ export function isPeriodCovered(period: string | undefined, periodFrom?: string,
   return lowerBound !== undefined && upperBound !== undefined && bounds.start >= lowerBound && bounds.end <= upperBound;
 }
 
+export function isSourcePeriodCovered(sourcePeriodFrom?: string, sourcePeriodTo?: string, grantPeriodFrom?: string, grantPeriodTo?: string): boolean {
+  if (!grantPeriodFrom && !grantPeriodTo) return true;
+  if (!sourcePeriodFrom || !sourcePeriodTo) return false;
+  const sourceStart = dataPeriodBounds(sourcePeriodFrom)?.start;
+  const sourceEnd = dataPeriodBounds(sourcePeriodTo)?.end;
+  if (sourceStart === undefined || sourceEnd === undefined || sourceStart > sourceEnd) return false;
+  const grantStart = grantPeriodFrom ? dataPeriodBounds(grantPeriodFrom)?.start : Number.NEGATIVE_INFINITY;
+  const grantEnd = grantPeriodTo ? dataPeriodBounds(grantPeriodTo)?.end : Number.POSITIVE_INFINITY;
+  return grantStart !== undefined && grantEnd !== undefined && sourceStart >= grantStart && sourceEnd <= grantEnd;
+}
+
 function parseCsvLine(line: string, delimiter: string): string[] | undefined {
   const cells: string[] = [];
   let cur = '';

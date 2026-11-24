@@ -33,7 +33,8 @@ export function prepareStudioArguments(args: unknown): Static<typeof studioParam
   const sources: unknown = input?.payload?.sources;
   // Check the supplied shape before Pi's schema conversion can wrap an object.
   if (sources != null && !Array.isArray(sources)) {
-    throw new Error(`invalid_studio_sources: payload.sources must be a JSON array of SourceRef objects, received ${typeof sources}. Pass the array directly without an item wrapper.`);
+    const details = { issues: [{ reason: 'expected_array', path: 'payload.sources' }] };
+    throw new Error(`invalid_studio_sources: payload.sources must be a JSON array of SourceRef objects, received ${typeof sources}. Pass the array directly without an item wrapper.: ${JSON.stringify(details)}`);
   }
   return input;
 }
