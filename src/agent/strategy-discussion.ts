@@ -54,9 +54,9 @@ export const strategyDiscussionTool = {
     'goalScopes.bound 或 defaultScope 已明确时可省略 draft.scope；有多种适用范围时按用户明确意图选用，归属仍有歧义时询问。基线待补用 pending，目标依据不足时继续讨论。修订原候选须给 goalId 和 expectedVersion。',
     'adopt-goal 仅按本轮用户明确原话给 quote(start/end/text)、准确 goalId/version/expectedVersion 和 goalContentSha256 采用。目标采用不授权经营执行。operation 给原 operationId 查回执，未知先核对原操作。',
     '战略事项主会话专用：initiative-files 列本事项共用及当前范围资料；initiative-read-file 按 fileId 读取文本资料（offset/limit 续读）；initiative-read-kickoff 读开题报告版本（可给 version）；initiative-save-kickoff 保存开题报告草稿，给 operationId、kickoffFields（horizon/diagnosis/propositions 3–5 项含稳定唯一 id、question、whyItMatters/assumptions/evidenceGaps/followUp）与可选 kickoffSources（无来源可省略或传 []；file 来源须给实际读取的 fileId 与 sha256 准确身份，public 来源给依据）。校验失败按安全 details.issues 的 path/reason 修正，失败未写入。锁定与应用由决策者在界面完成，工具不锁定。',
-    '候选会话专用：initiative-save-candidate 保存本候选版本正文，给 operationId、candidateBlocks（稳定唯一 id、label、text 的结构化章节，覆盖定位与增长、目标与里程碑、资源与明确不做、成立条件与假设）及可选 candidateGoals。initiative-read-candidate 只读核对本候选当前准确正文，operation 按原 operationId 查自己的保存回执；冲突后先读回，结果未知不要盲目换号，明确新保存意图才用新 operationId。Host 绑定本版本身份，不接受其他候选或开题引用；锁定由决策者完成。',
+    '候选会话专用：initiative-save-candidate 保存本候选版本正文，仅传 operationId（UUID）、candidateBlocks（1–20 项，含唯一 id ^[A-Za-z0-9_-]{1,40}$、label、text，覆盖定位与增长、目标与里程碑、资源与明确不做、成立条件与假设）及可选 candidateGoals（字符串数组，最多 10 条，勿传对象，勿夹带 candidateId/no/version）；校验失败按安全 details.issues 的 path/reason 修正，失败零写入。initiative-read-candidate 只读核对本候选或直接父版（传父版 candidateId 与 no）准确正文；长正文自动返回章节目录与 pagingRequired，再按 blockId 与 offset/limit（最大 8192）逐块完整分页读取，不截断丢正文。operation 按原 operationId 查自己的保存回执；冲突后先读回，结果未知不要盲目换号，明确新保存意图才用新 operationId。Host 绑定本版本身份，不接受无关候选或开题引用；锁定由决策者完成。',
     '检验会话专用：initiative-save-verification 提交本道检验结论，给 verdict（pass/fail/insufficient）、evidence（可核对的关键发现与依据）及可选 verificationSources。结论只针对 Host 固定的锁定版指纹；发布由决策者完成。',
-    '主会话比较与拟改：initiative-read-candidate 按准确 candidateId/no 读取本事项当前范围候选正文与身份；initiative-propose-revision 仅用于本轮携带的修订拟议任务，按 Host 给定的 proposalId 与固定块提交 newText（仅替换该块，其他内容不动），由决策者核对差异后采纳另存。',
+    '主会话比较与拟改：initiative-read-candidate 按准确 candidateId/no 读取本事项当前范围候选正文与身份；initiative-propose-revision 仅在当前请求明确绑定该 proposalId 且目标块基线未变时可用，按 Host 给定的 proposalId 与固定块提交 newText（仅替换该块，其他内容不动），由决策者核对差异后采纳另存。',
     '主会话技能：initiative-read-skill 按 skill（deep-research 或 grill-me）读取 Host 固定产品资产原文与指纹；可附 path 读取该包内 references/agents 获准资料（默认 SKILL.md，禁止越界）。使用技能前先读取并遵循其方法。仅这两个资产可用。',
   ].join(' '),
   parameters: Type.Object({
@@ -82,6 +82,7 @@ export const strategyDiscussionTool = {
     candidateGoals: Type.Optional(Type.Array(nonblank(500), { maxItems: 10 })),
     candidateId: Type.Optional(nonblank(100)),
     no: Type.Optional(Type.Integer({ minimum: 1 })),
+    blockId: Type.Optional(nonblank(40)),
     proposalId: Type.Optional(nonblank(100)),
     newText: Type.Optional(nonblank(20000)),
     skill: Type.Optional(Type.Union([Type.Literal('deep-research'), Type.Literal('grill-me')])),
@@ -118,6 +119,8 @@ const proposalErrorReasons: Readonly<Record<string, string>> = {
   invalid_strategy_goal_due_date: 'draft.dueAt 需要可识别的日期，例如 2027-03-31。',
   invalid_strategy_goal_version: 'expectedVersion 需要原候选的正整数版本。请用 read-goals 核对。',
   strategy_goal_conflict: 'expectedVersion 与当前版本不一致。请重读目标再核对修订内容。',
+  strategy_proposal_unavailable: '该拟改提案未绑定到当前获准请求或已非待拟改状态；本次未修改提案。',
+  strategy_proposal_baseline_changed: '目标块正文已发生变化，原拟改基线已过期；本次未提交旧补丁，请基于最新正文重新发起限定修改。',
 };
 
 export function explainGoalProposalError(error: unknown): unknown {

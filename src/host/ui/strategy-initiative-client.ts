@@ -33,7 +33,12 @@ export interface InitiativeHandoffReceipt { operationId: string; scope: GoalScop
 export class StrategyInitiativeRequestError extends Error {
   code: string; status: number; uncertain: boolean;
   constructor(code: string, status: number, uncertain = false, message?: string) {
-    super(message || (status === 404 ? '原记录不存在或尚未创建，请核对当前事项与范围。' : code.includes('conflict') || code.includes('changed') ? '所见版本或状态已变化，输入保持；请核对原记录后再操作。' : uncertain ? '操作结果尚未核实，原输入与编号保留，请先读取原结果。' : '战略事项操作未完成，原输入与记录保留。'));
+    super(message || (status === 0
+      ? (uncertain ? '无法连接到本地 OptraCall 服务，操作结果尚未核实（UNKNOWN），原输入与操作编号保留；请确认服务已启动后再只读核对原结果。' : '无法连接到本地 OptraCall 服务，请确认服务已启动后重试；原输入与记录保留。')
+      : status === 404 ? '原记录不存在或尚未创建，请核对当前事项与范围。'
+      : code.includes('conflict') || code.includes('changed') ? '所见版本或状态已变化，输入保持；请核对原记录后再操作。'
+      : uncertain ? '操作结果尚未核实，原输入与编号保留，请先读取原结果。'
+      : '战略事项操作未完成，原输入与记录保留。'));
     this.code = code; this.status = status; this.uncertain = uncertain;
   }
 }
@@ -79,7 +84,7 @@ export interface RevisePatchInput { blockId: string; expectedOldSha256: string; 
 export const reviseKickoffReport = (id: string, no: number, input: { operationId: string; baseSha256: string; request: string; patches: RevisePatchInput[]; proposalId?: string }, scopeKey: string) => request<{ version: KickoffReportVersion }>(`${path(id)}/reports/${no}/revise${scopeQuery(scopeKey)}`, 'POST', input);
 
 export const listCandidates = (id: string, scopeKey?: string) => request<{ candidates: CandidateVersion[] }>(`${path(id)}/candidates${scopeKey !== undefined ? scopeQuery(scopeKey) : ''}`);
-export const createCandidate = (id: string, input: { operationId: string; scope: GoalScope; title: string; instruction: string; configurationId?: string }) => request<{ candidate: CandidateVersion; requestId?: string; replayed?: boolean }>(`${path(id)}/candidates`, 'POST', input);
+export const createCandidate = (id: string, input: { operationId: string; scope: GoalScope; title: string; instruction: string; parent?: { candidateId: string; no: number }; configurationId?: string }) => request<{ candidate: CandidateVersion; requestId?: string; replayed?: boolean }>(`${path(id)}/candidates`, 'POST', input);
 const candidatePath = (id: string, cid: string, no: number) => `${path(id)}/candidates/${encodeURIComponent(cid)}/versions/${no}`;
 export const readCandidate = (id: string, cid: string, no: number) => request<CandidateDetail>(candidatePath(id, cid, no));
 export const sendCandidateMessage = (id: string, cid: string, no: number, input: { requestId: string; text: string; expectedRevision: number; replacePendingRequestId?: string }) => request<{ candidate: CandidateVersion; requestId: string; replayed?: boolean; receipt?: ReplacedStrategyRequest }>(`${candidatePath(id, cid, no)}/messages`, 'POST', input);
@@ -104,7 +109,24 @@ export async function sha256Text(text: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
 }
-export interface RevisionProposalView { proposalId: string; target: { kind: 'report'; no: number } | { kind: 'candidate'; candidateId: string; no: number }; blockId: string; request: string; baselineSha256: string; newText?: string; status: 'pending' | 'proposed' | 'adopted' | 'ended' | 'failed'; at: string; updatedAt: string }
+export async function sha256Buffer(buffer: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', buffer);
+  return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+}
+export type { RevisionProposalFeedback } from '../strategy-initiative-types.ts';
+export interface RevisionProposalView {
+  proposalId: string;
+  target: { kind: 'report'; no: number } | { kind: 'candidate'; candidateId: string; no: number };
+  blockId: string;
+  request: string;
+  baselineSha256: string;
+  newText?: string;
+  status: 'pending' | 'proposed' | 'adopted' | 'ended' | 'failed';
+  requestId?: string;
+  feedback?: import('../strategy-initiative-types.ts').RevisionProposalFeedback;
+  at: string;
+  updatedAt: string;
+}
 export const proposeReportRevision = (id: string, no: number, scopeKey: string, input: { operationId: string; blockId: string; request: string }) => request<{ proposal: RevisionProposalView; requestId: string }>(`${path(id)}/reports/${no}/revise-proposal${scopeQuery(scopeKey)}`, 'POST', input);
 export const proposeCandidateRevision = (id: string, cid: string, no: number, input: { operationId: string; blockId: string; request: string }) => request<{ proposal: RevisionProposalView; requestId: string }>(`${candidatePath(id, cid, no)}/revise-proposal`, 'POST', input);
 export const readProposal = (id: string, proposalId: string, scopeKey?: string) => {

@@ -213,3 +213,297 @@ test('SS13 exact-version dialog keeps every receipt inside a scrollable body', a
   assert.match(html, /查看候选会话/, 'exact-version dialog offers the original candidate session entry');
   assert.match(html, /尝试 1 · completed · pass/, 'every gate attempt keeps its true terminal state');
 });
+
+test('I131-A pending upload recovery UI shows operationId, fingerprint, launch guidance and reload reselect path', async () => {
+  const view = await import('../src/host/ui/strategy-initiative-view.tsx') as any;
+  assert.equal(typeof view.matchPendingUploadFile, 'function', 'matchPendingUploadFile helper must exist');
+  const pending = {
+    operationId: '12121212-1212-4121-8121-121212121212',
+    initiativeId: initiative.id,
+    workspaceScopeKey: scopeKey,
+    directory: '010_draw' as const,
+    name: '门店摘要.txt',
+    size: 128,
+    sha256: 'e'.repeat(64),
+    status: 'unknown' as const,
+    unreachable: true,
+    createdAt: '2026-11-24T10:00:00Z',
+  };
+  const unreachableHtml = renderToStaticMarkup(createElement(view.InitiativeFilePanel, {
+    files: [], reports: [], candidates: [], batches: [], scopeKey,
+    pendingUpload: pending, hasPendingUploadPayload: false,
+    onUpload() {}, onOpenFile() {}, onOpenReport() {},
+    onCheckPendingUpload() {}, onRetryPendingUpload() {}, onReselectPendingUpload() {}, onDismissPendingUpload() {},
+  }));
+  assert.match(unreachableHtml, /12121212-1212-4121-8121-121212121212/);
+  assert.match(unreachableHtml, /门店摘要\.txt/);
+  assert.match(unreachableHtml, /UNKNOWN/);
+  assert.match(unreachableHtml, /启动 OptraCall\.command/);
+  assert.match(unreachableHtml, /核对原上传结果/);
+  assert.match(unreachableHtml, /＋ 上传资料/, 'explicit new upload remains available');
+
+  const reloadedNotFoundHtml = renderToStaticMarkup(createElement(view.InitiativeFilePanel, {
+    files: [], reports: [], candidates: [], batches: [], scopeKey,
+    pendingUpload: { ...pending, status: 'not-found' as const, unreachable: false, checkedAt: '2026-11-24T10:01:00Z' },
+    hasPendingUploadPayload: false,
+    onUpload() {}, onOpenFile() {}, onOpenReport() {},
+    onCheckPendingUpload() {}, onRetryPendingUpload() {}, onReselectPendingUpload() {}, onDismissPendingUpload() {},
+  }));
+  assert.match(reloadedNotFoundHtml, /重选原文件并按原编号重试/);
+  assert.match(reloadedNotFoundHtml, /SHA-256/);
+
+  const inMemoryNotFoundHtml = renderToStaticMarkup(createElement(view.InitiativeFilePanel, {
+    files: [], reports: [], candidates: [], batches: [], scopeKey,
+    pendingUpload: { ...pending, status: 'not-found' as const, unreachable: false, checkedAt: '2026-11-24T10:01:00Z' },
+    hasPendingUploadPayload: true,
+    onUpload() {}, onOpenFile() {}, onOpenReport() {},
+    onCheckPendingUpload() {}, onRetryPendingUpload() {}, onReselectPendingUpload() {}, onDismissPendingUpload() {},
+  }));
+  assert.match(inMemoryNotFoundHtml, /按原操作编号重试/);
+});
+
+test('I131-C ReviseDialog shows exact target baseline preview, bound clarification, empty-reason and main discussion entry', async () => {
+  const { ReviseDialog } = await import('../src/host/ui/StrategyInitiativeWorkbench.tsx') as any;
+  const targets = [
+    { blockId: 'positioning', label: '定位与增长', text: '聚焦华东成熟门店会员复购。' },
+    { blockId: 'budget', label: '预算与资源', text: '2027 试点投入预算 80 万元。' },
+  ];
+  const baseProps = {
+    title: '限定修改战略候选',
+    baseLabel: '会员复购优先 · v1',
+    baseSha256: 'b'.repeat(64),
+    targets,
+    maxText: 20000,
+    propose: async () => ({ proposal: { proposalId: 'p1' } }),
+    readProposal: async () => ({ proposal: { status: 'pending' } }),
+    onSubmit: async () => ({}),
+    onDone: async () => {},
+    onClose() {},
+    readMainDiscussion: async () => null,
+  };
+  const clarifiedHtml = renderToStaticMarkup(createElement(ReviseDialog, {
+    ...baseProps,
+    initialFeedback: {
+      proposalId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      requestId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      blockId: 'positioning',
+      blockLabel: '定位与增长',
+      status: 'ended',
+      feedback: {
+        requestId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        outcome: 'completed',
+        replyText: '预算在「预算与资源」块，请确认改选后再拟改。',
+      },
+    },
+  }));
+  assert.match(clarifiedHtml, /聚焦华东成熟门店会员复购/, 'renders selected target baseline text preview');
+  assert.match(clarifiedHtml, /bbbbbbbbbbbb/, 'renders baseline fingerprint prefix');
+  assert.match(clarifiedHtml, /预算在「预算与资源」块，请确认改选后再拟改/, 'displays exact Agent clarification');
+  assert.match(clarifiedHtml, /查看主会话原讨论/, 'provides main discussion entry');
+
+  const emptyReasonHtml = renderToStaticMarkup(createElement(ReviseDialog, {
+    ...baseProps,
+    initialFeedback: {
+      proposalId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      requestId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      blockId: 'positioning',
+      blockLabel: '定位与增长',
+      status: 'ended',
+      feedback: { requestId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', outcome: 'completed' },
+    },
+  }));
+  assert.match(emptyReasonHtml, /未返回文字说明/);
+  assert.match(emptyReasonHtml, /查看主会话原讨论/);
+
+  const cancelledHtml = renderToStaticMarkup(createElement(ReviseDialog, {
+    ...baseProps,
+    initialFeedback: {
+      proposalId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      requestId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+      blockId: 'positioning',
+      blockLabel: '定位与增长',
+      status: 'failed',
+      feedback: { requestId: 'ffffffff-ffff-4fff-8fff-ffffffffffff', outcome: 'cancelled', failureDetail: '本轮拟改已取消；原稿未改动。' },
+    },
+  }));
+  assert.match(cancelledHtml, /本轮拟改已取消/);
+});
+
+test('I131-D CandidateBody, StrategyReleaseReview and PublishConfirmDialog explain 0-goal impact upfront and list goals when present', async () => {
+  const { CandidateBody } = await import('../src/host/ui/strategy-initiative-view.tsx');
+  const { PublishConfirmDialog, StrategyReleaseReview } = await import('../src/host/ui/StrategyInitiativeGovernance.tsx');
+  const zeroGoalCandidate: CandidateVersion = { ...candidate, goals: [] };
+
+  const bodyEmpty = renderToStaticMarkup(createElement(CandidateBody, { candidate: zeroGoalCandidate }));
+  assert.match(bodyEmpty, /可承接战略目标（0 个）/);
+  assert.match(bodyEmpty, /带入目标管理/);
+
+  const bodyWithGoals = renderToStaticMarkup(createElement(CandidateBody, { candidate }));
+  assert.match(bodyWithGoals, /可承接战略目标（2 个）/);
+  assert.match(bodyWithGoals, /90 天二购率达到 12%/);
+
+  const reviewEmpty = renderToStaticMarkup(createElement(StrategyReleaseReview, {
+    initiativeId: initiative.id, scope, scopes: [scope], candidates: [zeroGoalCandidate], batches: [batch],
+    publications: [], selected: null, onSelect() {}, onStage() {}, onRefresh: async () => {}, onGoalsChanged: async () => {},
+  }));
+  assert.match(reviewEmpty, /可承接目标：0 个/);
+  assert.match(reviewEmpty, /战略记录/);
+  assert.match(reviewEmpty, /核对并正式发布/, '0-goal strategy remains legally publishable');
+
+  const reviewWithGoals = renderToStaticMarkup(createElement(StrategyReleaseReview, {
+    initiativeId: initiative.id, scope, scopes: [scope], candidates: [candidate], batches: [batch],
+    publications: [], selected: null, onSelect() {}, onStage() {}, onRefresh: async () => {}, onGoalsChanged: async () => {},
+  }));
+  assert.match(reviewWithGoals, /可承接目标（2 个/);
+  assert.match(reviewWithGoals, /试点门店触达率达到 80%/);
+
+  const publishEmpty = renderToStaticMarkup(createElement(PublishConfirmDialog, {
+    initiativeId: initiative.id, candidate: zeroGoalCandidate, batch, template: '树形地图',
+    onPublished: async () => {}, onClose() {},
+  }));
+  assert.match(publishEmpty, /可承接目标 0 个/);
+  assert.match(publishEmpty, /战略记录/);
+  assert.match(publishEmpty, /确认发布/);
+});
+
+test('I131-E InitiativeEditorDialog marks title, scope name and scope id as required while keeping enterpriseId optional', async () => {
+  const { InitiativeEditorDialog } = await import('../src/host/ui/StrategyInitiativeWorkbench.tsx') as any;
+  assert.equal(typeof InitiativeEditorDialog, 'function', 'InitiativeEditorDialog should be exported for UI verification');
+  const html = renderToStaticMarkup(createElement(InitiativeEditorDialog, {
+    onClose() {},
+    onSaved: async () => {},
+  }));
+  assert.match(html, /事项名称\s*<span[^>]*>必填<\/span>/);
+  assert.match(html, /范围名称\s*<span[^>]*>必填<\/span>/);
+  assert.match(html, /归属标识\s*<span[^>]*>必填<\/span>/);
+  assert.match(html, /id="si-scope-id-0"[^>]*aria-required="true"/);
+  assert.match(html, /上层企业标识（可选）/);
+});
+
+test('I131-A-Rework-1 multi-entry pending upload ledger preserves prior UNKNOWN across subsequent uploads, refresh and scope isolation', async () => {
+  const view = await import('../src/host/ui/strategy-initiative-view.tsx') as any;
+  assert.equal(typeof view.upsertPendingUpload, 'function', 'upsertPendingUpload helper must exist');
+  assert.equal(typeof view.removePendingUpload, 'function', 'removePendingUpload helper must exist');
+  assert.equal(typeof view.parsePendingUploadLedger, 'function', 'parsePendingUploadLedger helper must exist');
+
+  const op1 = {
+    operationId: '11111111-1111-4111-8111-111111111111',
+    initiativeId: initiative.id,
+    workspaceScopeKey: scopeKey,
+    directory: '010_draw' as const,
+    name: 'first-unknown.txt',
+    size: 512,
+    sha256: '1'.repeat(64),
+    status: 'unknown' as const,
+    unreachable: false,
+    errorMessage: '503',
+    createdAt: '2026-11-24T10:00:00Z',
+  };
+  const op2 = {
+    operationId: '22222222-2222-4222-8222-222222222222',
+    initiativeId: initiative.id,
+    workspaceScopeKey: scopeKey,
+    directory: '020_clean' as const,
+    name: 'second-new.txt',
+    size: 256,
+    sha256: '2'.repeat(64),
+    status: 'uploading' as const,
+    createdAt: '2026-11-24T10:01:00Z',
+  };
+  const op3 = {
+    operationId: '33333333-3333-4333-8333-333333333333',
+    initiativeId: initiative.id,
+    workspaceScopeKey: scopeKey,
+    scopeKey,
+    directory: '010_draw' as const,
+    name: 'third-unknown.txt',
+    size: 128,
+    sha256: '3'.repeat(64),
+    status: 'unknown' as const,
+    createdAt: '2026-11-24T10:02:00Z',
+  };
+
+  let ledger = view.upsertPendingUpload([], op1);
+  ledger = view.upsertPendingUpload(ledger, op2);
+  assert.equal(ledger.length, 2, 'new upload must not overwrite prior UNKNOWN');
+  // Second upload succeeds or is deterministically rejected -> only op2 removed, op1 preserved
+  ledger = view.removePendingUpload(ledger, op2.operationId);
+  assert.equal(ledger.length, 1);
+  assert.equal(ledger[0].operationId, op1.operationId);
+  // Third upload also becomes UNKNOWN -> both op1 and op3 preserved
+  ledger = view.upsertPendingUpload(ledger, op3);
+  assert.equal(ledger.length, 2);
+
+  // Refresh normalization & scope isolation
+  const reloaded = view.parsePendingUploadLedger(JSON.stringify([...ledger, op2]), initiative.id, scopeKey);
+  assert.equal(reloaded.length, 3);
+  assert.equal(reloaded.find((item: any) => item.operationId === op2.operationId)?.status, 'unknown', 'in-flight uploading normalizes to unknown after refresh');
+  assert.deepEqual(view.parsePendingUploadLedger(JSON.stringify(ledger), initiative.id, 'department::other'), [], 'other scope must not see current scope pending uploads');
+  // Legacy single-object storage upgrades cleanly
+  const upgraded = view.parsePendingUploadLedger(JSON.stringify(op1), initiative.id, scopeKey);
+  assert.equal(upgraded.length, 1);
+  assert.equal(upgraded[0].operationId, op1.operationId);
+
+  // InitiativeFilePanel renders multiple pending uploads simultaneously with per-item payload awareness
+  const html = renderToStaticMarkup(createElement(view.InitiativeFilePanel, {
+    files: [], reports: [], candidates: [], batches: [], scopeKey,
+    pendingUploads: [op1, op3],
+    pendingUploadPayloadIds: new Set([op3.operationId]),
+    onUpload() {}, onOpenFile() {}, onOpenReport() {},
+    onCheckPendingUpload() {}, onRetryPendingUpload() {}, onReselectPendingUpload() {}, onDismissPendingUpload() {},
+  }));
+  assert.match(html, /first-unknown\.txt/);
+  assert.match(html, /third-unknown\.txt/);
+  assert.match(html, /11111111-1111-4111-8111-111111111111/);
+  assert.match(html, /33333333-3333-4333-8333-333333333333/);
+  assert.match(html, /重选原文件并按原编号重试/, 'op1 without memory payload offers verified re-select');
+  assert.match(html, /按原操作编号重试/, 'op3 with memory payload offers in-memory retry');
+});
+
+test('I131-C-Rework-3 ReviseDialog freezes inputs while submitting and binds diff/waiting strictly to submitted snapshot', async () => {
+  const { ReviseDialog } = await import('../src/host/ui/StrategyInitiativeWorkbench.tsx') as any;
+  const targets = [
+    { blockId: 'positioning', label: '定位与增长', text: '被后台刷新改写的定位正文。' },
+    { blockId: 'budget', label: '预算与资源', text: '2027 试点投入预算 80 万元。' },
+  ];
+  const baseProps = {
+    title: '限定修改战略候选',
+    baseLabel: '会员复购优先 · v1',
+    baseSha256: '9'.repeat(64),
+    targets,
+    maxText: 20000,
+    propose: async () => ({ proposal: { proposalId: 'p1' } }),
+    readProposal: async () => ({ proposal: { status: 'pending' } }),
+    onSubmit: async () => ({}),
+    onDone: async () => {},
+    onClose() {},
+  };
+
+  // 1. Submitting state disables both block select and intent textarea
+  const submittingHtml = renderToStaticMarkup(createElement(ReviseDialog, { ...baseProps, initialBusy: true }));
+  assert.match(submittingHtml, /<select[^>]*id="si-revise-block"[^>]*disabled/, 'block select must be disabled while submitting');
+  assert.match(submittingHtml, /<textarea[^>]*id="si-revise-request"[^>]*disabled/, 'intent textarea must be disabled while submitting');
+
+  // 2. Diff view strictly renders submitted B1 snapshot, never drifted live props or B2
+  const submitted = {
+    proposalId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    requestId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    baseLabel: '会员复购优先 · v1',
+    baseSha256: '1'.repeat(64),
+    blockId: 'positioning',
+    blockLabel: '定位与增长',
+    baselineText: '聚焦华东成熟门店会员复购（提交时准确原文）。',
+    request: '仅在定位块补充会员增长取舍',
+  };
+  const diffHtml = renderToStaticMarkup(createElement(ReviseDialog, {
+    ...baseProps,
+    initialStep: 'diff',
+    initialSubmitted: submitted,
+    initialProposedText: '聚焦华东成熟门店会员复购，先试点 2 家店。',
+  }));
+  assert.match(diffHtml, /定位与增长/, 'diff title binds to submitted block');
+  assert.match(diffHtml, /聚焦华东成熟门店会员复购（提交时准确原文）/, 'diff before-text binds to submitted baselineText, not drifted live prop');
+  assert.equal(diffHtml.includes('被后台刷新改写的定位正文'), false, 'drifted live prop must not replace submitted baselineText');
+  assert.equal(diffHtml.includes('预算与资源'), false, 'other block must not bleed into submitted diff');
+  assert.match(diffHtml, /当前正文已发生变化/, 'warns when live props drifted after submission');
+});

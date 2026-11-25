@@ -280,6 +280,8 @@ export class StrategyInitiativeReports {
     if (input.proposalId !== undefined) {
       const proposal = file.proposals.find(p => p.proposalId === input.proposalId);
       if (!proposal || proposal.status !== 'proposed' || proposal.target.kind !== 'report' || proposal.target.no !== no || input.patches.length !== 1 || input.patches[0]!.blockId !== proposal.blockId || input.patches[0]!.newText !== proposal.newText) throw new StrategyDiscussionFault('strategy_proposal_unavailable');
+      const currentBlock = reportBlockText(base.fields, proposal.blockId);
+      if (currentBlock === undefined || createHash('sha256').update(currentBlock).digest('hex') !== proposal.baselineSha256 || input.patches[0]!.expectedOldSha256 !== proposal.baselineSha256) throw new StrategyDiscussionFault('strategy_proposal_baseline_changed');
     }
     const fields = structuredClone(base.fields);
     const applied: { blockId: string; oldSha256: string; newSha256: string }[] = [];
@@ -351,6 +353,11 @@ export class StrategyInitiativeReports {
     const file = this.read(id);
     const proposal = file.proposals.find(p => p.proposalId === proposalId);
     if (!proposal || proposal.status !== 'pending') throw new StrategyDiscussionFault('strategy_proposal_unavailable');
+    if (proposal.target.kind === 'report') {
+      const version = file.versions.find(v => v.no === proposal.target.no);
+      const currentBlock = version ? reportBlockText(version.fields, proposal.blockId) : undefined;
+      if (currentBlock === undefined || createHash('sha256').update(currentBlock).digest('hex') !== proposal.baselineSha256) throw new StrategyDiscussionFault('strategy_proposal_baseline_changed');
+    }
     if (typeof newText !== 'string' || !newText.trim() || newText.length > 8000) throw new StrategyDiscussionFault('strategy_kickoff_fields_invalid', 400);
     proposal.newText = newText;
     proposal.status = 'proposed';
@@ -367,11 +374,15 @@ export class StrategyInitiativeReports {
     proposal.updatedAt = new Date().toISOString();
     this.write(id, file);
   }
-  markTerminal(id: string, proposalId: string, status: 'ended' | 'failed'): void {
+  markTerminal(id: string, proposalId: string, status: 'ended' | 'failed', feedback?: import('./strategy-initiative-types.ts').RevisionProposalFeedback): void {
     const file = this.read(id);
     const proposal = file.proposals.find(p => p.proposalId === proposalId);
     if (!proposal || proposal.status !== 'pending') return;
     proposal.status = status;
+    if (feedback) {
+      proposal.requestId = feedback.requestId;
+      proposal.feedback = structuredClone(feedback);
+    }
     proposal.updatedAt = new Date().toISOString();
     this.write(id, file);
   }
@@ -384,4 +395,17 @@ export function reportBlockText(fields: KickoffFields, blockId: string): string 
     return proposition ? proposition[segments[2] as 'question' | 'whyItMatters' | 'evidence' | 'gaps'] : undefined;
   }
   return undefined;
+}
+export function reportBlockCatalog(fields: KickoffFields): { blockId: string; label: string }[] {
+  const labels: Record<'horizon' | 'diagnosis' | 'assumptions' | 'evidenceGaps' | 'followUp', string> = {
+    horizon: '时间视野', diagnosis: '诊断摘要', assumptions: '事实与假设', evidenceGaps: '证据缺口', followUp: '后续方案形成要求',
+  };
+  const items: { blockId: string; label: string }[] = (['horizon', 'diagnosis', 'assumptions', 'evidenceGaps', 'followUp'] as const).map(key => ({blockId: key, label: labels[key]}));
+  for (const proposition of fields.propositions) {
+    items.push({blockId: `proposition:${proposition.id}:question`, label: `命题 ${proposition.id} · 关键问题`});
+    items.push({blockId: `proposition:${proposition.id}:whyItMatters`, label: `命题 ${proposition.id} · 为何影响选择`});
+    if (proposition.evidence !== undefined) items.push({blockId: `proposition:${proposition.id}:evidence`, label: `命题 ${proposition.id} · 依据`});
+    if (proposition.gaps !== undefined) items.push({blockId: `proposition:${proposition.id}:gaps`, label: `命题 ${proposition.id} · 缺口`});
+  }
+  return items;
 }

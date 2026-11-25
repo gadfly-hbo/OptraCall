@@ -199,3 +199,108 @@ test('真实 Host+Pi：候选自读保存回执并从冲突中有限纠正', {ti
   assert.equal(reopened.candidate.saveReceipts.length, 3, 'save receipts survive close and native history readback');
   assert.deepEqual(provider.errors, []);
 });
+
+test('I131-B 真实 Host+Pi：候选保存角色字段／操作身份／块与目标校验定位、自修保存及旧 lastSave 兼容', {timeout: 180_000}, async t => {
+  const provider = await startToolProvider(), host = await startTestHost();
+  t.after(async () => { await host.close(); await provider.close(); });
+  const req = async (route: string, method = 'GET', body?: unknown, status = 200): Promise<any> => {
+    const r = await host.request(route, method, body);
+    assert.equal(r.status, status, await r.clone().text());
+    return r.json();
+  };
+  await req('/api/configuration', 'PUT', {name: '候选校验合成', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-candidate-validation', apiKey: 'synthetic-candidate-validation'});
+  const initiativeId = randomUUID();
+  await req('/api/strategy/initiatives', 'POST', {operationId: initiativeId, title: '候选校验事项', scopes: [stores]}, 201);
+  const base = `/api/strategy/initiatives/${initiativeId}`;
+  const report = (await req(`${base}/reports`, 'POST', {operationId: randomUUID(), fields: kickoffFields, sources: []}, 201)).version;
+  await req(`${base}/reports/1/lock`, 'POST', {operationId: randomUUID(), sha256: report.contentSha256});
+  await req(`${base}/reports/1/apply`, 'POST', {operationId: randomUUID(), sha256: report.contentSha256, scope: stores});
+
+  const candidateFile = join(host.dataRoot, 'strategy-initiatives', initiativeId, 'candidates.json');
+  const results: string[] = [];
+  let bytesBefore = '', bytesAfterFailures = '';
+  const opNoGoals = randomUUID(), opWithGoals = randomUUID();
+  provider.setResponder(async (ctx: any) => {
+    const step = ctx.recentToolResults.length;
+    if (step > 0) results[step - 1] = providerMessageText(ctx.recentToolResults.at(-1)?.content);
+    if (step === 0) {
+      bytesBefore = createHash('sha256').update(await readFile(candidateFile)).digest('hex');
+      // Role-disallowed fields: version & no
+      return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-candidate', operationId: randomUUID(), version: 1, no: 1, candidateBlocks: blocksFor('夹带字段')}}]};
+    }
+    if (step === 1) {
+      // Missing operationId
+      return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-candidate', candidateBlocks: blocksFor('缺操作编号')}}]};
+    }
+    if (step === 2) {
+      // Empty candidateBlocks
+      return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-candidate', operationId: randomUUID(), candidateBlocks: []}}]};
+    }
+    if (step === 3) {
+      // Duplicate block ID
+      return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-candidate', operationId: randomUUID(), candidateBlocks: [
+        {id: 'B1', label: '定位', text: '正文1'},
+        {id: 'B1', label: '重复', text: '正文2'},
+      ]}}]};
+    }
+    if (step === 4) {
+      // Invalid block ID (spaces/punctuation not matching ^[A-Za-z0-9_-]{1,40}$)
+      return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-candidate', operationId: randomUUID(), candidateBlocks: [
+        {id: 'bad id!', label: '非法ID', text: '正文'},
+      ]}}]};
+    }
+    if (step === 5) {
+      // Object-shaped candidateGoals (SDK-level validation stays visible)
+      return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-candidate', operationId: randomUUID(), candidateBlocks: blocksFor('对象目标'), candidateGoals: [{title: '非法对象目标'}]}}]};
+    }
+    if (step === 6) {
+      bytesAfterFailures = createHash('sha256').update(await readFile(candidateFile)).digest('hex');
+      // Corrected save without goals (legal)
+      return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-candidate', operationId: opNoGoals, candidateBlocks: blocksFor('无目标合法稿')}}]};
+    }
+    if (step === 7) {
+      // Corrected save with valid string-array goals
+      return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-candidate', operationId: opWithGoals, candidateBlocks: blocksFor('带目标合法稿'), candidateGoals: ['90天二购率提升至12%', '试点门店导购覆盖率达到80%']}}]};
+    }
+    return {text: '已按安全错误定位完成修正并保存候选。'};
+  });
+
+  const created = await req(`${base}/candidates`, 'POST', {operationId: randomUUID(), scope: stores, title: '校验修正候选', instruction: '测试校验定位并修正保存。'}, 202);
+  const cid = created.candidate.candidateId;
+  let detail: any;
+  for (let n = 0; n < 500; n++) { detail = await req(`${base}/candidates/${cid}/versions/1`); if (detail.candidate.lastRun?.status === 'completed') break; await delay(20); }
+  assert.equal(detail.candidate.lastRun.status, 'completed');
+  assert.equal(bytesAfterFailures, bytesBefore, 'all validation failures must produce zero persisted writes');
+
+  // Step 0: role fields
+  assert.match(results[0], /strategy_candidate_fields_invalid/);
+  assert.match(results[0], /"path":"version"/);
+  assert.match(results[0], /"path":"no"/);
+  assert.match(results[0], /unknown_field/);
+  // Step 1: missing operationId
+  assert.match(results[1], /strategy_candidate_operation_invalid/);
+  assert.match(results[1], /"path":"operationId"/);
+  assert.match(results[1], /required/);
+  // Step 2: empty candidateBlocks
+  assert.match(results[2], /strategy_candidate_schema_invalid/);
+  assert.match(results[2], /"path":"candidateBlocks"/);
+  assert.match(results[2], /too_few/);
+  // Step 3: duplicate block ID
+  assert.match(results[3], /strategy_candidate_schema_invalid/);
+  assert.match(results[3], /candidateBlocks\[1\]\.id/);
+  assert.match(results[3], /duplicate_id/);
+  // Step 4: invalid block ID
+  assert.match(results[4], /strategy_candidate_schema_invalid/);
+  assert.match(results[4], /candidateBlocks\[0\]\.id/);
+  assert.match(results[4], /invalid_id/);
+  // Step 5: SDK-level candidateGoals object error stays visible
+  assert.match(results[5], /candidateGoals/i);
+  // Step 6 & 7: both legal saves succeeded
+  const savedNoGoals = JSON.parse(results[6]);
+  assert.equal(savedNoGoals.receipt.operationId, opNoGoals);
+  const savedWithGoals = JSON.parse(results[7]);
+  assert.equal(savedWithGoals.receipt.operationId, opWithGoals);
+  assert.deepEqual(detail.candidate.goals, ['90天二购率提升至12%', '试点门店导购覆盖率达到80%']);
+  assert.equal(detail.candidate.saveReceipts.length, 2);
+  assert.deepEqual(provider.errors, []);
+});

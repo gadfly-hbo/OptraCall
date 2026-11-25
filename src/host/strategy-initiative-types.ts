@@ -68,6 +68,13 @@ export function recordReplacedStrategyRequest(previous: ReplacedStrategyRequest[
 }
 
 export interface CandidateBlock { id: string; label: string; text: string }
+export interface RevisionProposalFeedback {
+  requestId: string;
+  outcome: 'completed' | 'cancelled' | 'failed' | 'unknown';
+  replyText?: string;
+  failureCode?: string;
+  failureDetail?: string;
+}
 export interface RevisionProposal {
   proposalId: string;
   initiativeId: string;
@@ -78,6 +85,7 @@ export interface RevisionProposal {
   newText?: string;
   status: 'pending' | 'proposed' | 'adopted' | 'ended' | 'failed';
   requestId?: string;
+  feedback?: RevisionProposalFeedback;
   at: string;
   updatedAt: string;
 }
@@ -98,6 +106,7 @@ export interface CandidateVersion {
   sessionFile?: string;
   revision: number;
   createOperationId: string;
+  createRequestId?: string;
   instruction: string;
   pendingInput?: StrategySessionPendingRequest;
   lastRun?: StrategySessionRun;
