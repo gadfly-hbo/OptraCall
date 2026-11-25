@@ -1,3 +1,5 @@
+import { groupScopeKey } from './structured-goal.ts';
+import { createGoalDecompositionAccess } from './goal-decomposition-access.ts';
 import { normalizeGoalText, sameGoalRequirement } from './strategy-goals-types.ts';
 import { StrategyGoalsStore, StrategyGoalsError } from './strategy-goals-store.ts';
 import { GoalDecompositionError, parseScope } from './strategy-goal-decomposition-validation.ts';
@@ -12,7 +14,7 @@ import type {
   DecompositionProgressCheckInput,
   DecompositionProjectHandoffInput,
   DecompositionPublishInput,
-  DecompositionThresholdConfig,
+  DecompositionThresholdInput,
   GsaPlanConfirmInput,
   NextCycleDraftInput,
   StrategyReturnInput,
@@ -24,14 +26,17 @@ export function createStrategyGoalRoutes(options: {
   store: StrategyGoalsStore;
   mutate: <T>(fn: () => T | Promise<T>) => Promise<T>;
   isClosing: () => boolean;
+  validateEstimateGoal?: (ref: GoalRef) => Promise<unknown>;
   validateGoal?: (input: GoalDraftInput, target?: GoalRef | 'create') => void | Promise<void>;
   validateScope?: (scope: GoalScope) => void | Promise<void>;
   listSources?: () => Promise<unknown>;
   validateFeedbackSource?: (input: GoalSourceRef) => void | Promise<void>;
   validateAdoption?: (ref: GoalRef, input: GoalAdoptionInput) => void | Promise<void>;
+  readFormalStrategyPublication?: (initiativeId: string, publicationId: string) => InitiativePublication;
   listFormalStrategyPublications?: (scopeKey: string) => InitiativePublication[];
   assertGoalReadable?: (record: StrategyGoalRecord) => void | Promise<void>;
   preCommitPublishFault?: (goalId: string, operationId: string) => void;
+  findMatchingCase?: (goal: GoalRef, strategy: string) => {caseId: string; title: string} | undefined;
   validateContinueExistingCase?: (input: { goalId: string; goalVersion: number; strategy: string; scope: GoalScope; caseId: string }) => void | Promise<void>;
 }) {
   const { store } = options;
@@ -48,43 +53,31 @@ export function createStrategyGoalRoutes(options: {
     if (currentVer) await options.validateGoal?.(currentVer);
     return record;
   }
-  async function validateFrozenPublicationAccess(goalId: string, pub: import('./strategy-goal-decomposition-types.ts').DecompositionPublication): Promise<void> {
-    const boundGoal = store.read({ goalId, version: pub.snapshot.gsaPlan.goal.version });
-    await options.validateGoal?.(boundGoal);
-    const checkedScopes = new Set<string>();
-    for (const row of pub.snapshot.rows) {
-      const k = JSON.stringify(row.scope);
-      if (!checkedScopes.has(k)) {
-        checkedScopes.add(k);
-        await options.validateScope?.(row.scope);
-      }
-    }
-    for (const cg of pub.committedGoals) {
-      const k = JSON.stringify(cg.scope);
-      if (!checkedScopes.has(k)) {
-        checkedScopes.add(k);
-        await options.validateScope?.(cg.scope);
-      }
-    }
+  const { validateDraftRows, validateFrozenPublicationAccess, validateReviewEvidence, authorizeWorkspace } = createGoalDecompositionAccess(options);
+
+  function applicableFormalGoals(scope: GoalScope, period: string) {
+    const scopeKey = initiativeScopeKey(scope);
+    return (options.listFormalStrategyPublications?.(scopeKey) ?? [])
+      .filter(publication => publication.scopeKey === scopeKey && publication.state === 'active' && publication.handoffEligible)
+      .flatMap(publication => (publication.formalGoals ?? [])
+        .filter(goal => goal.period === period)
+        .map(formalGoal => ({
+          initiativeId: publication.initiativeId,
+          publicationId: publication.publicationId,
+          candidateId: publication.candidateId,
+          candidateNo: publication.no,
+          contentSha256: publication.contentSha256,
+          formalGoal,
+        })));
   }
-  function findApplicableFormalPublication(scope: GoalDraftInput['scope'], period?: string) {
-    if (!options.listFormalStrategyPublications) return undefined;
-    const key = initiativeScopeKey(scope);
-    const activePubs = options.listFormalStrategyPublications(key).filter(p => p.state === 'active' && p.handoffEligible && p.formalGoals?.length);
-    for (const pub of activePubs) {
-      const match = period ? pub.formalGoals!.find(g => g.period === period) : pub.formalGoals![0];
-      if (match) return { publication: pub, formalGoal: match };
-    }
-    return undefined;
-  }
-  function verifyFormalOrigin(draftInput: GoalDraftInput) {
+  function verifyFormalOrigin(draftInput: GoalDraftInput, receivingGoalId?: string) {
     const origin = draftInput.formalOrigin;
     if (!origin) return;
     if (origin.kind === 'manual-exception') {
-      const applicable = findApplicableFormalPublication(draftInput.scope, origin.period);
+      const applicable = applicableFormalGoals(draftInput.scope, origin.period)[0];
       if (applicable) {
         throw new GoalDecompositionError('formal_strategy_goal_exists', 409, {
-          publicationId: applicable.publication.publicationId,
+          publicationId: applicable.publicationId,
           formalGoalId: applicable.formalGoal.id,
         });
       }
@@ -94,18 +87,32 @@ export function createStrategyGoalRoutes(options: {
       if (!options.listFormalStrategyPublications) {
         throw new GoalDecompositionError('formal_strategy_origin_mismatch', 409);
       }
-      const key = initiativeScopeKey(draftInput.scope);
-      const activePubs = options.listFormalStrategyPublications(key).filter(p => p.state === 'active' && p.handoffEligible && p.formalGoals?.length);
-      const pub = activePubs.find(p => p.publicationId === origin.publicationId && p.contentSha256 === origin.contentSha256);
-      const fg = pub?.formalGoals?.find(g => g.id === origin.formalGoalId);
-      if (
-        !pub ||
-        !fg ||
-        fg.targetValue !== origin.targetValue ||
-        fg.unit !== origin.unit ||
-        fg.period !== origin.period ||
-        fg.metricKind !== origin.metricKind
-      ) {
+      const matchesPublication = (publication: { initiativeId: string; publicationId: string; candidateId: string; candidateNo: number; contentSha256: string }) =>
+        publication.initiativeId === origin.initiativeId && publication.publicationId === origin.publicationId &&
+        publication.candidateId === origin.candidateId && publication.candidateNo === origin.candidateNo && publication.contentSha256 === origin.contentSha256;
+      let goal = applicableFormalGoals(draftInput.scope, origin.period)
+        .find(item => matchesPublication(item) && item.formalGoal.id === origin.formalGoalId)?.formalGoal;
+      // An explicit handoff can authorize a different destination. Bind it to its actual receiving goal.
+      if (!goal && receivingGoalId && options.readFormalStrategyPublication) {
+        const imported = store.get(receivingGoalId).versions.find(version => version.formalOrigin?.kind === 'strategy-publication' &&
+          matchesPublication(version.formalOrigin) && version.formalOrigin.formalGoalId === origin.formalGoalId &&
+          initiativeScopeKey(version.scope) === initiativeScopeKey(draftInput.scope));
+        if (imported) {
+          const publication = options.readFormalStrategyPublication(origin.initiativeId, origin.publicationId);
+          const received = publication.handoffs.some(receipt => initiativeScopeKey(receipt.scope) === initiativeScopeKey(draftInput.scope) &&
+            receipt.goals.some(ref => ref.goalId === receivingGoalId && ref.version === imported.version));
+          if (received && publication.state === 'active' && publication.handoffEligible && matchesPublication({...publication, candidateNo: publication.no})) {
+            goal = publication.formalGoals?.find(row => row.id === origin.formalGoalId && row.period === origin.period);
+          }
+        }
+      }
+      const metric = draftInput.measurement?.kind === 'quantitative' ? draftInput.measurement.sapMetric : undefined;
+      const definitionMatches = goal?.sapMetric
+        ? draftInput.measurement?.kind === 'quantitative' && typeof draftInput.measurement.target === 'string' &&
+          draftInput.measurement.target.trim().replace(/\s+/g, '') === `${goal.targetValue}${goal.unit}`.replace(/\s+/g, '')
+        : draftInput.measurement?.kind === 'deliverable' && draftInput.measurement.criterion === goal?.outcome;
+      if (!goal || !definitionMatches || draftInput.outcome !== goal.outcome || goal.targetValue !== origin.targetValue || goal.unit !== origin.unit ||
+        goal.metricKind !== origin.metricKind || goal.sapMetric?.id !== metric?.id || goal.sapMetric?.version !== metric?.version || goal.sapMetric?.metricName !== metric?.metricName) {
         throw new GoalDecompositionError('formal_strategy_origin_mismatch', 409, {
           publicationId: origin.publicationId,
           formalGoalId: origin.formalGoalId,
@@ -158,6 +165,7 @@ export function createStrategyGoalRoutes(options: {
         if (filterScopeKey && initiativeScopeKey(item.goal.scope) !== filterScopeKey) continue;
         try {
           await options.validateGoal?.(item.goal);
+          if (item.review) await validateReviewEvidence(item.goal.goalId, item.review.preservedCheckIds);
           visible.push(item);
         } catch {
           // Omit unauthorized goal returns fail-closed
@@ -171,7 +179,14 @@ export function createStrategyGoalRoutes(options: {
     if (draftEstimateMatch) {
       const draftId = draftEstimateMatch[1]!;
       if (method === 'GET') {
-        const record = store.getPreConfirmEstimate(draftId);
+        const ref = searchParams?.has('goalVersion') ? {goalId:draftId, version:Number(searchParams.get('goalVersion'))} : undefined;
+        if (ref) {
+          const bound = store.read(ref);
+          await options.validateScope?.(bound.scope);
+          await options.validateGoal?.(bound);
+          await options.validateEstimateGoal?.(ref);
+        }
+        const record = store.getPreConfirmEstimate(draftId, ref);
         if (record) await options.validateScope?.(record.scope);
         return { body: { estimateRecord: record, estimate: record?.estimate ?? null } };
       }
@@ -181,12 +196,14 @@ export function createStrategyGoalRoutes(options: {
           body: await write(async () => {
             const parsedScope = parseScope(input.scope);
             await options.validateScope?.(parsedScope);
-            const saved = store.savePreConfirmEstimate(
-              draftId,
-              parsedScope,
-              input.estimate,
-              'user',
-            );
+            const ref = input.goalRef as GoalRef | undefined;
+            if (ref !== undefined) {
+              const {goal} = store.estimateOwnerContext(draftId, parsedScope, ref, true);
+              if (!goal) throw new StrategyGoalsError('estimate_goal_unavailable', 409);
+              await options.validateGoal?.(goal);
+              await options.validateEstimateGoal?.(ref);
+            }
+            const saved = store.savePreConfirmEstimate(draftId, parsedScope, input.estimate, 'user', undefined, ref);
             return { estimateRecord: saved, estimate: saved.estimate };
           }),
         };
@@ -212,7 +229,7 @@ export function createStrategyGoalRoutes(options: {
       }) };
     }
 
-    const goalAction = /^\/api\/strategy\/goals\/([a-f0-9-]+)\/(workspace|reconcile-formal|gsa-plan\/confirm|gsa-plan\/draft|gsa-plans|decomposition\/draft|decomposition\/align|decomposition\/publish-preview|decomposition\/publish|decomposition\/publications|decomposition\/threshold|decomposition\/checks|decomposition\/handoffs\/preview|decomposition\/handoffs|case-draft-intents|cycle-reviews|next-cycle-draft|return-to-strategy)$/.exec(pathname);
+    const goalAction = /^\/api\/strategy\/goals\/([a-f0-9-]+)\/(workspace|reconcile-formal|gsa-plan\/confirm|gsa-plan\/draft|gsa-plans|decomposition\/draft|decomposition\/align|decomposition\/publish-preview|decomposition\/publish|decomposition\/publications|decomposition\/threshold|decomposition\/actuals|decomposition\/checks|decomposition\/handoffs\/preview|decomposition\/handoffs|case-draft-intents|cycle-reviews|next-cycle-draft|return-to-strategy)$/.exec(pathname);
     if (goalAction) {
       const goalId = goalAction[1]!;
       const sub = goalAction[2]!;
@@ -220,32 +237,38 @@ export function createStrategyGoalRoutes(options: {
       if (sub === 'workspace' && method === 'GET') {
         const record = await checkGoalCurrentAccess(goalId);
         const goalVerParam = searchParams?.get('goalVersion');
-        const requestedVer = goalVerParam !== null && goalVerParam !== '' ? Number(goalVerParam) : undefined;
+        const requestedVer = goalVerParam != null && goalVerParam !== '' ? Number(goalVerParam) : undefined;
         if (requestedVer !== undefined) {
           if (!Number.isSafeInteger(requestedVer) || requestedVer < 1) throw new StrategyGoalsError('invalid_goal_version', 400);
           const bound = store.read({ goalId, version: requestedVer });
           await options.validateGoal?.(bound);
         }
         const ws = store.getGoalWorkspace(goalId, requestedVer);
-        if (ws.activePublication) await validateFrozenPublicationAccess(goalId, ws.activePublication);
+        await authorizeWorkspace(goalId, ws);
         const targetVerNum = requestedVer ?? (record.adoptedVersion ?? record.currentVersion);
         const currentVer = record.versions.find(v => v.version === targetVerNum);
         if (currentVer?.formalOrigin?.kind === 'manual-exception') {
-          const applicable = findApplicableFormalPublication(currentVer.scope, currentVer.formalOrigin.period);
+          const choices = applicableFormalGoals(currentVer.scope, currentVer.formalOrigin.period);
           ws.formalReconciliation = {
-            hasApplicableFormalPublication: Boolean(applicable),
+            hasApplicableFormalPublication: choices.length > 0,
             manualTargetValue: currentVer.formalOrigin.targetValue,
-            ...(applicable ? {
-              formalPublication: {
-                initiativeId: applicable.publication.initiativeId,
-                publicationId: applicable.publication.publicationId,
-                candidateId: applicable.publication.candidateId,
-                candidateNo: applicable.publication.no,
-                contentSha256: applicable.publication.contentSha256,
-                formalGoal: applicable.formalGoal,
-              },
-            } : {}),
+            formalPublications: choices,
+            ...(choices.length === 1 ? { formalPublication: choices[0] } : {}),
           };
+        }
+        if (options.findMatchingCase) {
+          for (const check of ws.checks) {
+            if (check.caseChoice) continue;
+            const { goal, goalRef, scope, strategies } = store.checkCaseBasis(goalId, check.checkId);
+            check.caseStrategies = strategies;
+            if (groupScopeKey(goal.scope) !== groupScopeKey(scope)) continue;
+            try {
+              check.caseCandidates = strategies.flatMap(strategy => {
+                const match = options.findMatchingCase!(goalRef, strategy);
+                return match ? [{ ...match, strategy }] : [];
+              });
+            } catch { check.caseCandidatesUnavailable = true; }
+          }
         }
         return { body: ws };
       }
@@ -256,11 +279,18 @@ export function createStrategyGoalRoutes(options: {
           body: await write(async () => {
             store.assertDecompositionWritable();
             const record = await checkGoalCurrentAccess(goalId);
-            const currentVer = record.versions.find(v => v.version === record.currentVersion)!;
-            const applicable = findApplicableFormalPublication(currentVer.scope, currentVer.formalOrigin?.period);
-            if (!applicable) throw new StrategyGoalsError('formal_strategy_goal_not_found', 404);
-            const { publication, formalGoal } = applicable;
-            const revised = store.revise(goalId, {
+            const currentVer = record.versions.find(v => v.version === Number(input.expectedVersion));
+            if (!currentVer || currentVer.formalOrigin?.kind !== 'manual-exception') {
+              throw new StrategyGoalsError('strategy_goal_conflict', 409);
+            }
+            const choices = applicableFormalGoals(currentVer.scope, currentVer.formalOrigin.period);
+            if (!choices.length) throw new StrategyGoalsError('formal_strategy_goal_not_found', 404);
+            const selected = choices.find(source =>
+              source.publicationId === input.publicationId && source.contentSha256 === input.contentSha256 &&
+              source.formalGoal.id === input.formalGoalId);
+            if (!selected) throw new GoalDecompositionError('formal_strategy_selection_required', 409);
+            const { formalGoal } = selected;
+            const revision = {
               ...currentVer,
               operationId: String(input.operationId),
               expectedVersion: Number(input.expectedVersion ?? record.currentVersion),
@@ -272,25 +302,27 @@ export function createStrategyGoalRoutes(options: {
               strategies: formalGoal.strategies?.length ? formalGoal.strategies : currentVer.strategies,
               formalOrigin: {
                 kind: 'strategy-publication',
-                initiativeId: publication.initiativeId,
-                publicationId: publication.publicationId,
-                candidateId: publication.candidateId,
-                candidateNo: publication.no,
-                contentSha256: publication.contentSha256,
+                initiativeId: selected.initiativeId,
+                publicationId: selected.publicationId,
+                candidateId: selected.candidateId,
+                candidateNo: selected.candidateNo,
+                contentSha256: selected.contentSha256,
                 formalGoalId: formalGoal.id,
                 targetValue: formalGoal.targetValue,
                 unit: formalGoal.unit,
                 period: formalGoal.period,
                 metricKind: formalGoal.metricKind,
               },
-            });
+            } satisfies Parameters<typeof store.revise>[1];
+            await options.validateGoal?.(revision, { goalId, version: currentVer.version });
+            const revised = store.revise(goalId, revision);
             return {
               goal: revised,
               comparison: {
                 manualValue: currentVer.formalOrigin?.targetValue ?? null,
                 publishedValue: formalGoal.targetValue,
                 unit: formalGoal.unit,
-                publicationId: publication.publicationId,
+                publicationId: selected.publicationId,
               },
             };
           }),
@@ -314,9 +346,9 @@ export function createStrategyGoalRoutes(options: {
             await checkGoalCurrentAccess(goalId);
             if (input.goalRevision) {
               await options.validateGoal?.(input.goalRevision as GoalDraftInput, { goalId, version: Number(input.expectedGoalVersion) });
-              verifyFormalOrigin(input.goalRevision as GoalDraftInput);
+              verifyFormalOrigin(input.goalRevision as GoalDraftInput, goalId);
             }
-            const res = store.confirmGsaPlan(goalId, input as unknown as GsaPlanConfirmInput);
+            const res = store.confirmGsaPlan(goalId, input as unknown as GsaPlanConfirmInput, goal => verifyFormalOrigin(goal, goalId));
             return res;
           }),
         };
@@ -350,9 +382,8 @@ export function createStrategyGoalRoutes(options: {
       if (sub === 'decomposition/publish-preview' && method === 'POST') {
         await checkGoalCurrentAccess(goalId);
         const preview = store.previewDecompositionPublish(goalId, input as { gsaPlanId: string; gsaPlanVersion: number; gsaPlanSha256: string; draftRevision: number; draftSha256: string; expectedActiveVersion: number | null });
-        for (const committed of preview.committedGoals) {
-          await options.validateScope?.(committed.scope);
-        }
+        const draft = store.getGoalWorkspace(goalId).draft;
+        if (draft) await validateDraftRows(draft);
         return {
           status: 200,
           body: preview,
@@ -361,7 +392,6 @@ export function createStrategyGoalRoutes(options: {
 
       if (sub === 'decomposition/publish' && method === 'POST') {
         const res = await write(async () => {
-          await checkGoalCurrentAccess(goalId);
           const pubInput = input as unknown as DecompositionPublishInput;
           // Check prior operation replay first so revoked historical publication scope fails closed even if current draft changed!
           const priorCheck = typeof pubInput.operationId === 'string' && /^[0-9a-f-]{36}$/i.test(pubInput.operationId)
@@ -370,10 +400,9 @@ export function createStrategyGoalRoutes(options: {
           if (priorCheck?.status === 'committed' && priorCheck.publication) {
             await validateFrozenPublicationAccess(goalId, priorCheck.publication);
           } else {
+            await checkGoalCurrentAccess(goalId);
             const ws = store.getGoalWorkspace(goalId);
-            for (const row of ws.draft?.rows ?? []) {
-              if (row.commitAsGoal) await options.validateScope?.(row.scope);
-            }
+            if (ws.draft) await validateDraftRows(ws.draft);
           }
           const published = store.publishDecomposition(goalId, pubInput, {
             preCommitFault: options.preCommitPublishFault ? () => options.preCommitPublishFault!(goalId, pubInput.operationId) : undefined,
@@ -388,7 +417,13 @@ export function createStrategyGoalRoutes(options: {
         await checkGoalCurrentAccess(goalId);
         const offset = Number(searchParams?.get('offset') ?? '0');
         const limit = Number(searchParams?.get('limit') ?? '20');
-        return { body: store.listDecompositionPublications(goalId, offset, limit) };
+        const page = store.listDecompositionPublications(goalId, offset, limit);
+        const unavailableVersions: number[] = [];
+        for (const item of page.items) {
+          try { await validateFrozenPublicationAccess(goalId, store.readDecompositionPublication(goalId, item.version)); }
+          catch { unavailableVersions.push(item.version); }
+        }
+        return { body: { ...page, items: page.items.filter(p => !unavailableVersions.includes(p.version)), unavailableVersions } };
       }
 
       if (sub === 'decomposition/threshold' && method === 'POST') {
@@ -396,9 +431,17 @@ export function createStrategyGoalRoutes(options: {
           status: 200,
           body: await write(async () => {
             await checkGoalCurrentAccess(goalId);
-            return { threshold: store.setThreshold(goalId, input as Partial<DecompositionThresholdConfig>) };
+            return { threshold: store.setThreshold(goalId, input as DecompositionThresholdInput) };
           }),
         };
+      }
+
+      if (sub === 'decomposition/actuals' && method === 'POST') {
+        return {status: 201, body: await write(async () => {
+          await checkGoalCurrentAccess(goalId);
+          await validateFrozenPublicationAccess(goalId, store.readDecompositionPublication(goalId, Number(input.publicationVersion)));
+          return store.submitActual(goalId, input as unknown as import('./strategy-goal-decomposition-types.ts').GoalActualInput);
+        })};
       }
 
       if (sub === 'decomposition/checks' && method === 'POST') {
@@ -454,6 +497,11 @@ export function createStrategyGoalRoutes(options: {
           status: 201,
           body: await write(async () => {
             await checkGoalCurrentAccess(goalId);
+            if (typeof input.checkId === 'string') {
+              const basis = store.checkCaseBasis(goalId, input.checkId);
+              await validateFrozenPublicationAccess(goalId, basis.publication);
+              await options.validateGoal?.(basis.goal);
+            }
             return store.createCaseDraftIntent(goalId, input as unknown as DecompositionCaseDraftIntentInput);
           }),
         };
@@ -464,6 +512,8 @@ export function createStrategyGoalRoutes(options: {
           status: 201,
           body: await write(async () => {
             await checkGoalCurrentAccess(goalId);
+            const ws = store.getGoalWorkspace(goalId);
+            await validateReviewEvidence(goalId, ws.checks.filter(c => ws.gsaPlans.some(p => p.planVersion === c.gsaPlanVersion && p.formalTarget.period === input.period)).map(c => c.checkId));
             return store.recordCycleReview(goalId, input as unknown as DecompositionCycleReviewInput);
           }),
         };
@@ -474,6 +524,9 @@ export function createStrategyGoalRoutes(options: {
           status: 201,
           body: await write(async () => {
             await checkGoalCurrentAccess(goalId);
+            const review = store.getGoalWorkspace(goalId).reviews.find(r => r.reviewId === input.reviewId);
+            if (review) await validateReviewEvidence(goalId, review.preservedCheckIds);
+            if (input.targetScope) await options.validateScope?.(parseScope(input.targetScope));
             return store.createNextCycleDraft(goalId, input as unknown as NextCycleDraftInput);
           }),
         };
@@ -484,6 +537,8 @@ export function createStrategyGoalRoutes(options: {
           status: 201,
           body: await write(async () => {
             await checkGoalCurrentAccess(goalId);
+            const review = store.getGoalWorkspace(goalId).reviews.find(r => r.reviewId === input.reviewId);
+            if (review) await validateReviewEvidence(goalId, review.preservedCheckIds);
             return store.recordStrategyReturn(goalId, input as unknown as StrategyReturnInput);
           }),
         };
@@ -495,7 +550,6 @@ export function createStrategyGoalRoutes(options: {
     if (pubVerMatch && method === 'GET') {
       const goalId = pubVerMatch[1]!;
       const version = Number(pubVerMatch[2]);
-      await checkGoalCurrentAccess(goalId);
       const pub = store.readDecompositionPublication(goalId, version);
       await validateFrozenPublicationAccess(goalId, pub);
       return { body: { publication: pub } };
@@ -507,9 +561,9 @@ export function createStrategyGoalRoutes(options: {
       const opId = opRecoveryMatch[2]!;
       const subAction = opRecoveryMatch[3];
       if (!subAction && method === 'GET') {
-        await checkGoalCurrentAccess(goalId);
         const rec = store.getDecompositionOperation(goalId, opId);
         if (rec.publication) await validateFrozenPublicationAccess(goalId, rec.publication);
+        else await checkGoalCurrentAccess(goalId);
         return { body: rec };
       }
       if (subAction === 'abandon' && method === 'POST') {
@@ -530,26 +584,21 @@ export function createStrategyGoalRoutes(options: {
       return {
         status: 200,
         body: await write(async () => {
-          const record = await checkGoalCurrentAccess(goalId);
+          await checkGoalCurrentAccess(goalId);
+          const basis = store.checkCaseBasis(goalId, checkId);
+          await validateFrozenPublicationAccess(goalId, basis.publication);
+          await options.validateGoal?.(basis.goal);
           if (input.kind === 'continue-existing') {
             const caseId = typeof input.caseId === 'string' ? input.caseId.trim() : '';
             if (!caseId) throw new GoalDecompositionError('case_id_required', 400);
-            const ws = store.getGoalWorkspace(goalId);
-            const check = ws.checks.find(c => c.checkId === checkId);
-            if (!check) throw new GoalDecompositionError('progress_check_not_found', 404);
-            const plan = ws.gsaPlans.find(p => p.planVersion === check.gsaPlanVersion);
-            const targetVer = plan?.goal.version ?? (record.adoptedVersion ?? record.currentVersion);
-            const goalVer = record.versions.find(v => v.version === targetVer)!;
-            const strategy = (typeof input.strategy === 'string' && input.strategy.trim())
-              || goalVer.strategies?.[0]
-              || '';
-            await options.validateContinueExistingCase?.({
-              goalId,
-              goalVersion: targetVer,
-              strategy,
-              scope: goalVer.scope,
-              caseId,
-            });
+            const { goal, goalRef, scope, strategies } = basis;
+            if (!options.validateContinueExistingCase || input.sameIssueConfirmed !== true ||
+                groupScopeKey(goal.scope) !== groupScopeKey(scope)) {
+              throw new GoalDecompositionError('case_continue_mismatch', 409);
+            }
+            const strategy = typeof input.strategy === 'string' ? input.strategy : strategies.length === 1 ? strategies[0] : undefined;
+            if (!strategy || !strategies.includes(strategy)) throw new GoalDecompositionError('case_continue_mismatch', 409);
+            await options.validateContinueExistingCase({ goalId: goalRef.goalId, goalVersion: goalRef.version, strategy, scope, caseId });
           }
           return store.setCheckCaseChoice(goalId, checkId, input as Parameters<StrategyGoalsStore['setCheckCaseChoice']>[2]);
         }),
@@ -572,7 +621,7 @@ export function createStrategyGoalRoutes(options: {
       if (match[2] === 'revisions' && method === 'POST') return { status: 201, body: await write(async () => {
         if (!store.getOperation(input.operationId as string)) {
           await options.validateGoal?.(input as unknown as GoalDraftInput, { goalId: id, version: Number(input.expectedVersion) });
-          verifyFormalOrigin(input as unknown as GoalDraftInput);
+          verifyFormalOrigin(input as unknown as GoalDraftInput, id);
         }
         return { goal: store.revise(id, input as unknown as GoalRevisionInput) };
       }) };

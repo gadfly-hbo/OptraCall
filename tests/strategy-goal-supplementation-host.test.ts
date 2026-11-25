@@ -1,3 +1,4 @@
+import {formalGoal} from './fixtures/strategy-formal-goal.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID, createHash} from 'node:crypto';
@@ -95,6 +96,7 @@ test('I131-D 真实 Host+Pi：无目标合法发布、未锁草稿补目标承�
   const pubA = (await req(`${base}/publications`, 'POST', {
     operationId: randomUUID(), candidateId: cidA, no: 1, sha256: lockedA.lock.fingerprint,
     batchId: batchA.batchId, template: '树形地图', confirmed: true, expectedActive: null,
+    formalGoals: [formalGoal('90天二购率达到12%',12,'%'), formalGoal('试点门店触达率达到80%',80,'%')],
   }, 201)).publication;
   assert.equal(pubA.state, 'active');
   const handoffA = (await req(`${base}/publications/${pubA.publicationId}/handoff`, 'POST', {operationId: randomUUID(), scope: stores, selected: [0, 1]})).handoff;
@@ -168,6 +170,7 @@ test('I131-D 真实 Host+Pi：无目标合法发布、未锁草稿补目标承�
   const pubB2 = (await req(`${base}/publications`, 'POST', {
     operationId: randomUUID(), candidateId: cidB, no: 2, sha256: lockedB2.lock.fingerprint,
     batchId: batchB2.batchId, template: '树形地图', confirmed: true, expectedActive: pubB1.publicationId,
+    formalGoals: [formalGoal('门店人效提升15%',15,'%')],
   }, 201)).publication;
   assert.equal(pubB2.state, 'active');
   const handoffB2 = (await req(`${base}/publications/${pubB2.publicationId}/handoff`, 'POST', {operationId: randomUUID(), scope: stores, selected: [0]})).handoff;

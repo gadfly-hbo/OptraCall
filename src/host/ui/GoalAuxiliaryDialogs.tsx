@@ -136,7 +136,7 @@ export function VersionsAndSourcesDialog({
   onOpenStrategyDiscussion?: (source: NonNullable<GoalVersion['source']>) => void;
   onClose: () => void;
 }) {
-  const [pubPage, setPubPage] = useState<{ total: number; offset: number; items: DecompositionPublicationSummary[] } | null>(null);
+  const [pubPage, setPubPage] = useState<{ total: number; offset: number; unavailableVersions: number[]; items: DecompositionPublicationSummary[] } | null>(null);
   const [inspectedPub, setInspectedPub] = useState<DecompositionPublication | null>(null);
   const [err, setErr] = useState('');
   const [loadingPub, setLoadingPub] = useState(false);
@@ -146,7 +146,7 @@ export function VersionsAndSourcesDialog({
     setLoadingPub(true);
     try {
       const res = await api.listDecompositionPublications(record.id, offset, 10);
-      setPubPage({ total: res.total, offset: res.offset, items: res.items });
+      setPubPage({ total: res.total, offset: res.offset, unavailableVersions: res.unavailableVersions, items: res.items });
     } catch (fault) {
       setErr(api.goalError(fault));
     } finally {
@@ -222,6 +222,8 @@ export function VersionsAndSourcesDialog({
             </div>
           )}
         </div>
+        {(pubPage?.unavailableVersions ?? workspace?.unavailablePublicationVersions ?? []).map(version =>
+          <p className="sg-muted" key={version}>拆解正式版 v{version} · 原范围或证据目前待核。</p>)}
         {(pubPage?.items ?? workspace?.publications ?? []).length ? (
           <ul className="sg-history">
             {(pubPage?.items ?? workspace?.publications ?? []).slice().reverse().map(pub => (
@@ -243,7 +245,7 @@ export function VersionsAndSourcesDialog({
             ))}
           </ul>
         ) : (
-          <p className="sg-muted">尚未发布正式拆解表。</p>
+          <p className="sg-muted">{(pubPage?.total ?? workspace?.activePublicationVersion) ? '本页暂无可读正式版。' : '尚未发布正式拆解表。'}</p>
         )}
         {inspectedPub && (
           <div className="gm-frozen-box">
@@ -341,7 +343,7 @@ export function RelatedDecisionsDialog({
   cases: CaseRecord[];
   workspace: GoalWorkspaceView | null;
   onInspectCase?: (caseId: string) => void;
-  onOpenCase: (goal: GoalRef & { strategy?: string; title?: string; description?: string }) => void;
+  onOpenCase: (goal: import('../case-types.ts').CaseGoalEntry) => void;
   onClose: () => void;
 }) {
   const intents = workspace?.caseDraftIntents ?? [];
@@ -369,14 +371,6 @@ export function RelatedDecisionsDialog({
         {intents.length ? (
           <ul className="sg-history">
             {intents.map(intent => {
-              const contextLines = [
-                `意图编号：${intent.intentId}（${intent.kind === 'proactive-pilot' ? '主动试点草稿' : '偏差跟进草稿'}）`,
-                `绑定目标：${intent.goalRef.goalId} · v${intent.goalRef.version} · 策略：${intent.strategy}`,
-                ...(intent.gsaPlanRef ? [`父 GSA 计划：v${intent.gsaPlanRef.planVersion}（${intent.gsaPlanRef.planId}）`] : []),
-                ...(intent.publicationRef ? [`冻结拆解版：v${intent.publicationRef.version} · 行 ${intent.publicationRef.rowId} · 检查点 ${intent.publicationRef.checkpointId}`] : []),
-                ...(intent.checkId ? [`原检查记录：${intent.checkId}`] : []),
-                `证据摘要：${intent.evidenceSummary}`,
-              ].join('\n');
               return (
               <li key={intent.intentId}>
                 <div className="sg-row-between">
@@ -403,7 +397,7 @@ export function RelatedDecisionsDialog({
                         version: intent.goalRef.version,
                         strategy: intent.strategy,
                         title: intent.title,
-                        description: contextLines,
+                        goalIntent: {goalId: intent.goalId, intentId: intent.intentId},
                       });
                     }}
                   >

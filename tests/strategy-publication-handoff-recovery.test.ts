@@ -1,3 +1,4 @@
+import {formalGoal} from './fixtures/strategy-formal-goal.ts';
 import test, {type TestContext} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash, randomUUID} from 'node:crypto';
@@ -73,9 +74,17 @@ function fixture(t: TestContext) {
     return {goals, publications};
   }
 
-  const publish = () => open().publications.publish(initiative.id, {
+  const publish = (mode: 'formal' | 'record' | 'legacy' = 'formal') => open().publications.publish(initiative.id, {
     operationId: randomUUID(), candidateId: candidate.candidateId, no: candidate.no, sha256: candidate.contentSha256,
     batchId: batch.batchId, confirmed: true, expectedActive: null,
+    ...(mode === 'formal' ? {formalGoals: candidate.goals.map(title => formalGoal(title))} : {}),
+  }).then(publication => {
+    if (mode === 'legacy') {
+      const ledger = JSON.parse(readFileSync(publicationFile, 'utf8'));
+      delete ledger.publications[0].handoffEligible;
+      writeFileSync(publicationFile, JSON.stringify(ledger));
+    }
+    return publication;
   });
   function restorePublicationFile() {
     if (!existsSync(originalFile)) return;
@@ -88,7 +97,7 @@ function fixture(t: TestContext) {
     ledger.fixturePadding = 'x'.repeat(2 * 1024 * 1024 - baseBytes - available);
     writeFileSync(publicationFile, JSON.stringify(ledger) + '\n');
   }
-  return {id: initiative.id, open, publish, restorePublicationFile, leaveLedgerBytes};
+  return {id: initiative.id, open, publish, publicationFile, restorePublicationFile, leaveLedgerBytes};
 }
 
 test('承接回执写入失败后，改范围或选择须冲突，原请求读回准确目标', async t => {
@@ -184,7 +193,7 @@ test('等待恢复的承接回执空间不能被撤销记录占用', async t => 
 
 test('旧请求范围含空白时，只恢复原准确目标，后续重试沿同一预留回执', async t => {
   const {id, open, publish, restorePublicationFile} = fixture(t);
-  const publication = await publish();
+  const publication = await publish('legacy');
   const {goals, publications} = open();
   const suppliedScope = {...scope, name: ' 个人工作 '};
   const request = {operationId: randomUUID(), scope: suppliedScope, selected: [0]};
@@ -207,4 +216,31 @@ test('旧请求范围含空白时，只恢复原准确目标，后续重试沿�
   assert.deepEqual(receipt.goals, [{goalId: original.goalId, version: 1}]);
   assert.deepEqual(receipt.scope, scope);
   assert.equal(goals.list().goals.length, 1);
+});
+
+
+test('explicit record-only publication with candidate text cannot create a new goal or receipt', async t => {
+  const {id, open, publish}=fixture(t);
+  const release=await publish('record');
+  assert.equal(release.handoffEligible, false);
+  const {goals,publications}=open();
+  await assert.rejects(publications.handoff(id,release.publicationId,{operationId:randomUUID(),scope,selected:[0]}),
+    {code:'strategy_publication_record_only',status:409});
+  assert.deepEqual(goals.list().goals,[]);
+  assert.deepEqual(publications.get(id,release.publicationId).handoffs,[]);
+});
+
+
+test('old completed record-only handoff replays its original receipt and refuses a new operation', async t => {
+  const {id,open,publish,publicationFile}=fixture(t);
+  const release=await publish('legacy');
+  const {goals,publications}=open();
+  const request={operationId:randomUUID(),scope,selected:[0]};
+  const original=await publications.handoff(id,release.publicationId,request);
+  const ledger=JSON.parse(readFileSync(publicationFile,'utf8'));
+  ledger.publications[0].handoffEligible=false;
+  writeFileSync(publicationFile,JSON.stringify(ledger));
+  assert.deepEqual(await publications.handoff(id,release.publicationId,request),original);
+  await assert.rejects(publications.handoff(id,release.publicationId,{...request,operationId:randomUUID()}),{code:'strategy_publication_record_only'});
+  assert.equal(goals.list().goals.length,1);
 });

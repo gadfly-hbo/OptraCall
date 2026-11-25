@@ -1,12 +1,12 @@
 import type { CaseCreationSource } from './case-types.ts';
-import type { GoalScope } from './strategy-goals-types.ts';
+import type { GoalRef, GoalScope } from './strategy-goals-types.ts';
 
 export type TeachReviewRef = { caseId:string; issueId:string; choiceId:string; reviewId:string };
 export type TeachReviewOwner = {role:'goal'|'strategy';goalId:string;version:number;teachReview:TeachReviewRef};
 export type BusinessRoleOwner =
   | {role:'strategy'; goalId:string; version:number; teachReview:TeachReviewRef}
-  | {role: 'goal'; teachReview?:TeachReviewRef; caseSource?:CaseCreationSource; goalId: string; version: number; analysisVariant?: 'goal-decomposition'}
-  | {role: 'goal-draft'; caseSource?:CaseCreationSource; draftId: string; scope: GoalScope; strategyChoice?: {discussionId:string;version:number}; analysisVariant?: 'goal-estimate'}
+  | {role: 'goal'; teachReview?:TeachReviewRef; caseSource?:CaseCreationSource; goalId: string; version: number; actualId?:string; analysisVariant?: 'goal-decomposition'}
+  | {role: 'goal-draft'; goalRef?: GoalRef; caseSource?:CaseCreationSource; draftId: string; scope: GoalScope; nextCycleSourceGoalId?:string; strategyChoice?: {discussionId:string;version:number}; analysisVariant?: 'goal-estimate'}
   | {role: 'case'; caseId: string; itemId: string}
   | {role: 'project'; projectId: string; issue?: { caseId: string; issueId: string }};
 

@@ -1,3 +1,4 @@
+import {formalGoal} from './fixtures/strategy-formal-goal.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -32,7 +33,10 @@ async function publishedCandidate(req: any, provider: any, base: string, goals: 
   await req(`${base}/candidates/${cid}/versions/1/verify`, 'POST', {operationId: randomUUID()}, 202);
   let batch: any;
   for (let n = 0; n < 600; n++) { batch = (await req(`${base}/candidates/${cid}/versions/1/verifications`)).batches.at(-1); if (batch?.state === 'passed') break; await delay(20); }
-  const publication = (await req(`${base}/publications`, 'POST', {operationId: randomUUID(), candidateId: cid, no: 1, sha256: detail.candidate.contentSha256, batchId: batch.batchId, confirmed: true, expectedActive: null}, 201)).publication;
+  const formalGoals = goals.map(title => title.length <= 300 ? formalGoal(title) : {
+    ...formalGoal('待授权指标'), outcome:title, sapMetric:{authority:'sap-metric',id:'unavailable-metric',version:'1',metricName:'待授权指标'},
+  });
+  const publication = (await req(`${base}/publications`, 'POST', {operationId: randomUUID(), candidateId: cid, no: 1, sha256: detail.candidate.contentSha256, batchId: batch.batchId, confirmed: true, formalGoals, expectedActive: null}, 201)).publication;
   return {cid, publication};
 }
 
@@ -49,8 +53,8 @@ test('真实 Host：多目标承接整批预校验，中途失败不留无回执
   await req('/api/strategy/initiatives', 'POST', {operationId: initiativeId, title: '承接事项', scopes: [stores]}, 201);
   const base = `/api/strategy/initiatives/${initiativeId}`;
   const {publication} = await publishedCandidate(req, provider, base, ['短目标', '长'.repeat(350)]);
-  const failed = await req(`${base}/publications/${publication.publicationId}/handoff`, 'POST', {operationId: randomUUID(), scope: personal, selected: [0, 1]}, 400);
-  assert.ok(failed.code, 'second invalid goal rejects the whole batch');
+  const failed = await req(`${base}/publications/${publication.publicationId}/handoff`, 'POST', {operationId: randomUUID(), scope: personal, selected: [0, 1]}, 409);
+  assert.equal(failed.code, 'strategy_goal_metric_unavailable', 'second invalid goal rejects the whole batch');
   assert.equal((await req('/api/strategy/goals')).goals.length, 0, 'no goal may persist without a handoff receipt');
   assert.deepEqual((await req(`${base}/publications`)).publications[0].handoffs, []);
 });
@@ -118,7 +122,7 @@ test('真实 Host：相同承接操作 ID 跨发布不得串目标身份与来�
     await req(`${base}/candidates/${cid}/versions/1/verify`, 'POST', {operationId: randomUUID()}, 202);
     let batch: any;
     for (let n = 0; n < 600; n++) { batch = (await req(`${base}/candidates/${cid}/versions/1/verifications`)).batches.at(-1); if (batch?.state === 'passed') break; await delay(20); }
-    const publication = (await req(`${base}/publications`, 'POST', {operationId: randomUUID(), candidateId: cid, no: 1, sha256: detail.candidate.contentSha256, batchId: batch.batchId, confirmed: true, expectedActive: first.publication.publicationId}, 201)).publication;
+    const publication = (await req(`${base}/publications`, 'POST', {operationId: randomUUID(), candidateId: cid, no: 1, sha256: detail.candidate.contentSha256, batchId: batch.batchId, confirmed: true, formalGoals:[formalGoal('目标二')], expectedActive: first.publication.publicationId}, 201)).publication;
     return {cid, publication};
   })();
   const handoff2 = (await req(`${base}/publications/${second.publication.publicationId}/handoff`, 'POST', {operationId: sharedOperationId, scope: personal, selected: [0]})).handoff;

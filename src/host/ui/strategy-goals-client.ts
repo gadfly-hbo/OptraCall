@@ -18,8 +18,11 @@ import type {
   DecompositionPublishOperationRecord,
   DecompositionPublishPreview,
   DecompositionThresholdConfig,
+  DecompositionThresholdInput,
   DecompositionValidationResult,
   GoalWorkspaceView,
+  GoalActualInput,
+  SubmittedGoalActual,
   GsaPlanConfirmInput,
   GsaPlanDraft,
   GsaPlanVersion,
@@ -61,7 +64,9 @@ const messages: Record<string, string> = {
   decomposition_row_cas_conflict: '拆解行基线版本已过期，未覆盖他人或新版本的行修改；请刷新核对。',
   decomposition_frozen_checkpoint_unavailable: '所选检查点未在目标拆解正式版本中冻结，不能作为执行承接依据。',
   decomposition_blob_integrity_failed: '拆解正式版快照完整性校验未通过；未静默修复或替换，请核对原存储。',
-  gsa_plan_planned_actions_required: '总目标 GSA 至少需要填写一条明确的计划 A 才能确认并进入拆解。',
+  gsa_stage_checkpoint_required: '请填写至少一个阶段检查点及其观察依据。',
+  gsa_strategies_required: '请先补充目标的具体策略。',
+  gsa_planned_actions_required: '总目标 GSA 至少需要填写一条明确的计划 A 才能确认并进入拆解。',
 };
 
 export class StrategyGoalsRequestError extends Error {
@@ -126,10 +131,10 @@ export const formalSources = (scope: Pick<GoalScope, 'kind' | 'id' | 'enterprise
   if (scope.enterpriseId) params.set('enterpriseId', scope.enterpriseId);
   return request<{ scopeKey: string; formalPublications: InitiativePublication[]; recordOnlyPublications: InitiativePublication[] }>(`goals/formal-sources?${params.toString()}`);
 };
-export const getPreConfirmEstimate = (draftId: string) =>
-  request<{ estimateRecord: { draftId: string; estimate: ReachabilityEstimate; updatedAt: string } | null; estimate: ReachabilityEstimate | null }>(`goals/draft-estimates/${encodeURIComponent(draftId)}`);
-export const savePreConfirmEstimate = (draftId: string, scope: GoalScope, estimate: ReachabilityEstimate) =>
-  request<{ estimateRecord: unknown; estimate: ReachabilityEstimate }>(`goals/draft-estimates/${encodeURIComponent(draftId)}`, 'POST', { scope, estimate });
+export const getPreConfirmEstimate = (draftId: string, goalVersion?: number) =>
+  request<{ estimateRecord: { draftId: string; goalRef?: GoalRef; estimate: ReachabilityEstimate; updatedAt: string } | null; estimate: ReachabilityEstimate | null }>(`goals/draft-estimates/${encodeURIComponent(draftId)}${goalVersion === undefined ? '' : '?goalVersion='+goalVersion}`);
+export const savePreConfirmEstimate = (draftId: string, scope: GoalScope, estimate: ReachabilityEstimate, goalRef?: GoalRef) =>
+  request<{ estimateRecord: unknown; estimate: ReachabilityEstimate }>(`goals/draft-estimates/${encodeURIComponent(draftId)}`, 'POST', { scope, estimate, ...(goalRef ? {goalRef} : {}) });
 
 export const getWorkspace = (goalId: string, goalVersion?: number) => {
   const qs = goalVersion !== undefined ? `?goalVersion=${encodeURIComponent(String(goalVersion))}` : '';
@@ -152,7 +157,7 @@ export const listStrategyReturns = (scope?: { kind: GoalScope['kind']; id: strin
     }[];
   }>(`goals/strategy-returns${qs}`);
 };
-export const reconcileFormal = (goalId: string, input: { operationId: string; expectedVersion: number }) =>
+export const reconcileFormal = (goalId: string, input: { operationId: string; expectedVersion: number; publicationId: string; formalGoalId: string; contentSha256: string }) =>
   request<{ goal: GoalVersion; comparison: { manualValue: number | null; publishedValue: number; unit: string; publicationId: string } }>(`${goalPath(goalId)}/reconcile-formal`, 'POST', input);
 export const saveGsaPlanDraft = (goalId: string, input: Partial<GsaPlanDraft>) =>
   request<{ gsaDraft: GsaPlanDraft }>(`${goalPath(goalId)}/gsa-plan/draft`, 'POST', input);
@@ -174,12 +179,14 @@ export const getDecompositionOperation = (goalId: string, operationId: string) =
 export const abandonDecompositionOperation = (goalId: string, operationId: string, expectedStateRevision: number) =>
   request<{ operation: DecompositionPublishOperationRecord }>(`${goalPath(goalId)}/decomposition/operations/${encodeURIComponent(operationId)}/abandon`, 'POST', { expectedStateRevision });
 export const listDecompositionPublications = (goalId: string, offset = 0, limit = 20) =>
-  request<{ total: number; offset: number; limit: number; activeVersion: number | null; items: DecompositionPublicationSummary[] }>(`${goalPath(goalId)}/decomposition/publications?offset=${offset}&limit=${limit}`);
+  request<{ total: number; offset: number; limit: number; activeVersion: number | null; unavailableVersions: number[]; items: DecompositionPublicationSummary[] }>(`${goalPath(goalId)}/decomposition/publications?offset=${offset}&limit=${limit}`);
 export const readDecompositionPublication = (goalId: string, version: number) =>
   request<{ publication: DecompositionPublication }>(`${goalPath(goalId)}/decomposition/publications/${version}`);
 
-export const setDecompositionThreshold = (goalId: string, input: Partial<DecompositionThresholdConfig>) =>
+export const setDecompositionThreshold = (goalId: string, input: DecompositionThresholdInput) =>
   request<{ threshold: DecompositionThresholdConfig }>(`${goalPath(goalId)}/decomposition/threshold`, 'POST', input);
+export const submitGoalActual = (goalId: string, input: GoalActualInput) =>
+  request<{actual: SubmittedGoalActual}>(`${goalPath(goalId)}/decomposition/actuals`, 'POST', input);
 export const recordProgressCheck = (goalId: string, input: DecompositionProgressCheckInput) =>
   request<{ check: DecompositionProgressCheck; replayed: boolean }>(`${goalPath(goalId)}/decomposition/checks`, 'POST', input);
 export const setCheckCaseChoice = (goalId: string, checkId: string, input: Record<string, unknown>) =>

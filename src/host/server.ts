@@ -52,6 +52,7 @@ import { createStrategyInitiativeHost } from './strategy-initiative-host.ts';
 import { createStrategyCandidateHost } from './strategy-candidate-host.ts';
 import { createStrategyVerificationHost } from './strategy-verification-host.ts';
 import { createStrategyInitiativePublications } from './strategy-initiative-publications.ts';
+import { createGoalDecompositionAccess, checkPublicationAccess } from './goal-decomposition-access.ts';
 import { createStrategyGoalRoutes } from './strategy-goals-routes.ts';
 import { normalizeGoalText } from './strategy-goals-types.ts';
 import { createAutomaticActionSettingsStore, AutomaticActionSettingsFault } from './automatic-action-settings-store.ts';
@@ -1093,6 +1094,9 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         if(owner.role==='goal'){
           if(target==='create'||target&&target.goalId!==owner.goalId)throw new StrategyGoalsError('goal_suggestion_owner_mismatch',403);
           if(target&&owner.version!==target.version&&strategyGoals.read(target).roleSuggestion?.sha256!==ref.sha256)throw new StrategyGoalsError('goal_suggestion_version_mismatch',409);
+        }else if(owner.goalRef) {
+          if (target && (target === 'create' || target.goalId !== owner.goalRef.goalId ||
+              (target.version !== owner.goalRef.version && prior?.roleSuggestion?.sha256 !== ref.sha256))) throw new StrategyGoalsError('goal_suggestion_owner_mismatch',403);
         }else {
           if(owner.strategyChoice&&(owner.strategyChoice.discussionId!==input.strategyChoice?.discussionId||owner.strategyChoice.version!==input.strategyChoice?.version))throw new StrategyGoalsError('goal_suggestion_strategy_mismatch',403);
           if(target&&target!=='create'&&strategyGoals.read(target).roleSuggestion?.discussionId!==ref.discussionId)throw new StrategyGoalsError('goal_suggestion_owner_mismatch',403);
@@ -1199,7 +1203,17 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     });
   }
   let strategyMapImports: ReturnType<typeof createStrategyMapImportService> | undefined;
-  const discussionOptions: Parameters<typeof createStrategyDiscussionHost>[0]={dataRoot,codeRoot:options.cwd,goals:strategyGoals,mapImports:()=>strategyMapImports,
+  async function readDecompositionWorkspace(goalId: string, version: number, cfg?: Readonly<RuntimeModelConfiguration>) {
+    const ws = strategyGoals.getGoalWorkspace(goalId, version);
+    const access = createGoalDecompositionAccess({
+      store: strategyGoals,
+      validateGoal: goal => validateStrategyGoal(goal, undefined, cfg),
+      validateScope: scope => validateStrategyGoalScope(scope, studio.enterpriseScopes),
+    });
+    await access.authorizeWorkspace(goalId, ws);
+    return ws;
+  }
+  const discussionOptions: Parameters<typeof createStrategyDiscussionHost>[0]={dataRoot,codeRoot:options.cwd,goals:strategyGoals,readDecompositionWorkspace,mapImports:()=>strategyMapImports,
     goalEnterprises:projectId=>{
       const directory=studio.enterpriseScopes.list();
       const assigned=projectId&&directory.projectAssignments.find(link=>link.projectId===projectId)?.enterpriseId;
@@ -1373,12 +1387,47 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       dueAt:goal.dueAt,resources:goal.resources,necessaryConditions:goal.necessaryConditions,source:goal.source,strategyContext:goal.strategyContext,evidence,
       ...(goal.strategyChoice?{strategyChoice:goal.strategyChoice}:{}),...(goal.roleSuggestion?{roleSuggestion:goal.roleSuggestion}:{})};
   }
+  async function qualifyPlanEvidence(goalId: string, publicationVersion: number, cfg?: Readonly<RuntimeModelConfiguration>) {
+    const publication = strategyGoals.readDecompositionPublication(goalId, publicationVersion);
+    await checkPublicationAccess(strategyGoals, goalId, publication,
+      goal => validateStrategyGoal(goal, undefined, cfg),
+      scope => validateStrategyGoalScope(scope, studio.enterpriseScopes));
+    return publication;
+  }
+  async function qualifiedRoleGoalSources(goal: import('./strategy-goals-types.ts').GoalVersion, cfg: Readonly<RuntimeModelConfiguration> | undefined, localRead: boolean) {
+    await validateStrategyGoal(goal,undefined,cfg);
+    const upstream=[];
+    for(const source of [goal.source,...(goal.strategyContext?.sources??[]),...(goal.strategyContext?.methods??[]).map(m=>m.source)]){
+      if(source?.authority!=='strategy-discussion')continue;
+      const ref=source as import('./strategy-goals-types.ts').GoalDiscussionSourceRef;
+      if(!cfg&&!localRead)throw new StrategyDiscussionFault('role_source_model_unavailable',403);
+      await strategyDiscussions.verifyChoiceSource(ref,cfg);
+      upstream.push(await strategyDiscussions.readSource(ref,{limit:8192}));
+    }
+    return upstream;
+  }
   const readRoleContext:RoleContextReader = async (owner, cfg, writing,localRead=false) => {
     if(closing)throw new StrategyDiscussionFault('host_closing');
     if(owner.role==='goal-draft'){
       validateStrategyGoalScope(owner.scope,studio.enterpriseScopes);
+      if (owner.nextCycleSourceGoalId) {
+        const source = strategyGoals.nextCycleSourceGoal(owner.nextCycleSourceGoalId, owner.draftId);
+        const ws = await readDecompositionWorkspace(source.goalId, source.version, cfg);
+        const handoff = ws.nextCycleDrafts.find(d => d.draftId === owner.draftId);
+        const review = ws.reviews.find(r => r.reviewId === handoff?.sourceReviewId);
+        if (!handoff || !review || discussionHash(handoff.targetScope) !== discussionHash(owner.scope)) throw new StrategyDiscussionFault('next_cycle_source_unavailable', 403);
+        await validateStrategyGoal(strategyGoals.read(review.lastEffectiveFormalTarget.goalRef), undefined, cfg);
+        return {scope:owner.scope, nextCycle:handoff, sourcePeriod:review.period, reviewedGoal:review.lastEffectiveFormalTarget};
+      }
+      if (owner.goalRef) {
+        const {goal, saved} = strategyGoals.estimateOwnerContext(owner.draftId, owner.scope, owner.goalRef, writing);
+        if (!goal) throw new StrategyDiscussionFault('estimate_goal_unavailable', 403);
+        const upstream = await qualifiedRoleGoalSources(goal, cfg, localRead);
+        return {scope:owner.scope, goalRef:owner.goalRef, goal, formalOrigin:goal.formalOrigin ?? null, upstream,
+          preConfirmEstimate:saved, sourceRights:[`goal/${goal.goalId}/${goal.version}`]};
+      }
       const original=await readGoalOrigin(owner,owner.scope,cfg);
-      const preConfirmEstimate = owner.analysisVariant === 'goal-estimate' ? strategyGoals.getPreConfirmEstimate(owner.draftId) : undefined;
+      const preConfirmEstimate = owner.analysisVariant === 'goal-estimate' ? strategyGoals.estimateOwnerContext(owner.draftId, owner.scope).saved : undefined;
       if(!owner.strategyChoice)return {scope:owner.scope,...original,...(preConfirmEstimate ? { preConfirmEstimate } : {})};
       const {discussionId,version}=owner.strategyChoice;
       const handed=await choices.read(discussionId,version);
@@ -1433,15 +1482,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       return {case:record,...materials,goalBinding,primaryGoal:primary?{id:primary.goalId,version:primary.version,title:primary.title,outcome:primary.outcome}:null};
     }
     const goal=strategyGoals.read({goalId:owner.goalId,version:owner.version});
-    await validateStrategyGoal(goal,undefined,cfg);
-    const upstream=[];
-    for(const source of [goal.source,...(goal.strategyContext?.sources??[]),...(goal.strategyContext?.methods??[]).map(m=>m.source)]){
-      if(source?.authority!=='strategy-discussion')continue;
-      const ref=source as import('./strategy-goals-types.ts').GoalDiscussionSourceRef;
-      if(!cfg&&!localRead)throw new StrategyDiscussionFault('role_source_model_unavailable',403);
-      await strategyDiscussions.verifyChoiceSource(ref,cfg);
-      upstream.push(await strategyDiscussions.readSource(ref,{limit:8192}));
-    }
+    const upstream = await qualifiedRoleGoalSources(goal, cfg, localRead);
     if(owner.teachReview) {
       const ref=owner.teachReview;
       const deny=():never=>{throw new StrategyDiscussionFault('teach_review_source_unavailable',403);};
@@ -1479,9 +1520,20 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     if(owner.role==='strategy')throw new StrategyDiscussionFault('teach_review_source_unavailable',403);
     const {arrangements}=await readGoalVersionPage(owner.goalId,owner.version);
     const current=strategyGoals.get(owner.goalId);
+    if (owner.actualId) {
+      const actual = strategyGoals.readSubmittedActual(owner.goalId, owner.actualId);
+      if (actual.goalVersion !== owner.version) throw new StrategyDiscussionFault('goal_actual_version_mismatch', 409);
+      const publication = await qualifyPlanEvidence(owner.goalId, actual.input.publicationVersion, cfg);
+      const row = publication.snapshot.rows.find(r => r.rowId === actual.input.rowId);
+      return { goal, actual, row, checkpoints:publication.snapshot.frozenCheckpoints.filter(c => c.rowId === actual.input.rowId),
+        periods:publication.snapshot.timePlan.filter(p => actual.input.actualPeriods.some(a => a.periodId === p.periodId)),
+        definition:publication.snapshot.estimate, gsa:publication.snapshot.gsaPlan.goal, publicationVersion:publication.version };
+    }
     const decompositionContext = owner.analysisVariant === 'goal-decomposition'
-      ? (() => {
-          const ws = strategyGoals.getGoalWorkspace(owner.goalId);
+      ? await (async () => {
+          const ws = await readDecompositionWorkspace(owner.goalId, owner.version, cfg);
+          if (ws.activeGsaPlan?.goal.version !== owner.version || current.adoptedVersion !== owner.version) throw new StrategyDiscussionFault('gsa_plan_stale_for_adopted_goal', 409);
+          if (ws.draftUnavailable) throw new StrategyDiscussionFault('strategy_goal_scope_unavailable', 409);
           return {
             activeGsaPlan: ws.activeGsaPlan ?? null,
             activeDecompositionDraft: ws.draft ?? null,
@@ -1594,23 +1646,42 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     const isCurrent = plans.at(-1)?.planVersion === plan.planVersion;
     return downloadable(gsaPlanVersionDocument(goal, plan, isCurrent, arrangements));
   }
+  function requireFrozenPublication(goalId: string, version: number) {
+    const publication = strategyGoals.readDecompositionPublication(goalId, version);
+    return checkPublicationAccess(strategyGoals, goalId, publication, validateStrategyGoal, scope => validateStrategyGoalScope(scope, studio.enterpriseScopes));
+  }
+  async function readProjectHandoffOrigin(goal: import('./strategy-goals-types.ts').GoalRef, parentId: string, handoffId: string) {
+    const handoff = strategyGoals.readProjectHandoff(parentId, handoffId);
+    if (handoff.goalRef.goalId !== goal.goalId || handoff.goalRef.version !== goal.version) throw new RequestFault(409, 'project_handoff_goal_mismatch');
+    await requireFrozenPublication(parentId, handoff.publicationVersion);
+    await validateStrategyGoal(strategyGoals.read(goal));
+    return handoff;
+  }
   async function exportDecompositionPublication(goalId:string,version:number) {
     const publication = strategyGoals.readDecompositionPublication(goalId, version);
     const {goal} = await readGoalVersionPage(goalId, publication.snapshot.gsaPlan.goal.version);
-    for (const row of publication.snapshot.rows) validateStrategyGoalScope(row.scope, studio.enterpriseScopes);
-    for (const cg of publication.committedGoals) validateStrategyGoalScope(cg.scope, studio.enterpriseScopes);
-    const workspace = strategyGoals.getGoalWorkspace(goalId);
-    const isCurrent = workspace.activePublication?.version === publication.version;
+    await requireFrozenPublication(goalId, version);
+    const isCurrent = strategyGoals.listDecompositionPublications(goalId, 0, 1).activeVersion === publication.version;
     return downloadable(decompositionPublicationDocument(goal, publication, isCurrent));
   }
   const workbookRoutes=strategyWorkbookRoutes({goals:strategyGoals,mapMetadata:strategyDiscussions.mapMetadata,readMap:strategyDiscussions.readMapVersion,activePublication:(map,publicationId)=>strategyMapPublications.active(map.discussionId,map.mapId,map.version,map.sha256,publicationId),saveMap:strategyDiscussions.saveMapVersion,
     mutate,isClosing:()=>closing,validateScope:scope=>validateStrategyGoalScope(scope,studio.enterpriseScopes),verifyGoal:goal=>validateStrategyGoal(goal)});
   const strategyGoalRoutes = createStrategyGoalRoutes({ store: strategyGoals, mutate, isClosing: () => closing,
     listSources: strategySources.list,
+    validateEstimateGoal: ref => readGoalVersionPage(ref.goalId, ref.version),
     validateGoal:validateStrategyGoal,
     validateScope: scope => validateStrategyGoalScope(scope, studio.enterpriseScopes),
     validateFeedbackSource: strategySources.validate,
+    readFormalStrategyPublication: (initiativeId, publicationId) => strategyInitiativePublications.get(initiativeId, publicationId),
     listFormalStrategyPublications: scopeKey => strategyInitiativePublications.listActiveForScope(scopeKey),
+    findMatchingCase: (ref, strategy) => {
+      const caseId = cases.caseForGoalStrategy(ref, strategy);
+      if (!caseId) return;
+      const record = cases.getCase(caseId);
+      const binding = cases.getGoalBinding(caseId);
+      if (record.status === 'closed' || binding?.primary.goalId !== ref.goalId || binding.primary.version !== ref.version || binding.strategy !== strategy) return;
+      return { caseId, title: record.title };
+    },
     validateContinueExistingCase: async ({ goalId, goalVersion, strategy, scope, caseId }) => {
       let existingCase;
       try { existingCase = cases.getCase(caseId); } catch { throw new GoalDecompositionError('case_continue_mismatch', 404, { caseId }); }
@@ -1619,7 +1690,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       if (!binding || binding.primary.goalId !== goalId || binding.primary.version !== goalVersion) {
         throw new GoalDecompositionError('case_continue_mismatch', 409, { caseId, expectedGoalId: goalId, expectedGoalVersion: goalVersion });
       }
-      if (strategy && binding.strategy && normalizeGoalText(binding.strategy) !== normalizeGoalText(strategy)) {
+      if (!binding.strategy || normalizeGoalText(binding.strategy) !== normalizeGoalText(strategy)) {
         throw new GoalDecompositionError('case_continue_mismatch', 409, { caseId, expectedStrategy: strategy, actualStrategy: binding.strategy });
       }
       validateStrategyGoalScope(scope, studio.enterpriseScopes);
@@ -1670,7 +1741,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     const read=await strategyDiscussions.readSource(source as import('./strategy-goals-types.ts').GoalDiscussionSourceRef,{offset:input.offset as number|undefined,limit:input.limit as number|undefined});assertSourceCurrent();
     return {content:[{type:'text' as const,text:JSON.stringify({...read,goal:ref,claim:'provided-not-used-or-verified'})}],details:{goal:ref,source:read.source,range:read.range,complete:read.complete}};
   }
-  const caseRoutes = createCaseRoutes({ cases, projects, configuration, mutate, assertActive, decorateProject, goals: strategyGoals, validateGoal: validateStrategyGoal, readSource: readPersonalSource,
+  const caseRoutes = createCaseRoutes({ cases, projects, configuration, mutate, assertActive, decorateProject, goals: strategyGoals, validateGoal: validateStrategyGoal, readSource: readPersonalSource, validateScope: scope => validateStrategyGoalScope(scope, studio.enterpriseScopes),
     enterpriseScope: {
       caseEnterpriseId: caseId => studio.enterpriseScopes.enterpriseIdForCase(caseId),
       projectEnterpriseId: projectId => studio.enterpriseScopes.enterpriseIdForProject(projectId),
@@ -3120,6 +3191,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       if (url.pathname === '/api/projects') {
         if (request.method === 'GET') { json(response, 200, { projects: (await projects.list()).map(decorateProject) }); return; }
         if (request.method === 'POST') {
+          let reopened = false;
           const input = await body(request), value = await mutate(async () => {
             const selected = configuration.read(typeof input.configurationId === 'string' ? input.configurationId : undefined);
             if (!selected?.hasApiKey) throw new RequestFault(409, 'configuration_required');
@@ -3135,14 +3207,15 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             if (goal && origin?.decompositionHandoff !== undefined) {
               const rawHandoffId = typeof origin.decompositionHandoff?.handoffId === 'string' ? origin.decompositionHandoff.handoffId.trim() : '';
               if (!rawHandoffId) throw new RequestFault(400, 'invalid_project_goal_origin');
-              const handoff = strategyGoals.readProjectHandoff(goal.goalId, rawHandoffId);
-              if (handoff.goalRef.goalId !== goal.goalId || handoff.goalRef.version !== goal.version) {
-                throw new RequestFault(409, 'project_handoff_goal_mismatch');
+              const parentId = origin.decompositionHandoff.goalId ?? goal.goalId;
+              const handoff = await readProjectHandoffOrigin(goal, parentId, rawHandoffId);
+              const existing = (await projects.list()).find(p => p.goalOrigin?.decompositionHandoff?.handoffId === handoff.handoffId);
+              if (existing) {
+                reopened = true;
+                return existing;
               }
-              const pub = strategyGoals.readDecompositionPublication(goal.goalId, handoff.publicationVersion);
-              for (const row of pub.snapshot.rows) validateStrategyGoalScope(row.scope, studio.enterpriseScopes);
-              validateStrategyGoalScope(handoff.scope, studio.enterpriseScopes);
               verifiedHandoff = {
+                goalId: parentId,
                 handoffId: handoff.handoffId,
                 gsaPlanId: handoff.gsaPlanRef.planId,
                 gsaPlanVersion: handoff.gsaPlanRef.planVersion,
@@ -3150,12 +3223,6 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                 publicationVersion: handoff.publicationVersion,
                 rowId: handoff.rowId,
                 checkpointId: handoff.checkpoint.checkpointId,
-                checkpointLabel: handoff.checkpoint.label,
-                checkpointDate: handoff.checkpoint.date,
-                checkpointTargetValue: handoff.checkpoint.targetValue,
-                unit: handoff.unit,
-                responsible: handoff.responsible,
-                strategy: handoff.strategy,
               };
             }
             const goalEnterprise=goal?.scope.kind==='enterprise' ? goal.scope.id : goal?.scope.enterpriseId;
@@ -3168,12 +3235,22 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             return created;
           });
           setOperatorProjectCookie(response, request, value.id);
-          json(response, 201, { project: decorateProject(value) }); return;
+          json(response, reopened ? 200 : 201, { project: decorateProject(value) }); return;
         }
       }
       const match = /^\/api\/projects\/([a-f0-9-]+)(?:\/(.*))?$/.exec(url.pathname);
       if (match) {
         const projectId = match[1]!, action = match[2];
+        if (action === 'decomposition-handoff' && request.method === 'GET') {
+          const origin = (await projects.get(projectId)).goalOrigin;
+          const ref = origin?.decompositionHandoff;
+          if (!origin || !ref) throw new RequestFault(404, 'project_handoff_not_found');
+          const handoff = await readProjectHandoffOrigin(origin.goal, ref.goalId, ref.handoffId);
+          if (handoff.publicationId !== ref.publicationId || handoff.publicationVersion !== ref.publicationVersion ||
+              handoff.gsaPlanRef.planId !== ref.gsaPlanId || handoff.gsaPlanRef.planVersion !== ref.gsaPlanVersion ||
+              handoff.rowId !== ref.rowId || handoff.checkpoint.checkpointId !== ref.checkpointId) throw new RequestFault(409, 'project_handoff_goal_mismatch');
+          json(response, 200, { handoff }); return;
+        }
         if (action === 'plan' || action?.startsWith('plan/')) {
           const input = request.method === 'POST' ? await body(request, 262144) : {};
           const result = await projectPlanPreparation.handle(projectId, action, request.method ?? 'GET', input) ?? await projectPlanFeature.handle(projectId, action, request.method ?? 'GET', input);

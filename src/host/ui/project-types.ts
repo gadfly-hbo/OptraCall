@@ -18,7 +18,7 @@ export type ClientTask = {
   lastRun?: { id: string; status: 'running' | 'completed' | 'cancelled' | 'failed' | 'interrupted'; startedAt: string; settledAt?: string; diagnostic?: RunDiagnostic };
 };
 export type ClientProject = {
-  goalOrigin?: {goal: import('../strategy-goals-types.ts').GoalRef};
+  goalOrigin?: { goal: import('../strategy-goals-types.ts').GoalRef; decompositionHandoff?: import('../project-store.ts').ProjectDecompositionHandoffOrigin };
   stages?: import('../task-assignment.ts').ProjectStage[];
   agreements?: import('../task-assignment.ts').ProjectAgreement[];
   schemaVersion: 2; id: string; name: string; configuration: ProjectConfiguration;

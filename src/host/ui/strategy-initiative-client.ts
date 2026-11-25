@@ -1,3 +1,4 @@
+import type { StrategicFormalGoal } from '../strategy-goal-decomposition-types.ts';
 import type { GoalScope } from '../strategy-goals-types.ts';
 import type { ProjectEvent, ProjectSnapshot } from '../../agent/project-runtime.ts';
 import type { CandidateVersion, KickoffAnchor, KickoffReportVersion, ReplacedStrategyRequest, StrategySessionPendingRequest, StrategySessionRun, VerificationBatch } from '../strategy-initiative-types.ts';
@@ -17,6 +18,7 @@ export interface InitiativeMainSession {
 export interface InitiativePublication {
   publicationId: string; initiativeId: string; scopeKey: string; candidateId: string; no: number; contentSha256: string; lockOperationId: string;
   batchId: string; gateRefs: [string, string]; operationId: string; state: 'active' | 'replaced' | 'withdrawn'; template: string; publishedAt: string;
+  formalGoals?: StrategicFormalGoal[]; handoffEligible?: boolean;
   replacedAt?: string; replacedBy?: string; withdrawnAt?: string; withdrawOperationId?: string;
   handoffs: { operationId: string; scope: GoalScope; goals: { goalId: string; version: number }[]; at: string }[];
 }
@@ -98,7 +100,7 @@ export const retryVerificationGate = (id: string, cid: string, no: number, turn:
 export const stopVerification = (id: string, batchId: string) => request<{ stopped: boolean }>(`${path(id)}/verifications/${encodeURIComponent(batchId)}/stop`, 'POST', {});
 
 export const listPublications = (id: string, scopeKey?: string) => request<{ publications: InitiativePublication[] }>(`${path(id)}/publications${scopeKey !== undefined ? scopeQuery(scopeKey) : ''}`);
-export const publishInitiative = (id: string, input: { operationId: string; candidateId: string; no: number; sha256: string; batchId: string; template?: string; confirmed: true; expectedActive: string | null }) => request<{ publication: InitiativePublication }>(`${path(id)}/publications`, 'POST', input);
+export const publishInitiative = (id: string, input: { operationId: string; candidateId: string; no: number; sha256: string; batchId: string; template?: string; formalGoals?: StrategicFormalGoal[]; confirmed: true; expectedActive: string | null }) => request<{ publication: InitiativePublication }>(`${path(id)}/publications`, 'POST', input);
 export const withdrawPublication = (id: string, publicationId: string, input: { operationId: string }) => request<{ publication: InitiativePublication }>(`${path(id)}/publications/${encodeURIComponent(publicationId)}/withdraw`, 'POST', input);
 export const handoffPublication = (id: string, publicationId: string, input: { operationId: string; scope: GoalScope; selected: number[] }) => request<{ handoff: InitiativeHandoffReceipt }>(`${path(id)}/publications/${encodeURIComponent(publicationId)}/handoff`, 'POST', input);
 

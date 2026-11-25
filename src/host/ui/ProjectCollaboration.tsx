@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { caseIssues } from './case-decisions-client.ts';
 import { list as listCases, status as caseStorage } from './case-client.ts';
 import { BusinessRoleConversation } from './BusinessRoleConversation.tsx';
-import { confirmProjectAgreement, setProjectStage, setDefaultTaskSkill, taskResults } from './runtime-client.ts';
+import { readProjectDecompositionHandoff, confirmProjectAgreement, setProjectStage, setDefaultTaskSkill, taskResults } from './runtime-client.ts';
 import { approvedTaskSkills, taskPurpose, type TaskCreateIntent, type ProjectStageInput, type TaskSourceSelection } from '../task-assignment.ts';
 import type { ProjectTaskResultDescriptor } from '../project-task-results-types.ts';
 import type { ClientProject, ClientTask } from './project-types.ts';
@@ -113,6 +113,29 @@ function StagePanel({ project, onRefresh }: { project: ClientProject; onRefresh:
   </section>;
 }
 
+function ProjectHandoffBasis({ project }: { project: ClientProject }) {
+  const ref = project.goalOrigin?.decompositionHandoff;
+  const [body, setBody] = useState<import('../strategy-goal-decomposition-types.ts').DecompositionProjectHandoff>();
+  const [error, setError] = useState('');
+  useEffect(() => {
+    if (!ref) return;
+    let current = true;
+    setBody(undefined);
+    setError('');
+    void readProjectDecompositionHandoff(project.id).then(result => {
+      if (current) setBody(result.handoff);
+    }).catch(reason => { if (current) setError(failure(reason)); });
+    return () => { current = false; };
+  }, [project.id, ref?.handoffId]);
+  if (!ref) return null;
+  return <section className="project-plan-section">
+    <h3>冻结的目标拆解依据</h3>
+    <p>总 GSA v{ref.gsaPlanVersion} · 拆解表 v{ref.publicationVersion} · 责任行 {ref.rowId} · 检查点 {ref.checkpointId}</p>
+    {body && <p>{body.scope.name} · {body.responsible} · {body.strategy} · {body.checkpoint.label}（{body.checkpoint.date}） · {body.checkpoint.targetValue ?? '待核'}{body.checkpoint.unit} · {body.checkpoint.evidenceSource}</p>}
+    {error && <p role="alert">原承接依据待核。{error}</p>}
+  </section>;
+}
+
 function ProjectWorkBasis({projectId,issue,version}:{projectId:string;issue?:IssueScope;version?:number}) {
   const [basis,setBasis]=useState<{goal?:{title:string;goal:{version:number};outcome:string;usageContext:{background:string};scope:{name:string};strategies?:string[];dueAt?:string;resources?:string[];necessaryConditions?:string[];source?:{authority:string;id:string;version:string|number};evidence?:{original?:{description?:string}}[]};case?:{description?:string};strategy?:string;decision?:{reason?:string}}>();
   const [error,setError]=useState('');
@@ -173,6 +196,7 @@ export function ProjectCollaboration({ project, issue, onChangeScope, onReturnIs
     {!!scopes.size && <div className="case-inline-actions"><label>项目工作范围 <select value={issue ? issue.caseId + '/' + issue.issueId : ''} onChange={event => onChangeScope(scopes.get(event.target.value))}>
       <option value="">独立项目工作</option>{[...scopes].map(([key, value]) => <option key={key} value={key}>{value.title ?? '原事项'} · {value.caseId.slice(0,8)} / {value.issueId.slice(0,8)}</option>)}</select></label>
       {issue && <button type="button" className="text-button" onClick={() => onReturnIssue(issue)}>返回原 Case 事项</button>}</div>}
+    {tab==='work' && project.goalOrigin?.decompositionHandoff && <ProjectHandoffBasis key={project.id} project={project}/>}
     {tab==='work' && (issue||project.goalOrigin) && <ProjectWorkBasis projectId={project.id} issue={issue} version={issue?undefined:project.goalOrigin?.goal.version}/>}
     <div hidden={tab !== 'work'}><BusinessRoleConversation owner={{ role: 'project', projectId: project.id, ...(issue ? {issue} : {}) }}/></div>
     {tab === 'terms' && <section className="project-plan-section"><h2>共用约定</h2>{!latest && <p>多个任务需要相同口径、范围或前提时，可在这里共同确定。</p>}

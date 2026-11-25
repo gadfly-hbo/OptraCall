@@ -61,7 +61,7 @@ export interface StrategyDiscussionSourcePort {
  verify(discussion:StrategyDiscussion,configuration:Readonly<RuntimeModelConfiguration>,context?:{signal?:AbortSignal;assertCurrent():void;metadataOnly?:boolean}):Promise<void>;
 }
 export type RoleContextReader = (owner: BusinessRoleOwner, configuration: Readonly<RuntimeModelConfiguration> | undefined, writing: boolean, localRead?: boolean) => Promise<unknown>;
-export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId?:string):{id:string;name:string}[];verifyPriorRights?:(owner:BusinessRoleOwner,configuration:Readonly<RuntimeModelConfiguration>,rights:ReadonlySet<string>)=>Promise<void>;roleContext?:RoleContextReader;verifyGoalContext?(context:GoalContextSnapshot,configuration?:Readonly<RuntimeModelConfiguration>):Promise<void>;verifyArrangement?(ref:GoalActionArrangement,configuration?:Readonly<RuntimeModelConfiguration>):Promise<void>;mapImports?:()=>import('./strategy-map-import-routes.ts').StrategyMapImportService|undefined;dataRoot:string;codeRoot:string;goals:StrategyGoalsStore;configuration(id?:string,revision?:number):Readonly<RuntimeModelConfiguration>|null|undefined;defaultUsageContext():Promise<UsageContext|null>;mutate<T>(fn:()=>T|Promise<T>):Promise<T>;isClosing():boolean;sources?:StrategyDiscussionSourcePort;validateGoal(input:GoalDraftInput):void|Promise<void>}){
+export function createStrategyDiscussionHost(options:{readDecompositionWorkspace?(goalId:string,version:number,configuration:Readonly<RuntimeModelConfiguration>):Promise<import('./strategy-goal-decomposition-types.ts').GoalWorkspaceView>;goalEnterprises?(projectId?:string):{id:string;name:string}[];verifyPriorRights?:(owner:BusinessRoleOwner,configuration:Readonly<RuntimeModelConfiguration>,rights:ReadonlySet<string>)=>Promise<void>;roleContext?:RoleContextReader;verifyGoalContext?(context:GoalContextSnapshot,configuration?:Readonly<RuntimeModelConfiguration>):Promise<void>;verifyArrangement?(ref:GoalActionArrangement,configuration?:Readonly<RuntimeModelConfiguration>):Promise<void>;mapImports?:()=>import('./strategy-map-import-routes.ts').StrategyMapImportService|undefined;dataRoot:string;codeRoot:string;goals:StrategyGoalsStore;configuration(id?:string,revision?:number):Readonly<RuntimeModelConfiguration>|null|undefined;defaultUsageContext():Promise<UsageContext|null>;mutate<T>(fn:()=>T|Promise<T>):Promise<T>;isClosing():boolean;sources?:StrategyDiscussionSourcePort;validateGoal(input:GoalDraftInput):void|Promise<void>}){
  const namespace = options.roleContext ? 'business-role-discussions' : 'strategy-discussions';
  const store=new StrategyDiscussionStore(options.dataRoot, namespace);
  const maps=new StrategyMapStore(store);
@@ -629,6 +629,23 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
   if(o.businessOwner) {
    const owner=o.businessOwner;
    if(owner.role==='goal'||owner.role==='goal-draft'){
+    if(owner.role === 'goal' && owner.actualId) {
+     const evidence = await options.roleContext!(owner, configuration, action === 'goal-assess-actual');
+     context.assertCurrent(); context.signal.throwIfAborted();
+     if (action === 'goal-read-context' || action === 'goal-analyze-progress') return payload(evidence);
+     if (action !== 'goal-assess-actual' || options.goals.disableDecomposition) fail('role_action_unavailable',403);
+     const comparability = input.comparability;
+     if (comparability !== 'comparable' && comparability !== 'partial-missing' && comparability !== 'observing' && comparability !== 'incomparable') return fail('invalid_progress_comparability',400);
+     if (typeof input.assessmentNote !== 'string' || !input.assessmentNote.trim() || input.assessmentNote.length > 1000) return fail('invalid_progress_assessment',400);
+     const actual = options.goals.readSubmittedActual(owner.goalId, owner.actualId);
+     const note = input.assessmentNote.trim();
+     const result = await options.mutate(async () => {
+      await options.roleContext!(owner, configuration, true);
+      context.assertCurrent(); context.signal.throwIfAborted();
+      return options.goals.assessSubmittedActual(owner.goalId, actual.actualId, comparability, note, input.observation);
+     });
+     return payload({check:result.check, claim:'assessed-submitted-actual'});
+    }
     if(action==='propose-goal'){
      if(!object(input.draft))fail('role_action_unavailable',403);
      const scope=owner.role==='goal'?options.goals.read(owner).scope:owner.scope;
@@ -647,17 +664,20 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
     if (options.goals.disableDecomposition) fail('goal_decomposition_disabled', 403);
 
     if (action === 'goal-read-context') {
-     await options.roleContext!(owner, configuration, false);
+     const authorized = await options.roleContext!(owner, configuration, false);
      context.assertCurrent(); context.signal.throwIfAborted();
      const skills = APPROVED_GOAL_ANALYSIS_SKILLS.map(s => ({ id: s.id, version: s.version, sha256: s.sha256, scopeNote: s.scopeNote, scripts: Object.keys(s.scripts) }));
      if (owner.role === 'goal-draft') {
-      const saved = options.goals.getPreConfirmEstimate(owner.draftId);
-      return payload({ mode: 'goal-estimate', draftId: owner.draftId, scope: owner.scope, estimate: saved?.estimate ?? null, skills, claim: 'pre-confirm-estimate-context' });
+      const saved = options.goals.estimateOwnerContext(owner.draftId, owner.scope, owner.goalRef).saved;
+      return payload({ mode: 'goal-estimate', draftId: owner.draftId, ...(object(authorized) ? authorized : {}), scope: owner.scope, estimate: saved?.estimate ?? null, skills, claim: 'pre-confirm-estimate-context' });
      }
-     const ws = options.goals.getGoalWorkspace(owner.goalId);
+     if (!options.readDecompositionWorkspace) fail('role_action_unavailable', 403);
+     const ws = await options.readDecompositionWorkspace(owner.goalId, owner.version, configuration);
      return payload({
       mode: 'goal-decomposition',
       goalId: owner.goalId,
+      goal: options.goals.read({ goalId: owner.goalId, version: owner.version }),
+      expectedDraftRevision: ws.latestDraftRevision,
       activeGsaPlan: ws.activeGsaPlan,
       draft: ws.draft,
       validation: ws.validation,
@@ -726,7 +746,7 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
      context.assertCurrent(); context.signal.throwIfAborted();
      const saved = await options.mutate(() => {
       context.assertCurrent(); context.signal.throwIfAborted();
-      return options.goals.savePreConfirmEstimate(owner.draftId, owner.scope, input.estimate, 'agent');
+      return options.goals.savePreConfirmEstimate(owner.draftId, owner.scope, input.estimate, 'agent', undefined, owner.goalRef);
      });
      return payload({ saved: true, estimate: saved.estimate, updatedAt: saved.updatedAt, claim: 'pre-confirm-estimate-saved-not-adopted' });
     }
@@ -750,7 +770,7 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
      };
      const result = await options.mutate(() => {
       context.assertCurrent(); context.signal.throwIfAborted();
-      return options.goals.saveDecompositionDraft(owner.goalId, draftInput, { updatedBy: 'agent' });
+      return options.goals.saveDecompositionDraft(owner.goalId, draftInput, { updatedBy: 'agent', ownerGoalVersion: owner.version });
      });
      return payload({ saved: true, draft: result.draft, validation: result.validation, claim: 'decomposition-draft-not-published' });
     }
@@ -759,8 +779,10 @@ export function createStrategyDiscussionHost(options:{goalEnterprises?(projectId
      if (!isDecomposition) fail('role_action_unavailable', 403);
      await options.roleContext!(owner, configuration, false);
      context.assertCurrent(); context.signal.throwIfAborted();
-     const ws = options.goals.getGoalWorkspace(owner.goalId);
+     if (!options.readDecompositionWorkspace) fail('role_action_unavailable', 403);
+     const ws = await options.readDecompositionWorkspace(owner.goalId, owner.version, configuration);
      const pubVer = input.publicationVersion !== undefined ? Number(input.publicationVersion) : ws.activePublicationVersion;
+     if (pubVer && !ws.publications.some(p => p.version === pubVer)) fail('decomposition_publication_unavailable', 409);
      const pub = pubVer ? options.goals.readDecompositionPublication(owner.goalId, pubVer) : null;
      return payload({
       goalId: owner.goalId,

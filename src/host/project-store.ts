@@ -16,6 +16,7 @@ export interface FeedbackTaskOrigin { handoffId: string; operationId: string; re
 export interface PlanTaskOrigin { confirmationId: string; taskKey: string; requestHash: string }
 export interface TaskRecord { createRequestFingerprint?: string; createFingerprint?: string; assignment?: TaskAssignment; id: string; name: string; createdAt: string; updatedAt: string; draft: string; configuration: ProjectConfiguration; sessionStorage: 'legacy' | 'task'; sessionFile?: string; lastRun?: ProjectRun; sessionDirectory: string; simulationTools?: boolean; tradeAreaTools?: boolean; weatherTools?: boolean; modelTools?: boolean; feedbackOrigin?: FeedbackTaskOrigin; reviewDraftIds?: string[]; archivedAt?: string | null; planOrigin?: PlanTaskOrigin }
 export interface ProjectDecompositionHandoffOrigin {
+  goalId: string;
   handoffId: string;
   gsaPlanId: string;
   gsaPlanVersion: number;
@@ -23,12 +24,6 @@ export interface ProjectDecompositionHandoffOrigin {
   publicationVersion: number;
   rowId: string;
   checkpointId: string;
-  checkpointLabel: string;
-  checkpointDate: string;
-  checkpointTargetValue: number | null;
-  unit: string;
-  responsible: string;
-  strategy: string;
 }
 export interface ProjectRecord { goalOrigin?: { goal: import('./strategy-goals-types.ts').GoalRef; decompositionHandoff?: ProjectDecompositionHandoffOrigin }; stages?: ProjectStage[]; agreements?: ProjectAgreement[]; schemaVersion: 2; id: string; name: string; createdAt: string; updatedAt: string; configuration: ProjectConfiguration; uploads: UploadedFile[]; archivedAt: string | null; tasks: TaskRecord[]; rootPath: string }
 export interface FileNode { name: string; path: string; kind: 'file' | 'directory'; bytes?: number; children?: FileNode[] }
@@ -236,21 +231,17 @@ export class ProjectStore {
         const h = origin.decompositionHandoff;
         if (
           !object(h) ||
+          (h.goalId !== undefined && (typeof h.goalId !== 'string' || !uuid.test(h.goalId))) ||
           typeof h.handoffId !== 'string' || !uuid.test(h.handoffId) ||
           typeof h.gsaPlanId !== 'string' || !uuid.test(h.gsaPlanId) ||
           !Number.isSafeInteger(h.gsaPlanVersion) || Number(h.gsaPlanVersion) < 1 ||
           typeof h.publicationId !== 'string' || !uuid.test(h.publicationId) ||
           !Number.isSafeInteger(h.publicationVersion) || Number(h.publicationVersion) < 1 ||
           typeof h.rowId !== 'string' || !h.rowId.trim() ||
-          typeof h.checkpointId !== 'string' || !h.checkpointId.trim() ||
-          typeof h.checkpointLabel !== 'string' ||
-          typeof h.checkpointDate !== 'string' ||
-          (h.checkpointTargetValue !== null && (typeof h.checkpointTargetValue !== 'number' || !Number.isFinite(h.checkpointTargetValue))) ||
-          typeof h.unit !== 'string' ||
-          typeof h.responsible !== 'string' ||
-          typeof h.strategy !== 'string'
+          typeof h.checkpointId !== 'string' || !h.checkpointId.trim()
         ) return fail('invalid_project_metadata');
         decompositionHandoff = {
+          goalId: typeof h.goalId === 'string' ? h.goalId : origin.goal.goalId,
           handoffId: h.handoffId,
           gsaPlanId: h.gsaPlanId,
           gsaPlanVersion: Number(h.gsaPlanVersion),
@@ -258,12 +249,6 @@ export class ProjectStore {
           publicationVersion: Number(h.publicationVersion),
           rowId: h.rowId,
           checkpointId: h.checkpointId,
-          checkpointLabel: h.checkpointLabel,
-          checkpointDate: h.checkpointDate,
-          checkpointTargetValue: h.checkpointTargetValue,
-          unit: h.unit,
-          responsible: h.responsible,
-          strategy: h.strategy,
         };
       }
       goalOrigin={goal:{goalId:origin.goal.goalId,version:Number(origin.goal.version)},...(decompositionHandoff?{decompositionHandoff}:{})};

@@ -1,3 +1,4 @@
+import { allocatedTarget } from './strategy-goal-allocation.ts';
 import type { GoalArrangementView, GoalSourceRef, GoalVersion } from './strategy-goals-types.ts';
 
 type DocumentRow = readonly string[];
@@ -204,6 +205,8 @@ export function decompositionPublicationDocument(
           ['正式目标值', `${snap.estimate.formalTargetValue}${snap.estimate.unit}`],
           ['同口径可达测算值', snap.estimate.estimatedValue === null ? '部分待补' : `${snap.estimate.estimatedValue}${snap.estimate.unit}`],
           ['差额（正式 − 测算）', snap.estimate.gapValue === null ? '待核' : `${snap.estimate.gapValue}${snap.estimate.unit}`],
+          ['贡献汇总', snap.gsaPlan.formalTarget.metricKind === 'milestone' ? '按各项成果标准核对'
+            : `${allocatedTarget(snap.rows, snap.gsaPlan.formalTarget.metricKind, snap.gsaPlan.formalTarget.unit) ?? '待核'}${snap.gsaPlan.formalTarget.unit}`],
           ['测算依据', snap.estimate.basis],
           ['发布说明', publication.reason ?? '正式拆解发布'],
           ['快照指纹', publication.snapshotSha256],

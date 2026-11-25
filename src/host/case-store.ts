@@ -875,11 +875,11 @@ export class CaseStore {
     this.put('cases', 'id', record); this.event('case', record.id, record.revision, eventType, operationId, delta, time, note);
     return record;
   }
-  createCase(input: { operationId: string; title: string; description?: string; judgement?: string; nextStep?: string; status?: CaseStatus; goalBinding?: CaseGoalBindingInput; creationSource?: CaseCreationSource }, scope?: CaseEnterpriseScopeOptions): CaseRecord {
+  createCase(input: { operationId: string; title: string; description?: string; judgement?: string; nextStep?: string; status?: CaseStatus; goalBinding?: CaseGoalBindingInput; creationSource?: CaseCreationSource; goalIntent?: import('./case-types.ts').CaseGoalIntentRef }, scope?: CaseEnterpriseScopeOptions): CaseRecord {
     const clean = { operationId: input.operationId, title: text(input.title, 80, true, true, true), description: text(input.description ?? '', 20000), judgement: text(input.judgement ?? '', 20000), nextStep: text(input.nextStep ?? '', 5000), status: input.status ?? 'pending' };
     if (!(activeStatuses as readonly string[]).includes(clean.status)) fail('invalid_case_status');
     const binding = input.goalBinding === undefined ? undefined : goalBindingInput(input.goalBinding);
-    const request = { ...clean, ...(binding ? { goalBinding: binding } : {}), ...(input.creationSource ? { creationSource: input.creationSource } : {}) };
+    const request = { ...clean, ...(binding ? { goalBinding: binding } : {}), ...(input.goalIntent ? { goalIntent: input.goalIntent } : {}), ...(input.creationSource ? { creationSource: input.creationSource } : {}) };
     return this.operation('case_create', request, null, null, () => {
       if (binding?.strategy && this.caseForGoalStrategy(binding.primary,binding.strategy)) fail('case_goal_strategy_already_used', 409);
       const time = now(), record: CaseRecord = { id: randomUUID(), ...clean, closeReason: null, closedAt: null, revision: 1, createdAt: time, updatedAt: time };
@@ -887,7 +887,7 @@ export class CaseStore {
       this.insert('cases', saved);
       if (binding) this.writeGoalBinding(saved.id, 1, binding, time, clean.operationId);
       this.database().prepare('UPDATE operation_receipts SET case_id=? WHERE operation_id=?').run(saved.id, clean.operationId);
-      this.event('case', saved.id, 1, 'case_created', clean.operationId, changes({}, { ...saved, ...(binding ? { goalBinding: binding } : {}), ...(input.creationSource ? { creationSource: input.creationSource } : {}) }), time);
+      this.event('case', saved.id, 1, 'case_created', clean.operationId, changes({}, { ...saved, ...(binding ? { goalBinding: binding } : {}), ...(input.goalIntent ? { goalIntent: input.goalIntent } : {}), ...(input.creationSource ? { creationSource: input.creationSource } : {}) }), time);
       return saved;
     }, { ...scope, goals: Boolean(binding) });
   }

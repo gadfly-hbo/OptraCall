@@ -53,6 +53,7 @@ export interface ReachabilityEstimate {
   unit: string;
   period: string;
   scopeDescription: string;
+  scope?: GoalScope;
   sapMetric?: { id: string; version: string; metricName?: string };
   formalTargetValue: number;
   estimatedValue: number | null;
@@ -76,6 +77,7 @@ export interface ReachabilityEstimate {
 }
 
 export interface PreConfirmEstimateRecord {
+  goalRef?: GoalRef;
   draftId: string;
   scope: GoalScope;
   estimate: ReachabilityEstimate;
@@ -98,7 +100,13 @@ export interface GsaStageCheckpoint {
   observationBasis?: string;
 }
 
+export function hasGsaCheckpoint(actions: readonly GsaPlannedAction[], stages: readonly GsaStageCheckpoint[]): boolean {
+  return actions.some(action => action.summary.trim() && action.checkpoint?.trim() && action.observationBasis?.trim()) ||
+    stages.some(stage => stage.label.trim() && stage.observationBasis?.trim());
+}
+
 export interface GsaPlanDraft {
+  goalVersion?: number;
   goalId: string;
   plannedActions: GsaPlannedAction[];
   stageCheckpoints: GsaStageCheckpoint[];
@@ -120,7 +128,17 @@ export interface GsaPlanConfirmInput {
   supersedesReason?: string;
 }
 
+export interface FormalGoalSelection {
+  initiativeId: string;
+  publicationId: string;
+  candidateId: string;
+  candidateNo: number;
+  contentSha256: string;
+  formalGoal: StrategicFormalGoal;
+}
+
 export interface GsaPlanVersion {
+  preConfirmEstimate?: ReachabilityEstimate;
   planId: string;
   planVersion: number;
   goal: GoalRef;
@@ -296,6 +314,12 @@ export interface DecompositionAlignmentInput {
 export interface DecompositionValidationIssue {
   code:
     | 'gsa_plan_required'
+    | 'incomplete_reachability_estimate'
+    | 'estimate_formal_target_mismatch'
+    | 'incomplete_allocation_row'
+    | 'invalid_ratio_rollup'
+    | 'incomparable_checkpoint'
+    | 'incomparable_time_plan'
     | 'incomparable_estimate_caliber'
     | 'incomparable_row_caliber'
     | 'incomparable_reserve_caliber'
@@ -309,6 +333,8 @@ export interface DecompositionValidationIssue {
     | 'cross_view_conflict'
     | 'incomparable_view'
     | 'view_row_mismatch'
+    | 'view_coverage_mismatch'
+    | 'view_total_mismatch'
     | 'gap_not_covered'
     | 'overlapping_gap_scope'
     | 'invalid_gap_strategy'
@@ -325,7 +351,7 @@ export interface DecompositionValidationIssue {
 
 export interface DecompositionValidationResult {
   ok: boolean;
-  allocatedTotal: number;
+  allocatedTotal: number | null;
   reserveTotal: number;
   formalTargetValue: number;
   estimatedValue: number | null;
@@ -409,6 +435,7 @@ export interface DecompositionPublishPreview {
   gsaPlan: GsaPlanVersion;
   draftRevision: number;
   draftSha256: string;
+  previewSha256: string;
   expectedActiveVersion: number | null;
   nextPublicationVersion: number;
   committedGoals: {
@@ -416,6 +443,7 @@ export interface DecompositionPublishPreview {
     linkedGoalId?: string;
     expectedGoalVersion?: number;
     expectedAdoptedVersion?: number | null;
+    relations: { id: string; revision: number; responsibility: string; rationale: string }[];
     action: 'create-and-adopt' | 'reuse-adopted' | 'revise-and-adopt';
     title: string;
     outcome: string;
@@ -430,7 +458,7 @@ export interface DecompositionPublishPreview {
     formalTargetValue: number;
     estimatedValue: number | null;
     gapValue: number | null;
-    allocatedTotal: number;
+    allocatedTotal: number | null;
     reserveTotal: number;
     gapCoverageTotal: number;
   };
@@ -443,6 +471,7 @@ export interface DecompositionPublishInput {
   gsaPlanSha256: string;
   draftRevision: number;
   draftSha256: string;
+  previewSha256?: string;
   expectedActiveVersion: number | null;
   reason?: string;
   explicitRetry?: boolean;
@@ -475,7 +504,11 @@ export interface DecompositionOperationRecoveryResult {
   publication?: DecompositionPublication;
 }
 
+export type DecompositionThresholdInput = Partial<DecompositionThresholdConfig> & { expectedGoalVersion?: number };
+
 export interface DecompositionThresholdConfig {
+  metricId?: string;
+  periodGranularity?: 'month' | 'week' | 'day';
   configured: boolean;
   magnitudePct?: number;
   consecutivePeriods?: number;
@@ -485,6 +518,17 @@ export interface DecompositionThresholdConfig {
 }
 
 export type ProgressComparability = 'comparable' | 'partial-missing' | 'incomparable' | 'observing';
+
+export const MAX_GOAL_ACTUAL_REPORT_CHARS = 12_000;
+
+export interface ProgressEvidenceBasis {
+  metric: string;
+  unit: string;
+  scope: string;
+  periodId: string;
+  coverage: 'complete' | 'partial' | 'unknown';
+  maturity: 'closed' | 'open' | 'unknown';
+}
 
 export interface ProgressComparisonPeriod {
   periodId: string;
@@ -522,12 +566,18 @@ export interface DecompositionProgressCheck {
   metricId: string;
   periodGranularity: 'month' | 'week' | 'day';
   periodSequenceKey: string;
+  periodStartDate?: string;
+  periodEndDate?: string;
   actualSource: {
     ref: string;
     label: string;
     cutoffAt: string;
     coverageNote?: string;
+    reportText?: string;
+    basis?: ProgressEvidenceBasis;
   };
+  assessmentNote?: string;
+  evidenceQuote?: string;
   comparability: ProgressComparability;
   missingCoverageNote?: string;
   periods: ProgressComparisonPeriod[];
@@ -537,6 +587,9 @@ export interface DecompositionProgressCheck {
   thresholdSnapshot: DecompositionThresholdConfig;
   trigger: ProgressTriggerResult;
   caseChoice: ProgressCaseChoice | null;
+  caseStrategies?: string[];
+  caseCandidatesUnavailable?: boolean;
+  caseCandidates?: { caseId: string; title: string; strategy: string }[];
   supplementOfCheckId?: string;
   recordedAt: string;
   operationId: string;
@@ -555,11 +608,23 @@ export interface DecompositionProgressCheckInput {
     label: string;
     cutoffAt: string;
     coverageNote?: string;
+    reportText?: string;
+    basis?: ProgressEvidenceBasis;
   };
+  assessmentNote?: string;
+  evidenceQuote?: string;
   comparability: ProgressComparability;
   missingCoverageNote?: string;
   actualPeriods: { periodId: string; label?: string; actualValue: number | null }[];
   supplementOfCheckId?: string;
+}
+
+export type GoalActualInput = Omit<DecompositionProgressCheckInput, 'assessmentNote' | 'evidenceQuote' | 'comparability' | 'periodSequenceKey' | 'periodGranularity' | 'metricId'>;
+export interface SubmittedGoalActual {
+  actualId: string;
+  goalVersion: number;
+  input: GoalActualInput;
+  submittedAt: string;
 }
 
 export interface DecompositionCaseDraftIntent {
@@ -727,6 +792,10 @@ export interface StrategyReturnInput {
 }
 
 export interface GoalWorkspaceView {
+  latestGsaPlanVersion: number;
+  latestDraftRevision: number;
+  unavailablePublicationVersions?: number[];
+  draftUnavailable?: boolean;
   goal: import('./strategy-goals-types.ts').StrategyGoalRecord;
   gsaPlans: GsaPlanVersion[];
   activeGsaPlan: GsaPlanVersion | null;
@@ -738,21 +807,17 @@ export interface GoalWorkspaceView {
   activePublication: DecompositionPublication | null;
   checks: DecompositionProgressCheck[];
   threshold: DecompositionThresholdConfig;
+  thresholdStreams?: DecompositionThresholdConfig[];
   caseDraftIntents: DecompositionCaseDraftIntent[];
   handoffs: DecompositionProjectHandoff[];
   reviews: DecompositionCycleReview[];
   nextCycleDrafts: NextCycleDraft[];
+  submittedActuals: SubmittedGoalActual[];
   strategyReturns: StrategyReturnRecord[];
   formalReconciliation?: {
     hasApplicableFormalPublication: boolean;
     manualTargetValue?: number;
-    formalPublication?: {
-      initiativeId: string;
-      publicationId: string;
-      candidateId: string;
-      candidateNo: number;
-      contentSha256: string;
-      formalGoal: StrategicFormalGoal;
-    };
+    formalPublications: FormalGoalSelection[];
+    formalPublication?: FormalGoalSelection;
   };
 }

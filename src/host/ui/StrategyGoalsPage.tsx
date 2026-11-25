@@ -36,8 +36,8 @@ export interface StrategyGoalsPageProps {
   caseSource?:CaseCreationSource;clearCaseSource?:()=>void;onInspectCase?:(id:string)=>void;
   management: ManagementRoute; onStage: (stage: ManagementStage) => void;
   active?: boolean;
-  onOpenCase: (goal: GoalRef & { strategy?: string; title?: string; description?: string }) => void;
-  onStartProject: (goal: GoalRef, usageContext?: UsageContext, handoff?: { handoffId: string }) => void;
+  onOpenCase: (goal: import('../case-types.ts').CaseGoalEntry) => void;
+  onStartProject: (goal: GoalRef, usageContext?: UsageContext, handoff?: { goalId: string; handoffId: string }) => void;
   onManageMetrics: () => void;
   onOpenBoard?: () => void;
   feedbackSources?: GoalFeedbackSource[];
@@ -427,7 +427,7 @@ export function StrategyGoalsPage({ teachReview,onReturnReview,clearTeachReview,
   const value = exactPublicationHandoff && goalIndexUnavailable ? undefined : record?.versions.find(x => x.version === (selectedVersion ?? record.adoptedVersion ?? record.currentVersion));
   const visible = index.goals.filter(x => perspective === 'all' || current(x).perspective === perspective);
   const options = adoptedVersions(index), sources = [...new Map([...originalSources, ...feedbackSources, ...cases.map(x => ({ label: `Case：${x.title}`, ref: { authority: 'case' as const, id: x.id, version: x.revision } }))].map(x => [sourceKey(x.ref), x])).values()];
-  const select = (id: string) => { clearPublicationHandoff(); setDraftScopeKey('');setHandoff(undefined); setSelectedId(id); setSelectedVersion(index.goals.find(record => record.id === id)?.currentVersion ?? null); };
+  const select = (id: string) => { clearPublicationHandoff(); setDraftScopeKey('');setHandoff(undefined); setSelectedId(id); setSelectedVersion(null); };
   const relations = value ? index.relations.filter(x => sameRef(x.from, value) || sameRef(x.to, value)) : [];
   const feedback = value ? index.feedback.filter(x => sameRef(x.goal, value)) : [];
   const [handoff,setHandoff]=useState<ChoiceHandoff>();
@@ -476,9 +476,9 @@ export function StrategyGoalsPage({ teachReview,onReturnReview,clearTeachReview,
   },[active,goalsLoaded,originKey,enterpriseDirectory,projects,resolvedOrigin]);
   const standaloneDraft=Boolean(draftScopeKey)||!value;
   const roleGoal=!handoff&&!standaloneDraft?value:undefined;
-  const stableDraftId=(scope:GoalScope, goalIdKey?: string)=>{
+  const stableDraftId=(scope:GoalScope)=>{
     if(typeof window==='undefined')return '';
-    const key='optracall.gsa.draft:'+scopeKey(scope)+(goalIdKey?':goal:'+goalIdKey:'')+(caseSource?':'+JSON.stringify(caseSource):'');
+    const key='optracall.gsa.draft:'+scopeKey(scope)+(caseSource?':'+JSON.stringify(caseSource):'');
     const previous=localStorage.getItem(key);
     if(previous)return previous;
     const id=crypto.randomUUID();localStorage.setItem(key,id);return id;
@@ -499,16 +499,22 @@ export function StrategyGoalsPage({ teachReview,onReturnReview,clearTeachReview,
   const openEditor = (mode: typeof editor, fromRole?:GoalDraftInput) => { setSuggestion(fromRole); setEditorGoal(value && record ? structuredClone({ value, record }) : null); if (mode === 'feedback') setEditorSources(structuredClone(sources)); setEditor(mode); };
   const openRelation = (initial?: GoalRelation) => { setRelationEditor(initial); openEditor('relation'); };
   const [auxDialog, setAuxDialog] = useState<'switch' | 'versions' | 'decisions' | 'handoffs' | null>(null);
-  const [auxWorkspace, setAuxWorkspace] = useState<import('../strategy-goal-decomposition-types.ts').GoalWorkspaceView | null>(null);
-  const openAuxDialog = (kind: 'switch' | 'versions' | 'decisions' | 'handoffs') => {
-    setAuxDialog(kind);
-    if (kind !== 'switch' && selectedId) {
-      setAuxWorkspace(null);
-      const targetId = selectedId;
-      const targetVer = value?.version;
-      void api.getWorkspace(targetId, targetVer).then(ws => setAuxWorkspace(ws)).catch(() => setAuxWorkspace(null));
+  const [auxResult, setAuxResult] = useState<{ owner: string; workspace: import('../strategy-goal-decomposition-types.ts').GoalWorkspaceView } | null>(null);
+  const auxGoalVersion = value?.version;
+  const auxOwner = auxDialog && auxDialog !== 'switch' && selectedId && auxGoalVersion
+    ? JSON.stringify([auxDialog, selectedId, auxGoalVersion]) : null;
+  const auxWorkspace = auxResult?.owner === auxOwner ? auxResult.workspace : null;
+  useEffect(() => {
+    let current = true;
+    setAuxResult(null);
+    if (auxOwner && auxGoalVersion) {
+      void api.getWorkspace(selectedId, auxGoalVersion)
+        .then(workspace => { if (current) setAuxResult({ owner: auxOwner, workspace }); })
+        .catch(() => { if (current) setAuxResult(null); });
     }
-  };
+    return () => { current = false; };
+  }, [auxOwner, selectedId, auxGoalVersion, index]);
+  const openAuxDialog = setAuxDialog;
   const relationTable = <div className="sg-table-scroll"><table className="sg-table"><thead><tr><th>目标关系</th><th>职责与协同</th><th>依据／必要条件</th><th>版本</th></tr></thead><tbody>{relations.map(x => <tr key={x.id}><td>{goalName(index, x.from)}<br /><strong>{relationLabels[x.kind]}</strong> → {goalName(index, x.to)}</td><td>{x.responsibility}</td><td>{x.rationale}</td><td>关系 v{x.revision}<br /><button type="button" className="text-button" onClick={() => openRelation(x)}>修订关系</button>{x.history.length > 0 && <details><summary>历史</summary>{x.history.map(v => <p key={v.revision}>v{v.revision} · {goalName(index, v.from)} → {goalName(index, v.to)}<br />{v.responsibility}<br />{v.rationale}</p>)}</details>}</td></tr>)}</tbody></table>{!relations.length && <p className="sg-muted">此准确目标版本尚无已记录关系，不据此推断业务上没有贡献或必要条件。</p>}</div>;
   if(teachReview&&onReturnReview)return <TeachReviewPanel key={JSON.stringify(teachReview)} owner={teachReview} onReturn={onReturnReview}
     onGoal={()=>{clearPublicationHandoff();setSelectedId(teachReview.goalId);setSelectedVersion(teachReview.version);setHandoff(undefined);setDraftScopeKey('');setPerspective('all');clearTeachReview?.();onStage('history');}}
@@ -570,10 +576,11 @@ export function StrategyGoalsPage({ teachReview,onReturnReview,clearTeachReview,
         </div>
       ) : (
         <GoalDecompositionWorkspace
+          key={refKey(value)}
           record={record}
           goal={value}
-          cases={cases}
-          estimateDraftId={stableDraftId(value.scope, record.id)}
+          onInspectCase={onInspectCase}
+          estimateDraftId={record.id}
           onOpenSwitcher={() => openAuxDialog('switch')}
           onOpenVersions={() => openAuxDialog('versions')}
           onOpenDecisions={() => openAuxDialog('decisions')}
@@ -584,7 +591,7 @@ export function StrategyGoalsPage({ teachReview,onReturnReview,clearTeachReview,
           onOpenCase={onOpenCase}
           onStartProject={() => onStartProject(refOf(value), resolveNewUsageContext({ goal: value }))}
           onGoalsReload={refresh}
-          onGoalDraftSuggestion={(draft, source) => openEditor('revise', { ...draft, roleSuggestion: source })}
+          onGoalDraftSuggestion={(draft, source) => openEditor(source.owner.role === 'goal-draft' ? 'create' : 'revise', { ...draft, roleSuggestion: source })}
         />
       )
     )}
@@ -614,6 +621,7 @@ export function StrategyGoalsPage({ teachReview,onReturnReview,clearTeachReview,
     )}
     {auxDialog === 'versions' && value && record && (
       <VersionsAndSourcesDialog
+        key={record.id + '/' + value.version}
         active={active}
         record={record}
         selectedVersion={value}
@@ -649,15 +657,9 @@ export function StrategyGoalsPage({ teachReview,onReturnReview,clearTeachReview,
         workspace={auxWorkspace}
         board={board}
         arrangementsNode={<ReadGoalArrangements key={refKey(value)} goal={value} board={board} onOpenBoard={onOpenBoard} />}
-        onStartProject={handoff => onStartProject(refOf(value), resolveNewUsageContext({ goal: value }), handoff ? { handoffId: handoff.handoffId } : undefined)}
+        onStartProject={handoff => onStartProject(handoff?.goalRef ?? refOf(value), handoff ? undefined : resolveNewUsageContext({ goal: value }), handoff ? { goalId: handoff.goalId, handoffId: handoff.handoffId } : undefined)}
         onOpenBoard={onOpenBoard}
-        onWorkspaceChanged={async () => {
-          await refresh();
-          if (selectedId) {
-            const ws = await api.getWorkspace(selectedId, value.version).catch(() => null);
-            setAuxWorkspace(ws);
-          }
-        }}
+        onWorkspaceChanged={refresh}
         onClose={() => setAuxDialog(null)}
       />
     )}

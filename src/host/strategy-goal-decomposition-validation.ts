@@ -1,3 +1,4 @@
+import { allocatedTarget } from './strategy-goal-allocation.ts';
 import { createHash } from 'node:crypto';
 import type {
   CycleReviewConclusion,
@@ -266,6 +267,7 @@ export function parseReachabilityEstimate(v: unknown): ReachabilityEstimate {
     unit: reqText(v.unit, 60, 'invalid_reachability_estimate'),
     period: reqText(v.period, 100, 'invalid_reachability_estimate'),
     scopeDescription: reqText(v.scopeDescription, 300, 'invalid_reachability_estimate'),
+    ...(v.scope !== undefined ? { scope: parseScope(v.scope) } : {}),
     ...(isObj(v.sapMetric) ? { sapMetric: { id: reqText(v.sapMetric.id, 300), version: reqText(v.sapMetric.version, 200), ...(optText(v.sapMetric.metricName, 200) ? { metricName: optText(v.sapMetric.metricName, 200) } : {}) } } : {}),
     formalTargetValue,
     estimatedValue,
@@ -273,7 +275,7 @@ export function parseReachabilityEstimate(v: unknown): ReachabilityEstimate {
     ...(v.numerator !== undefined ? { numerator: reqFinite(v.numerator) } : {}),
     ...(v.denominator !== undefined ? { denominator: reqFinite(v.denominator) } : {}),
     ...(typeof v.denominatorAssumed === 'boolean' ? { denominatorAssumed: v.denominatorAssumed } : {}),
-    basis: reqText(v.basis, 4000, 'invalid_reachability_estimate'),
+    basis: optText(v.basis, 4000, 'invalid_reachability_estimate') ?? '',
     evidence,
     ...(limitations ? { limitations } : {}),
     ...(optText(v.methodNote, 2000) ? { methodNote: optText(v.methodNote, 2000) } : {}),
@@ -465,36 +467,32 @@ export function validateDecompositionForPublish(
   const formalPeriod = gsaPlan?.formalTarget.period ?? draft.estimate.period;
   const metricKind = gsaPlan?.formalTarget.metricKind ?? draft.estimate.metricKind;
 
-  // Caliber checks MUST run BEFORE computing amounts, gaps, or ratios (GM04 / GM06 / Item 2)
-  let estimateCaliberOk = true;
-  if (gsaPlan) {
-    if (
-      draft.estimate.unit !== formalUnit ||
-      draft.estimate.period !== formalPeriod ||
-      draft.estimate.metricKind !== metricKind
-    ) {
-      estimateCaliberOk = false;
-      issues.push({
-        code: 'incomparable_estimate_caliber',
-        message: `可达测算口径（${draft.estimate.metricKind} / ${draft.estimate.unit} / ${draft.estimate.period}）与总目标正式口径（${metricKind} / ${formalUnit} / ${formalPeriod}）不一致，不可直接计算差额。`,
-        details: {
-          estimate: { metricKind: draft.estimate.metricKind, unit: draft.estimate.unit, period: draft.estimate.period },
-          formal: { metricKind, unit: formalUnit, period: formalPeriod },
-        },
-      });
-    }
+  const goal = existingGoals?.find(record => record.id === gsaPlan?.goal.goalId)?.versions.find(version => version.version === gsaPlan?.goal.version);
+  const estimate = draft.estimate;
+  const expectedMetric = goal?.measurement.kind === 'quantitative' ? goal.measurement.sapMetric : undefined;
+  const matchesScope = !goal || (estimate.scope
+    ? estimate.scope.kind === goal.scope.kind && estimate.scope.id === goal.scope.id && estimate.scope.enterpriseId === goal.scope.enterpriseId
+    : estimate.scopeDescription === goal.scope.name);
+  const matchesMetric = !goal || (estimate.sapMetric?.id === expectedMetric?.id && estimate.sapMetric?.version === expectedMetric?.version && estimate.sapMetric?.metricName === expectedMetric?.metricName);
+  const estimateCaliberOk = matchesScope && matchesMetric && estimate.unit === formalUnit && estimate.period === formalPeriod && estimate.metricKind === metricKind;
+  if (!estimateCaliberOk) {
+    issues.push({ code: 'incomparable_estimate_caliber', message: '测算的指标定义、范围、单位和期间须与总目标一致，请核对后再计算差额。' });
   }
-
-  const estimatedValue = estimateCaliberOk ? draft.estimate.estimatedValue : null;
-  const gapValue = !estimateCaliberOk
-    ? null
-    : estimatedValue === null
-      ? draft.estimate.gapValue
-      : Number((formalTargetValue - estimatedValue).toFixed(6));
+  const estimatedValue = estimateCaliberOk ? estimate.estimatedValue : null;
+  const gapValue = estimatedValue === null ? null : Number((formalTargetValue - estimatedValue).toFixed(6));
+  if (estimate.estimatedValue === null || !estimate.basis.trim()) {
+    issues.push({ code: 'incomplete_reachability_estimate', message: '请补充可达测算及其依据后再发布。' });
+  }
+  if (estimate.formalTargetValue !== formalTargetValue || (gapValue !== null && (estimate.gapValue === null || Math.abs(estimate.gapValue - gapValue) > EPS))) {
+    issues.push({ code: 'estimate_formal_target_mismatch', message: '草稿的正式值和差额须与准确 GSA 及其同口径测算一致，请核对草稿。' });
+  }
 
   const allocationRows = draft.rows.filter(r => r.contributionNature === 'allocation');
   let rowCaliberOk = true;
   for (const row of allocationRows) {
+    if (row.targetValue === null) {
+      issues.push({ code: 'incomplete_allocation_row', rowId: row.rowId, message: `正式分配行 ${row.rowId} 缺目标值。` });
+    }
     if (row.unit !== formalUnit || row.metricKind !== metricKind) {
       rowCaliberOk = false;
       issues.push({
@@ -526,7 +524,7 @@ export function validateDecompositionForPublish(
     }
   }
 
-  const allocatedTotal = Number(allocationRows.filter(r => r.unit === formalUnit && r.metricKind === metricKind).reduce((sum, r) => sum + (r.targetValue ?? 0), 0).toFixed(6));
+  const allocatedTotal = allocatedTarget(draft.rows, metricKind, formalUnit);
   const reserveTotal = Number(draft.reserves.filter(r => r.unit === formalUnit).reduce((sum, r) => sum + r.amount, 0).toFixed(6));
   const gapCoverageTotal = Number(draft.gapStrategies.filter(g => g.unit === formalUnit).reduce((sum, g) => sum + g.expectedContribution, 0).toFixed(6));
 
@@ -572,7 +570,7 @@ export function validateDecompositionForPublish(
   }
 
   // Metric-specific rules (GM04 / GM06) — only sum amounts after same-caliber check passes
-  if (metricKind === 'amount' && rowCaliberOk && reserveCaliberOk) {
+  if (metricKind === 'amount' && allocatedTotal !== null && rowCaliberOk && reserveCaliberOk) {
     const combined = Number((allocatedTotal + reserveTotal).toFixed(6));
     if (Math.abs(combined - formalTargetValue) > EPS) {
       issues.push({
@@ -591,7 +589,7 @@ export function validateDecompositionForPublish(
           message: `比率目标行 ${row.rowId} 必须显式提供同口径分子与正数分母，不能简单平均各门店比率。`,
         });
       } else if (row.targetValue !== null) {
-        const expected = row.unit.includes('%') || row.unit.includes('百分')
+        const expected = /%|％|百分/.test(row.unit)
           ? (row.ratio.numerator / row.ratio.denominator) * 100
           : row.ratio.numerator / row.ratio.denominator;
         if (Math.abs(expected - row.targetValue) > 0.05) {
@@ -614,10 +612,27 @@ export function validateDecompositionForPublish(
     }
   }
 
+  if (metricKind === 'ratio' && (allocatedTotal === null || Math.abs(allocatedTotal - formalTargetValue) > EPS)) {
+    issues.push({ code: 'invalid_ratio_rollup', message: '同定义分配行的分子之和除以分母之和，须与正式比率目标一致。' });
+  }
+  for (const row of draft.rows) {
+    if (row.checkpoints.some(checkpoint => checkpoint.unit !== row.unit)) {
+      issues.push({ code: 'incomparable_checkpoint', rowId: row.rowId, message: `检查点与责任行 ${row.rowId} 单位不一致。` });
+    }
+  }
+  for (const period of draft.timePlan) {
+    if (period.unit !== formalUnit) {
+      issues.push({ code: 'incomparable_time_plan', message: `期间 ${period.label} 的单位与正式目标不一致。` });
+    }
+  }
   // Cross-view consistency checks (GM07)
+  const allocationCells = new Set(allocationRows.map(row => row.crossCellId));
   for (const view of draft.views) {
     const viewCellIds = new Set<string>();
     for (const cell of view.cells) {
+      if (cell.unit !== formalUnit || view.period !== formalPeriod) {
+        issues.push({ code: 'incomparable_view', crossCellId: cell.crossCellId, message: `视图「${view.viewName}」交叉项「${cell.label}」的单位或期间与正式目标不同。` });
+      }
       if (viewCellIds.has(cell.crossCellId)) {
         issues.push({
           code: 'duplicate_cross_cell',
@@ -627,6 +642,18 @@ export function validateDecompositionForPublish(
         });
       }
       viewCellIds.add(cell.crossCellId);
+    }
+    if (metricKind === 'amount') {
+      if (allocationCells.has(undefined) || viewCellIds.size !== allocationCells.size || [...viewCellIds].some(id => !allocationCells.has(id))) {
+        issues.push({ code: 'view_coverage_mismatch', message: `视图「${view.viewName}」与正式分配行的交叉单元覆盖不一致。` });
+      }
+      if (view.period === formalPeriod && view.cells.every(cell => cell.unit === formalUnit)) {
+        const total = view.cells.reduce((sum, cell) => sum + cell.value, view.reserveIncluded);
+        if (Math.abs(total - formalTargetValue) > EPS || Math.abs(view.reserveIncluded - reserveTotal) > EPS) {
+          issues.push({ code: 'view_total_mismatch', message: `视图「${view.viewName}」的预留或分配合计与正式计划不一致。`,
+            details: { viewId: view.viewId, total, formalTargetValue, includedReserve: view.reserveIncluded, reserveTotal } });
+        }
+      }
     }
   }
   if (draft.views.length >= 2) {
@@ -657,7 +684,7 @@ export function validateDecompositionForPublish(
             message: `同口径交叉单元 ${crossCellId} 在「${first.viewName}」与「${other.viewName}」中覆盖不一致。`,
             details: { crossCellId, left: left ?? null, right: right ?? null },
           });
-        } else if (Math.abs(left.value - right.value) > EPS) {
+        } else if (left.unit === right.unit && Math.abs(left.value - right.value) > EPS) {
           issues.push({
             code: 'cross_view_conflict',
             crossCellId,
@@ -673,12 +700,14 @@ export function validateDecompositionForPublish(
         }
       }
     }
-    // Also verify view assertions match allocation rows for shared crossCellIds
+  }
+  {
+    // A single submitted view must agree with the responsibility rows as well.
     const rowByCell = new Map(allocationRows.filter(r => r.crossCellId).map(r => [r.crossCellId!, r]));
     for (const view of draft.views) {
       for (const cell of view.cells) {
         const row = rowByCell.get(cell.crossCellId);
-        if (row && row.targetValue !== null && Math.abs(row.targetValue - cell.value) > EPS) {
+        if (row && row.unit === cell.unit && row.targetValue !== null && Math.abs(row.targetValue - cell.value) > EPS) {
           issues.push({
             code: 'view_row_mismatch',
             rowId: row.rowId,
@@ -829,7 +858,7 @@ export function evaluateProgressComparison(options: {
   scopeKey: string;
   metricId: string;
   periodGranularity: 'month' | 'week' | 'day';
-  currentSequenceKey?: string;
+  periodStartDate: string;
   supplementOfCheckId?: string;
 }): {
   periods: ProgressComparisonPeriod[];
@@ -847,7 +876,7 @@ export function evaluateProgressComparison(options: {
     scopeKey,
     metricId,
     periodGranularity,
-    currentSequenceKey,
+    periodStartDate,
     supplementOfCheckId,
   } = options;
   const actualById = new Map(actualPeriods.map(p => [p.periodId, p]));
@@ -949,47 +978,23 @@ export function evaluateProgressComparison(options: {
     else break;
   }
 
-  const parseSeqIndex = (seq: string): { prefix: string; num: number } | null => {
-    const m = /^(.*?)(\d+)$/.exec(seq.trim());
-    return m ? { prefix: m[1]!, num: Number(m[2]) } : null;
-  };
-  const isStrictlyAdjacentSeq = (earlier: string, later: string): boolean => {
-    const a = parseSeqIndex(earlier);
-    const b = parseSeqIndex(later);
-    if (!a || !b) return earlier !== later;
-    return a.prefix === b.prefix && b.num === a.num + 1;
-  };
-
   let consecutiveTotal = consecutiveInCurrent;
-  // Only carry over from prior checks if ALL periods in the current check were adverse (so chain is unbroken)
-  if (consecutiveInCurrent === periods.length && periods.length > 0) {
-    const supersededIds = new Set(priorChecks.map(c => c.supplementOfCheckId).filter((s): s is string => Boolean(s)));
-    if (supplementOfCheckId) supersededIds.add(supplementOfCheckId);
-    const sameStream = priorChecks.filter(
-      c =>
-        c.scopeKey === scopeKey &&
-        c.metricId === metricId &&
-        c.periodGranularity === periodGranularity &&
-        !supersededIds.has(c.checkId),
-    );
-    const currentSeqKey = currentSequenceKey?.trim() || periods.at(-1)?.periodId || '';
-    const seenSeqs = new Set<string>(currentSeqKey ? [currentSeqKey] : []);
-    let nextExpectedSeq = currentSeqKey;
-    for (let i = sameStream.length - 1; i >= 0; i--) {
-      const prev = sameStream[i]!;
-      if (seenSeqs.has(prev.periodSequenceKey)) continue;
-      seenSeqs.add(prev.periodSequenceKey);
-      // Incomparable / partial-missing / observing breaks consecutive chain — NEVER bridge across unknown!
-      if (prev.comparability !== 'comparable' || prev.overallPending) break;
-      if (nextExpectedSeq && parseSeqIndex(nextExpectedSeq) && parseSeqIndex(prev.periodSequenceKey) && !isStrictlyAdjacentSeq(prev.periodSequenceKey, nextExpectedSeq)) {
-        break;
-      }
-      if (isAdverse(prev.overallAbsoluteDiff)) {
-        consecutiveTotal++;
-        nextExpectedSeq = prev.periodSequenceKey;
-      } else {
-        break;
-      }
+  if (consecutiveInCurrent > 0) {
+    const replaced = new Set(priorChecks.map(c => c.supplementOfCheckId));
+    if (supplementOfCheckId) replaced.add(supplementOfCheckId);
+    const priorByEnd = new Map<string, DecompositionProgressCheck>();
+    for (const check of priorChecks) {
+      if (!replaced.has(check.checkId) && check.scopeKey === scopeKey && check.metricId === metricId &&
+          check.periodGranularity === periodGranularity && check.periodStartDate && check.periodEndDate &&
+          check.periodStartDate <= check.periodEndDate) priorByEnd.set(check.periodEndDate, check);
+    }
+    let start = periodStartDate;
+    while (start) {
+      const dayBefore = new Date(Date.parse(start) - 86_400_000).toISOString().slice(0, 10);
+      const prev = priorByEnd.get(dayBefore);
+      if (!prev || prev.comparability !== 'comparable' || prev.overallPending || !isAdverse(prev.overallAbsoluteDiff)) break;
+      consecutiveTotal++;
+      start = prev.periodStartDate!;
     }
   }
 

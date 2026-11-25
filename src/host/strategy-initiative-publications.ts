@@ -154,6 +154,9 @@ export function createStrategyInitiativePublications(options: {
       const parsedFormalGoals = submittedFormalGoals ?? (current.formalGoals?.length
         ? current.formalGoals.map(g => parseStrategicFormalGoal(g))
         : undefined);
+      if (parsedFormalGoals && new Set(parsedFormalGoals.map(goal => goal.id)).size !== parsedFormalGoals.length) {
+        fail('strategy_publication_goal_invalid', 400);
+      }
       const publication: InitiativePublication = {
         publicationId, initiativeId: id, scopeKey: candidate.scopeKey, candidateId: candidate.candidateId, no: candidate.no,
         contentSha256: current.lock.fingerprint, lockOperationId: current.lock.operationId,
@@ -201,7 +204,7 @@ export function createStrategyInitiativePublications(options: {
     if (!Array.isArray(input.selected) || !input.selected.length || input.selected.length > 20 || input.selected.some(i => !Number.isSafeInteger(i))) fail('strategy_publication_fields_invalid', 400);
     const candidate = candidates.version(id, publication.candidateId, publication.no);
     const selected = [...new Set(input.selected as number[])].sort((a, b) => a - b);
-    if (selected.some(i => i < 0 || i >= candidate.goals.length)) fail('strategy_publication_goal_invalid', 400);
+    if (selected.some(i => i < 0 || i >= (publication.formalGoals?.length || candidate.goals.length))) fail('strategy_publication_goal_invalid', 400);
     const drafts = selected.map(index => {
       const text = candidate.goals[index]!;
       const formal = publication.formalGoals?.[index];
@@ -260,6 +263,8 @@ export function createStrategyInitiativePublications(options: {
         ? reservation.legacyFingerprint
         : suppliedFingerprint === requestFingerprint ? undefined : suppliedFingerprint;
       if (!reservation && current.state !== 'active') fail('strategy_publication_not_active');
+      if (!reservation && current.handoffEligible === false) fail('strategy_publication_record_only');
+      if (current.handoffEligible && drafts.some(draft => draft.formalOrigin?.kind !== 'strategy-publication')) fail('strategy_publication_goal_invalid', 400);
       if (current.state === 'active') {
         for (const draft of drafts) await options.validateGoal?.(draft, 'create');
       }

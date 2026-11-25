@@ -1,4 +1,7 @@
 import test from 'node:test';
+import { createMetricLibrary } from '../extensions/business-plugins/metric-factory/library/store.ts';
+import { preparePublication } from '../extensions/business-plugins/metric-factory/sap/validate.ts';
+import { allocatedTarget } from '../src/host/strategy-goal-allocation.ts';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
@@ -72,6 +75,10 @@ async function startTestHost(options: {
 
 const deptScope: GoalScope = { kind: 'department', id: 'retail-ops-full', name: '门店运营部' };
 
+function reportedBasis(periodId: string, scope = '门店运营部全渠道', coverage = 'complete') {
+  return { metric: '净销售额达到 120 万元', unit: '万元', scope, periodId, coverage, maturity: 'closed' };
+}
+
 function validDraftInput(plan: { planId: string; planVersion: number; contentSha256: string }, expectedDraftRevision: number): DecompositionDraftInput {
   return {
     gsaPlanId: plan.planId,
@@ -81,7 +88,7 @@ function validDraftInput(plan: { planId: string; planVersion: number; contentSha
     estimate: {
       metricKind: 'amount',
       period: '2027-01',
-      scopeDescription: '门店运营部全渠道',
+      scopeDescription: '门店运营部全渠道', scope: deptScope,
       formalTargetValue: 120,
       estimatedValue: 112,
       gapValue: 8,
@@ -259,6 +266,9 @@ test('GM01: 正式战略目标发布拦截手工绕开，仅记录发布不阻�
   }), 201);
 
   // 2) Publish formal strategy publication with formalGoals (handoffEligible=true) for 2027-02
+  const metrics = createMetricLibrary(path.join(root, 'metric-assets'));
+  const published = metrics.publish(preparePublication(readFileSync(new URL('../extensions/business-plugins/metric-factory/fixtures/membership-repurchase@1.0.0.draft.yaml', import.meta.url))), 'synthetic-user');
+  const sapMetric = {authority:'sap-metric' as const,id:published.id,version:published.version,metricName:published.metricNames[0]!};
   const formalPub = await pubs.publish(init.id, {
     operationId: randomUUID(),
     candidateId: cid2,
@@ -276,6 +286,11 @@ test('GM01: 正式战略目标发布拦截手工绕开，仅记录发布不阻�
       unit: '万元',
       metricKind: 'amount',
       strategies: ['战略新品组合'],
+    }, {
+      id: 'fg-2', title: '门店毛利额', outcome: '毛利额', period: '2027-02',
+      targetValue: 38, unit: '万元', metricKind: 'amount',
+    }, {
+      id:'fg-sap', title:'复购率', outcome:'复购率达到 80%', period:'2027-02', targetValue:80, unit:'%', metricKind:'ratio', sapMetric,
     }],
   });
 
@@ -300,17 +315,41 @@ test('GM01: 正式战略目标发布拦截手工绕开，仅记录发布不阻�
   const ws = await json(await host.request(`/api/strategy/goals/${manualGoal.goal.goalId}/workspace`));
   assert.equal(ws.formalReconciliation.hasApplicableFormalPublication, true);
   assert.equal(ws.formalReconciliation.manualTargetValue, 100);
-  assert.equal(ws.formalReconciliation.formalPublication.formalGoal.targetValue, 115);
+  assert.equal(ws.formalReconciliation.formalPublication, undefined);
+  assert.deepEqual(ws.formalReconciliation.formalPublications.map((source: any) => source.formalGoal.targetValue), [115, 38, 80]);
+  const reconcileRoute = `/api/strategy/goals/${manualGoal.goal.goalId}/reconcile-formal`;
+  await json(await host.request(reconcileRoute, 'POST', { operationId: randomUUID(), expectedVersion: 1 }), 409);
+  const { goalId: _, ...manualBody } = manualGoal.goal;
+  const source = { kind: 'strategy-publication', initiativeId: init.id, publicationId: formalPub.publicationId,
+    candidateId: cid2, candidateNo: 2, contentSha256: fp2, formalGoalId: 'fg-2027-02', targetValue: 115, unit: '万元', period: '2027-02', metricKind: 'amount' };
+  const sourcedGoal = {...manualBody, title: '2 月正式战略净销目标 115 万', outcome: '2 月净销售额达到 115 万元',
+    measurement: {kind: 'deliverable', criterion: '2 月净销售额达到 115 万元'}};
+  await json(await host.request('/api/strategy/goals', 'POST', {...sourcedGoal, operationId: randomUUID(), formalOrigin: source}), 201);
+  const quantified = {...sourcedGoal, title:'复购率', outcome:'复购率达到 80%',
+    formalOrigin: {...source, formalGoalId:'fg-sap', metricKind:'ratio', targetValue:80, unit:'%'}};
+  for (const target of ['800 %', undefined]) {
+    const rejected = await json(await host.request('/api/strategy/goals', 'POST', {...quantified, operationId:randomUUID(),
+      measurement: {kind:'quantitative',sapMetric,target}}),409);
+    assert.equal(rejected.code,'formal_strategy_origin_mismatch');
+  }
+  await json(await host.request('/api/strategy/goals','POST',{...quantified,operationId:randomUUID(),
+    measurement: {kind:'quantitative',sapMetric,target:'80 %'}}),201);
+  for (const mismatch of [{ candidateNo: 1 }, { candidateId: cid1 }, { initiativeId: randomUUID() }]) {
+    const rejected = await json(await host.request('/api/strategy/goals', 'POST', {
+      ...sourcedGoal, operationId: randomUUID(), formalOrigin: { ...source, ...mismatch },
+    }), 409);
+    assert.equal(rejected.code, 'formal_strategy_origin_mismatch');
+  }
 
   // Explicit reconcile creates v2 carrying strategy-publication formalOrigin while keeping v1 manual record intact
   const reconciled = await json(await host.request(`/api/strategy/goals/${manualGoal.goal.goalId}/reconcile-formal`, 'POST', {
     operationId: randomUUID(),
-    expectedVersion: 1,
+    expectedVersion: 1, publicationId: formalPub.publicationId, contentSha256: formalPub.contentSha256, formalGoalId: 'fg-2',
   }), 201);
   assert.equal(reconciled.goal.version, 2);
   assert.equal(reconciled.goal.formalOrigin.kind, 'strategy-publication');
   assert.equal(reconciled.comparison.manualValue, 100);
-  assert.equal(reconciled.comparison.publishedValue, 115);
+  assert.equal(reconciled.comparison.publishedValue, 38);
   const fullRec = await json(await host.request(`/api/strategy/goals/${manualGoal.goal.goalId}`));
   assert.equal(fullRec.goal.versions[0].formalOrigin.kind, 'manual-exception');
   assert.equal(fullRec.goal.versions[1].formalOrigin.kind, 'strategy-publication');
@@ -425,7 +464,7 @@ test('GM04/GM05: 比率/里程碑校验、未定计划与非目标行不误采�
     estimate: {
       metricKind: 'amount',
       period: '2027-01',
-      scopeDescription: '门店运营部全渠道',
+      scopeDescription: '门店运营部全渠道', scope: deptScope,
       formalTargetValue: 120,
       estimatedValue: 130,
       gapValue: -10,
@@ -707,7 +746,7 @@ test('GM10/GM11/GM12 & 原型缺口 #1/#2: 阶段跟进（含缺2店不给整体
     checkpointId: 'm1-w0',
     periodGranularity: 'week',
     periodSequenceKey: '2026-W53',
-    actualSource: { ref: 'pos-trial-0', label: 'POS 试运行', cutoffAt: '2026-12-31T23:59:59Z' },
+    actualSource: { ref: 'pos-trial-0', label: 'POS 试运行', cutoffAt: '2026-12-31T23:59:59Z', basis: reportedBasis('m1-w0') },
     comparability: 'comparable',
     actualPeriods: [{ periodId: 'm1-w0', label: '试运行周', actualValue: 2 }],
   }), 201);
@@ -733,7 +772,7 @@ test('GM10/GM11/GM12 & 原型缺口 #1/#2: 阶段跟进（含缺2店不给整体
     checkpointId: 'm1-w1',
     periodGranularity: 'week',
     periodSequenceKey: '2027-W01-partial',
-    actualSource: { ref: 'pos-w1-partial', label: 'POS 日结（缺华东2店）', cutoffAt: '2027-01-07T23:59:59Z' },
+    actualSource: { ref: 'pos-w1-partial', label: 'POS 日结（缺华东2店）', cutoffAt: '2027-01-07T23:59:59Z', basis: reportedBasis('m1-w1', '门店运营部全渠道', 'partial') },
     comparability: 'partial-missing',
     missingCoverageNote: '华东旗舰店、苏州中心店尚未上传日结',
     actualPeriods: [{ periodId: 'm1-w1', label: '第 1 周', actualValue: 27 }],
@@ -750,11 +789,19 @@ test('GM10/GM11/GM12 & 原型缺口 #1/#2: 阶段跟进（含缺2店不给整体
     checkpointId: 'm1-w1',
     periodGranularity: 'week',
     periodSequenceKey: '2027-W01',
-    actualSource: { ref: 'pos-w1-full', label: 'POS 全量 W1', cutoffAt: '2027-01-08T10:00:00Z' },
+    actualSource: { ref: 'pos-w1-full', label: 'POS 全量 W1', cutoffAt: '2027-01-08T10:00:00Z', basis: reportedBasis('m1-w1') },
     comparability: 'comparable',
     actualPeriods: [{ periodId: 'm1-w1', label: '第 1 周', actualValue: 28 }],
   }), 201);
   assert.equal(checkW1.check.trigger.triggered, false);
+  const replayedWeek = await json(await host.request(`/api/strategy/goals/${goal.goalId}/decomposition/checks`, 'POST', {
+    operationId: randomUUID(), publicationVersion: 1, rowId: 'G-TOTAL', checkpointId: 'm1-w1', periodSequenceKey: 'W1-2',
+    actualSource: {ref: 'w1-corrected', label: '一周补录', cutoffAt: '2027-01-09', basis: reportedBasis('m1-w1')},
+    comparability: 'comparable', actualPeriods: [{periodId:'m1-w1', actualValue: 28}], supplementOfCheckId: checkPartial.check.checkId,
+  }), 201);
+  assert.equal(replayedWeek.check.trigger.triggered, false, 'multiple reports of one week count as one period');
+  assert.equal(replayedWeek.check.trigger.consecutiveCount, 1);
+  assert.equal(replayedWeek.check.supplementOfCheckId, checkPartial.check.checkId);
 
   // GM10 Complete comparable adjacent period 2: 30 vs 27 (-10% AND consecutive=2 → triggered!)
   const checkW2 = await json(await host.request(`/api/strategy/goals/${goal.goalId}/decomposition/checks`, 'POST', {
@@ -764,7 +811,7 @@ test('GM10/GM11/GM12 & 原型缺口 #1/#2: 阶段跟进（含缺2店不给整体
     checkpointId: 'm1-w2',
     periodGranularity: 'week',
     periodSequenceKey: '2027-W02',
-    actualSource: { ref: 'pos-w2-full', label: 'POS 全量 W2', cutoffAt: '2027-01-15T10:00:00Z' },
+    actualSource: { ref: 'pos-w2-full', label: 'POS 全量 W2', cutoffAt: '2027-01-15T10:00:00Z', basis: reportedBasis('m1-w2') },
     comparability: 'comparable',
     actualPeriods: [{ periodId: 'm1-w2', label: '第 2 周', actualValue: 27 }],
   }), 201);
@@ -920,6 +967,14 @@ test('GM10/GM11/GM12 & 原型缺口 #1/#2: 阶段跟进（含缺2店不给整体
   assert.equal(nextDraft.nextCycleDraft.status, 'draft-not-adopted');
   assert.equal(nextDraft.nextCycleDraft.selectedConclusions[1].classification, 'hypothesis-unverified');
 
+  const arbitraryReturn = await host.request(`/api/strategy/goals/${goal.goalId}/return-to-strategy`, 'POST', {
+    operationId: randomUUID(), reviewId: reviewRes.review.reviewId, reason: '重审', selectedConclusionIds: ['unrelated'], evidenceRefs: [],
+  });
+  assert.equal(arbitraryReturn.status, 404);
+  const unrelatedProof = await host.request(`/api/strategy/goals/${goal.goalId}/return-to-strategy`, 'POST', {
+    operationId: randomUUID(), reviewId: reviewRes.review.reviewId, reason: '重审', selectedConclusionIds: ['conc-2'], evidenceRefs: [checkW1.check.checkId],
+  });
+  assert.equal(unrelatedProof.status, 409);
   // Return to strategy carries original evidence without overwriting any strategy publication
   const returned = await json(await host.request(`/api/strategy/goals/${goal.goalId}/return-to-strategy`, 'POST', {
     operationId: randomUUID(),
@@ -931,7 +986,10 @@ test('GM10/GM11/GM12 & 原型缺口 #1/#2: 阶段跟进（含缺2店不给整体
   assert.equal(returned.strategyReturn.status, 'returned-for-review');
   assert.equal(returned.strategyReturn.evidenceRefs.length, 2);
   const strategyReturns = await json(await host.request('/api/strategy/goals/strategy-returns'));
-  assert.ok(strategyReturns.strategyReturns.some((r: any) => r.strategyReturn.goalId === goal.goalId && r.selectedConclusions.length === 1));
+  const delivered = strategyReturns.strategyReturns.find((r: any) => r.strategyReturn.goalId === goal.goalId);
+  assert.deepEqual(delivered.selectedConclusions.map((c: any) => c.id), ['conc-2']);
+  assert.deepEqual(delivered.review.conclusions.map((c: any) => c.id), ['conc-2']);
+  assert.deepEqual(delivered.strategyReturn.evidenceRefs, [reviewRes.review.reviewId, checkW2.check.checkId]);
 });
 
 test('E1 & 原型缺口 #3: 存储外置与分页预算、--disable-goal-decomposition 安全回退（schema 4 只读/写拦截）、权限撤回阻断回读与导出', { timeout: 60_000 }, async t => {
@@ -1048,7 +1106,10 @@ test('E1 & 原型缺口 #3: 存储外置与分页预算、--disable-goal-decompo
   const entObj = ent.enterprise ?? ent;
   const entScope: GoalScope = { kind: 'enterprise', id: entObj.id, name: entObj.name };
   const entGoal = await createAndConfirmGoal(authHost, 120, '2027-01', entScope);
-  const entDraft = await json(await authHost.request(`/api/strategy/goals/${entGoal.goal.goalId}/decomposition/draft`, 'POST', validDraftInput(entGoal.gsaPlan, 0)), 201);
+  const entInput = validDraftInput(entGoal.gsaPlan, 0);
+  entInput.estimate.scope = entScope;
+  entInput.estimate.scopeDescription = entScope.name;
+  const entDraft = await json(await authHost.request(`/api/strategy/goals/${entGoal.goal.goalId}/decomposition/draft`, 'POST', entInput), 201);
   const entPrev = await json(await authHost.request(`/api/strategy/goals/${entGoal.goal.goalId}/decomposition/publish-preview`, 'POST', {
     gsaPlanId: entGoal.gsaPlan.planId,
     gsaPlanVersion: entGoal.gsaPlan.planVersion,
@@ -1149,14 +1210,18 @@ test('Review regressions: child enterprise scope auth, scope-checked formal-sour
   // 3) Valid publish v1, then modify linked child row targetValue -> publish v2 MUST revise child goal to v2 (P1 #6)
   const cleanDraft1 = validDraftInput(gsaPlan, savedUnauth.draft.revision);
   const d1 = await json(await host.request(`/api/strategy/goals/${goal.goalId}/decomposition/draft`, 'POST', cleanDraft1), 201);
-  const pub1 = await json(await host.request(`/api/strategy/goals/${goal.goalId}/decomposition/publish`, 'POST', {
-    operationId: randomUUID(),
+  const v1Basis = {
     gsaPlanId: gsaPlan.planId,
     gsaPlanVersion: gsaPlan.planVersion,
     gsaPlanSha256: gsaPlan.contentSha256,
     draftRevision: d1.draft.revision,
     draftSha256: d1.draft.contentSha256,
     expectedActiveVersion: null,
+  };
+  const v1Preview = await json(await host.request(`/api/strategy/goals/${goal.goalId}/decomposition/publish-preview`, 'POST', v1Basis));
+  const pub1 = await json(await host.request(`/api/strategy/goals/${goal.goalId}/decomposition/publish`, 'POST', {
+    operationId: randomUUID(),
+    ...v1Basis, previewSha256: v1Preview.previewSha256,
     reason: 'v1 正常发布',
   }), 201);
   const onlineCommit1 = pub1.publication.committedGoals.find((c: { rowId: string }) => c.rowId === 'row-online');
@@ -1176,18 +1241,26 @@ test('Review regressions: child enterprise scope auth, scope-checked formal-sour
     ...validDraftInput(gsaPlan, wsAfterV1.draft.revision),
     rows: rowsForV2,
   }), 201);
-  const pub2 = await json(await host.request(`/api/strategy/goals/${goal.goalId}/decomposition/publish`, 'POST', {
-    operationId: randomUUID(),
+  const v2Basis = {
     gsaPlanId: gsaPlan.planId,
     gsaPlanVersion: gsaPlan.planVersion,
     gsaPlanSha256: gsaPlan.contentSha256,
     draftRevision: d2.draft.revision,
     draftSha256: d2.draft.contentSha256,
     expectedActiveVersion: 1,
+  };
+  const v2Preview = await json(await host.request(`/api/strategy/goals/${goal.goalId}/decomposition/publish-preview`, 'POST', v2Basis));
+  const pub2 = await json(await host.request(`/api/strategy/goals/${goal.goalId}/decomposition/publish`, 'POST', {
+    operationId: randomUUID(),
+    ...v2Basis, previewSha256: v2Preview.previewSha256,
     reason: 'v2 调整子目标 formalTargetValue',
   }), 201);
   const onlineCommit2 = pub2.publication.committedGoals.find((c: { rowId: string }) => c.rowId === 'row-online');
   assert.equal(onlineCommit2.version, 2, 'changing child row targetValue MUST create child goal v2');
+  const relation1 = pub1.publication.committedRelations.find((r: { rowId: string }) => r.rowId === 'row-online');
+  const relation2 = pub2.publication.committedRelations.find((r: { rowId: string }) => r.rowId === 'row-online');
+  assert.equal(relation2.relationId, relation1.relationId);
+  assert.equal(relation2.revision, relation1.revision + 1);
   const goalsAfterV2 = await json(await host.request('/api/strategy/goals'));
   const onlineChildRecord = goalsAfterV2.goals.find((g: { id: string }) => g.id === onlineCommit2.goalId);
   assert.equal(onlineChildRecord.versions.length, 2);
@@ -1209,7 +1282,7 @@ test('Review regressions: child enterprise scope auth, scope-checked formal-sour
     checkpointId: 'm1-w1',
     periodGranularity: 'week',
     periodSequenceKey: '2027-W01',
-    actualSource: { ref: 'pp-w1', label: 'W1 实绩', cutoffAt: '2027-01-07T23:59:59Z' },
+    actualSource: { ref: 'pp-w1', label: 'W1 实绩', cutoffAt: '2027-01-07T23:59:59Z', basis: reportedBasis('m1-w1') },
     comparability: 'comparable',
     actualPeriods: [{ periodId: 'm1-w1', label: '第 1 周', actualValue: 28 }],
   }), 201);
@@ -1220,12 +1293,12 @@ test('Review regressions: child enterprise scope auth, scope-checked formal-sour
     operationId: randomUUID(),
     publicationVersion: 2,
     rowId: 'G-TOTAL',
-    checkpointId: 'm1-w1',
+    checkpointId: 'm1-w3',
     periodGranularity: 'week',
     periodSequenceKey: '2027-W03',
-    actualSource: { ref: 'pp-w3', label: 'W3 实绩（跳过W2）', cutoffAt: '2027-01-21T23:59:59Z' },
+    actualSource: { ref: 'pp-w3', label: 'W3 实绩（跳过W2）', cutoffAt: '2027-01-21T23:59:59Z', basis: reportedBasis('m1-w3') },
     comparability: 'comparable',
-    actualPeriods: [{ periodId: 'm1-w1', label: '第 3 周', actualValue: 28 }],
+    actualPeriods: [{ periodId: 'm1-w3', label: '第 3 周', actualValue: 28 }],
   }), 201);
   assert.equal(ppW3.check.trigger.triggered, false, 'non-adjacent 2027-W01 -> 2027-W03 must NOT falsely trigger consecutive');
 
@@ -1234,12 +1307,12 @@ test('Review regressions: child enterprise scope auth, scope-checked formal-sour
     operationId: randomUUID(),
     publicationVersion: 2,
     rowId: 'G-TOTAL',
-    checkpointId: 'm1-w1',
+    checkpointId: 'm1-w4',
     periodGranularity: 'week',
     periodSequenceKey: '2027-W04',
-    actualSource: { ref: 'pp-w4', label: 'W4 实绩（紧邻W3）', cutoffAt: '2027-01-28T23:59:59Z' },
+    actualSource: { ref: 'pp-w4', label: 'W4 实绩（紧邻W3）', cutoffAt: '2027-01-31T23:59:59Z', basis: reportedBasis('m1-w4') },
     comparability: 'comparable',
-    actualPeriods: [{ periodId: 'm1-w1', label: '第 4 周', actualValue: 28 }],
+    actualPeriods: [{ periodId: 'm1-w4', label: '第 4 周', actualValue: 28 }],
   }), 201);
   assert.equal(ppW4.check.trigger.triggered, true);
   assert.equal(ppW4.check.trigger.type, 'consecutive');
@@ -1250,12 +1323,12 @@ test('Review regressions: child enterprise scope auth, scope-checked formal-sour
     operationId: randomUUID(),
     publicationVersion: 2,
     rowId: 'G-TOTAL',
-    checkpointId: 'm1-w1',
+    checkpointId: 'm1-w4',
     periodGranularity: 'week',
-    periodSequenceKey: '2027-W05',
-    actualSource: { ref: 'pp-w5', label: 'W5 实绩（达5百分点）', cutoffAt: '2027-02-04T23:59:59Z' },
+    periodSequenceKey: '2027-W04-final',
+    actualSource: { ref: 'pp-w4-final', label: 'W4 完整关账（达5百分点）', cutoffAt: '2027-02-04T23:59:59Z', basis: reportedBasis('m1-w4') },
     comparability: 'comparable',
-    actualPeriods: [{ periodId: 'm1-w1', label: '第 5 周', actualValue: 25 }],
+    actualPeriods: [{ periodId: 'm1-w4', label: '第 4 周', actualValue: 25 }],
   }), 201);
   assert.equal(ppMag.check.trigger.triggered, true);
   assert.equal(ppMag.check.trigger.type, 'magnitude');
@@ -1276,7 +1349,7 @@ test('PM首审#4 回归：责任行冻结检查点用该行计划值 35，不回
   }), 201);
   const check = (rowId: string, checkpointId: string, periodId: string) => host.request(`/api/strategy/goals/${goal.goalId}/decomposition/checks`, 'POST', {
     operationId: randomUUID(), publicationVersion: 1, rowId, checkpointId,
-    actualSource: { ref: 'pos', label: 'POS', cutoffAt: '2027-01-15T00:00:00Z' },
+    actualSource: { ref: 'pos', label: 'POS', cutoffAt: '2027-01-15T00:00:00Z', basis: reportedBasis(periodId, rowId === 'G-TOTAL' ? '门店运营部全渠道' : '线上平台') },
     comparability: 'comparable', actualPeriods: [{ periodId, label: '第 2 周', actualValue: 27 }],
   });
   const rowCheck = await json(await check('row-online', 'cp-online-w2', 'm1-w2'), 201);
@@ -1285,6 +1358,24 @@ test('PM首审#4 回归：责任行冻结检查点用该行计划值 35，不回
   assert.equal(totalCheck.check.periods[0].plannedValue, 30);
   const mismatch = await check('row-online', 'cp-store-w2', 'm1-w2');
   assert.equal(mismatch.status, 404);
+  const wrongPeriod = await check('row-online', 'cp-online-w2', 'm1-w1');
+  assert.equal(wrongPeriod.status, 409, 'a week-two checkpoint cannot compare against week one');
+  const evidence = {metric: '净销售额达到 120 万元', unit: '元', scope: '线上平台', periodId: 'm1-w2', coverage: 'complete', maturity: 'closed'};
+  const differentUnit = await json(await host.request(`/api/strategy/goals/${goal.goalId}/decomposition/checks`, 'POST', {
+    operationId: randomUUID(), publicationVersion: 1, rowId: 'row-online', checkpointId: 'cp-online-w2',
+    actualSource: {ref: 'pos-r2', label: 'POS', cutoffAt: '2027-01-15', basis: evidence},
+    comparability: 'comparable', actualPeriods: [{periodId:'m1-w2', actualValue:27}],
+  }), 201);
+  assert.equal(differentUnit.check.overallPending, true);
+  assert.equal(differentUnit.check.overallVariancePct, null);
+  const early = await json(await host.request(`/api/strategy/goals/${goal.goalId}/decomposition/checks`, 'POST', {
+    operationId: randomUUID(), publicationVersion: 1, rowId: 'row-online', checkpointId: 'cp-online-w2',
+    actualSource: {ref: 'pos-early', label: '未到观察日', cutoffAt: '2027-01-10', basis: reportedBasis('m1-w2', '线上平台')},
+    comparability: 'comparable', actualPeriods: [{periodId:'m1-w2', actualValue:27}],
+  }), 201);
+  assert.equal(early.check.comparability, 'observing');
+  assert.equal(early.check.overallPending, true);
+  assert.equal(early.check.trigger.triggered, false);
   const totalMismatch = await check('G-TOTAL', 'cp-w1', 'm1-w2');
   assert.equal(totalMismatch.status, 409);
 });
@@ -1322,4 +1413,318 @@ test('PM首审#1 回归：缺 formalOrigin 不伪造 0；伪造战略来源被�
   const stale = await host.request(`/api/strategy/goals/${goal.goalId}/decomposition/draft`, 'POST', validDraftInput(gsaPlan, 0));
   assert.equal(stale.status, 409);
   assert.equal((await stale.json()).code, 'gsa_plan_stale_for_adopted_goal');
+});
+
+test('UI04: a committed child handoff opens the real project with its parent publication and survives reread', async t => {
+  const host = await startTestHost();
+  t.after(() => host.close());
+  await json(await host.request('/api/configuration', 'PUT', {
+    name: '交接测试', provider: 'openai-compatible', baseUrl: 'http://127.0.0.1:4013/v1',
+    model: 'synthetic-project', apiKey: 'synthetic-only',
+  }));
+  const { goal, gsaPlan } = await createAndConfirmGoal(host);
+  const api = '/api/strategy/goals/' + goal.goalId + '/decomposition';
+  const { draft } = await json(await host.request(api + '/draft', 'POST', validDraftInput(gsaPlan, 0)), 201);
+  const input = { gsaPlanId: gsaPlan.planId, gsaPlanVersion: gsaPlan.planVersion, gsaPlanSha256: gsaPlan.contentSha256,
+    draftRevision: draft.revision, draftSha256: draft.contentSha256, expectedActiveVersion: null };
+  const preview = await json(await host.request(api + '/publish-preview', 'POST', input));
+  await json(await host.request(api + '/publish', 'POST', { ...input, previewSha256: preview.previewSha256, operationId: randomUUID() }), 201);
+  const { handoff } = await json(await host.request(api + '/handoffs', 'POST', {
+    operationId: randomUUID(), publicationVersion: 1, rowId: 'row-online', checkpointId: 'cp-online-w2',
+  }), 201);
+  assert.notEqual(handoff.goalRef.goalId, goal.goalId);
+  const projectInput = { name: '线上零售', goalOrigin: { goal: handoff.goalRef, decompositionHandoff: { goalId: goal.goalId, handoffId: handoff.handoffId } } };
+  const { project } = await json(await host.request('/api/projects', 'POST', projectInput), 201);
+  const replay = await json(await host.request('/api/projects', 'POST', projectInput), 200);
+  assert.equal(replay.project.id, project.id);
+  const reopened = await json(await host.request('/api/projects/' + project.id));
+  assert.deepEqual(reopened.project.goalOrigin.goal, handoff.goalRef);
+  const frozen = await json(await host.request('/api/projects/' + project.id + '/decomposition-handoff'));
+  assert.equal(frozen.handoff.checkpoint.targetValue, 35);
+  assert.equal(frozen.handoff.gsaPlanRef.planId, gsaPlan.planId);
+  assert.equal(frozen.handoff.rowId, 'row-online');
+  assert.equal(frozen.handoff.publicationId, handoff.publicationId);
+});
+
+test('GM13: publication and preview check the scope of every frozen row including analytical rows', async t => {
+  const host = await startTestHost();
+  t.after(() => host.close());
+  const { goal, gsaPlan } = await createAndConfirmGoal(host);
+  const api = '/api/strategy/goals/' + goal.goalId + '/decomposition';
+  const rowsInput = validDraftInput(gsaPlan, 0);
+  rowsInput.rows[0]!.commitAsGoal = false;
+  rowsInput.rows[0]!.scope = { kind: 'enterprise', id: 'unavailable', name: '待核企业' };
+  const { draft } = await json(await host.request(api + '/draft', 'POST', rowsInput), 201);
+  const input = { gsaPlanId: gsaPlan.planId, gsaPlanVersion: gsaPlan.planVersion, gsaPlanSha256: gsaPlan.contentSha256,
+    draftRevision: draft.revision, draftSha256: draft.contentSha256, expectedActiveVersion: null };
+  await json(await host.request(api + '/publish-preview', 'POST', input), 409);
+  await json(await host.request(api + '/publish', 'POST', { ...input, operationId: randomUUID() }), 409);
+  assert.equal((await json(await host.request(api + '/publications'))).total, 0);
+});
+
+test('GM11 original Case consumes exact frozen check and intent evidence after human confirmation', async t => {
+  const host = await startTestHost();
+  t.after(() => host.close());
+  await json(await host.request('/api/cases/storage/initialize', 'POST', {}));
+  const initial = await createAndConfirmGoal(host);
+  const base = '/api/strategy/goals/' + initial.goal.goalId;
+  await json(await host.request(base + '/revisions', 'POST', {
+    ...initial.goal, operationId: randomUUID(), expectedVersion: 1, title: '修订后的总目标', strategies: ['平台与门店联合推广'],
+  }), 201);
+  const { goal, gsaPlan } = await json(await host.request(base + '/gsa-plan/confirm', 'POST', {
+    operationId: randomUUID(), expectedGoalVersion: 2, expectedAdoptedVersion: 1, expectedPlanVersion: 1,
+    plannedActions: [{id: 'a2', summary: '修订后的计划', checkpoint: '月末', observationBasis: '月末库存表'}], decision: '确认修订版',
+  }), 201);
+  const { draft } = await json(await host.request(base + '/decomposition/draft', 'POST', validDraftInput(gsaPlan, 0)), 201);
+  const planRef = {gsaPlanId: gsaPlan.planId, gsaPlanVersion: gsaPlan.planVersion,
+    gsaPlanSha256: gsaPlan.contentSha256, draftRevision: draft.revision, draftSha256: draft.contentSha256, expectedActiveVersion: null};
+  const preview = await json(await host.request(base + '/decomposition/publish-preview', 'POST', planRef));
+  const { publication } = await json(await host.request(base + '/decomposition/publish', 'POST', {
+    ...planRef, operationId: randomUUID(), previewSha256: preview.previewSha256,
+  }), 201);
+  const { check } = await json(await host.request(base + '/decomposition/checks', 'POST', {
+    operationId: randomUUID(), publicationVersion: publication.version, rowId: 'row-online', checkpointId: 'cp-online-w2',
+    periodGranularity: 'week', periodSequenceKey: '2027-W02', comparability: 'comparable',
+    actualSource: { basis: reportedBasis('m1-w2','线上平台'), ref: 'online-pos-w2', label: '平台第二周', cutoffAt: '2027-01-15T00:00:00Z' },
+    actualPeriods: [{ periodId: 'm1-w2', actualValue: 27 }],
+  }), 201);
+  const create = (primary: {goalId:string;version:number}, strategy: string, goalIntent?: {goalId:string;intentId:string}) =>
+    host.request('/api/cases', 'POST', { operationId: randomUUID(), title: '排查周销售偏差', goalBinding: {primary, related: [], strategy}, ...(goalIntent ? {goalIntent} : {}) });
+  const parentBinding = { goalId: goal.goalId, version: goal.version };
+  const parent = (await json(await create(parentBinding, '平台与门店联合推广'), 201)).case;
+  const choose = (caseId: string, operationId = randomUUID()) => host.request(base + '/decomposition/checks/' + encodeURIComponent(check.checkId) + '/case-choice',
+    'POST', { kind: 'continue-existing', caseId, operationId, sameIssueConfirmed: true });
+  await json(await choose(parent.id), 409);
+  const committed = publication.committedGoals.find((c: {rowId:string}) => c.rowId === check.rowId);
+  const rowBinding = { goalId: committed.goalId, version: committed.version };
+  const { intent } = await json(await host.request(base + '/case-draft-intents', 'POST', {
+    operationId: randomUUID(), intentId: 'online-check-case', title: '平台活动偏差', strategy: '平台活动放量',
+    kind: 'deviation-followup', checkId: check.checkId, evidenceSummary: '同一平台责任行核对',
+  }), 201);
+  assert.deepEqual(intent.goalRef, rowBinding);
+  assert.equal(intent.goalRef.version, 1);
+  assert.equal(gsaPlan.goal.version, 2);
+  const { intent: pilot } = await json(await host.request(base + '/case-draft-intents', 'POST', {
+    operationId: randomUUID(), intentId: 'parent-v1-pilot', title: '首版目标独立试点', strategy: '老客复购与新品放量',
+    kind: 'proactive-pilot', goalVersion: 1, evidenceSummary: '期初独立判断',
+  }), 201);
+  const { handoff } = await json(await host.request(base + '/decomposition/handoffs', 'POST', {
+    operationId: randomUUID(), publicationVersion: publication.version, rowId: 'row-online', checkpointId: 'cp-online-w2',
+  }), 201);
+  const history = await json(await host.request(base + '/workspace?goalVersion=1'));
+  const current = await json(await host.request(base + '/workspace?goalVersion=2'));
+  assert.deepEqual(history.caseDraftIntents.map((i: {intentId:string}) => i.intentId), [pilot.intentId]);
+  assert.deepEqual(current.caseDraftIntents.map((i: {intentId:string}) => i.intentId), [intent.intentId]);
+  assert.deepEqual(history.handoffs, []);
+  assert.deepEqual(current.handoffs.map((h: {handoffId:string}) => h.handoffId), [handoff.handoffId]);
+  const original = (await json(await create(rowBinding, '平台活动放量', {goalId: goal.goalId, intentId: intent.intentId}), 201)).case;
+  const choiceOp = randomUUID();
+  await json(await choose(original.id, choiceOp));
+  await json(await choose(original.id, choiceOp));
+  const detail = await json(await host.request('/api/cases/' + original.id));
+  assert.equal(detail.goalIntentEvidence.intentId, intent.intentId);
+  assert.equal(detail.goalIntentEvidence.actualSourceRef, 'online-pos-w2');
+  assert.equal(detail.goalCheckEvidence.length, 1);
+  assert.equal(detail.goalCheckEvidence[0].publicationId, publication.publicationId);
+  assert.equal(detail.goalCheckEvidence[0].rowId, check.rowId);
+  assert.equal(detail.goalCheckEvidence[0].checkpointId, check.checkpointId);
+  assert.equal(detail.goalCheckEvidence[0].actualSource.ref, 'online-pos-w2');
+  await json(await host.request('/api/cases/' + original.id + '/close', 'POST',
+    {operationId: randomUUID(), expectedRevision: original.revision, reason: '已核对'}));
+  await json(await choose(original.id), 409);
+  rmSync(path.join(host.root, 'strategy-goals', 'blobs', publication.snapshotSha256 + '.json'));
+  const missing = await json(await host.request('/api/cases/' + original.id));
+  assert.equal(missing.case.id, original.id);
+  assert.equal(missing.goalIntentEvidence, undefined);
+  assert.equal(missing.goalCheckEvidence, undefined);
+  assert.deepEqual(missing.unavailableGoalEvidence, [
+    {goalId: goal.goalId, intentId: intent.intentId}, {goalId: goal.goalId, checkId: check.checkId},
+  ]);
+
+});
+
+test('GM13: a revoked historical row hides its handoff and summaries while the readable newer publication remains available', async t => {
+  const base = mkdtempSync(path.join(tmpdir(), 'goal-history-row-'));
+  const storage = { dataRoot: path.join(base, 'data'), projectsRoot: path.join(base, 'projects') };
+  let host = await startTestHost(storage);
+  t.after(async () => { await host.close(); rmSync(base, { recursive: true, force: true }); });
+  const enterprise = await json(await host.request('/api/studio/enterprises', 'POST', { name: '历史范围' }), 201);
+  const { goal, gsaPlan } = await createAndConfirmGoal(host);
+  const goalApi = '/api/strategy/goals/' + goal.goalId;
+  const api = goalApi + '/decomposition';
+  const input = validDraftInput(gsaPlan, 0);
+  const entity = enterprise.enterprise ?? enterprise;
+  input.rows[0]!.scope = { kind: 'enterprise', id: entity.id, name: entity.name };
+  input.rows[0]!.commitAsGoal = false;
+  const publish = async (draftInput: DecompositionDraftInput, active: number | null) => {
+    const { draft } = await json(await host.request(api + '/draft', 'POST', draftInput), 201);
+    const args = { gsaPlanId: gsaPlan.planId, gsaPlanVersion: gsaPlan.planVersion, gsaPlanSha256: gsaPlan.contentSha256,
+      draftRevision: draft.revision, draftSha256: draft.contentSha256, expectedActiveVersion: active };
+    const preview = await json(await host.request(api + '/publish-preview', 'POST', args));
+    const operationId = randomUUID();
+    await json(await host.request(api + '/publish', 'POST', { ...args, previewSha256: preview.previewSha256, operationId }), 201);
+    return operationId;
+  };
+  const op1 = await publish(input, null);
+  await json(await host.request(api + '/handoffs', 'POST', {
+    operationId: randomUUID(), publicationVersion: 1, rowId: 'row-online', checkpointId: 'cp-online-w2',
+  }), 201);
+  const ws1 = await json(await host.request(goalApi + '/workspace'));
+  const next = validDraftInput(gsaPlan, ws1.draft.revision);
+  next.rows = ws1.draft.rows;
+  next.rows[0]!.scope = deptScope;
+  await publish(next, 1);
+  await host.close();
+  const scopesFile = path.join(storage.dataRoot, 'enterprise-scopes', 'index.json');
+  const scopes = JSON.parse(readFileSync(scopesFile, 'utf8'));
+  scopes.enterprises = scopes.enterprises.filter((e: { id: string }) => e.id !== entity.id);
+  writeFileSync(scopesFile, JSON.stringify(scopes));
+  host = await startTestHost(storage);
+  const ws = await json(await host.request(goalApi + '/workspace'));
+  assert.equal(ws.activePublication.version, 2);
+  assert.deepEqual(ws.handoffs, []);
+  assert.deepEqual(ws.unavailablePublicationVersions, [1]);
+  const directory = await json(await host.request(api + '/publications'));
+  assert.deepEqual(directory.items.map((p: { version: number }) => p.version), [2]);
+  assert.deepEqual(directory.unavailableVersions, [1]);
+  await json(await host.request(api + '/operations/' + op1), 409);
+  await json(await host.request(api + '/publications/1/export'), 409);
+});
+
+
+test('GM03/06/07 preflight and commit both reject inconsistent values, origin, scope and units', async t => {
+  const host = await startTestHost();
+  t.after(() => host.close());
+  const {goal, gsaPlan} = await createAndConfirmGoal(host);
+  const route = `/api/strategy/goals/${goal.goalId}/decomposition/`;
+  function views(draft: DecompositionDraftInput) {
+    draft.rows.forEach(row => { row.crossCellId = row.rowId; });
+    draft.views = ['渠道','品类'].map(viewName => ({viewName, viewId: viewName, metricId:'net-sales', period:'2027-01',
+      coverageScope: '全渠道', reserveIncluded:5, cells: draft.rows.map(row => ({crossCellId:row.rowId, label:row.title,
+        basis:'双方工作表', value:row.targetValue!, unit:'万元'}))}));
+  }
+  const invalid: [string, (draft: DecompositionDraftInput) => void][] = [
+    ['view_coverage_mismatch', draft => { views(draft); draft.views.forEach(view => view.cells.pop()); }],
+    ['view_coverage_mismatch', draft => { views(draft); draft.views.forEach(view => view.cells.push({...view.cells[0]!, crossCellId:'extra', value:0})); }],
+    ['view_total_mismatch', draft => { views(draft); draft.views.forEach(view => { view.reserveIncluded=4; }); }],
+    ['estimate_formal_target_mismatch', draft => { draft.estimate.formalTargetValue = 999; draft.estimate.gapValue = 887; }],
+    ['incomplete_reachability_estimate', draft => { draft.estimate.estimatedValue = null; draft.estimate.gapValue = null; draft.estimate.basis = ''; }],
+    ['incomparable_estimate_caliber', draft => { draft.estimate.scope = {...deptScope, id: 'different-department'}; }],
+    ['incomparable_estimate_caliber', draft => { draft.estimate.sapMetric = {id: 'returns', version: 'V2', metricName: '退货额'}; }],
+    ['incomparable_view', draft => {
+      draft.rows[0]!.crossCellId = 'online';
+      draft.views = ['万元', '元'].map((unit,i) => ({ viewId: String(i), viewName: '视图'+i, period: '2027-01',
+        metricId: 'net-sales', coverageScope: '全渠道', reserveIncluded: 5,
+        cells: [{crossCellId: 'online', label: '线上', value: 70, unit, basis: '部门工作表'}] }));
+    }],
+  ];
+  let revision = 0;
+  for (const [code, edit] of invalid) {
+    const input = validDraftInput(gsaPlan, revision);
+    edit(input);
+    const {draft} = await json(await host.request(route+'draft','POST',input),201);
+    revision = draft.revision;
+    const refs = {gsaPlanId: gsaPlan.planId, gsaPlanVersion: gsaPlan.planVersion, gsaPlanSha256: gsaPlan.contentSha256,
+      expectedActiveVersion: null, draftRevision: revision, draftSha256: draft.contentSha256};
+    const preview = await json(await host.request(route+'publish-preview','POST',refs));
+    assert.equal(preview.ok, false);
+    assert.ok(preview.issues.some((issue: {code: string}) => issue.code === code), code);
+    await json(await host.request(route+'publish','POST',{...refs, operationId:randomUUID(), previewSha256:preview.previewSha256}),400);
+    assert.equal((await json(await host.request(route+'publications'))).total, 0);
+  }
+});
+
+test('GM02 exact goal workspace exposes global CAS and allows explicit adoption of pending v2', async t => {
+  const host = await startTestHost();
+  t.after(() => host.close());
+  const {goal, gsaPlan} = await createAndConfirmGoal(host);
+  const route = '/api/strategy/goals/'+goal.goalId;
+  const next = await json(await host.request(route+'/revisions','POST', {
+    ...goal, expectedVersion:1, operationId:randomUUID(), formalOrigin: {...goal.formalOrigin,targetValue:110},
+  }),201);
+  const pending = await json(await host.request(route+'/workspace?goalVersion=2'));
+  assert.equal(pending.activeGsaPlan, null);
+  assert.equal(pending.latestGsaPlanVersion, gsaPlan.planVersion);
+  const first = await json(await host.request(route+'/workspace?goalVersion=1'));
+  assert.equal(first.activeGsaPlan.formalTarget.value,120);
+  const result = await json(await host.request(route+'/gsa-plan/confirm','POST', {
+    operationId:randomUUID(), expectedGoalVersion:next.goal.version, expectedAdoptedVersion:1, expectedPlanVersion:pending.latestGsaPlanVersion,
+    plannedActions:gsaPlan.plannedActions, stageCheckpoints:gsaPlan.stageCheckpoints, decision:'核对并承接 110 万',
+  }),201);
+  assert.equal(result.gsaPlan.formalTarget.value,110);
+  assert.equal((await json(await host.request(route+'/workspace?goalVersion=1'))).activeGsaPlan.formalTarget.value,120);
+});
+
+
+test('GM04 weighted ratio allocation uses the combined numerator and denominator', async t => {
+  const host = await startTestHost();
+  t.after(() => host.close());
+  const {goal:parent, gsaPlan:previous} = await createAndConfirmGoal(host);
+  const base = '/api/strategy/goals/'+parent.goalId;
+  const {gsaPlan} = await json(await host.request(base+'/gsa-plan/confirm','POST',{
+    operationId:randomUUID(), expectedGoalVersion:1, expectedAdoptedVersion:1, expectedPlanVersion:1,
+    goalRevision:{...parent,formalOrigin:{...parent.formalOrigin,targetValue:50,metricKind:'ratio',unit:'%'}},
+    plannedActions:previous.plannedActions,stageCheckpoints:previous.stageCheckpoints,decision:'确认比率目标',
+  }),201);
+  const input=validDraftInput(gsaPlan,0);
+  Object.assign(input.estimate,{metricKind:'ratio',unit:'%',formalTargetValue:50,estimatedValue:50,gapValue:0});
+  input.reserves=[];input.timePlan=[];input.gapStrategies=[];
+  input.rows=input.rows.map((row,i) => ({...row,commitAsGoal:false,tracked:false,metricKind:'ratio',unit:'%',
+    targetValue:i ? 80 : 20,checkpoints:[],ratio:{numerator:i?8:20,denominator:i?10:100,denominatorAssumed:true,definition:'同意人数 / 满足条件人数'}}));
+  const {draft,validation}=await json(await host.request(base+'/decomposition/draft','POST',input),201);
+  assert.equal(validation.ok,false);
+  assert.ok(validation.issues.some((issue:{code:string})=>issue.code==='invalid_ratio_rollup'));
+  input.expectedDraftRevision=draft.revision;
+  input.rows[1]!.ratio!.numerator=80;
+  input.rows[1]!.ratio!.denominator=100;
+  const aligned=await json(await host.request(base+'/decomposition/draft','POST',input),201);
+  assert.equal(aligned.validation.ok,true);
+  assert.equal(aligned.validation.allocatedTotal,50);
+  const refs={gsaPlanId:gsaPlan.planId,gsaPlanVersion:gsaPlan.planVersion,gsaPlanSha256:gsaPlan.contentSha256,
+    draftRevision:aligned.draft.revision,draftSha256:aligned.draft.contentSha256,expectedActiveVersion:null};
+  const preview=await json(await host.request(base+'/decomposition/publish-preview','POST',refs));
+  assert.equal(preview.summary.allocatedTotal,50);
+  await json(await host.request(base+'/decomposition/publish','POST',{...refs,operationId:randomUUID(),previewSha256:preview.previewSha256}),201);
+  const {publication}=await json(await host.request(base+'/decomposition/publications/1'));
+  assert.equal(allocatedTarget(publication.snapshot.rows,'ratio','%'),50);
+  assert.equal(allocatedTarget(publication.snapshot.rows,'milestone','项'),null);
+});
+
+
+test('GM09 adopted allocations keep the exact SAP metric across publish and re-adoption', async t => {
+  const host = await startTestHost();
+  t.after(() => host.close());
+  const library = createMetricLibrary(path.join(host.root,'metric-assets'));
+  const sap = library.publish(preparePublication(readFileSync(new URL('../extensions/business-plugins/metric-factory/fixtures/membership-repurchase@1.0.0.draft.yaml', import.meta.url))),'synthetic-user');
+  const metric = {authority:'sap-metric' as const,id:sap.id,version:sap.version,metricName:sap.metricNames[0]!};
+  const {goal, gsaPlan:oldPlan} = await createAndConfirmGoal(host);
+  const route='/api/strategy/goals/'+goal.goalId;
+  const {gsaPlan}=await json(await host.request(route+'/gsa-plan/confirm','POST',{
+    expectedGoalVersion:goal.version,expectedAdoptedVersion:goal.version,expectedPlanVersion:oldPlan.planVersion,operationId:randomUUID(),
+    goalRevision:{...goal,measurement:{kind:'quantitative',sapMetric:metric,target:'120 万元'}},
+    plannedActions:oldPlan.plannedActions,stageCheckpoints:oldPlan.stageCheckpoints,decision:'确认采用指标版',
+  }),201);
+  const input=validDraftInput(gsaPlan,0);
+  input.estimate.sapMetric=metric;
+  const release = async (raw:DecompositionDraftInput, active:number|null) => {
+    const {draft}=await json(await host.request(route+'/decomposition/draft','POST',raw),201);
+    const refs={gsaPlanId:gsaPlan.planId,gsaPlanVersion:gsaPlan.planVersion,gsaPlanSha256:gsaPlan.contentSha256,
+      expectedActiveVersion:active,draftRevision:draft.revision,draftSha256:draft.contentSha256};
+    const preview=await json(await host.request(route+'/decomposition/publish-preview','POST',refs));
+    const {publication}=await json(await host.request(route+'/decomposition/publish','POST',{...refs,previewSha256:preview.previewSha256,operationId:randomUUID()}),201);
+    return {publication,preview};
+  };
+  const first=await release(input,null);
+  const childId=first.publication.committedGoals[0].goalId;
+  const readChild=async()=> (await json(await host.request('/api/strategy/goals/'+childId))).goal;
+  assert.deepEqual((await readChild()).versions[0].measurement,{kind:'quantitative',sapMetric:metric,target:'70 万元'});
+  const ws=await json(await host.request(route+'/workspace'));
+  const revise={...input,rows:ws.draft.rows,expectedDraftRevision:ws.draft.revision};
+  revise.rows[0].targetValue=68;
+  revise.rows[1].targetValue=47;
+  const second=await release(revise,1);
+  assert.equal(second.preview.committedGoals[0].action,'revise-and-adopt');
+  const child=await readChild();
+  assert.deepEqual(child.versions[1].measurement,{kind:'quantitative',sapMetric:metric,target:'68 万元'});
+  assert.equal(child.versions[1].formalOrigin.period,'2027-01');
 });

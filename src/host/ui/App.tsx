@@ -171,7 +171,7 @@ export function App() {
   const openProjectPlan = (project: ClientProject) => { setPlanProjectId(project.id); setMountedPlans(previous => previous.includes(project.id) ? previous : [...previous, project.id]); setHelpOpen(false); setView('project-plan'); if (window.innerWidth <= 760) setSidebarOpen(false); };
   const [goalUsageForProject, setGoalUsageForProject] = useState<UsageContext>();
   const [goalProjectEntrances, setGoalProjectEntrances] = useState<Record<string, { goal: GoalRef; usageContext?: UsageContext }>>({});
-  const [goalForCase, setGoalForCase] = useState<GoalRef & { strategy?: string; title?: string; description?: string }>(), [goalForProject, setGoalForProject] = useState<GoalRef>(), [handoffForProject, setHandoffForProject] = useState<{ handoffId: string }>();
+  const [goalForCase, setGoalForCase] = useState<import('../case-types.ts').CaseGoalEntry>(), [goalForProject, setGoalForProject] = useState<GoalRef>(), [handoffForProject, setHandoffForProject] = useState<{ goalId: string; handoffId: string }>();
   const [studioLibraryArea, setStudioLibraryArea] = useState<StudioLibraryArea>('semantic');
   const [studioLibraryRequest, setStudioLibraryRequest] = useState<StudioLibraryRequest>();
   const [studioMounted, setStudioMounted] = useState(() => new URL(window.location.href).searchParams.has('studio'));
@@ -592,7 +592,7 @@ export function App() {
   };
   const stop = async () => { if (!active || !activeTask || !activeKey || !busy || current?.status === 'stopping') return; const projectId = active.id, taskId = activeTask.id, key = activeKey; changeUI(key, old => ({ ...old, status: 'stopping' })); try { if (current?.opening && question) await answerInteraction(projectId, taskId, { id: question.id, cancelled: true }); await stopTask(projectId, taskId, current?.snapshot?.cleanupRequestId); await refreshTask(projectId, taskId); } catch (error) { changeUI(key, old => ({ ...old, error: safeError(error), status: 'running' })); } };
   useEffect(() => { const keyboard = (event: KeyboardEvent) => { if (event.key === 'Escape' && !helpOpen && (view === 'chat' || view === 'studio') && !modalOpen && !document.querySelector('dialog[open]') && busy && !archived) { event.preventDefault(); void stop(); } }; document.addEventListener('keydown', keyboard); return () => document.removeEventListener('keydown', keyboard); });
-  function openProjectCreation(goal?: GoalRef, usageContext?: UsageContext, decompositionHandoff?: { handoffId: string }) {
+  function openProjectCreation(goal?: GoalRef, usageContext?: UsageContext, decompositionHandoff?: { goalId: string; handoffId: string }) {
     setGoalForProject(goal);
     setGoalUsageForProject(usageContext);
     setHandoffForProject(decompositionHandoff);
@@ -612,7 +612,7 @@ export function App() {
       goalForProject
         ? {
             goal: goalForProject,
-            ...(handoffForProject ? { decompositionHandoff: handoffForProject as import('../project-store.ts').ProjectDecompositionHandoffOrigin } : {}),
+            ...(handoffForProject ? { decompositionHandoff: handoffForProject } : {}),
           }
         : undefined,
     );
@@ -623,7 +623,7 @@ export function App() {
       try { await associateStudioEnterprise({ kind: 'project', entityId: project.id, enterpriseId, requestId }); }
       catch (error) { if (error instanceof StudioRequestError && error.uncertain) setStudioProjectAssociationPending({ requestId, projectId: project.id, enterpriseId }); setGlobalError(`项目已创建，企业关联尚未核定，请保留该项目并核对归属。${safeError(error)}`); }
     }
-    setProjects(previous => [...previous, project]); selectContext(project.id); setFilesOpen(window.innerWidth > 1100);
+    setProjects(previous => [...previous.filter(p => p.id !== project.id), project]); selectContext(project.id); setFilesOpen(window.innerWidth > 1100);
     if (!fromStudio) openWorkspace('chat');
     if (window.innerWidth <= 760) setSidebarOpen(false);
   };

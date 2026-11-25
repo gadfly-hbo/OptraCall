@@ -1,9 +1,12 @@
+import { hasGsaCheckpoint } from '../strategy-goal-decomposition-types.ts';
+import { allocatedTarget } from '../strategy-goal-allocation.ts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BusinessRoleOwner } from '../business-role-types.ts';
-import type { CaseRecord } from '../case-types.ts';
 import type { GoalDraftInput, GoalRef, GoalRoleSuggestionRef, GoalScope, GoalVersion, StrategyGoalRecord } from '../strategy-goals-types.ts';
 import type {
   DecompositionDraftInput,
+  DecompositionCycleReviewInput,
+  DecompositionThresholdConfig,
   DecompositionGapStrategy,
   DecompositionPublication,
   DecompositionPublishOperationRecord,
@@ -13,12 +16,16 @@ import type {
   DecompositionTimePeriod,
   GoalWorkspaceView,
   GsaPlannedAction,
+  FormalGoalSelection,
   GsaStageCheckpoint,
-  ProgressComparability,
+  ProgressEvidenceBasis,
   ReachabilityEstimate,
 } from '../strategy-goal-decomposition-types.ts';
+import { MAX_GOAL_ACTUAL_REPORT_CHARS } from '../strategy-goal-decomposition-types.ts';
+import { checkpointPeriods, progressMetric } from '../strategy-goal-progress.ts';
 import { BusinessRoleConversation } from './BusinessRoleConversation.tsx';
 import { CaseDialog, CaseFormError, caseDate } from './CaseDialogs.tsx';
+import { DownloadVersion } from './StrategyChoicePanel.tsx';
 import * as api from './strategy-goals-client.ts';
 
 type BusinessStage = 'plan' | 'followup' | 'review';
@@ -47,6 +54,12 @@ interface PendingIntentReadResult {
 
 const PENDING_PREFIX = 'optracall.goal.pendingPublish.v1:';
 const pendingKey = (goalId: string) => `${PENDING_PREFIX}${goalId}`;
+
+const emptyActualInput = {
+  checkActualVal: '', checkSourceRef: '', checkCutoffAt: '', checkSourceLabel: '', reportText: '', uploadedName: '', reuseActualId: '',
+  checkBasis: { metric: '', unit: '', scope: '', periodId: '', coverage: 'unknown', maturity: 'unknown' } as ProgressEvidenceBasis,
+  supplementCheck: '', checkMissingNote: '',
+};
 
 function readPendingIntent(goalId: string): PendingIntentReadResult {
   if (typeof window === 'undefined') return { intent: null, storageError: null };
@@ -101,7 +114,7 @@ function isUnknownOutcomeError(error: unknown): boolean {
 function buildInitialDraft(goal: GoalVersion, workspace: GoalWorkspaceView): DecompositionDraftInput {
   const plan = workspace.activeGsaPlan!;
   const existing = workspace.draft;
-  if (existing && existing.gsaPlanVersion === plan.planVersion && existing.gsaPlanSha256 === plan.contentSha256) {
+  if (existing && existing.gsaPlanId === plan.planId && existing.gsaPlanVersion === plan.planVersion && existing.gsaPlanSha256 === plan.contentSha256) {
     return {
       gsaPlanId: plan.planId,
       gsaPlanVersion: plan.planVersion,
@@ -119,11 +132,13 @@ function buildInitialDraft(goal: GoalVersion, workspace: GoalWorkspaceView): Dec
   const formalVal = plan.formalTarget.value;
   const unit = plan.formalTarget.unit;
   const period = plan.formalTarget.period;
-  const est = workspace.gsaDraft?.preConfirmEstimate ?? {
+  const est = plan.preConfirmEstimate ?? {
     metricKind: plan.formalTarget.metricKind,
     unit,
     period,
     scopeDescription: goal.scope.name,
+    scope: goal.scope,
+    ...(goal.measurement.kind === 'quantitative' ? { sapMetric: goal.measurement.sapMetric } : {}),
     formalTargetValue: formalVal,
     estimatedValue: null,
     gapValue: null,
@@ -134,21 +149,33 @@ function buildInitialDraft(goal: GoalVersion, workspace: GoalWorkspaceView): Dec
     gsaPlanId: plan.planId,
     gsaPlanVersion: plan.planVersion,
     gsaPlanSha256: plan.contentSha256,
-    expectedDraftRevision: existing?.revision ?? 0,
+    expectedDraftRevision: workspace.latestDraftRevision,
     estimate: structuredClone(est),
-    rows: existing ? structuredClone(existing.rows) : [],
-    reserves: existing ? structuredClone(existing.reserves) : [],
-    gapStrategies: existing ? structuredClone(existing.gapStrategies) : [],
-    views: existing ? structuredClone(existing.views) : [],
-    timePlan: existing ? structuredClone(existing.timePlan) : [],
-    notes: existing?.notes ?? '',
+    rows: [],
+    reserves: [],
+    gapStrategies: [],
+    views: [],
+    timePlan: [],
+    notes: '',
   };
+}
+
+function restoreDraft(key: string, base: DecompositionDraftInput): DecompositionDraftInput | null {
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(key) ?? 'null') as DecompositionDraftInput | null;
+    if (!cached || cached.gsaPlanId !== base.gsaPlanId || cached.gsaPlanVersion !== base.gsaPlanVersion ||
+        cached.gsaPlanSha256 !== base.gsaPlanSha256 || cached.expectedDraftRevision !== base.expectedDraftRevision ||
+        !cached.estimate || ![cached.rows, cached.reserves, cached.views, cached.timePlan, cached.gapStrategies].every(Array.isArray)) return null;
+    return cached;
+  } catch {
+    return null;
+  }
 }
 
 export function GoalDecompositionWorkspace({
   record,
   goal,
-  cases,
+  onInspectCase,
   estimateDraftId,
   onOpenSwitcher,
   onOpenVersions,
@@ -164,7 +191,7 @@ export function GoalDecompositionWorkspace({
 }: {
   record: StrategyGoalRecord;
   goal: GoalVersion;
-  cases: CaseRecord[];
+  onInspectCase?: (caseId: string) => void;
   estimateDraftId: string;
   onOpenSwitcher: () => void;
   onOpenVersions: () => void;
@@ -183,6 +210,7 @@ export function GoalDecompositionWorkspace({
   const [wsError, setWsError] = useState('');
   const [notice, setNotice] = useState('');
   const [stage, setStage] = useState<BusinessStage>('plan');
+  const [analysisRequest, setAnalysisRequest] = useState<{kind:'actual'|'next-cycle'; id:string} | null>(null);
   const [editingGsa, setEditingGsa] = useState(false);
 
   // Stage 1a: GSA Plan editor fields
@@ -191,9 +219,7 @@ export function GoalDecompositionWorkspace({
   const [plannedActions, setPlannedActions] = useState<GsaPlannedAction[]>([
     { id: 'act-1', summary: '', checkpoint: '' },
   ]);
-  const [stageCheckpoints, setStageCheckpoints] = useState<GsaStageCheckpoint[]>([
-    { id: 'stg-1', label: '月中核对', targetDate: goal.dueAt?.slice(0, 10) ?? '', observationBasis: '可比期业务实绩' },
-  ]);
+  const [stageCheckpoints, setStageCheckpoints] = useState<GsaStageCheckpoint[]>([]);
   const [preEstimate, setPreEstimate] = useState<ReachabilityEstimate | null>(null);
   const [showEstimateAgent, setShowEstimateAgent] = useState(false);
 
@@ -203,6 +229,25 @@ export function GoalDecompositionWorkspace({
   const [busy, setBusy] = useState(false);
   const [publishReason, setPublishReason] = useState('正式发布目标拆解表');
   const [preview, setPreview] = useState<DecompositionPublishPreview | null>(null);
+  const [recoveredReceipt, setRecoveredReceipt] = useState<{ operationId: string; publication: DecompositionPublication } | null>(null);
+  const receiptKey = `optracall.goal.lastRecovered.v1:${record.id}`;
+  useEffect(() => {
+    let active = true;
+    const pending = readPendingIntent(record.id);
+    if (!pending.intent && !pending.storageError) {
+      try {
+        const ref = JSON.parse(sessionStorage.getItem(receiptKey) ?? 'null');
+        if (ref && typeof ref.operationId === 'string' && Number.isSafeInteger(ref.version) && typeof ref.sha256 === 'string') {
+          void api.readDecompositionPublication(record.id, ref.version).then(({ publication }) => {
+            if (active && publication.snapshotSha256 === ref.sha256 && publication.operationId === ref.operationId) {
+              setRecoveredReceipt({ operationId: ref.operationId, publication });
+            }
+          }).catch(() => { /* The exact version may no longer be readable. */ });
+        }
+      } catch { /* A missing tab receipt never changes a publication. */ }
+    }
+    return () => { active = false; };
+  }, [record.id, receiptKey]);
   const [pendingIntent, setPendingIntent] = useState<PendingPublishIntent | null>(null);
   const [pendingStorageError, setPendingStorageError] = useState<string | null>(null);
   const [alignBasis, setAlignBasis] = useState('双视角负责人已核对口径并达成一致');
@@ -211,28 +256,43 @@ export function GoalDecompositionWorkspace({
 
   // Stage 2: Follow-up checks & threshold & pilot Case draft
   const [threshMagnitude, setThreshMagnitude] = useState('10');
+  const [threshDirection, setThreshDirection] = useState<DecompositionThresholdConfig['adverseDirection']>('below');
+  const [threshUnit, setThreshUnit] = useState<DecompositionThresholdConfig['unit']>('percent');
+  const [threshGranularity, setThreshGranularity] = useState<DecompositionTimePeriod['granularity']>('week');
   const [threshConsecutive, setThreshConsecutive] = useState('2');
   const [checkPubVersion, setCheckPubVersion] = useState<number | null>(null);
   const [selectedCheckPub, setSelectedCheckPub] = useState<DecompositionPublication | null>(null);
   const [checkRowId, setCheckRowId] = useState('');
   const [checkCheckpointId, setCheckCheckpointId] = useState('');
   const [checkPeriodId, setCheckPeriodId] = useState('');
-  const [checkActualVal, setCheckActualVal] = useState('');
-  const [checkSourceRef, setCheckSourceRef] = useState('');
-  const [checkCutoffAt, setCheckCutoffAt] = useState('');
-  const [checkSourceLabel, setCheckSourceLabel] = useState('POS / 财务阶段实绩');
-  const [checkComparability, setCheckComparability] = useState<ProgressComparability>('comparable');
-  const [checkMissingNote, setCheckMissingNote] = useState('');
-  const [continueCaseIds, setContinueCaseIds] = useState<Record<string, string>>({});
+  const evidenceCache = `optracall.goal.unsentActual.v1:${record.id}:${goal.version}`;
+  const evidenceTarget = JSON.stringify([checkPubVersion, checkRowId, checkCheckpointId, checkPeriodId]);
+  const [actualInputs, setActualInputs] = useState<Record<string, typeof emptyActualInput>>(() => {
+    try { return JSON.parse(sessionStorage.getItem(evidenceCache) ?? '{}') ?? {}; } catch { return {}; }
+  });
+  const actualInput = {...emptyActualInput, ...actualInputs[evidenceTarget]};
+  const { checkActualVal, checkSourceRef, checkCutoffAt, checkSourceLabel, checkBasis, supplementCheck, checkMissingNote, reportText, uploadedName, reuseActualId } = actualInput;
+  const editActual = (patch: Partial<typeof emptyActualInput>) => setActualInputs(inputs => ({
+    ...inputs, [evidenceTarget]: { ...emptyActualInput, ...inputs[evidenceTarget], ...patch },
+  }));
+  useEffect(() => {
+    try { sessionStorage.setItem(evidenceCache, JSON.stringify(actualInputs)); } catch { /* Keep the in-memory form. */ }
+  }, [evidenceCache, actualInputs]);
+  const [checkStrategies, setCheckStrategies] = useState<Record<string, string>>({});
   const [pilotTitle, setPilotTitle] = useState('');
+  const [pilotStrategy, setPilotStrategy] = useState('');
   const [pilotSummary, setPilotSummary] = useState('');
 
   // Stage 3: Cycle review
+  const [reviewPeriod, setReviewPeriod] = useState('');
+  const [reviewConclusions, setReviewConclusions] = useState<DecompositionCycleReviewInput['conclusions']>([]);
   const [reviewActual, setReviewActual] = useState('');
-  const [reviewSourceRef, setReviewSourceRef] = useState('fin-close-period');
-  const [reviewConcTitle, setReviewConcTitle] = useState('主策略在本期范围的效果结论');
+  const [reviewSourceRef, setReviewSourceRef] = useState('');
+  const [reviewConcTitle, setReviewConcTitle] = useState('');
+  const [conclusionEvidence, setConclusionEvidence] = useState('');
+  const [conclusionScope, setConclusionScope] = useState('');
   const [reviewConcSummary, setReviewConcSummary] = useState('');
-  const [reviewMature, setReviewMature] = useState(true);
+  const [reviewMature, setReviewMature] = useState(false);
   const [reviewCausal, setReviewCausal] = useState(false);
   const [reviewSameScope, setReviewSameScope] = useState(true);
   const [selectedReviewConclusions, setSelectedReviewConclusions] = useState<Record<string, string[]>>({});
@@ -242,6 +302,17 @@ export function GoalDecompositionWorkspace({
   const draftDirtyRef = useRef(draftDirty);
   draftDirtyRef.current = draftDirty;
   const loadSeqRef = useRef(0);
+  const checkPublicationSeq = useRef(0);
+  const recoverySeq = useRef(0);
+  const autoCheckedOperation = useRef<string | null>(null);
+  const goalVersion = goal.version;
+  const draftCacheKey = `optracall.goal.unsavedDraft.v1:${record.id}:${goalVersion}`;
+  useEffect(() => {
+    if (draftDirty && draftForm) {
+      try { sessionStorage.setItem(draftCacheKey, JSON.stringify(draftForm)); } catch { /* Edits remain in memory. */ }
+    }
+  }, [draftDirty, draftForm, draftCacheKey]);
+
 
   const effectiveVersion = record.adoptedVersion ?? record.currentVersion;
   // Item 1: Latest candidate v2 (when v1 is adopted) is NOT historical; only superseded versions are read-only!
@@ -250,7 +321,7 @@ export function GoalDecompositionWorkspace({
     (goal.status === 'candidate' && goal.version < record.currentVersion);
   const pendingLocked = Boolean(pendingIntent || pendingStorageError);
   const mutationsLocked = pendingLocked || isHistoricalVersion;
-  const openCases = useMemo(() => cases.filter(c => c.status !== 'closed'), [cases]);
+
 
   const syncCheckSelectors = useCallback((pub: DecompositionPublication | null) => {
     setSelectedCheckPub(pub);
@@ -275,18 +346,19 @@ export function GoalDecompositionWorkspace({
     setLoadingWs(true);
     setWsError('');
     try {
-      const ws = await api.getWorkspace(record.id, goal.version);
+      const ws = await api.getWorkspace(record.id, goalVersion);
       if (seq !== loadSeqRef.current) return;
       setWorkspace(ws);
-      setThreshMagnitude(ws.threshold.magnitudePct !== undefined ? String(ws.threshold.magnitudePct) : '10');
-      setThreshConsecutive(ws.threshold.consecutivePeriods !== undefined ? String(ws.threshold.consecutivePeriods) : '2');
       if (ws.activeGsaPlan) {
         setPlannedActions(ws.activeGsaPlan.plannedActions.length ? structuredClone(ws.activeGsaPlan.plannedActions) : [{ id: 'act-1', summary: '', checkpoint: '' }]);
         setStageCheckpoints(ws.activeGsaPlan.stageCheckpoints.length ? structuredClone(ws.activeGsaPlan.stageCheckpoints) : []);
         if (forceResetDraft || !draftDirtyRef.current) {
-          const built = buildInitialDraft(goal, ws);
-          setDraftForm(built);
-          setDraftDirty(false);
+          const visibleGoal = ws.goal.versions.find(v => v.version === goalVersion);
+          if (!visibleGoal) throw new Error('找不到所选目标准确版本。');
+          const built = buildInitialDraft(visibleGoal, ws);
+          const unsaved = restoreDraft(draftCacheKey, built);
+          setDraftForm(unsaved ?? built);
+          setDraftDirty(Boolean(unsaved));
         }
       } else if (ws.gsaDraft) {
         setPlannedActions(ws.gsaDraft.plannedActions.length ? structuredClone(ws.gsaDraft.plannedActions) : [{ id: 'act-1', summary: '', checkpoint: '' }]);
@@ -294,6 +366,7 @@ export function GoalDecompositionWorkspace({
         setDraftForm(null);
       } else {
         setPlannedActions([{ id: 'act-1', summary: '', checkpoint: '' }]);
+        setStageCheckpoints([]);
         setDraftForm(null);
       }
       if (ws.activePublication) {
@@ -307,7 +380,7 @@ export function GoalDecompositionWorkspace({
     } finally {
       if (seq === loadSeqRef.current) setLoadingWs(false);
     }
-  }, [record.id, goal, syncCheckSelectors]);
+  }, [record.id, goalVersion, draftCacheKey, syncCheckSelectors]);
 
   useEffect(() => {
     loadSeqRef.current += 1;
@@ -323,38 +396,47 @@ export function GoalDecompositionWorkspace({
     setPendingStorageError(read.storageError);
     setGsaConfirmedBy(goal.responsible || '负责人');
     void loadWorkspace(true);
-  }, [record.id, goal.version, loadWorkspace]);
+    return () => { loadSeqRef.current++; checkPublicationSeq.current++; recoverySeq.current++; };
+  }, [record.id, goalVersion, loadWorkspace, goal.responsible]);
 
   const handleSelectCheckPublication = async (ver: number) => {
+    const seq = ++checkPublicationSeq.current;
     setCheckPubVersion(ver);
     if (workspace?.activePublication?.version === ver) {
       syncCheckSelectors(workspace.activePublication);
+      setBusy(false);
       return;
     }
     setBusy(true);
     setWsError('');
     try {
       const { publication } = await api.readDecompositionPublication(record.id, ver);
-      syncCheckSelectors(publication);
+      if (seq === checkPublicationSeq.current) syncCheckSelectors(publication);
     } catch (fault) {
-      setWsError(api.goalError(fault));
+      if (seq === checkPublicationSeq.current) setWsError(api.goalError(fault));
     } finally {
-      setBusy(false);
+      if (seq === checkPublicationSeq.current) setBusy(false);
     }
   };
 
+  const estimateReadSeq = useRef(0);
   const loadPreEstimate = useCallback(async () => {
+    const seq = ++estimateReadSeq.current;
     try {
-      const res = await api.getPreConfirmEstimate(estimateDraftId);
-      setPreEstimate(res.estimate);
+      const {estimateRecord} = await api.getPreConfirmEstimate(estimateDraftId, goal.version);
+      if (seq !== estimateReadSeq.current) return;
+      setPreEstimate(estimateRecord?.draftId === estimateDraftId && estimateRecord.goalRef?.goalId === goal.goalId &&
+        estimateRecord.goalRef.version === goal.version ? estimateRecord.estimate : null);
     } catch {
-      // ignore if none saved yet
+      if (seq === estimateReadSeq.current) setPreEstimate(null);
     }
-  }, [estimateDraftId]);
+  }, [estimateDraftId, goal.goalId, goal.version]);
 
   useEffect(() => {
-    if (showEstimateAgent) void loadPreEstimate();
-  }, [showEstimateAgent, loadPreEstimate]);
+    setPreEstimate(null);
+    void loadPreEstimate();
+    return () => { estimateReadSeq.current++; };
+  }, [loadPreEstimate]);
 
   // Conflict details extracted from validation issues (GM07)
   const crossConflicts = useMemo(() => {
@@ -379,6 +461,14 @@ export function GoalDecompositionWorkspace({
 
   const activeGsaPlan = workspace?.activeGsaPlan ?? null;
   const activePub = workspace?.activePublication ?? null;
+  const thresholdMetric = activePub ? progressMetric(activePub.snapshot, record.versions.find(v => v.version === activePub.snapshot.gsaPlan.goal.version)?.measurement ?? goal.measurement) : '';
+  const displayedThreshold = workspace?.thresholdStreams?.find(t => t.metricId === thresholdMetric && t.periodGranularity === threshGranularity) ?? workspace?.threshold;
+  useEffect(() => {
+    setThreshMagnitude(displayedThreshold?.magnitudePct?.toString() ?? '');
+    setThreshConsecutive(displayedThreshold?.consecutivePeriods?.toString() ?? '');
+    setThreshDirection(displayedThreshold?.adverseDirection ?? 'below');
+    setThreshUnit(displayedThreshold?.unit ?? 'percent');
+  }, [displayedThreshold, threshGranularity, thresholdMetric]);
   const activeStageMode = !activeGsaPlan || editingGsa ? 'gsa-confirm' : 'decompose';
 
   const statusBadge = useMemo(() => {
@@ -394,9 +484,10 @@ export function GoalDecompositionWorkspace({
   const estimateOwner: BusinessRoleOwner = useMemo(() => ({
     role: 'goal-draft',
     draftId: estimateDraftId,
+    goalRef: {goalId:goal.goalId, version:goal.version},
     scope: goal.scope,
     analysisVariant: 'goal-estimate',
-  }), [estimateDraftId, goal.scope]);
+  }), [estimateDraftId, goal.goalId, goal.version, goal.scope]);
 
   const decompositionOwner: BusinessRoleOwner = useMemo(() => ({
     role: 'goal',
@@ -405,13 +496,23 @@ export function GoalDecompositionWorkspace({
     analysisVariant: 'goal-decomposition',
   }), [goal.goalId, goal.version]);
 
+  const selectedActual = analysisRequest?.kind === 'actual' && workspace?.submittedActuals?.find(a => a.actualId === analysisRequest.id);
+  const selectedCycle = analysisRequest?.kind === 'next-cycle' && workspace?.nextCycleDrafts.find(d => d.draftId === analysisRequest.id);
+  const analysisOwner: BusinessRoleOwner | null = selectedActual
+    ? {role:'goal', goalId:record.id, version:selectedActual.goalVersion, actualId:selectedActual.actualId, analysisVariant:'goal-decomposition'}
+    : selectedCycle ? {role:'goal-draft', draftId:selectedCycle.draftId, scope:selectedCycle.targetScope, nextCycleSourceGoalId:record.id} : null;
+
   // --- Actions ---
-  const handleReconcileFormal = async () => {
+  const handleReconcileFormal = async (source: FormalGoalSelection) => {
+    if (mutationsLocked) return;
     setBusy(true);
     setWsError('');
     setNotice('');
     try {
       const res = await api.reconcileFormal(record.id, {
+        publicationId: source.publicationId,
+        contentSha256: source.contentSha256,
+        formalGoalId: source.formalGoal.id,
         operationId: crypto.randomUUID(),
         expectedVersion: goal.version,
       });
@@ -426,9 +527,15 @@ export function GoalDecompositionWorkspace({
   };
 
   const handleConfirmGsa = async () => {
+    if (mutationsLocked) return;
     const validActions = plannedActions.filter(a => a.summary.trim());
+    if (!workspace) return;
     if (!validActions.length) {
       setWsError('总目标 GSA 至少需要填写一条明确的计划 A 才能确认并进入拆解。');
+      return;
+    }
+    if (!hasGsaCheckpoint(validActions, stageCheckpoints)) {
+      setWsError('请补充至少一个阶段检查点和对应的观察依据，可填写在计划 A 中或单列阶段检查点。');
       return;
     }
     setBusy(true);
@@ -439,7 +546,7 @@ export function GoalDecompositionWorkspace({
         operationId: crypto.randomUUID(),
         expectedGoalVersion: goal.version,
         expectedAdoptedVersion: record.adoptedVersion ?? null,
-        expectedPlanVersion: activeGsaPlan?.planVersion ?? 0,
+        expectedPlanVersion: workspace.latestGsaPlanVersion,
         plannedActions: validActions.map((a, idx) => ({
           id: a.id.trim() || `act-${idx + 1}`,
           summary: a.summary.trim(),
@@ -470,6 +577,7 @@ export function GoalDecompositionWorkspace({
   };
 
   const handleSaveDraft = async (): Promise<{ draft: NonNullable<GoalWorkspaceView['draft']>; validation: NonNullable<GoalWorkspaceView['validation']> } | null> => {
+    if (mutationsLocked) return null;
     if (!draftForm || !activeGsaPlan) return null;
     setBusy(true);
     setWsError('');
@@ -480,9 +588,10 @@ export function GoalDecompositionWorkspace({
         gsaPlanId: activeGsaPlan.planId,
         gsaPlanVersion: activeGsaPlan.planVersion,
         gsaPlanSha256: activeGsaPlan.contentSha256,
-        expectedDraftRevision: workspace?.draft?.revision ?? 0,
+        expectedDraftRevision: draftForm.expectedDraftRevision,
       };
       const res = await api.saveDecompositionDraft(record.id, payload);
+      try { sessionStorage.removeItem(draftCacheKey); } catch { /* Revision protects subsequent restores. */ }
       setDraftDirty(false);
       setNotice(`已保存拆解草稿 rev ${res.draft.revision}（尚未正式发布）。`);
       await loadWorkspace(true);
@@ -496,6 +605,7 @@ export function GoalDecompositionWorkspace({
   };
 
   const handleAlignConflict = async () => {
+    if (mutationsLocked) return;
     if (!workspace?.draft || !activeGsaPlan) return;
     const cellUpdates = crossConflicts.map(issue => ({
       crossCellId: issue.crossCellId!,
@@ -588,7 +698,7 @@ export function GoalDecompositionWorkspace({
       draftRevision: preview.draftRevision,
       draftSha256: preview.draftSha256,
       expectedActiveVersion: preview.expectedActiveVersion,
-      previewSha256: preview.draftSha256,
+      previewSha256: preview.previewSha256,
       reason: publishReason.trim() || '正式发布目标拆解表',
       createdAt: new Date().toISOString(),
       status: 'unknown',
@@ -598,6 +708,8 @@ export function GoalDecompositionWorkspace({
       setWsError('本机持久化待核发布意图失败，为防止失答重发，本次未发出正式发布请求。请检查浏览器存储权限后重试。');
       return;
     }
+    setRecoveredReceipt(null);
+    try { sessionStorage.removeItem(receiptKey); } catch { /* Browser receipt history is optional. */ }
     setPendingIntent(intent);
     setBusy(true);
     setWsError('');
@@ -611,6 +723,7 @@ export function GoalDecompositionWorkspace({
         draftRevision: intent.draftRevision,
         draftSha256: intent.draftSha256,
         expectedActiveVersion: intent.expectedActiveVersion,
+        previewSha256: intent.previewSha256,
         reason: intent.reason,
       });
       clearPendingIntent(record.id);
@@ -622,9 +735,10 @@ export function GoalDecompositionWorkspace({
     } catch (fault) {
       if (isUnknownOutcomeError(fault)) {
         setPreview(null);
-        setWsError('正式发布请求尚未收到确定回执（网络中断或服务异常）。已保留原发布编号并锁定编辑，请先点击「核对原发布结果」，切勿重复新建发布。');
+        setWsError('正式发布请求尚未收到确定回执（网络中断或服务异常）。已保留原发布编号并锁定编辑，正在核对服务器记录。');
       } else {
-        // Explicit deterministic 4xx rejection: safe to release pending intent so user can fix
+        // A rejected confirmation must return to the workspace for a fresh preview.
+        setPreview(null);
         clearPendingIntent(record.id);
         setPendingIntent(null);
         setWsError(api.goalError(fault));
@@ -634,14 +748,20 @@ export function GoalDecompositionWorkspace({
     }
   };
 
-  const handleRecoverPending = async () => {
-    if (!pendingIntent) return;
+  const recoverPending = useCallback(async (intent: PendingPublishIntent) => {
+    const seq = ++recoverySeq.current;
     setBusy(true);
     setWsError('');
     setNotice('');
     try {
-      const res = await api.getDecompositionOperation(record.id, pendingIntent.operationId);
+      const res = await api.getDecompositionOperation(record.id, intent.operationId);
+      if (seq !== recoverySeq.current || readPendingIntent(record.id).intent?.operationId !== intent.operationId) return;
       if (res.status === 'committed' && res.publication) {
+        const publication = res.publication;
+        setRecoveredReceipt({ operationId: intent.operationId, publication });
+        try {
+          sessionStorage.setItem(receiptKey, JSON.stringify({ operationId: intent.operationId, version: publication.version, sha256: publication.snapshotSha256 }));
+        } catch { /* The fetched frozen receipt remains available on this screen. */ }
         clearPendingIntent(record.id);
         setPendingIntent(null);
         setNotice(`核对完成：原发布意图已落盘为拆解正式版 v${res.publication.version}，已直接恢复该版（未重复发布）。`);
@@ -649,7 +769,7 @@ export function GoalDecompositionWorkspace({
         await loadWorkspace(true);
       } else if (res.status === 'not-committed-retryable' && res.operation) {
         const updated: PendingPublishIntent = {
-          ...pendingIntent,
+          ...intent,
           status: 'not-committed-retryable',
           stateRevision: res.operation.stateRevision,
           lastCheckedMessage: 'Host 确认原发布在落盘前中断且未提交任何版本。您可以显式按原编号重试，或放弃该意图后重新编辑。',
@@ -663,7 +783,8 @@ export function GoalDecompositionWorkspace({
         await loadWorkspace(true);
       } else {
         const updated: PendingPublishIntent = {
-          ...pendingIntent,
+          ...intent,
+          stateRevision: undefined,
           status: res.status === 'in-flight' ? 'in-flight' : 'unknown',
           lastCheckedMessage: res.status === 'in-flight'
             ? '原发布仍在处理中，请稍后再次只读核对；未自动重试。'
@@ -673,13 +794,25 @@ export function GoalDecompositionWorkspace({
         setPendingIntent(updated);
       }
     } catch (fault) {
-      setWsError(`只读核对暂时失败，已继续保持待核锁定状态：${api.goalError(fault)}`);
+      if (seq !== recoverySeq.current || readPendingIntent(record.id).intent?.operationId !== intent.operationId) return;
+      const lastCheckedMessage = `只读核对暂时失败，已继续保持待核锁定状态：${api.goalError(fault)}`;
+      const updated: PendingPublishIntent = { ...intent, status: 'unknown', stateRevision: undefined, lastCheckedMessage };
+      writePendingIntent(updated);
+      setPendingIntent(updated);
     } finally {
-      setBusy(false);
+      if (seq === recoverySeq.current) setBusy(false);
     }
-  };
+  }, [record.id, receiptKey, onGoalsReload, loadWorkspace]);
+
+  useEffect(() => {
+    if (!busy && pendingIntent && autoCheckedOperation.current !== pendingIntent.operationId) {
+      autoCheckedOperation.current = pendingIntent.operationId;
+      void recoverPending(pendingIntent);
+    }
+  }, [busy, pendingIntent, recoverPending]);
 
   const handleExplicitRetryPending = async () => {
+    if (isHistoricalVersion) return;
     if (!pendingIntent || pendingIntent.status !== 'not-committed-retryable' || pendingIntent.stateRevision === undefined) return;
     setBusy(true);
     setWsError('');
@@ -693,6 +826,8 @@ export function GoalDecompositionWorkspace({
         draftRevision: pendingIntent.draftRevision,
         draftSha256: pendingIntent.draftSha256,
         expectedActiveVersion: pendingIntent.expectedActiveVersion,
+        // Older local intents stored draftSha256 here but sent no preview fingerprint.
+        ...(pendingIntent.previewSha256 !== pendingIntent.draftSha256 ? { previewSha256: pendingIntent.previewSha256 } : {}),
         reason: pendingIntent.reason,
         explicitRetry: true,
         expectedOperationStateRevision: pendingIntent.stateRevision,
@@ -708,8 +843,9 @@ export function GoalDecompositionWorkspace({
           ...pendingIntent,
           status: 'unknown',
           stateRevision: undefined,
-          lastCheckedMessage: '显式重试请求尚未收到确定回执（网络中断或服务异常）。已回退为待核对状态，请先点击「核对原发布结果」，切勿盲目再次重试。',
+          lastCheckedMessage: '显式重试请求尚未收到确定回执（网络中断或服务异常）。已保留原编号，正在核对服务器记录。',
         };
+        autoCheckedOperation.current = null;
         writePendingIntent(reverted);
         setPendingIntent(reverted);
         setWsError(reverted.lastCheckedMessage!);
@@ -722,6 +858,7 @@ export function GoalDecompositionWorkspace({
   };
 
   const handleAbandonPending = async () => {
+    if (isHistoricalVersion) return;
     if (!pendingIntent || pendingIntent.status !== 'not-committed-retryable' || pendingIntent.stateRevision === undefined) return;
     setBusy(true);
     setWsError('');
@@ -741,16 +878,18 @@ export function GoalDecompositionWorkspace({
 
   // --- Stage 2: Follow-up Checks ---
   const handleSaveThreshold = async () => {
+    if (mutationsLocked) return;
     setBusy(true);
     setWsError('');
     setNotice('');
     try {
       await api.setDecompositionThreshold(record.id, {
-        configured: true,
-        magnitudePct: Number(threshMagnitude),
-        consecutivePeriods: Number(threshConsecutive),
-        adverseDirection: 'below',
-        unit: 'percent',
+        expectedGoalVersion: goal.version,
+        configured: Boolean(threshMagnitude || threshConsecutive),
+        ...(threshMagnitude ? { magnitudePct: Number(threshMagnitude) } : {}),
+        ...(threshConsecutive ? { consecutivePeriods: Number(threshConsecutive) } : {}),
+        adverseDirection: threshDirection, unit: threshUnit,
+        metricId: thresholdMetric, periodGranularity: threshGranularity,
       });
       setNotice('已保存本目标的跟进偏差阈值设置。');
       await loadWorkspace();
@@ -761,25 +900,43 @@ export function GoalDecompositionWorkspace({
     }
   };
 
+  const loadActualReport = async (file: File) => {
+    if (mutationsLocked) return;
+    if (file.size > MAX_GOAL_ACTUAL_REPORT_CHARS * 4) {
+      setWsError(`请截取本次检查所需的报表段落，最多 ${MAX_GOAL_ACTUAL_REPORT_CHARS} 字符。`); return;
+    }
+    try {
+      const contents = new TextDecoder('utf-8', {fatal: true}).decode(await file.arrayBuffer());
+      if (contents.includes('\0') || !contents.trim()) { setWsError('请选择含报表正文的 UTF-8 文本文件。'); return; }
+      if (contents.length > MAX_GOAL_ACTUAL_REPORT_CHARS) { setWsError(`报表正文超过 ${MAX_GOAL_ACTUAL_REPORT_CHARS} 字符，请截取相关段落。`); return; }
+      editActual({ reportText: contents, uploadedName: file.name,
+        checkSourceRef: !checkSourceRef || checkSourceRef === uploadedName ? file.name : checkSourceRef });
+      setWsError('');
+    } catch { setWsError('无法读取报表，请选择 UTF-8 文本文件或直接粘贴原文。'); }
+  };
+
   const handleRecordCheck = async () => {
+    if (mutationsLocked) return;
     const targetPub = selectedCheckPub ?? activePub;
     if (!targetPub) return;
     const resolvedRowId = checkRowId || targetPub.snapshot.rows[0]?.rowId || 'G-TOTAL';
-    const periodObj = targetPub.snapshot.timePlan.find(p => p.periodId === checkPeriodId) ?? targetPub.snapshot.timePlan[0];
-    const matchingCps = resolvedRowId === 'G-TOTAL'
-      ? targetPub.snapshot.frozenCheckpoints
-      : targetPub.snapshot.frozenCheckpoints.filter(c => c.rowId === resolvedRowId);
-    const cpObj = resolvedRowId === 'G-TOTAL'
-      ? (periodObj ? { checkpointId: periodObj.checkpointId ?? periodObj.periodId, label: periodObj.label } : matchingCps[0])
-      : (matchingCps.find(c => c.checkpointId === checkCheckpointId) ?? matchingCps[0]);
-    if (!cpObj || (resolvedRowId === 'G-TOTAL' && !periodObj)) {
-      setWsError('所选拆解正式版缺少对应责任行冻结检查点或总表时间计划，无法记录检查。');
+    const rowCheckpoint = resolvedRowId === 'G-TOTAL' ? undefined :
+      targetPub.snapshot.frozenCheckpoints.find(c => c.rowId === resolvedRowId && c.checkpointId === checkCheckpointId);
+    const periods = rowCheckpoint ? checkpointPeriods(targetPub.snapshot.timePlan, rowCheckpoint) : targetPub.snapshot.timePlan;
+    const period = periods.find(p => p.periodId === checkPeriodId) ?? periods[0];
+    if (!period || (resolvedRowId !== 'G-TOTAL' && !rowCheckpoint)) {
+      setWsError('请选择与责任行匹配的冻结检查点和对应期间。');
       return;
     }
     if (!checkSourceRef.trim() || !checkCutoffAt.trim()) {
       setWsError('请填写实绩来源凭证引用（如报表编号/文件路径）与真实数据截至日期/时间，Host 不自动伪造凭证或截至日。');
       return;
     }
+    if (reportText.length > MAX_GOAL_ACTUAL_REPORT_CHARS) {
+      setWsError(`报表正文超过 ${MAX_GOAL_ACTUAL_REPORT_CHARS} 字符，请截取本次检查相关段落。`); return;
+    }
+    const hasManualBasis = checkBasis.metric.trim() || checkBasis.unit.trim() || checkBasis.scope.trim() ||
+      checkBasis.periodId.trim() || checkBasis.coverage !== 'unknown' || checkBasis.maturity !== 'unknown';
     const actualNum = checkActualVal.trim() === '' ? null : Number(checkActualVal);
     if (actualNum !== null && !Number.isFinite(actualNum)) {
       setWsError('请输入有效的实绩数值。');
@@ -789,30 +946,22 @@ export function GoalDecompositionWorkspace({
     setWsError('');
     setNotice('');
     try {
-      const effectivePeriodId = resolvedRowId === 'G-TOTAL'
-        ? periodObj!.periodId
-        : (periodObj?.periodId ?? cpObj.checkpointId);
-      const effectivePeriodLabel = resolvedRowId === 'G-TOTAL'
-        ? periodObj!.label
-        : cpObj.label;
-      const res = await api.recordProgressCheck(record.id, {
-        operationId: crypto.randomUUID(),
-        publicationVersion: targetPub.version,
-        rowId: resolvedRowId,
-        checkpointId: cpObj.checkpointId,
-        periodGranularity: periodObj?.granularity ?? 'week',
-        periodSequenceKey: `${effectivePeriodId}-${(workspace?.checks.length ?? 0) + 1}`,
+      const res = await api.submitGoalActual(record.id, {
+        operationId: crypto.randomUUID(), publicationVersion: targetPub.version, rowId: resolvedRowId,
+        checkpointId: rowCheckpoint?.checkpointId ?? period.checkpointId ?? period.periodId,
         actualSource: {
-          ref: checkSourceRef.trim(),
-          label: checkSourceLabel.trim() || '阶段实绩录入',
-          cutoffAt: checkCutoffAt.trim(),
+          ref: checkSourceRef.trim(), label: checkSourceLabel.trim() || checkSourceRef.trim(), cutoffAt: checkCutoffAt.trim(),
+          ...(reportText.trim() ? {reportText} : {}),
+          ...(hasManualBasis ? {basis: checkBasis} : {}),
+          ...(checkMissingNote.trim() ? {coverageNote: checkMissingNote.trim()} : {}),
         },
-        comparability: checkComparability,
-        ...(checkComparability === 'partial-missing' ? { missingCoverageNote: checkMissingNote.trim() || '部分门店数据尚未齐全' } : {}),
-        actualPeriods: [{ periodId: effectivePeriodId, label: effectivePeriodLabel, actualValue: actualNum }],
+        ...(checkMissingNote.trim() ? { missingCoverageNote: checkMissingNote.trim() } : {}),
+        ...(supplementCheck ? { supplementOfCheckId: supplementCheck } : {}),
+        actualPeriods: [{periodId: period.periodId, label: rowCheckpoint?.label ?? period.label, actualValue: actualNum}],
       });
-      setCheckActualVal('');
-      setNotice(`已记录阶段检查 ${res.check.checkId}（绑定冻结拆解版 v${res.check.publicationVersion} · ${resolvedRowId} / ${cpObj.label}）。`);
+      editActual(emptyActualInput);
+      setAnalysisRequest({kind: 'actual', id: res.actual.actualId});
+      setNotice('本次实绩已保存，请让 Agent 核对凭据与冻结计划。');
       await loadWorkspace();
     } catch (fault) {
       setWsError(api.goalError(fault));
@@ -825,7 +974,9 @@ export function GoalDecompositionWorkspace({
     checkId: string,
     kind: 'observe' | 'supplement' | 'create-new-draft' | 'continue-existing',
     existingCaseId?: string,
+    strategy?: string,
   ) => {
+    if (mutationsLocked) return;
     if (kind === 'continue-existing' && !existingCaseId) {
       setWsError('请先选择一个未关闭的已有 Case 再续接。');
       return;
@@ -837,7 +988,8 @@ export function GoalDecompositionWorkspace({
       const res = await api.setCheckCaseChoice(record.id, checkId, {
         operationId: crypto.randomUUID(),
         kind,
-        ...(kind === 'continue-existing' && existingCaseId ? { caseId: existingCaseId } : {}),
+        ...(kind === 'continue-existing' && existingCaseId ? { caseId: existingCaseId, sameIssueConfirmed: true } : {}),
+        ...(strategy ? {strategy} : {}),
         ...(kind === 'create-new-draft' ? { intentId: `CASE-INTENT-${crypto.randomUUID().slice(0, 8)}`, title: `${goal.title} · ${checkId} 偏差决策草稿` } : {}),
         note:
           kind === 'observe'
@@ -864,8 +1016,10 @@ export function GoalDecompositionWorkspace({
   };
 
   const handleCreatePilotCase = async () => {
-    if (!pilotTitle.trim()) {
-      setWsError('请填写试点 Case 草稿标题。');
+    if (mutationsLocked) return;
+    const strategy = goal.strategies?.length === 1 ? goal.strategies[0] : pilotStrategy;
+    if (!pilotTitle.trim() || !strategy || !goal.strategies?.includes(strategy) || !pilotSummary.trim()) {
+      setWsError('请选定已采用的具体策略，填写试点标题与观察依据。');
       return;
     }
     setBusy(true);
@@ -876,11 +1030,13 @@ export function GoalDecompositionWorkspace({
         operationId: crypto.randomUUID(),
         intentId: `PILOT-${crypto.randomUUID().slice(0, 8)}`,
         title: pilotTitle.trim(),
-        strategy: goal.strategies?.[0] || '当前目标策略',
+        goalVersion: goal.version,
+        strategy,
         kind: 'proactive-pilot',
-        evidenceSummary: pilotSummary.trim() || '从已采用 G+S 发起的主动试点 Case 草稿（无拆解表也可发起）。',
+        evidenceSummary: pilotSummary.trim(),
       });
       setPilotTitle('');
+      setPilotStrategy('');
       setPilotSummary('');
       setNotice(`已生成主动试点 Case 草稿意图 ${res.intent.intentId}（可在「关联决策」查看，未自动创建正式 Case）。`);
       await loadWorkspace();
@@ -892,11 +1048,34 @@ export function GoalDecompositionWorkspace({
   };
 
   // --- Stage 3: Cycle Review ---
+  const buildConclusion = (): DecompositionCycleReviewInput['conclusions'][number] | null => {
+    if (!reviewConcTitle.trim() || !reviewConcSummary.trim() || !conclusionEvidence.trim() || !conclusionScope.trim()) return null;
+    return { id: crypto.randomUUID(), title: reviewConcTitle.trim(), summary: reviewConcSummary.trim(),
+      sourceRef: conclusionEvidence.trim(), applicableScope: conclusionScope.trim(), evidenceMature: reviewMature,
+      causalVerified: reviewCausal, targetScopeSameAsOriginal: reviewSameScope };
+  };
+  const clearConclusion = () => {
+    setReviewConcTitle(''); setReviewConcSummary(''); setConclusionEvidence(''); setConclusionScope('');
+    setReviewMature(false); setReviewCausal(false); setReviewSameScope(true);
+  };
+  const appendReviewConclusion = () => {
+    const conclusion = buildConclusion();
+    if (!conclusion) { setWsError('请补齐结论标题、摘要、原证据引用和适用范围。'); return; }
+    setReviewConclusions(old => [...old, conclusion]);
+    clearConclusion();
+    setWsError('');
+  };
   const handleRecordReview = async () => {
+    if (mutationsLocked) return;
     const trimmed = reviewActual.trim();
     const val = trimmed === '' ? null : Number(trimmed);
     if (val !== null && !Number.isFinite(val)) {
       setWsError('请填写有效的到期最终实际值，或留空保持待补。');
+      return;
+    }
+    const conclusion = buildConclusion();
+    if ((val !== null && !reviewSourceRef.trim()) || (!conclusion && (reviewConcTitle.trim() || reviewConcSummary.trim() || conclusionEvidence.trim() || conclusionScope.trim()))) {
+      setWsError('实绩需注明凭证，结论需注明标题、摘要、原证据引用和适用范围。');
       return;
     }
     setBusy(true);
@@ -905,23 +1084,12 @@ export function GoalDecompositionWorkspace({
     try {
       const res = await api.recordCycleReview(record.id, {
         operationId: crypto.randomUUID(),
-        period: activeGsaPlan?.formalTarget.period ?? goal.formalOrigin?.period ?? '当期',
+        period: reviewPeriod || activeGsaPlan?.formalTarget.period || '',
         actualFinalValue: val,
-        actualSourceRef: reviewSourceRef.trim() || 'period-final-report',
-        conclusions: [
-          {
-            id: `conc-${Date.now()}`,
-            title: reviewConcTitle.trim() || '当期策略结论',
-            summary: reviewConcSummary.trim() || '结合历史阶段检查与最终实绩形成复盘结论',
-            sourceRef: workspace?.checks.at(-1)?.checkId ?? 'period-final',
-            applicableScope: goal.scope.name,
-            evidenceMature: reviewMature,
-            causalVerified: reviewCausal,
-            targetScopeSameAsOriginal: reviewSameScope,
-          },
-        ],
+        actualSourceRef: reviewSourceRef.trim(),
+        conclusions: conclusion ? [...reviewConclusions, conclusion] : reviewConclusions,
       });
-      setReviewActual('');
+      setReviewActual(''); setReviewConclusions([]); clearConclusion();
       setNotice(
         res.review.actualFinalValue === null
           ? `已记录到期复盘（期末实绩待补，按末版已确认总 GSA ${res.review.lastEffectiveFormalTarget.value}${res.review.lastEffectiveFormalTarget.unit} 备查）。`
@@ -936,6 +1104,7 @@ export function GoalDecompositionWorkspace({
   };
 
   const handleNextCycleDraft = async (reviewId: string, conclusionIds: string[]) => {
+    if (mutationsLocked) return;
     if (!conclusionIds.length) {
       setWsError('请先勾选至少一条复盘结论再起草下一期草案。');
       return;
@@ -950,7 +1119,8 @@ export function GoalDecompositionWorkspace({
         nextPeriod: nextPeriod.trim() || '下一周期',
         selectedConclusionIds: conclusionIds,
       });
-      setNotice(`已起草下期目标草案 ${res.nextCycleDraft.draftId.slice(0, 8)}（带入所选 ${conclusionIds.length} 条结论，状态：未采纳草稿，未验证/跨范围结论已标为待验证假设）。`);
+      setAnalysisRequest({kind: 'next-cycle', id: res.nextCycleDraft.draftId});
+      setNotice(`已向 Agent 提供所选 ${conclusionIds.length} 条结论及原依据，等待起草下一期目标。`);
       await loadWorkspace();
     } catch (fault) {
       setWsError(api.goalError(fault));
@@ -960,6 +1130,7 @@ export function GoalDecompositionWorkspace({
   };
 
   const handleReturnToStrategy = async (reviewId: string, conclusionIds: string[]) => {
+    if (mutationsLocked) return;
     if (!conclusionIds.length) {
       setWsError('请先勾选至少一条复盘结论再回送战略重审。');
       return;
@@ -973,7 +1144,7 @@ export function GoalDecompositionWorkspace({
         reviewId,
         reason: returnReason.trim() || '带原证据回战略重审',
         selectedConclusionIds: conclusionIds,
-        evidenceRefs: [reviewId, ...(workspace?.checks.slice(-3).map(c => c.checkId) ?? [])],
+        evidenceRefs: [],
       });
       setNotice(`已记录回送战略讨论凭证 ${res.strategyReturn.returnId.slice(0, 8)}（带入所选 ${conclusionIds.length} 条结论与原证据，已同步至战略选择页，不覆写原战略发布）。`);
       await loadWorkspace();
@@ -1051,10 +1222,8 @@ export function GoalDecompositionWorkspace({
     }));
   };
 
-  const allocatedSum = useMemo(() => {
-    if (!draftForm) return 0;
-    return Number(draftForm.rows.filter(r => r.contributionNature === 'allocation').reduce((s, r) => s + (r.targetValue ?? 0), 0).toFixed(4));
-  }, [draftForm]);
+  const allocatedSum = draftForm && activeGsaPlan
+    ? allocatedTarget(draftForm.rows, activeGsaPlan.formalTarget.metricKind, activeGsaPlan.formalTarget.unit) : null;
 
   const reserveSum = useMemo(() => {
     if (!draftForm) return 0;
@@ -1136,20 +1305,20 @@ export function GoalDecompositionWorkspace({
       )}
 
       {/* Formal Strategy Reconciliation Banner (GM01) */}
-      {workspace?.formalReconciliation?.hasApplicableFormalPublication && workspace.formalReconciliation.formalPublication && (
+      {workspace?.formalReconciliation?.hasApplicableFormalPublication && (
         <aside className="gm-reconcile-banner" role="region" aria-label="正式战略发布核对提示">
           <div>
-            <strong>检测到适用的正式战略目标发布</strong>
-            <p>
-              当前手动目标为 {workspace.formalReconciliation.manualTargetValue ?? '—'}；正式战略发布（
-              {workspace.formalReconciliation.formalPublication.publicationId.slice(0, 8)}）为{' '}
-              {workspace.formalReconciliation.formalPublication.formalGoal.targetValue}
-              {workspace.formalReconciliation.formalPublication.formalGoal.unit}。可核对补挂为新版本，不覆写历史手动版本。
-            </p>
+            <strong>选择要承接的正式战略目标</strong>
+            <p>当前手动目标为 {workspace.formalReconciliation.manualTargetValue}{goal.formalOrigin?.unit}。核对后将保存为新版本。</p>
+            {workspace.formalReconciliation.formalPublications.map(source => (
+              <div key={JSON.stringify([source.publicationId, source.formalGoal.id])}>
+                <p>{source.formalGoal.title} · {source.formalGoal.period} · {source.formalGoal.targetValue}{source.formalGoal.unit} · 发布 {source.publicationId.slice(0, 8)}</p>
+                <button type="button" className="secondary-button" disabled={busy || mutationsLocked} onClick={() => void handleReconcileFormal(source)}>
+                  按正式战略核对补挂
+                </button>
+              </div>
+            ))}
           </div>
-          <button type="button" className="primary-button" disabled={busy || mutationsLocked} onClick={() => void handleReconcileFormal()}>
-            按正式战略核对补挂
-          </button>
         </aside>
       )}
 
@@ -1162,18 +1331,18 @@ export function GoalDecompositionWorkspace({
               <p className="sg-muted">
                 原发布操作编号：<code>{pendingIntent.operationId}</code> · 基线草稿 rev {pendingIntent.draftRevision}
               </p>
-              <p>{pendingIntent.lastCheckedMessage || '上次发布请求尚未收到确定回执。请先执行只读核对，Host 不会自动换号重发。'}</p>
+              <p>{pendingIntent.lastCheckedMessage || '系统正在按原操作编号核对服务器记录。'}</p>
             </div>
             <div className="sg-row">
-              <button type="button" className="primary-button" disabled={busy} onClick={() => void handleRecoverPending()}>
+              <button type="button" className="primary-button" disabled={busy} onClick={() => void recoverPending(pendingIntent)}>
                 核对原发布结果
               </button>
               {pendingIntent.status === 'not-committed-retryable' && (
                 <>
-                  <button type="button" className="secondary-button" disabled={busy} onClick={() => void handleExplicitRetryPending()}>
+                  <button type="button" className="secondary-button" disabled={busy || isHistoricalVersion} onClick={() => void handleExplicitRetryPending()}>
                     重试原发布意图
                   </button>
-                  <button type="button" className="text-button" disabled={busy} onClick={() => void handleAbandonPending()}>
+                  <button type="button" className="text-button" disabled={busy || isHistoricalVersion} onClick={() => void handleAbandonPending()}>
                     放弃未提交意图
                   </button>
                 </>
@@ -1183,7 +1352,24 @@ export function GoalDecompositionWorkspace({
         </aside>
       )}
 
+      {recoveredReceipt && !pendingLocked && (
+        <section className="sg-panel" aria-label="原发布操作的冻结回执">
+          <h3>原操作已发布拆解正式版 v{recoveredReceipt.publication.version}</h3>
+          <p className="sg-muted">操作编号 {recoveredReceipt.operationId} · 目标 v{recoveredReceipt.publication.snapshot.gsaPlan.goal.version} · 总 GSA v{recoveredReceipt.publication.gsaPlanVersion}</p>
+          <div className="sg-table-scroll">
+            <table className="sg-table">
+              <thead><tr><th>责任行</th><th>发布时的目标</th><th>目标值</th></tr></thead>
+              <tbody>{recoveredReceipt.publication.snapshot.rows.map(row => (
+                <tr key={row.rowId}><td>{row.rowId}</td><td>{row.title}</td><td>{row.targetValue === null ? '待定' : row.targetValue + row.unit}</td></tr>
+              ))}</tbody>
+            </table>
+          </div>
+          <DownloadVersion route={`/api/strategy/goals/${record.id}/decomposition/publications/${recoveredReceipt.publication.version}/export`} />
+        </section>
+      )}
+
       <CaseFormError error={wsError} />
+      {workspace?.draftUnavailable && <p role="status">原拆解草稿的范围或引用暂不可读，请核对原授权。</p>}
       {notice && <p className="case-notice" role="status">{notice}</p>}
 
       {/* Confirmed A 3-Stage Business Stepper */}
@@ -1280,9 +1466,38 @@ export function GoalDecompositionWorkspace({
                     value={act.checkpoint ?? ''}
                     onChange={e => setPlannedActions(old => old.map((x, i) => (i === idx ? { ...x, checkpoint: e.target.value } : x)))}
                   />
+                  <input className="gm-input" aria-label={`计划 A ${idx + 1} 观察依据`} placeholder="核对这项行动所用的观察依据"
+                    disabled={mutationsLocked} value={act.observationBasis ?? ''}
+                    onChange={e => setPlannedActions(old => old.map((action, i) => i === idx ? { ...action, observationBasis: e.target.value } : action))}
+                  />
                   {plannedActions.length > 1 && (
                     <button type="button" className="text-button" disabled={mutationsLocked} onClick={() => setPlannedActions(old => old.filter((_, i) => i !== idx))}>移除</button>
                   )}
+                </div>
+              ))}
+            </div>
+
+            <div className="gm-gsa-action-editor">
+              <div className="sg-row-between">
+                <strong>上层阶段检查点</strong>
+                <button type="button" className="secondary-button" disabled={mutationsLocked}
+                  onClick={() => setStageCheckpoints(items => [...items, { id: crypto.randomUUID(), label: '' }])}>
+                  添加阶段检查点
+                </button>
+              </div>
+              {stageCheckpoints.map((point, index) => (
+                <div key={point.id} className="gm-inline-row">
+                  <input className="gm-input" aria-label={`阶段检查点 ${index + 1} 名称`} placeholder="检查内容"
+                    disabled={mutationsLocked} value={point.label}
+                    onChange={e => setStageCheckpoints(items => items.map(p => p.id === point.id ? { ...p, label: e.target.value } : p))} />
+                  <input className="gm-input gm-input-sm" aria-label={`阶段检查点 ${index + 1} 日期`} type="date"
+                    disabled={mutationsLocked} value={point.targetDate ?? ''}
+                    onChange={e => setStageCheckpoints(items => items.map(p => p.id === point.id ? { ...p, targetDate: e.target.value } : p))} />
+                  <input className="gm-input" aria-label={`阶段检查点 ${index + 1} 观察依据`} placeholder="观察依据"
+                    disabled={mutationsLocked} value={point.observationBasis ?? ''}
+                    onChange={e => setStageCheckpoints(items => items.map(p => p.id === point.id ? { ...p, observationBasis: e.target.value } : p))} />
+                  <button type="button" className="text-button" disabled={mutationsLocked}
+                    onClick={() => setStageCheckpoints(items => items.filter(p => p.id !== point.id))}>移除检查点</button>
                 </div>
               ))}
             </div>
@@ -1400,7 +1615,9 @@ export function GoalDecompositionWorkspace({
                   <div className="gm-metric-card">
                     <span>正式目标值（固定权威）</span>
                     <strong>{formalVal ?? '—'}{formalUnit}</strong>
-                    <small>已分配 {allocatedSum} + 预留 {reserveSum} = {Number((allocatedSum + reserveSum).toFixed(4))}{formalUnit}</small>
+                    <small>{activeGsaPlan?.formalTarget.metricKind === 'amount'
+                      ? `已分配 ${allocatedSum ?? '待核'} + 预留 ${reserveSum} = ${allocatedSum === null ? '待核' : Number((allocatedSum + reserveSum).toFixed(4))}${formalUnit}`
+                      : activeGsaPlan?.formalTarget.metricKind === 'ratio' ? `按分子分母汇总 ${allocatedSum ?? '待核'}${formalUnit}` : '按各项成果标准核对'}</small>
                   </div>
                   <div className="gm-metric-card">
                     <span>同口径可达测算值</span>
@@ -1770,13 +1987,16 @@ export function GoalDecompositionWorkspace({
               </p>
             </div>
             <div className="sg-row gm-threshold-bar">
-              <label>单期幅度阈值 (%)
-                <input type="number" className="gm-input gm-input-xs" value={threshMagnitude} onChange={e => setThreshMagnitude(e.target.value)} />
+              <label>检查周期<select disabled={mutationsLocked} className="sg-select" value={threshGranularity} onChange={e => setThreshGranularity(e.target.value as DecompositionTimePeriod['granularity'])}><option value="day">日</option><option value="week">周</option><option value="month">月</option></select></label>
+              <label>不利方向<select disabled={mutationsLocked} className="sg-select" value={threshDirection} onChange={e => setThreshDirection(e.target.value as typeof threshDirection)}><option value="below">低于计划</option><option value="above">高于计划</option></select></label>
+              <label>幅度单位<select disabled={mutationsLocked} className="sg-select" value={threshUnit} onChange={e => setThreshUnit(e.target.value as typeof threshUnit)}><option value="percent">百分比</option><option value="percentage-points">百分点</option></select></label>
+              <label>单期幅度阈值
+                <input disabled={mutationsLocked} type="number" className="gm-input gm-input-xs" value={threshMagnitude} onChange={e => setThreshMagnitude(e.target.value)} />
               </label>
               <label>连续期数
-                <input type="number" className="gm-input gm-input-xs" value={threshConsecutive} onChange={e => setThreshConsecutive(e.target.value)} />
+                <input disabled={mutationsLocked} type="number" className="gm-input gm-input-xs" value={threshConsecutive} onChange={e => setThreshConsecutive(e.target.value)} />
               </label>
-              <button type="button" className="secondary-button" disabled={busy} onClick={() => void handleSaveThreshold()}>保存阈值</button>
+              <button type="button" className="secondary-button" disabled={mutationsLocked || busy || !activePub} onClick={() => void handleSaveThreshold()}>保存阈值</button>
             </div>
           </div>
 
@@ -1785,6 +2005,18 @@ export function GoalDecompositionWorkspace({
             const visibleCheckpoints = checkRowId && checkRowId !== 'G-TOTAL'
               ? targetPub.snapshot.frozenCheckpoints.filter(c => c.rowId === checkRowId)
               : targetPub.snapshot.frozenCheckpoints;
+            const rowCheckpoint = checkRowId === 'G-TOTAL' ? undefined : visibleCheckpoints.find(c => c.checkpointId === checkCheckpointId);
+            const checkPeriods = rowCheckpoint ? checkpointPeriods(targetPub.snapshot.timePlan, rowCheckpoint) : targetPub.snapshot.timePlan;
+            const selectedPeriod = checkPeriods.find(p => p.periodId === checkPeriodId) ?? checkPeriods[0];
+            const targetRow = targetPub.snapshot.rows.find(r => r.rowId === checkRowId);
+            const original = record.versions.find(v => v.version === targetPub.snapshot.gsaPlan.goal.version);
+            const savedForPeriod = (workspace.submittedActuals ?? []).filter(actual => {
+              const input = actual.input;
+              return input.publicationVersion === targetPub.version && input.rowId === checkRowId &&
+                input.checkpointId === (rowCheckpoint?.checkpointId ?? selectedPeriod?.checkpointId ?? selectedPeriod?.periodId) &&
+                input.actualPeriods[0]?.periodId === selectedPeriod?.periodId;
+            });
+            const saved = savedForPeriod.find(actual => actual.actualId === reuseActualId);
             return (
             <div className="gm-card">
               <strong>按所选冻结拆解版 v{targetPub.version} 记录一次阶段检查</strong>
@@ -1828,7 +2060,7 @@ export function GoalDecompositionWorkspace({
                     <option value="G-TOTAL">总目标汇总 (G-TOTAL)</option>
                   </select>
                 </label>
-                <label className="case-field">
+                {checkRowId !== 'G-TOTAL' && <label className="case-field">
                   <span>选择冻结检查点</span>
                   <select
                     className="sg-select"
@@ -1836,69 +2068,104 @@ export function GoalDecompositionWorkspace({
                     value={checkCheckpointId}
                     onChange={e => setCheckCheckpointId(e.target.value)}
                   >
-                    {(visibleCheckpoints.length ? visibleCheckpoints : targetPub.snapshot.frozenCheckpoints).map(cp => (
+                    {visibleCheckpoints.map(cp => (
                       <option key={cp.checkpointId} value={cp.checkpointId}>
                         {cp.label}（{cp.date} · 计划 {cp.targetValue ?? '待定'}{cp.unit}）
                       </option>
                     ))}
                   </select>
-                </label>
+                </label>}
                 <label className="case-field">
                   <span>选择冻结计划阶段</span>
-                  <select className="sg-select" value={checkPeriodId} onChange={e => setCheckPeriodId(e.target.value)}>
-                    {targetPub.snapshot.timePlan.map(tp => (
+                  <select className="sg-select" value={selectedPeriod?.periodId ?? ''} onChange={e => setCheckPeriodId(e.target.value)}>
+                    {checkPeriods.map(tp => (
                       <option key={tp.periodId} value={tp.periodId}>
                         {tp.label}（计划 {tp.targetValue ?? '本期未定'}{tp.unit}）
                       </option>
                     ))}
                   </select>
                 </label>
-                <label className="case-field">
-                  <span>实绩值 ({formalUnit})</span>
-                  <input type="number" step="any" className="gm-input" value={checkActualVal} onChange={e => setCheckActualVal(e.target.value)} placeholder="输入实绩数值" />
+                {savedForPeriod.length > 0 && <div className="case-field">
+                  <label>选定本期已保存的实绩
+                    <select disabled={mutationsLocked} className="sg-select" aria-label="选定本期已保存的实绩" value={saved?.actualId ?? ''} onChange={e => editActual({reuseActualId:e.target.value})}>
+                      <option value="">选择一份已保存的实绩</option>
+                      {savedForPeriod.map(actual => <option key={actual.actualId} value={actual.actualId}>{actual.input.actualSource.ref} · 截至 {actual.input.actualSource.cutoffAt}</option>)}
+                    </select>
+                  </label>
+                  <button type="button" className="secondary-button" disabled={mutationsLocked || !saved} onClick={() => saved && setAnalysisRequest({kind:'actual',id:saved.actualId})}>用选定实绩核对</button>
+                </div>}
+                <label className="case-field"><span>实绩报表原文</span>
+                  <textarea disabled={mutationsLocked} className="gm-input" aria-label="实绩报表原文" value={reportText}
+                    placeholder="粘贴报表或本次检查相关段落，Agent 将从原文核对数值、口径和覆盖范围。"
+                    onChange={e => editActual({reportText:e.target.value})} />
                 </label>
-                <label className="case-field">
-                  <span>可比口径状态</span>
-                  <select className="sg-select" value={checkComparability} onChange={e => setCheckComparability(e.target.value as ProgressComparability)}>
-                    <option value="comparable">全量可比</option>
-                    <option value="partial-missing">部分门店/范围未出数（整体偏差待补）</option>
-                    <option value="incomparable">口径不可比</option>
-                    <option value="observing">窗口未满 · 观察中</option>
-                  </select>
+                <label className="case-field"><span>读取文本报表</span>
+                  <input disabled={mutationsLocked} type="file" aria-label="读取文本报表" accept=".txt,.csv,.tsv,.md,.json,.log,text/*,application/json"
+                    onChange={e => { const file = e.currentTarget.files?.[0]; e.currentTarget.value = ''; if (file) void loadActualReport(file); }} />
                 </label>
                 <label className="case-field">
                   <span>实绩来源凭证引用（必填）</span>
-                  <input
+                  <input disabled={mutationsLocked}
                     className="gm-input"
                     aria-label="实绩来源凭证引用"
                     placeholder="例如：pos-2027-w02.csv 或 财务日结单号"
                     value={checkSourceRef}
-                    onChange={e => setCheckSourceRef(e.target.value)}
+                    onChange={e => editActual({ checkSourceRef: e.target.value })}
                   />
                 </label>
                 <label className="case-field">
                   <span>实绩数据截至日期/时间（必填）</span>
-                  <input
+                  <input disabled={mutationsLocked}
                     className="gm-input"
                     aria-label="实绩数据截至时间"
                     placeholder="例如：2027-01-14T23:59:59Z"
                     value={checkCutoffAt}
-                    onChange={e => setCheckCutoffAt(e.target.value)}
+                    onChange={e => editActual({ checkCutoffAt: e.target.value })}
                   />
                 </label>
+              </div>
+              <details><summary>可选补充数值、口径与覆盖说明</summary>
+                <div className="gm-form-grid">
                 <label className="case-field">
                   <span>实绩数据来源说明</span>
-                  <input className="gm-input" value={checkSourceLabel} onChange={e => setCheckSourceLabel(e.target.value)} />
+                  <input disabled={mutationsLocked} className="gm-input" value={checkSourceLabel} onChange={e => editActual({ checkSourceLabel: e.target.value })} />
                 </label>
-              </div>
-              {checkComparability === 'partial-missing' && (
+                <label className="case-field">
+                  <span>实绩值 ({formalUnit})</span>
+                  <input disabled={mutationsLocked} type="number" step="any" className="gm-input" value={checkActualVal} onChange={e => editActual({ checkActualVal: e.target.value })} placeholder="输入实绩数值" />
+                </label>
+                <label className="case-field"><span>凭证中的指标定义或 SAP 版本</span>
+                  <input disabled={mutationsLocked} className="gm-input" value={checkBasis.metric} placeholder={original && progressMetric(targetPub.snapshot, original.measurement)} onChange={e => editActual({ checkBasis: {...checkBasis, metric: e.target.value} })} />
+                </label>
+                <label className="case-field"><span>凭证单位</span><input disabled={mutationsLocked} className="gm-input" value={checkBasis.unit} placeholder={rowCheckpoint?.unit ?? selectedPeriod?.unit} onChange={e => editActual({ checkBasis: {...checkBasis, unit: e.target.value} })}/></label>
+                <label className="case-field"><span>凭证所覆盖的业务范围</span><input disabled={mutationsLocked} className="gm-input" value={checkBasis.scope} placeholder={targetRow?.scopeLabel ?? targetPub.snapshot.estimate.scopeDescription} onChange={e => editActual({ checkBasis: {...checkBasis, scope: e.target.value} })}/></label>
+                <label className="case-field"><span>凭证归属期间</span><input disabled={mutationsLocked} className="gm-input" value={checkBasis.periodId} placeholder={selectedPeriod?.periodId} onChange={e => editActual({ checkBasis: {...checkBasis, periodId: e.target.value} })}/></label>
+                <label className="case-field"><span>凭证覆盖情况</span>
+                  <select disabled={mutationsLocked} className="sg-select" value={checkBasis.coverage} onChange={e => editActual({ checkBasis: {...checkBasis, coverage: e.target.value as ProgressEvidenceBasis['coverage']} })}>
+                    <option value="unknown">待核</option><option value="complete">凭证覆盖全范围</option><option value="partial">部分范围未出数</option>
+                  </select>
+                </label>
+                <label className="case-field"><span>凭证观察窗</span>
+                  <select disabled={mutationsLocked} className="sg-select" value={checkBasis.maturity} onChange={e => editActual({ checkBasis: {...checkBasis, maturity: e.target.value as ProgressEvidenceBasis['maturity']} })}>
+                    <option value="unknown">待核</option><option value="closed">已结账</option><option value="open">尚未结账</option>
+                  </select>
+                </label>
+                <label className="case-field"><span>补充哪次检查</span>
+                  <select disabled={mutationsLocked} className="sg-select" value={supplementCheck} onChange={e => editActual({ supplementCheck: e.target.value })}>
+                    <option value="">本次独立检查</option>
+                    {workspace.checks.filter(c => c.publicationVersion === targetPub.version && c.rowId === checkRowId && c.periods[0]?.periodId === selectedPeriod?.periodId && c.checkpointId === (rowCheckpoint?.checkpointId ?? selectedPeriod?.checkpointId ?? selectedPeriod?.periodId)).map(c => <option key={c.checkId}>{c.checkId}</option>)}
+                  </select>
+                </label>
+                </div>
+              {checkBasis.coverage === 'partial' && (
                 <label className="case-field">
                   <span>未出数门店/范围说明</span>
-                  <input className="gm-input" placeholder="例如：华东旗舰店、苏州中心店尚未上传日结" value={checkMissingNote} onChange={e => setCheckMissingNote(e.target.value)} />
+                  <input disabled={mutationsLocked} className="gm-input" placeholder="例如：华东旗舰店、苏州中心店尚未上传日结" value={checkMissingNote} onChange={e => editActual({ checkMissingNote: e.target.value })} />
                 </label>
               )}
-              <button type="button" className="primary-button" disabled={busy || isHistoricalVersion} onClick={() => void handleRecordCheck()}>
-                记录阶段检查
+              </details>
+              <button type="button" className="primary-button" disabled={busy || mutationsLocked} onClick={() => void handleRecordCheck()}>
+                提交本次实绩，交 Agent 核对
               </button>
             </div>
             );
@@ -1934,34 +2201,26 @@ export function GoalDecompositionWorkspace({
                     </p>
                     <p>{chk.trigger.reason}</p>
                     {chk.caseChoice ? (
-                      <p className="sg-muted">已选择处理方式：{chk.caseChoice.kind}（{chk.caseChoice.note || '已记录'}）</p>
+                      <p className="sg-muted">已选择处理方式：{chk.caseChoice.kind}（{chk.caseChoice.note || '已记录'}）{chk.caseChoice.kind === 'continue-existing' && onInspectCase && <button disabled={mutationsLocked} type="button" className="text-button"
+                        onClick={() => { if (chk.caseChoice?.kind === 'continue-existing') onInspectCase(chk.caseChoice.caseId); }}>查看原 Case</button>}</p>
                     ) : (
                       <div className="sg-row">
-                        <button type="button" className="secondary-button" disabled={busy} onClick={() => void handleCheckChoice(chk.checkId, 'observe')}>继续观察</button>
-                        <button type="button" className="secondary-button" disabled={busy} onClick={() => void handleCheckChoice(chk.checkId, 'supplement')}>安排补证</button>
-                        {openCases.length > 0 && (
-                          <>
-                            <select
-                              className="sg-select"
-                              aria-label={`选择续接 Case ${chk.checkId}`}
-                              value={continueCaseIds[chk.checkId] ?? openCases[0]!.id}
-                              onChange={e => setContinueCaseIds(old => ({ ...old, [chk.checkId]: e.target.value }))}
-                            >
-                              {openCases.map(c => (
-                                <option key={c.id} value={c.id}>{c.title}</option>
-                              ))}
-                            </select>
-                            <button
-                              type="button"
-                              className="secondary-button"
-                              disabled={busy}
-                              onClick={() => void handleCheckChoice(chk.checkId, 'continue-existing', continueCaseIds[chk.checkId] ?? openCases[0]!.id)}
-                            >
-                              续接已有 Case
-                            </button>
-                          </>
-                        )}
-                        <button type="button" className="primary-button" disabled={busy} onClick={() => void handleCheckChoice(chk.checkId, 'create-new-draft')}>另建独立 Case 草稿</button>
+                        <button type="button" className="secondary-button" disabled={mutationsLocked || busy} onClick={() => void handleCheckChoice(chk.checkId, 'observe')}>继续观察</button>
+                        <button type="button" className="secondary-button" disabled={mutationsLocked || busy} onClick={() => void handleCheckChoice(chk.checkId, 'supplement')}>安排补证</button>
+                        {chk.caseCandidatesUnavailable && <span className="sg-muted">原 Case 暂待核对。</span>}
+                        {(chk.caseCandidates ?? []).map(candidate => (
+                          <button key={candidate.caseId} type="button" className="secondary-button" disabled={mutationsLocked || busy}
+                            onClick={() => void handleCheckChoice(chk.checkId, 'continue-existing', candidate.caseId, candidate.strategy)}>
+                            确认同一问题并续接「{candidate.title}」· {candidate.strategy}
+                          </button>
+                        ))}
+                        {(chk.caseStrategies?.length ?? 0) > 1 && <select disabled={mutationsLocked} className="sg-select" aria-label="新 Case 采用的具体策略"
+                          value={checkStrategies[chk.checkId] ?? ''} onChange={e => setCheckStrategies(old => ({...old, [chk.checkId]: e.target.value}))}>
+                          <option value="">选择具体策略</option>
+                          {chk.caseStrategies?.map(strategy => <option key={strategy}>{strategy}</option>)}
+                        </select>}
+                        <button type="button" className="primary-button" disabled={mutationsLocked || busy || (chk.caseStrategies?.length ?? 0) > 1 && !checkStrategies[chk.checkId]}
+                          onClick={() => void handleCheckChoice(chk.checkId, 'create-new-draft', undefined, checkStrategies[chk.checkId])}>另建独立 Case 草稿</button>
                       </div>
                     )}
                   </li>
@@ -1976,16 +2235,22 @@ export function GoalDecompositionWorkspace({
           <div className="gm-card">
             <strong>主动试点 Case 草稿（无拆解表也可从已采用 G+S 发起）</strong>
             <div className="gm-form-grid">
+              {(goal.strategies?.length ?? 0) > 1 && <label className="case-field"><span>试点采用的具体策略</span>
+                <select disabled={mutationsLocked} className="sg-select" value={pilotStrategy} onChange={e => setPilotStrategy(e.target.value)}>
+                  <option value="">选择已采用的策略</option>
+                  {goal.strategies?.map(strategy => <option key={strategy}>{strategy}</option>)}
+                </select>
+              </label>}
               <label className="case-field">
                 <span>试点 Case 标题</span>
-                <input className="gm-input" placeholder="例如：核心门店老客复购策略试点" value={pilotTitle} onChange={e => setPilotTitle(e.target.value)} />
+                <input disabled={mutationsLocked} className="gm-input" placeholder="例如：核心门店老客复购策略试点" value={pilotTitle} onChange={e => setPilotTitle(e.target.value)} />
               </label>
               <label className="case-field">
                 <span>背景与观察依据</span>
-                <input className="gm-input" placeholder="说明拟验证的策略假设与观察范围" value={pilotSummary} onChange={e => setPilotSummary(e.target.value)} />
+                <input disabled={mutationsLocked} className="gm-input" placeholder="说明拟验证的策略假设与观察范围" value={pilotSummary} onChange={e => setPilotSummary(e.target.value)} />
               </label>
             </div>
-            <button type="button" className="secondary-button" disabled={busy || goal.status !== 'adopted'} onClick={() => void handleCreatePilotCase()}>
+            <button type="button" className="secondary-button" disabled={mutationsLocked || busy || goal.status !== 'adopted'} onClick={() => void handleCreatePilotCase()}>
               生成主动试点 Case 草稿意图
             </button>
           </div>
@@ -2004,28 +2269,34 @@ export function GoalDecompositionWorkspace({
             <strong>记录本周期到期复盘</strong>
             <div className="gm-form-grid">
               <label className="case-field">
-                <span>最终实绩值 ({formalUnit}，留空则记为待补)</span>
-                <input type="number" step="any" className="gm-input" value={reviewActual} onChange={e => setReviewActual(e.target.value)} placeholder="输入周期结账最终实绩（留空保持待补）" />
+                <span>复盘期间</span><select disabled={mutationsLocked} className="sg-select" value={reviewPeriod || activeGsaPlan?.formalTarget.period || ''} onChange={e => setReviewPeriod(e.target.value)}>{[...new Set(workspace.gsaPlans.map(p => p.formalTarget.period))].map(period => <option key={period}>{period}</option>)}</select>
+              </label>
+              <label className="case-field"><span>最终实绩值 ({workspace.gsaPlans.filter(p => p.formalTarget.period === (reviewPeriod || activeGsaPlan?.formalTarget.period)).at(-1)?.formalTarget.unit}，留空则记为待补)</span>
+                <input disabled={mutationsLocked} type="number" step="any" className="gm-input" value={reviewActual} onChange={e => setReviewActual(e.target.value)} placeholder="输入周期结账最终实绩（留空保持待补）" />
               </label>
               <label className="case-field">
                 <span>最终实绩来源凭证</span>
-                <input className="gm-input" value={reviewSourceRef} onChange={e => setReviewSourceRef(e.target.value)} />
+                <input disabled={mutationsLocked} className="gm-input" value={reviewSourceRef} onChange={e => setReviewSourceRef(e.target.value)} />
               </label>
               <label className="case-field">
                 <span>策略复盘结论标题</span>
-                <input className="gm-input" value={reviewConcTitle} onChange={e => setReviewConcTitle(e.target.value)} />
+                <input disabled={mutationsLocked} className="gm-input" value={reviewConcTitle} onChange={e => setReviewConcTitle(e.target.value)} />
               </label>
+              <label className="case-field"><span>结论的原证据引用与版本</span><input disabled={mutationsLocked} className="gm-input" value={conclusionEvidence} onChange={e => setConclusionEvidence(e.target.value)} /></label>
+              <label className="case-field"><span>结论适用范围</span><input disabled={mutationsLocked} className="gm-input" value={conclusionScope} onChange={e => setConclusionScope(e.target.value)} /></label>
               <label className="case-field">
                 <span>证据与复盘摘要</span>
-                <input className="gm-input" value={reviewConcSummary} onChange={e => setReviewConcSummary(e.target.value)} placeholder="说明证据成熟度、因果验证与适用范围" />
+                <input disabled={mutationsLocked} className="gm-input" value={reviewConcSummary} onChange={e => setReviewConcSummary(e.target.value)} placeholder="说明证据成熟度、因果验证与适用范围" />
               </label>
             </div>
             <div className="sg-row">
-              <label className="gm-checkbox"><input type="checkbox" checked={reviewMature} onChange={e => setReviewMature(e.target.checked)} /><span>证据已成熟</span></label>
-              <label className="gm-checkbox"><input type="checkbox" checked={reviewCausal} onChange={e => setReviewCausal(e.target.checked)} /><span>因果机制已核验</span></label>
-              <label className="gm-checkbox"><input type="checkbox" checked={reviewSameScope} onChange={e => setReviewSameScope(e.target.checked)} /><span>下期适用范围与本期一致</span></label>
+              <label className="gm-checkbox"><input disabled={mutationsLocked} type="checkbox" checked={reviewMature} onChange={e => setReviewMature(e.target.checked)} /><span>证据已成熟</span></label>
+              <label className="gm-checkbox"><input disabled={mutationsLocked} type="checkbox" checked={reviewCausal} onChange={e => setReviewCausal(e.target.checked)} /><span>因果机制已核验</span></label>
+              <label className="gm-checkbox"><input disabled={mutationsLocked} type="checkbox" checked={reviewSameScope} onChange={e => setReviewSameScope(e.target.checked)} /><span>下期适用范围与本期一致</span></label>
             </div>
-            <button type="button" className="primary-button" disabled={busy || goal.status !== 'adopted'} onClick={() => void handleRecordReview()}>
+            <button disabled={mutationsLocked} type="button" className="secondary-button" onClick={appendReviewConclusion}>加入本次复盘结论</button>
+            {reviewConclusions.length > 0 && <ul>{reviewConclusions.map(c => <li key={c.id}>{c.title} · {c.sourceRef} · {c.applicableScope} <button disabled={mutationsLocked} className="text-button" onClick={() => setReviewConclusions(rows => rows.filter(row => row.id !== c.id))}>移除</button></li>)}</ul>}
+            <button type="button" className="primary-button" disabled={busy || mutationsLocked || !workspace.gsaPlans.length} onClick={() => void handleRecordReview()}>
               保存到期复盘记录
             </button>
           </div>
@@ -2035,10 +2306,10 @@ export function GoalDecompositionWorkspace({
             {workspace.reviews.length ? (
               <ul className="sg-history">
                 {workspace.reviews.slice().reverse().map(rev => {
-                  const chosenIds = selectedReviewConclusions[rev.reviewId] ?? rev.conclusions.map(c => c.id);
+                  const chosenIds = selectedReviewConclusions[rev.reviewId] ?? [];
                   const toggleConclusion = (cid: string, checked: boolean) => {
                     setSelectedReviewConclusions(old => {
-                      const prev = old[rev.reviewId] ?? rev.conclusions.map(c => c.id);
+                      const prev = old[rev.reviewId] ?? [];
                       const next = checked ? [...new Set([...prev, cid])] : prev.filter(x => x !== cid);
                       return { ...old, [rev.reviewId]: next };
                     });
@@ -2058,7 +2329,7 @@ export function GoalDecompositionWorkspace({
                       {rev.conclusions.map(c => (
                         <li key={c.id}>
                           <label className="gm-checkbox">
-                            <input
+                            <input disabled={mutationsLocked}
                               type="checkbox"
                               checked={chosenIds.includes(c.id)}
                               onChange={e => toggleConclusion(c.id, e.target.checked)}
@@ -2073,12 +2344,12 @@ export function GoalDecompositionWorkspace({
                       ))}
                     </ul>
                     <div className="gm-inline-row">
-                      <input className="gm-input gm-input-sm" value={nextPeriod} onChange={e => setNextPeriod(e.target.value)} placeholder="下期周期名称" />
-                      <button type="button" className="secondary-button" disabled={busy || !chosenIds.length} onClick={() => void handleNextCycleDraft(rev.reviewId, chosenIds)}>
-                        按所选结论起草下一期（{chosenIds.length}/{rev.conclusions.length}）
+                      <input disabled={mutationsLocked} className="gm-input gm-input-sm" value={nextPeriod} onChange={e => setNextPeriod(e.target.value)} placeholder="下期周期名称" />
+                      <button type="button" className="secondary-button" disabled={busy || mutationsLocked || !chosenIds.length} onClick={() => void handleNextCycleDraft(rev.reviewId, chosenIds)}>
+                        交 Agent 按所选结论起草（{chosenIds.length}/{rev.conclusions.length}）
                       </button>
-                      <input className="gm-input" value={returnReason} onChange={e => setReturnReason(e.target.value)} placeholder="回送战略重审说明" />
-                      <button type="button" className="text-button" disabled={busy || !chosenIds.length} onClick={() => void handleReturnToStrategy(rev.reviewId, chosenIds)}>
+                      <input disabled={mutationsLocked} className="gm-input" value={returnReason} onChange={e => setReturnReason(e.target.value)} placeholder="回送战略重审说明" />
+                      <button type="button" className="text-button" disabled={busy || mutationsLocked || !chosenIds.length} onClick={() => void handleReturnToStrategy(rev.reviewId, chosenIds)}>
                         回送所选原证据重审战略
                       </button>
                     </div>
@@ -2092,6 +2363,28 @@ export function GoalDecompositionWorkspace({
           </div>
         </section>
       )}
+
+      {stage === 'followup' && workspace?.submittedActuals?.map(actual => {
+        const checked = workspace.checks.find(c => c.operationId === actual.actualId);
+        return <p key={actual.actualId}><button disabled={mutationsLocked} className="text-button" onClick={() => setAnalysisRequest({kind:'actual', id:actual.actualId})}>
+          {actual.input.actualSource.label} · {checked ? '查看 Agent 核对' : '待 Agent 核对'}
+        </button>{checked?.assessmentNote}</p>;
+      })}
+      {stage === 'review' && workspace?.nextCycleDrafts.map(draft => <p key={draft.draftId}>
+        <button disabled={mutationsLocked} className="text-button" onClick={() => setAnalysisRequest({kind:'next-cycle', id:draft.draftId})}>
+          {draft.nextPeriod} · 查看起草对话
+        </button></p>)}
+      {analysisOwner && <CaseDialog active title={selectedActual ? 'Agent 核对实绩' : 'Agent 起草下一期目标'} busy={false}
+        onClose={() => setAnalysisRequest(null)}>
+        {selectedActual && <details><summary>查看本次原始实绩</summary>
+          <p>{selectedActual.input.actualSource.ref} · 截至 {selectedActual.input.actualSource.cutoffAt}</p>
+          {selectedActual.input.actualSource.reportText && <pre>{selectedActual.input.actualSource.reportText}</pre>}
+        </details>}
+        <BusinessRoleConversation owner={analysisOwner} readOnly={mutationsLocked} showInlineTitle={false}
+          openingPrompt={selectedActual ? '请对照这份实绩和冻结计划，核验指标、单位、范围、期间及观察成熟度。请用 goal-assess-actual 保存这一次核对的结论和依据。' :
+            '请按负责人选定的复盘结论、原证据和适用范围，用 propose-goal 起草下一期可编辑目标。保留尚待验证的假设。'}
+          onSettled={() => void loadWorkspace(true)} onGoalDraft={selectedCycle ? onGoalDraftSuggestion : undefined} />
+      </CaseDialog>}
 
       {/* Read-Only Publish Preview Modal (GM06 / UI03) */}
       {preview && (
@@ -2113,13 +2406,25 @@ export function GoalDecompositionWorkspace({
           )}
           <dl className="sg-details">
             <dt>正式目标值</dt><dd>{preview.summary.formalTargetValue}{formalUnit}</dd>
-            <dt>已分配 + 预留</dt><dd>{preview.summary.allocatedTotal} + {preview.summary.reserveTotal}{formalUnit}</dd>
+            <dt>分配核对</dt><dd>{preview.gsaPlan.formalTarget.metricKind === 'amount'
+              ? `已分配 ${preview.summary.allocatedTotal ?? '待核'} + 预留 ${preview.summary.reserveTotal}${formalUnit}`
+              : preview.gsaPlan.formalTarget.metricKind === 'ratio' ? `按分子分母汇总 ${preview.summary.allocatedTotal ?? '待核'}${formalUnit}` : '按各项成果标准核对'}</dd>
             <dt>可达测算 / 差额</dt><dd>{preview.summary.estimatedValue ?? '部分待补'}{formalUnit} / 差额 {preview.summary.gapValue ?? '待核'}{formalUnit}</dd>
             <dt>将正式采用子目标</dt><dd>{preview.committedGoals.length} 条（{preview.committedGoals.map(g => `${g.title} ${g.targetValue ?? '待定'}${g.unit}`).join('、') || '无'}）</dd>
             <dt>非目标行/预留</dt><dd>仅记录，不自动采用为子目标（预留合计 {preview.summary.reserveTotal}{formalUnit}）</dd>
             <dt>将冻结行级检查点</dt><dd>{preview.committedGoals.reduce((sum, g) => sum + g.checkpoints.length, 0)} 个</dd>
             <dt>草稿内容指纹</dt><dd><code>{preview.draftSha256.slice(0, 16)}</code></dd>
           </dl>
+          {preview.committedGoals.length > 0 && <details>
+            <summary>核对正式承诺行与贡献关系</summary>
+            <ul>{preview.committedGoals.map(row => <li key={row.rowId}>
+              <strong>{row.title}</strong> · {row.scope.name} · {row.responsible}
+              <p>策略：{row.strategy} · 结果：{row.outcome}</p>
+              {row.linkedGoalId && <p>关联目标 {row.linkedGoalId} · 最新 v{row.expectedGoalVersion} · 已采用 {row.expectedAdoptedVersion ? `v${row.expectedAdoptedVersion}` : '待采用'}</p>}
+              {row.relations.map(rel => <p key={rel.id}>贡献关系 {rel.id} v{rel.revision} · {rel.responsibility} · {rel.rationale}</p>)}
+              {row.checkpoints.map(cp => <p key={cp.id}>{cp.label} · {cp.date} · {cp.targetValue ?? '待定'}{cp.unit}</p>)}
+            </li>)}</ul>
+          </details>}
           <label className="case-field">
             <span>发布说明</span>
             <input className="gm-input" value={publishReason} onChange={e => setPublishReason(e.target.value)} />

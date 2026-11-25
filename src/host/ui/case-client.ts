@@ -30,7 +30,7 @@ export const init = () => request<CaseStorageStatus>('cases/storage/initialize',
 export const list = (signal?: AbortSignal) => request<CaseList>('cases', 'GET', undefined, signal);
 export const originReply = (id: string) => request<{text: string}>(casePath(id)+'/origin/reply');
 export const detail = (id: string, signal?: AbortSignal) => request<CaseDetail>(casePath(id), 'GET', undefined, signal);
-export const create = (input: { operationId: string; title: string; description?: string; goalBinding: CaseGoalBindingInput; creationSource?: import('../case-types.ts').CaseCreationSource }) => request<{ case: CaseRecord }>('cases', 'POST', input);
+export const create = (input: { operationId: string; title: string; description?: string; goalBinding: CaseGoalBindingInput; goalIntent?: import('../case-types.ts').CaseGoalIntentRef; creationSource?: import('../case-types.ts').CaseCreationSource }) => request<{ case: CaseRecord }>('cases', 'POST', input);
 export const update = (id: string, input: CaseMutation & { title: string; description: string; judgement: string; nextStep: string }) => request<{ case: CaseRecord }>(casePath(id), 'PATCH', input);
 export const setStatus = (id: string, input: CaseMutation & { status: Exclude<CaseStatus, 'closed'> }) => request<{ case: CaseRecord }>(`${casePath(id)}/status`, 'POST', input);
 export const close = (id: string, input: CaseMutation & { reason: string }) => request<{ case: CaseRecord }>(`${casePath(id)}/close`, 'POST', input);

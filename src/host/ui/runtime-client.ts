@@ -47,7 +47,9 @@ export async function listProjects(signal?: AbortSignal): Promise<ClientProject[
 export async function bindProjectContext(id: string, signal?: AbortSignal): Promise<void> {
   await request(`projects/${encodeURIComponent(id)}`, 'GET', undefined, signal);
 }
-export async function createProject(name: string, configurationId: string, goalOrigin?:ClientProject['goalOrigin']): Promise<ClientProject> { return (await request<{ project: ClientProject }>('projects', 'POST', { name, configurationId,goalOrigin })).project; }
+export const readProjectDecompositionHandoff = (projectId: string) =>
+  request<{ handoff: import('../strategy-goal-decomposition-types.ts').DecompositionProjectHandoff }>(`projects/${projectId}/decomposition-handoff`, 'GET');
+export async function createProject(name: string, configurationId: string, goalOrigin?: {goal: import('../strategy-goals-types.ts').GoalRef; decompositionHandoff?: {goalId: string; handoffId: string}}): Promise<ClientProject> { return (await request<{ project: ClientProject }>('projects', 'POST', { name, configurationId,goalOrigin })).project; }
 export async function renameProject(id: string, name: string): Promise<ClientProject> { return (await request<{ project: ClientProject }>(`projects/${encodeURIComponent(id)}`, 'PATCH', { name })).project; }
 export async function archiveProject(id: string): Promise<ClientProject> { return (await request<{ project: ClientProject }>(`projects/${encodeURIComponent(id)}/archive`, 'POST', {})).project; }
 export async function restoreProject(id: string): Promise<ClientProject> { return (await request<{ project: ClientProject }>(`projects/${encodeURIComponent(id)}/restore`, 'POST', {})).project; }

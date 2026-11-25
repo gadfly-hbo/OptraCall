@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
+import { publishedMetrics, type LibraryEntry } from './strategy-goals-client.ts';
+import type { GoalMetricKind, StrategicFormalGoal } from '../strategy-goal-decomposition-types.ts';
 import { CaseDialog, CaseFormError, useOperationId } from './CaseDialogs.tsx';
 import { StrategyDiscussionPanel } from './StrategyDiscussionPanel.tsx';
 import type { LegacyStrategyStage, ManagementStage } from './ManagementTabs.tsx';
@@ -69,13 +71,42 @@ export function PublishConfirmDialog({ initiativeId, candidate, batch, prior, te
   onPublished: () => Promise<void>; onClose: () => void;
 }) {
   const [confirmed, setConfirmed] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('');
+  const [metrics, setMetrics] = useState<LibraryEntry[]>([]);
+  const [metricNotice, setMetricNotice] = useState('');
+  useEffect(() => {
+    let active = true;
+    publishedMetrics().then(entries => { if (active) setMetrics(entries); })
+      .catch(() => { if (active) setMetricNotice('正式 SAP 指标目录暂不可读。'); });
+    return () => { active = false; };
+  }, []);
+  const metricChoices = metrics.flatMap(entry => entry.metricNames.map(metricName => ({
+    authority: 'sap-metric' as const, id: entry.id, version: entry.version, metricName,
+  })));
+  const metricKey = (ref: StrategicFormalGoal['sapMetric']) => ref ? JSON.stringify([ref.id, ref.version, ref.metricName]) : '';
+  const [targets, setTargets] = useState(() => candidate.goals.map((text, i) => {
+    const formal = candidate.formalGoals?.[i];
+    return { title: formal?.title ?? text, value: formal ? String(formal.targetValue) : '', unit: formal?.unit ?? '',
+      period: formal?.period ?? '', sapMetric: formal?.sapMetric, strategy: formal?.strategies?.join('\n') ?? '', metricKind: formal?.metricKind ?? 'amount' as GoalMetricKind };
+  }));
+  const update = (index: number, patch: Partial<typeof targets[number]>) =>
+    setTargets(current => current.map((row, i) => i === index ? { ...row, ...patch } : row));
   const operationId = useOperationId();
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!confirmed || busy || !candidate.lock) return;
-    const id = operationId({ candidateId: candidate.candidateId, no: candidate.no, sha256: candidate.lock.fingerprint, batchId: batch.batchId, template, expectedActive: prior?.publicationId ?? null });
+    const formalGoals = targets.map((row, i) => ({
+      ...candidate.formalGoals?.[i], id: candidate.formalGoals?.[i]?.id ?? `G${i + 1}`,
+      title: row.title, outcome: candidate.formalGoals?.[i]?.outcome ?? row.title, sapMetric: row.sapMetric,
+      targetValue: Number(row.value), unit: row.unit.trim(), period: row.period.trim(), metricKind: row.metricKind,
+      strategies: row.strategy.split('\n').map(line => line.trim()).filter(Boolean),
+    }));
+    if (targets.some(row => !row.value.trim() || !row.unit.trim() || !row.period.trim() || !row.strategy.trim())) {
+      setError('请填写各目标的正式值、单位、期间及承接策略。'); return;
+    }
+    const release = { candidateId: candidate.candidateId, no: candidate.no, sha256: candidate.lock.fingerprint, batchId: batch.batchId, template, formalGoals, expectedActive: prior?.publicationId ?? null };
+    const id = operationId(release);
     setBusy(true); setError('');
-    void api.publishInitiative(initiativeId, { operationId: id, candidateId: candidate.candidateId, no: candidate.no, sha256: candidate.lock.fingerprint, batchId: batch.batchId, template, confirmed: true, expectedActive: prior?.publicationId ?? null })
+    void api.publishInitiative(initiativeId, { ...release, operationId: id, confirmed: true })
       .then(async () => { await onPublished(); onClose(); })
       .catch(fault => setError(api.errorText(fault)))
       .finally(() => setBusy(false));
@@ -85,7 +116,23 @@ export function PublishConfirmDialog({ initiativeId, candidate, batch, prior, te
       {prior && <p className="si-notice si-notice-warning" role="status">确认后将替代当前发布「{prior.candidateId.slice(0, 8)} · v{prior.no}」。同一事项同一范围仅一条有效发布；已有目标与回执保留。</p>}
       <ReleaseMap candidate={candidate} template={template} />
       {candidate.goals.length > 0
-        ? <div className="si-content-block"><h4>可承接目标（{candidate.goals.length} 个）</h4><ul>{candidate.goals.map((goal, index) => <li key={index}>G{index + 1} · {goal}</li>)}</ul></div>
+        ? <div className="si-content-block"><h4>可承接目标（{targets.length} 个）</h4>{targets.map((row, index) => (
+          <fieldset key={index} disabled={busy}><legend>G{index + 1} · {row.title}</legend>
+            <label>正式目标值<input type="number" step="any" required value={row.value} onChange={e => update(index, { value: e.target.value })} /></label>
+            <label>单位<input required maxLength={60} value={row.unit} onChange={e => update(index, { unit: e.target.value })} /></label>
+            <label>期间<input required maxLength={100} value={row.period} onChange={e => update(index, { period: e.target.value })} /></label>
+            <label>目标类型<select value={row.metricKind} onChange={e => update(index, { metricKind: e.target.value as GoalMetricKind })}>
+              <option value="amount">金额或数量</option><option value="ratio">比率</option><option value="milestone">里程碑</option>
+            </select></label>
+            <label>SAP 指标定义<select value={metricKey(row.sapMetric)} onChange={e => update(index, { sapMetric: metricChoices.find(ref => metricKey(ref) === e.target.value) })}>
+              <option value="">沿用本目标的成果定义</option>
+              {row.sapMetric && !metricChoices.some(ref => metricKey(ref) === metricKey(row.sapMetric)) && <option value={metricKey(row.sapMetric)}>{row.sapMetric.metricName} · {row.sapMetric.version}</option>}
+              {metricChoices.map(ref => <option key={metricKey(ref)} value={metricKey(ref)}>{ref.metricName} · {ref.id} @ {ref.version}</option>)}
+            </select></label>
+            {metricNotice && <small>{metricNotice}</small>}
+            <label>承接策略<textarea required value={row.strategy} onChange={e => update(index, { strategy: e.target.value })} /></label>
+          </fieldset>
+        ))}</div>
         : <p className="si-notice si-notice-warning" role="status">当前锁定版可承接目标 0 个：继续发布将作为正式战略记录保存，发布后无法直接「带入目标管理」；如需承接目标，请取消并返回战略共创建立新候选版本补充目标后重新锁定与检验。</p>}
       <div className="si-review-lines">{batch.gates.map((gate, turn) => <p key={turn}><strong>{gateNames[turn]} · 通过</strong><br />{gate.evidence || '证据暂不可读。'}<br /><span className="si-muted">{gate.ref}</span></p>)}</div>
       <label className="si-check-row"><input type="checkbox" required checked={confirmed} disabled={busy} onChange={event => setConfirmed(event.target.checked)} />我已核对准确版方案及两份带依据的检验结论。</label>
@@ -121,11 +168,14 @@ function handoffScopeLabel(item: GoalScope, options: GoalScope[], currentKey: st
   return `${handoffKindLabels[item.kind]} · ${item.name}${parent} · ID ${item.id}${initiativeScopeKey(item) === currentKey ? ' · 当前战略范围' : ''}`;
 }
 
-export function HandoffDialog({ initiativeId, publication, candidate, scope, scopes, onDone, onClose }: { initiativeId: string; publication: InitiativePublication; candidate: CandidateVersion; scope: GoalScope; scopes: GoalScope[]; onDone: () => Promise<void>; onClose: () => void }) {
+export function HandoffDialog({ initiativeId, publication, candidate, scope, scopes, onDone, onClose }: { initiativeId: string; publication: InitiativePublication; candidate: CandidateVersion; scope: GoalScope; scopes: GoalScope[]; onDone: (receipt: InitiativeHandoffReceipt) => Promise<void>; onClose: () => void }) {
   const currentKey = initiativeScopeKey(scope);
   const options = [...new Map([scope, ...scopes].map(item => [initiativeScopeKey(item), item])).values()];
   const [scopeKey, setScopeKey] = useState(currentKey);
-  const [selected, setSelected] = useState<number[]>(candidate.goals.map((_, index) => index));
+  const goals = publication.formalGoals?.length
+    ? publication.formalGoals.map(goal => `${goal.title} · ${goal.period} · ${goal.targetValue}${goal.unit}`)
+    : candidate.goals;
+  const [selected, setSelected] = useState<number[]>(goals.map((_, index) => index));
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const operationId = useOperationId();
   const destination = options.find(item => initiativeScopeKey(item) === scopeKey) ?? scope;
@@ -134,12 +184,12 @@ export function HandoffDialog({ initiativeId, publication, candidate, scope, sco
       event.preventDefault(); if (busy || !selected.length) return;
       const id = operationId({ publicationId: publication.publicationId, scopeKey, selected });
       setBusy(true); setError('');
-      void api.handoffPublication(initiativeId, publication.publicationId, { operationId: id, scope: destination, selected }).then(async () => { await onDone(); onClose(); }).catch(fault => setError(api.errorText(fault))).finally(() => setBusy(false));
+      void api.handoffPublication(initiativeId, publication.publicationId, { operationId: id, scope: destination, selected }).then(async ({ handoff }) => { await onDone(handoff); onClose(); }).catch(fault => setError(api.errorText(fault))).finally(() => setBusy(false));
     }}>
       <div className="case-field"><label htmlFor="si-handoff-scope">目标归属范围</label><select id="si-handoff-scope" value={scopeKey} disabled={busy} onChange={event => setScopeKey(event.target.value)}>{options.map(item => <option key={initiativeScopeKey(item)} value={initiativeScopeKey(item)}>{handoffScopeLabel(item, options, currentKey)}</option>)}</select></div>
       <p className="si-muted">保存前归属：{handoffScopeLabel(destination, options, currentKey)}</p>
-      {candidate.goals.length ? <fieldset className="si-handoff-goals"><legend>可承接目标 · 已选 {selected.length} / {candidate.goals.length}</legend>
-        {candidate.goals.map((goal, index) => <label className="si-check-row" key={index}><input type="checkbox" checked={selected.includes(index)} disabled={busy} onChange={event => setSelected(old => event.target.checked ? [...old, index] : old.filter(item => item !== index))} /><span><strong>G{index + 1} · {goal}</strong><br /><span className="si-muted">关联策略 · {candidate.title}</span></span></label>)}
+      {goals.length ? <fieldset className="si-handoff-goals"><legend>可承接目标 · 已选 {selected.length} / {goals.length}</legend>
+        {goals.map((goal, index) => <label className="si-check-row" key={index}><input type="checkbox" checked={selected.includes(index)} disabled={busy} onChange={event => setSelected(old => event.target.checked ? [...old, index] : old.filter(item => item !== index))} /><span><strong>G{index + 1} · {goal}</strong><br /><span className="si-muted">关联策略 · {candidate.title}</span></span></label>)}
       </fieldset> : <p className="si-muted">此锁定版未列出可承接目标；仍可保留发布记录。</p>}
       <p className="si-muted">保存后进入目标管理成为候选，等待单独采用；发布本身不创建目标，也不启动执行。</p>
       <p className="si-muted">历史误存个人范围的目标候选，请在目标管理选择准确版本，通过“提出目标修订”更正归属；旧版本和发布来源保留，不自动修改既有记录。</p>
@@ -177,7 +227,7 @@ export function StrategyReleaseReview({ initiativeId, scope, scopes, candidates,
         </div><span className="si-muted">仅调整呈现，沿用同一锁定版及检验报告。</span></div>
         <ReleaseMap candidate={current} template={template} />
         {current.goals.length > 0
-          ? <div className="si-content-block"><h4>可承接目标（{current.goals.length} 个 · 发布后可按需带入目标管理）</h4><ul>{current.goals.map((goal, index) => <li key={index}>G{index + 1} · {goal}</li>)}</ul></div>
+          ? <div className="si-content-block"><h4>可承接目标（{current.goals.length} 个 · 发布前须核对目标值、期间和策略）</h4><ul>{current.goals.map((goal, index) => <li key={index}>G{index + 1} · {goal}</li>)}</ul></div>
           : <p className="si-notice si-notice-warning" role="status">可承接目标：0 个。此锁定版可继续作为战略记录正式发布，但发布后不能「带入目标管理」。如需补充可承接目标，请回到战略共创基于此版新建候选版本补充目标，并重新锁定与检验。</p>}
         <details className="si-review-details"><summary>查看完整方案与取舍</summary><CandidateBody candidate={current} /></details>
         <details className="si-review-details"><summary>查看两道检验结论</summary>{passed.gates.map((gate, turn) => <div className="si-content-block" key={turn}><h4>{gateNames[turn]} · 通过</h4><p>{gate.evidence || '证据暂不可读。'}</p><p className="si-muted">{gate.ref} · 批次 {passed.batchId.slice(0, 8)}</p></div>)}</details>
@@ -192,13 +242,13 @@ export function StrategyReleaseReview({ initiativeId, scope, scopes, candidates,
       </aside>}
       <div className="si-actions">
         {eligible && passed && <button type="button" className="primary-button" onClick={() => setDialog('publish')}>核对并正式发布</button>}
-        {publication?.state === 'active' && <><button type="button" className="primary-button" onClick={() => setDialog('handoff')}>带入目标管理</button><button type="button" className="danger-button" onClick={() => setDialog('withdraw')}>撤销发布</button></>}
+        {publication?.state === 'active' && <>{publication.handoffEligible && <button type="button" className="primary-button" onClick={() => setDialog('handoff')}>带入目标管理</button>}{!publication.handoffEligible && <span className="si-muted">战略记录，待正式发布含目标值的版本。</span>}<button type="button" className="danger-button" onClick={() => setDialog('withdraw')}>撤销发布</button></>}
         {!eligible && !publication && <button type="button" className="secondary-button" onClick={() => onStage('strategy-check')}>查看战略检验</button>}
       </div>
     </>}
     {dialog === 'publish' && current && passed && <PublishConfirmDialog initiativeId={initiativeId} candidate={current} batch={passed} prior={active} template={template} onPublished={published} onClose={() => setDialog(null)} />}
     {dialog === 'withdraw' && publication && <WithdrawConfirmDialog initiativeId={initiativeId} publication={publication} label={current ? candidateLabel(current) : ''} onWithdrawn={refresh} onClose={() => setDialog(null)} />}
-    {dialog === 'handoff' && publication && current && <HandoffDialog initiativeId={initiativeId} publication={publication} candidate={current} scope={scope} scopes={scopes} onDone={async () => { await refresh(); await onGoalsChanged(); }} onClose={() => setDialog(null)} />}
+    {dialog === 'handoff' && publication && current && <HandoffDialog initiativeId={initiativeId} publication={publication} candidate={current} scope={scope} scopes={scopes} onDone={async receipt => { await refresh(); await onGoalsChanged(); onReviewHandoff?.(receipt, publication); }} onClose={() => setDialog(null)} />}
   </section>;
 }
 
