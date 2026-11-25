@@ -352,6 +352,17 @@ export function createStrategyCandidateHost(options: {
     return prompt;
   }
 
+  function creationReceipt(record: CandidateVersion): string {
+    if (record.createRequestId) return record.createRequestId;
+    // Older records kept only the latest run. Its fingerprint can still prove
+    // the original create send when the first turn is the one on record.
+    const run = record.lastRun;
+    if (run && record.sessionFile && run.status === 'completed' && run.fingerprint === hash({
+      requestId: run.id, text: record.instruction, expectedRevision: 1,
+    })) return run.id;
+    fail('strategy_candidate_creation_receipt_unknown', 503);
+  }
+
   async function create(id: string, input: Record<string, unknown>) {
     const initiative = initiatives.get(id);
     if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['operationId', 'scope', 'title', 'instruction', 'parent', 'configurationId'].includes(key))) fail('strategy_candidate_fields_invalid', 400);
@@ -382,8 +393,7 @@ export function createStrategyCandidateHost(options: {
       if (existing) {
         const sameParent = (existing.parent?.candidateId ?? undefined) === (parent?.candidateId ?? undefined) && (existing.parent?.no ?? undefined) === (parent?.no ?? undefined);
         if (existing.title !== trimmedTitle || existing.instruction !== trimmedInstruction || existing.scopeKey !== scopeKey || !sameParent) fail('strategy_candidate_operation_conflict');
-        if (!existing.lastRun?.id) fail('strategy_candidate_run_unavailable');
-        return {record: existing, replayed: true};
+        return {record: existing, replayed: true as const, requestId: creationReceipt(existing)};
       }
       const candidateId = parent?.candidateId ?? randomUUID();
       const no = parent ? Math.max(...file.candidates.filter(c => c.candidateId === candidateId).map(c => c.no)) + 1 : 1;
@@ -413,12 +423,12 @@ export function createStrategyCandidateHost(options: {
       };
       file.candidates.push(record);
       writeFile(id, file);
-      return {record, replayed: false};
+      return {record, replayed: false as const};
     });
-    if (created.replayed) return {candidate: created.record, requestId: created.record.lastRun!.id, replayed: true};
+    if (created.replayed) return {candidate: created.record, requestId: created.requestId, replayed: true};
     const requestId = randomUUID();
     try {
-      const ack = await send(id, created.record.candidateId, created.record.no, {requestId, text: created.record.instruction, expectedRevision: created.record.revision});
+      const ack = await send(id, created.record.candidateId, created.record.no, {requestId, text: created.record.instruction, expectedRevision: created.record.revision}, created.record.createOperationId);
       return {...ack, candidate: version(id, created.record.candidateId, created.record.no)};
     } catch (err) {
       // Roll back unborn candidate record if send() failed deterministically before persisting lastRun
@@ -437,7 +447,7 @@ export function createStrategyCandidateHost(options: {
     }
   }
 
-  async function send(id: string, candidateId: string, no: number, input: Record<string, unknown>) {
+  async function send(id: string, candidateId: string, no: number, input: Record<string, unknown>, createOperationId?: string) {
     if (!input || Object.keys(input).some(key => !['requestId', 'text', 'expectedRevision', 'replacePendingRequestId'].includes(key)) || typeof input.text !== 'string' || !input.text.trim() || input.text.length > 20000) fail('invalid_strategy_message', 400);
     if (typeof input.requestId !== 'string' || !uuid.test(input.requestId)) fail('invalid_strategy_message', 400);
     const requestId = input.requestId;
@@ -528,7 +538,11 @@ export function createStrategyCandidateHost(options: {
       await options.mutate(() => {
         const file = readFile(id);
         const latest = file.candidates.find(c => c.candidateId === candidateId && c.no === no);
-        if (latest) { latest.sessionFile = opened.sessionFile; writeFile(id, file); }
+        if (latest) {
+          latest.sessionFile = opened.sessionFile;
+          if (createOperationId && latest.createOperationId === createOperationId) latest.createRequestId = requestId;
+          writeFile(id, file);
+        }
       });
       accept({candidate: version(id, candidateId, no), requestId});
       const result = await run.completion;

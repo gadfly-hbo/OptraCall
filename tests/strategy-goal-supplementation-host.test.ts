@@ -281,10 +281,12 @@ test('I131-D-Rework-5 真实 Host+Pi：合法长父版不触发 413、支持受�
     return {text: '已完整分页读取长父版并保存补目标新候选。'};
   });
 
-  const childCreated = await req(`${base}/candidates`, 'POST', {
+  const childInput = {
     operationId: childCreateOp, scope: stores, title: '长方案父版', instruction: '基于父版保留正文并补充两条可承接目标。',
     parent: {candidateId: parentCid, no: 1},
-  }, 202);
+  };
+  const createChild = () => req(`${base}/candidates`, 'POST', childInput, 202);
+  const childCreated = await createChild();
   assert.equal(childCreated.candidate.no, 2);
   assert.ok(childCreated.requestId, 'create with long parent must return real requestId');
   const childDetail = await settleCandidate(parentCid, 2);
@@ -299,10 +301,7 @@ test('I131-D-Rework-5 真实 Host+Pi：合法长父版不触发 413、支持受�
   assert.notEqual(childDetail.candidate.contentSha256, lockedParent.contentSha256);
 
   // 3. Idempotent replay of createOperationId returns 202/replayed with real requestId
-  const replayed = await req(`${base}/candidates`, 'POST', {
-    operationId: childCreateOp, scope: stores, title: '长方案父版', instruction: '基于父版保留正文并补充两条可承接目标。',
-    parent: {candidateId: parentCid, no: 1},
-  }, 202);
+  const replayed = await createChild();
   assert.equal(replayed.replayed, true);
   assert.equal(replayed.requestId, childCreated.requestId);
 
@@ -314,6 +313,11 @@ test('I131-D-Rework-5 真实 Host+Pi：合法长父版不触发 413、支持受�
   assert.ok(followUp.requestId);
   const afterFollowUp = await settleCandidate(parentCid, 2);
   assert.equal(afterFollowUp.candidate.lastRun.status, 'completed');
+  const runsBeforeReplay = provider.requests.length;
+  const afterChatReplay = await createChild();
+  assert.equal(afterChatReplay.requestId, childCreated.requestId, 'create replay retains the first accepted request after further conversation');
+  assert.equal(afterChatReplay.candidate.lastRun.id, followUp.requestId);
+  assert.equal(provider.requests.length, runsBeforeReplay);
 
   // 5. Fresh lock on 80k-char child v2 + create concise child v3 from locked 80k-char parent to complete full fresh lock + dual verification; parent v1 stays byte-identical
   const lockedChild = (await req(`${base}/candidates/${parentCid}/versions/2/lock`, 'POST', {operationId: randomUUID(), sha256: afterFollowUp.candidate.contentSha256})).candidate;

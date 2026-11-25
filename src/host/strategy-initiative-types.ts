@@ -106,6 +106,7 @@ export interface CandidateVersion {
   sessionFile?: string;
   revision: number;
   createOperationId: string;
+  createRequestId?: string;
   instruction: string;
   pendingInput?: StrategySessionPendingRequest;
   lastRun?: StrategySessionRun;
