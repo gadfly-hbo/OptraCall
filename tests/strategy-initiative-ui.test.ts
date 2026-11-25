@@ -379,3 +379,131 @@ test('I131-E InitiativeEditorDialog marks title, scope name and scope id as requ
   assert.match(html, /id="si-scope-id-0"[^>]*aria-required="true"/);
   assert.match(html, /上层企业标识（可选）/);
 });
+
+test('I131-A-Rework-1 multi-entry pending upload ledger preserves prior UNKNOWN across subsequent uploads, refresh and scope isolation', async () => {
+  const view = await import('../src/host/ui/strategy-initiative-view.tsx') as any;
+  assert.equal(typeof view.upsertPendingUpload, 'function', 'upsertPendingUpload helper must exist');
+  assert.equal(typeof view.removePendingUpload, 'function', 'removePendingUpload helper must exist');
+  assert.equal(typeof view.parsePendingUploadLedger, 'function', 'parsePendingUploadLedger helper must exist');
+
+  const op1 = {
+    operationId: '11111111-1111-4111-8111-111111111111',
+    initiativeId: initiative.id,
+    workspaceScopeKey: scopeKey,
+    directory: '010_draw' as const,
+    name: 'first-unknown.txt',
+    size: 512,
+    sha256: '1'.repeat(64),
+    status: 'unknown' as const,
+    unreachable: false,
+    errorMessage: '503',
+    createdAt: '2026-11-24T10:00:00Z',
+  };
+  const op2 = {
+    operationId: '22222222-2222-4222-8222-222222222222',
+    initiativeId: initiative.id,
+    workspaceScopeKey: scopeKey,
+    directory: '020_clean' as const,
+    name: 'second-new.txt',
+    size: 256,
+    sha256: '2'.repeat(64),
+    status: 'uploading' as const,
+    createdAt: '2026-11-24T10:01:00Z',
+  };
+  const op3 = {
+    operationId: '33333333-3333-4333-8333-333333333333',
+    initiativeId: initiative.id,
+    workspaceScopeKey: scopeKey,
+    scopeKey,
+    directory: '010_draw' as const,
+    name: 'third-unknown.txt',
+    size: 128,
+    sha256: '3'.repeat(64),
+    status: 'unknown' as const,
+    createdAt: '2026-11-24T10:02:00Z',
+  };
+
+  let ledger = view.upsertPendingUpload([], op1);
+  ledger = view.upsertPendingUpload(ledger, op2);
+  assert.equal(ledger.length, 2, 'new upload must not overwrite prior UNKNOWN');
+  // Second upload succeeds or is deterministically rejected -> only op2 removed, op1 preserved
+  ledger = view.removePendingUpload(ledger, op2.operationId);
+  assert.equal(ledger.length, 1);
+  assert.equal(ledger[0].operationId, op1.operationId);
+  // Third upload also becomes UNKNOWN -> both op1 and op3 preserved
+  ledger = view.upsertPendingUpload(ledger, op3);
+  assert.equal(ledger.length, 2);
+
+  // Refresh normalization & scope isolation
+  const reloaded = view.parsePendingUploadLedger(JSON.stringify([...ledger, op2]), initiative.id, scopeKey);
+  assert.equal(reloaded.length, 3);
+  assert.equal(reloaded.find((item: any) => item.operationId === op2.operationId)?.status, 'unknown', 'in-flight uploading normalizes to unknown after refresh');
+  assert.deepEqual(view.parsePendingUploadLedger(JSON.stringify(ledger), initiative.id, 'department::other'), [], 'other scope must not see current scope pending uploads');
+  // Legacy single-object storage upgrades cleanly
+  const upgraded = view.parsePendingUploadLedger(JSON.stringify(op1), initiative.id, scopeKey);
+  assert.equal(upgraded.length, 1);
+  assert.equal(upgraded[0].operationId, op1.operationId);
+
+  // InitiativeFilePanel renders multiple pending uploads simultaneously with per-item payload awareness
+  const html = renderToStaticMarkup(createElement(view.InitiativeFilePanel, {
+    files: [], reports: [], candidates: [], batches: [], scopeKey,
+    pendingUploads: [op1, op3],
+    pendingUploadPayloadIds: new Set([op3.operationId]),
+    onUpload() {}, onOpenFile() {}, onOpenReport() {},
+    onCheckPendingUpload() {}, onRetryPendingUpload() {}, onReselectPendingUpload() {}, onDismissPendingUpload() {},
+  }));
+  assert.match(html, /first-unknown\.txt/);
+  assert.match(html, /third-unknown\.txt/);
+  assert.match(html, /11111111-1111-4111-8111-111111111111/);
+  assert.match(html, /33333333-3333-4333-8333-333333333333/);
+  assert.match(html, /重选原文件并按原编号重试/, 'op1 without memory payload offers verified re-select');
+  assert.match(html, /按原操作编号重试/, 'op3 with memory payload offers in-memory retry');
+});
+
+test('I131-C-Rework-3 ReviseDialog freezes inputs while submitting and binds diff/waiting strictly to submitted snapshot', async () => {
+  const { ReviseDialog } = await import('../src/host/ui/StrategyInitiativeWorkbench.tsx') as any;
+  const targets = [
+    { blockId: 'positioning', label: '定位与增长', text: '被后台刷新改写的定位正文。' },
+    { blockId: 'budget', label: '预算与资源', text: '2027 试点投入预算 80 万元。' },
+  ];
+  const baseProps = {
+    title: '限定修改战略候选',
+    baseLabel: '会员复购优先 · v1',
+    baseSha256: '9'.repeat(64),
+    targets,
+    maxText: 20000,
+    propose: async () => ({ proposal: { proposalId: 'p1' } }),
+    readProposal: async () => ({ proposal: { status: 'pending' } }),
+    onSubmit: async () => ({}),
+    onDone: async () => {},
+    onClose() {},
+  };
+
+  // 1. Submitting state disables both block select and intent textarea
+  const submittingHtml = renderToStaticMarkup(createElement(ReviseDialog, { ...baseProps, initialBusy: true }));
+  assert.match(submittingHtml, /<select[^>]*id="si-revise-block"[^>]*disabled/, 'block select must be disabled while submitting');
+  assert.match(submittingHtml, /<textarea[^>]*id="si-revise-request"[^>]*disabled/, 'intent textarea must be disabled while submitting');
+
+  // 2. Diff view strictly renders submitted B1 snapshot, never drifted live props or B2
+  const submitted = {
+    proposalId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    requestId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    baseLabel: '会员复购优先 · v1',
+    baseSha256: '1'.repeat(64),
+    blockId: 'positioning',
+    blockLabel: '定位与增长',
+    baselineText: '聚焦华东成熟门店会员复购（提交时准确原文）。',
+    request: '仅在定位块补充会员增长取舍',
+  };
+  const diffHtml = renderToStaticMarkup(createElement(ReviseDialog, {
+    ...baseProps,
+    initialStep: 'diff',
+    initialSubmitted: submitted,
+    initialProposedText: '聚焦华东成熟门店会员复购，先试点 2 家店。',
+  }));
+  assert.match(diffHtml, /定位与增长/, 'diff title binds to submitted block');
+  assert.match(diffHtml, /聚焦华东成熟门店会员复购（提交时准确原文）/, 'diff before-text binds to submitted baselineText, not drifted live prop');
+  assert.equal(diffHtml.includes('被后台刷新改写的定位正文'), false, 'drifted live prop must not replace submitted baselineText');
+  assert.equal(diffHtml.includes('预算与资源'), false, 'other block must not bleed into submitted diff');
+  assert.match(diffHtml, /当前正文已发生变化/, 'warns when live props drifted after submission');
+});

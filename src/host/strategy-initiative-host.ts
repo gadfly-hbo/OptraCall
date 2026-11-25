@@ -204,19 +204,39 @@ export function createStrategyInitiativeHost(options: {
       if (typeof input.proposalId !== 'string' || !uuid.test(input.proposalId)) fail('strategy_proposal_unavailable', 400);
       const proposal = reports.proposal(o.initiativeId, input.proposalId) ?? candidates.proposal(o.initiativeId, input.proposalId);
       if (!proposal || proposal.status !== 'pending' || proposal.initiativeId !== o.initiativeId) fail('strategy_proposal_unavailable');
-      if (current.pendingInput?.proposalId && (current.pendingInput.proposalId !== proposal.proposalId || current.pendingInput.requestId !== context.requestId)) fail('strategy_proposal_unavailable');
-      if (proposal.target.kind === 'report') {
-        reports.versionForScope(o.initiativeId, proposal.target.no, o.scopeKey);
-      } else {
-        const target = candidates.version(o.initiativeId, proposal.target.candidateId, proposal.target.no);
-        if (target.scopeKey !== o.scopeKey) fail('strategy_proposal_unavailable');
-      }
+      if (
+        !current.pendingInput
+        || current.pendingInput.requestId !== context.requestId
+        || current.pendingInput.proposalId !== proposal.proposalId
+        || current.lastRun?.id !== context.requestId
+        || current.lastRun?.status !== 'accepted'
+      ) fail('strategy_proposal_unavailable');
+      const assertTargetBaselineFresh = () => {
+        if (proposal.target.kind === 'report') {
+          const version = reports.versionForScope(o.initiativeId, proposal.target.no, o.scopeKey);
+          const text = reportBlockText(version.fields, proposal.blockId);
+          if (text === undefined || createHash('sha256').update(text).digest('hex') !== proposal.baselineSha256) fail('strategy_proposal_baseline_changed');
+        } else {
+          const target = candidates.version(o.initiativeId, proposal.target.candidateId, proposal.target.no);
+          if (target.scopeKey !== o.scopeKey) fail('strategy_proposal_unavailable');
+          const matchedBlock = target.blocks.find(b => b.id === proposal.blockId);
+          if (!matchedBlock || createHash('sha256').update(matchedBlock.text).digest('hex') !== proposal.baselineSha256) fail('strategy_proposal_baseline_changed');
+        }
+      };
+      assertTargetBaselineFresh();
       if (typeof input.newText !== 'string' || !input.newText.trim()) fail('strategy_proposal_fields_invalid', 400);
       const guardCommit = () => {
         context.assertCurrent();
         context.signal.throwIfAborted();
         const latest = session(o.initiativeId, o.scopeKey);
-        if (latest.pendingInput?.proposalId && (latest.pendingInput.proposalId !== proposal.proposalId || latest.pendingInput.requestId !== context.requestId)) fail('strategy_proposal_unavailable');
+        if (
+          !latest.pendingInput
+          || latest.pendingInput.requestId !== context.requestId
+          || latest.pendingInput.proposalId !== proposal.proposalId
+          || latest.lastRun?.id !== context.requestId
+          || latest.lastRun?.status !== 'accepted'
+        ) fail('strategy_proposal_unavailable');
+        assertTargetBaselineFresh();
       };
       const updated = proposal.target.kind === 'report'
         ? await options.mutate(() => {
@@ -355,7 +375,8 @@ export function createStrategyInitiativeHost(options: {
         availableBlocks = target.blocks.map(b => ({blockId: b.id, label: b.label}));
       }
       if (baselineText === undefined) fail('strategy_proposal_unavailable');
-      proposalContext = {proposalId: proposal.proposalId, target: proposal.target, blockId: proposal.blockId, blockLabel, availableBlocks, request: proposal.request, baselineText};
+      if (createHash('sha256').update(baselineText).digest('hex') !== proposal.baselineSha256) fail('strategy_proposal_baseline_changed');
+      proposalContext = {proposalId: proposal.proposalId, target: proposal.target, blockId: proposal.blockId, blockLabel, availableBlocks, request: proposal.request, baselineText, baselineSha256: proposal.baselineSha256};
     }
     const contextBody = {
       initiative: {id, title: initiative.title}, scope: owner.scope,
@@ -407,6 +428,20 @@ export function createStrategyInitiativeHost(options: {
         if (anchor) {
           const currentAnchor = reports.anchor(id, owner.scope);
           if (!currentAnchor || currentAnchor.reportNo !== anchor.reportNo || currentAnchor.contentSha256 !== anchor.contentSha256) fail('strategy_initiative_context_changed');
+        }
+        if (typeof input.proposal === 'string') {
+          const latestProposal = reports.proposal(id, input.proposal) ?? candidates.proposal(id, input.proposal);
+          if (!latestProposal || latestProposal.status !== 'pending' || latestProposal.initiativeId !== id) fail('strategy_proposal_unavailable');
+          let currentText: string | undefined;
+          if (latestProposal.target.kind === 'report') {
+            const version = reports.versionForScope(id, latestProposal.target.no, scopeKey);
+            currentText = reportBlockText(version.fields, latestProposal.blockId);
+          } else {
+            const target = candidates.version(id, latestProposal.target.candidateId, latestProposal.target.no);
+            if (target.scopeKey !== scopeKey) fail('strategy_proposal_unavailable');
+            currentText = target.blocks.find(b => b.id === latestProposal.blockId)?.text;
+          }
+          if (currentText === undefined || createHash('sha256').update(currentText).digest('hex') !== latestProposal.baselineSha256) fail('strategy_proposal_baseline_changed');
         }
       };
       const run = lease.start({

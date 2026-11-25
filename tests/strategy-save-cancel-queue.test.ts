@@ -221,7 +221,8 @@ test('I131-C 拟改提交排队期间取消：提交前重核取消态，零写�
     sessions: [{
       initiativeId: id, scopeKey, scope, configurationId: 'cfg', configurationRevision: 1, revision: 1,
       createOperationId: randomUUID(), createdAt: now, updatedAt: now,
-      pendingInput: {requestId: reqId, text: '拟改请求', proposalId, at: now},
+      lastRun: {id: reqId, fingerprint: 'f'.repeat(64), status: 'accepted'},
+      pendingInput: {requestId: reqId, text: '拟改请求', proposalId, expectedRevision: 1},
     }],
   }) + '\n');
   const candidateId = randomUUID();
@@ -233,7 +234,7 @@ test('I131-C 拟改提交排队期间取消：提交前重核取消态，零写�
   };
   const pendingProposal = {
     proposalId, initiativeId: id, target: {kind: 'candidate' as const, candidateId, no: 1},
-    blockId: 'B1', request: '改定位', baselineSha256: 'c'.repeat(64), status: 'pending' as const, at: now, updatedAt: now,
+    blockId: 'B1', request: '改定位', baselineSha256: createHash('sha256').update(blocks[0]!.text).digest('hex'), status: 'pending' as const, at: now, updatedAt: now,
   };
   const originalCandidates = JSON.stringify({formatVersion: 1, candidates: [candidateRecord], proposals: [pendingProposal]}) + '\n';
   await writeFile(candidateFile, originalCandidates);

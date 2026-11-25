@@ -160,3 +160,253 @@ test('I131-C 真实 Host+Pi：限定修改目标带出、不匹配澄清回传�
   assert.equal(reportClarify.feedback?.replyText, reportClarifyText);
   assert.equal((await req(`${base}/reports?scopeKey=${encodeURIComponent(scopeKey)}`)).versions.length, 1, 'kickoff report untouched');
 });
+
+test('I131-C-Rework-2 真实 Host+Pi：普通主会话或非绑定请求不得接管 pending proposal（开题与候选共用）', {timeout: 180_000}, async t => {
+  const provider = await startToolProvider(), host = await startTestHost();
+  t.after(async () => { await host.close(); await provider.close(); });
+  const req = async (route: string, method = 'GET', body?: unknown, status = 200): Promise<any> => {
+    const r = await host.request(route, method, body);
+    assert.equal(r.status, status, await r.clone().text());
+    return r.json();
+  };
+  await req('/api/configuration', 'PUT', {name: '绑定守卫合成', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-proposal-bind', apiKey: 'synthetic-proposal-bind'});
+  const initiativeId = randomUUID();
+  await req('/api/strategy/initiatives', 'POST', {operationId: initiativeId, title: '绑定守卫事项', scopes: [stores]}, 201);
+  const base = `/api/strategy/initiatives/${initiativeId}`;
+  const report = (await req(`${base}/reports`, 'POST', {operationId: randomUUID(), fields: kickoffFields, sources: []}, 201)).version;
+  await req(`${base}/reports/1/lock`, 'POST', {operationId: randomUUID(), sha256: report.contentSha256});
+  await req(`${base}/reports/1/apply`, 'POST', {operationId: randomUUID(), sha256: report.contentSha256, scope: stores});
+
+  provider.setResponder((ctx: any) => ctx.recentToolResults.length
+    ? {text: '候选已保存。'}
+    : {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-candidate', operationId: randomUUID(), candidateBlocks}}]});
+  const created = await req(`${base}/candidates`, 'POST', {operationId: randomUUID(), scope: stores, title: '方案一', instruction: '形成方案。'}, 202);
+  const cid = created.candidate.candidateId;
+  for (let n = 0; n < 500; n++) {
+    const d = await req(`${base}/candidates/${cid}/versions/1`);
+    if (d.candidate.lastRun?.status === 'completed') break;
+    await delay(20);
+  }
+
+  // 1. Start a normal main-session request and hold it running
+  const session = (await req(`${base}/session`, 'POST', {operationId: randomUUID(), scope: stores}, 201)).session;
+  const beforeHold = provider.requests.length;
+  provider.setResponder(() => ({text: '阻塞中', hold: true}));
+  const req1Id = randomUUID();
+  await req(`${base}/messages?scopeKey=${encodeURIComponent(scopeKey)}`, 'POST', {requestId: req1Id, text: '先聊聊整体思路。', expectedRevision: session.revision}, 202);
+  await provider.waitForRequests(beforeHold + 1);
+
+  // 2. While busy, create candidate proposal P -> returns 409 busy, leaving P pending
+  const orphanCandPropId = randomUUID();
+  const busyRes = await req(`${base}/candidates/${cid}/versions/1/revise-proposal`, 'POST', {operationId: orphanCandPropId, blockId: 'budget', request: '预算改为 60 万。'}, 409);
+  assert.ok(['strategy_initiative_pending_request', 'session_busy'].includes(busyRes.code));
+  // Also create an orphaned kickoff report proposal while busy
+  const orphanReportPropId = randomUUID();
+  const busyReportRes = await req(`${base}/reports/1/revise-proposal?scopeKey=${encodeURIComponent(scopeKey)}`, 'POST', {operationId: orphanReportPropId, blockId: 'horizon', request: '调整时间视野。'}, 409);
+  assert.ok(['strategy_initiative_pending_request', 'session_busy'].includes(busyReportRes.code));
+
+  // 3. Stop the first normal main-session request and wait for settlement
+  await req(`${base}/stop?scopeKey=${encodeURIComponent(scopeKey)}`, 'POST', {expectedRequestId: req1Id});
+  let settledSession: any;
+  for (let n = 0; n < 500; n++) {
+    const d = await req(`${base}/session?scopeKey=${encodeURIComponent(scopeKey)}`);
+    if (!d.busy && d.session.lastRun?.status !== 'accepted') { settledSession = d.session; break; }
+    await delay(20);
+  }
+  assert.ok(settledSession);
+
+  // 4. Start a SECOND normal main-session request (no proposal) where model tries to hijack both orphan proposals
+  const hijackErrors: string[] = [];
+  provider.setResponder((ctx: any) => {
+    const step = ctx.recentToolResults.length;
+    if (step === 0) return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-propose-revision', proposalId: orphanCandPropId, newText: '普通请求非法篡改候选预算。'}}]};
+    if (step === 1) {
+      hijackErrors.push(providerMessageText(ctx.recentToolResults[0]?.content));
+      return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-propose-revision', proposalId: orphanReportPropId, newText: '普通请求非法篡改开题视野。'}}]};
+    }
+    hijackErrors.push(providerMessageText(ctx.recentToolResults[1]?.content));
+    return {text: '工具均拒绝了未绑定拟改。'};
+  });
+  const req2Id = randomUUID();
+  await req(`${base}/messages?scopeKey=${encodeURIComponent(scopeKey)}`, 'POST', {
+    requestId: req2Id, text: '继续普通讨论，不拟改。', expectedRevision: settledSession.revision,
+    ...(settledSession.pendingInput ? {replacePendingRequestId: settledSession.pendingInput.requestId} : {}),
+  }, 202);
+  for (let n = 0; n < 500; n++) {
+    const d = await req(`${base}/session?scopeKey=${encodeURIComponent(scopeKey)}`);
+    if (d.session.lastRun?.id === req2Id && d.session.lastRun.status !== 'accepted') break;
+    await delay(20);
+  }
+  assert.equal(hijackErrors.length, 2);
+  assert.match(hijackErrors[0]!, /strategy_proposal_unavailable/);
+  assert.match(hijackErrors[1]!, /strategy_proposal_unavailable/);
+
+  const candPropAfter = (await req(`${base}/proposals?proposalId=${orphanCandPropId}&scopeKey=${encodeURIComponent(scopeKey)}`)).proposal;
+  assert.equal(candPropAfter.status, 'pending', 'normal request must not mutate candidate pending proposal');
+  assert.equal(candPropAfter.newText, undefined);
+  assert.equal(candPropAfter.requestId, undefined);
+  const reportPropAfter = (await req(`${base}/proposals?proposalId=${orphanReportPropId}&scopeKey=${encodeURIComponent(scopeKey)}`)).proposal;
+  assert.equal(reportPropAfter.status, 'pending', 'normal request must not mutate report pending proposal');
+  assert.equal(reportPropAfter.newText, undefined);
+  assert.equal(reportPropAfter.requestId, undefined);
+
+  // 5. Start a DIFFERENT proposal P2 and verify model cannot hijack orphanCandPropId from P2's bound run
+  const boundPropId = randomUUID();
+  let wrongPropError = '';
+  provider.setResponder((ctx: any) => {
+    const step = ctx.recentToolResults.length;
+    if (step === 0) return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-propose-revision', proposalId: orphanCandPropId, newText: '跨提案劫持。'}}]};
+    if (step === 1) {
+      wrongPropError = providerMessageText(ctx.recentToolResults[0]?.content);
+      return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-propose-revision', proposalId: boundPropId, newText: '合法绑定提案的修改。'}}]};
+    }
+    return {text: '仅合法绑定提案已提交。'};
+  });
+  await req(`${base}/candidates/${cid}/versions/1/revise-proposal`, 'POST', {operationId: boundPropId, blockId: 'budget', request: '仅合法提案修改预算。'}, 202);
+  let boundSettled: any;
+  for (let n = 0; n < 500; n++) {
+    const p = (await req(`${base}/proposals?proposalId=${boundPropId}&scopeKey=${encodeURIComponent(scopeKey)}`)).proposal;
+    if (p.status !== 'pending') { boundSettled = p; break; }
+    await delay(20);
+  }
+  assert.match(wrongPropError, /strategy_proposal_unavailable/);
+  assert.equal(boundSettled.status, 'proposed');
+  assert.equal((await req(`${base}/proposals?proposalId=${orphanCandPropId}&scopeKey=${encodeURIComponent(scopeKey)}`)).proposal.status, 'pending');
+});
+
+test('I131-C-Rework-4 真实 Host+Pi：目标块变化后，旧基线 proposal 在派发、工具提交与采纳边界均被拒绝', {timeout: 180_000}, async t => {
+  const provider = await startToolProvider(), host = await startTestHost();
+  t.after(async () => { await host.close(); await provider.close(); });
+  const req = async (route: string, method = 'GET', body?: unknown, status = 200): Promise<any> => {
+    const r = await host.request(route, method, body);
+    assert.equal(r.status, status, await r.clone().text());
+    return r.json();
+  };
+  await req('/api/configuration', 'PUT', {name: '基线守卫合成', provider: 'openai-compatible', baseUrl: provider.baseUrl, model: 'synthetic-baseline-guard', apiKey: 'synthetic-baseline-guard'});
+  const initiativeId = randomUUID();
+  await req('/api/strategy/initiatives', 'POST', {operationId: initiativeId, title: '基线守卫事项', scopes: [stores]}, 201);
+  const base = `/api/strategy/initiatives/${initiativeId}`;
+  const report = (await req(`${base}/reports`, 'POST', {operationId: randomUUID(), fields: kickoffFields, sources: []}, 201)).version;
+  await req(`${base}/reports/1/lock`, 'POST', {operationId: randomUUID(), sha256: report.contentSha256});
+  await req(`${base}/reports/1/apply`, 'POST', {operationId: randomUUID(), sha256: report.contentSha256, scope: stores});
+
+  const settleCand = async (cid: string, no: number) => {
+    for (let n = 0; n < 500; n++) {
+      const d = await req(`${base}/candidates/${cid}/versions/${no}`);
+      if (d.candidate.lastRun?.status && d.candidate.lastRun.status !== 'accepted') return d.candidate;
+      await delay(20);
+    }
+    throw new Error('candidate did not settle');
+  };
+  const waitProposal = async (proposalId: string) => {
+    for (let n = 0; n < 500; n++) {
+      const p = (await req(`${base}/proposals?proposalId=${proposalId}&scopeKey=${encodeURIComponent(scopeKey)}`)).proposal;
+      if (p.status !== 'pending') return p;
+      await delay(20);
+    }
+    throw new Error('proposal did not settle');
+  };
+
+  // Initial candidate v1 with budget 200000
+  const blocks200k = [
+    {id: 'positioning', label: '定位与增长', text: '聚焦华东成熟门店。'},
+    {id: 'budget', label: '预算与资源', text: '2027 试点预算 200000 元。'},
+  ];
+  provider.setResponder((ctx: any) => ctx.recentToolResults.length
+    ? {text: '初始候选已保存。'}
+    : {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-candidate', operationId: randomUUID(), candidateBlocks: blocks200k}}]});
+  const created = await req(`${base}/candidates`, 'POST', {operationId: randomUUID(), scope: stores, title: '方案一', instruction: '形成方案。'}, 202);
+  const cid = created.candidate.candidateId;
+  let v1 = await settleCand(cid, 1);
+
+  // Case A: Proposal P1 proposed on 200000 -> candidate session updates v1 to 500000 -> adopt with refreshed CAS must REJECT
+  const p1Id = randomUUID();
+  provider.setResponder((ctx: any) => ctx.recentToolResults.length
+    ? {text: '已拟改为 300000。'}
+    : {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-propose-revision', proposalId: p1Id, newText: '2027 试点预算 300000 元。'}}]});
+  await req(`${base}/candidates/${cid}/versions/1/revise-proposal`, 'POST', {operationId: p1Id, blockId: 'budget', request: '预算改为 300000。'}, 202);
+  const p1 = await waitProposal(p1Id);
+  assert.equal(p1.status, 'proposed');
+  assert.equal(p1.baselineSha256, textSha(blocks200k[1]!.text));
+
+  const blocks500k = [blocks200k[0]!, {id: 'budget', label: '预算与资源', text: '2027 试点预算 500000 元。'}];
+  provider.setResponder((ctx: any) => ctx.recentToolResults.length
+    ? {text: '已更新为 500000。'}
+    : {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-candidate', operationId: randomUUID(), candidateBlocks: blocks500k}}]});
+  await req(`${base}/candidates/${cid}/versions/1/messages`, 'POST', {requestId: randomUUID(), text: '将预算改为 500000 元。', expectedRevision: v1.revision}, 202);
+  v1 = await settleCand(cid, 1);
+  assert.equal(v1.blocks[1].text, '2027 试点预算 500000 元。');
+
+  const staleAdopt = await req(`${base}/candidates/${cid}/versions/1/revise`, 'POST', {
+    operationId: randomUUID(), baseSha256: v1.contentSha256, request: '预算改为 300000。',
+    patches: [{blockId: 'budget', expectedOldSha256: textSha(v1.blocks[1].text), newText: '2027 试点预算 300000 元。'}],
+    proposalId: p1Id,
+  }, 409);
+  assert.equal(staleAdopt.code, 'strategy_proposal_baseline_changed');
+  assert.equal((await req(`${base}/candidates?scopeKey=${encodeURIComponent(scopeKey)}`)).candidates.length, 1, 'stale adopt creates zero new versions');
+  assert.equal((await req(`${base}/candidates/${cid}/versions/1`)).candidate.blocks[1].text, '2027 试点预算 500000 元。', 'v1 500000 preserved');
+  assert.equal((await req(`${base}/proposals?proposalId=${p1Id}&scopeKey=${encodeURIComponent(scopeKey)}`)).proposal.status, 'proposed');
+
+  // Case B: Mid-run change before tool submit -> tool must REJECT with strategy_proposal_baseline_changed
+  const p2Id = randomUUID();
+  let midRunToolError = '';
+  let releaseModel!: () => void;
+  const holdPromise = new Promise<void>(resolve => { releaseModel = resolve; });
+  let holdMainHit!: () => void;
+  const mainHeld = new Promise<void>(resolve => { holdMainHit = resolve; });
+  provider.setResponder(async (ctx: any) => {
+    const userText = ctx.messages.filter((m: any) => m.role === 'user').map((m: any) => providerMessageText(m.content)).join('\n');
+    if (userText.includes(p2Id)) {
+      if (ctx.recentToolResults.length === 0) {
+        holdMainHit();
+        await holdPromise;
+        return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-propose-revision', proposalId: p2Id, newText: '2027 试点预算 550000 元。'}}]};
+      }
+      midRunToolError = providerMessageText(ctx.recentToolResults[0]?.content);
+      return {text: '基线已变，拒绝提交。'};
+    }
+    return ctx.recentToolResults.length
+      ? {text: '候选已更新为 600000。'}
+      : {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-candidate', operationId: randomUUID(), candidateBlocks: [blocks200k[0]!, {id: 'budget', label: '预算与资源', text: '2027 试点预算 600000 元。'}]}}]};
+  });
+  await req(`${base}/candidates/${cid}/versions/1/revise-proposal`, 'POST', {operationId: p2Id, blockId: 'budget', request: '预算改为 550000。'}, 202);
+  await mainHeld;
+  // While proposal run is in flight, candidate session legally updates budget to 600000
+  await req(`${base}/candidates/${cid}/versions/1/messages`, 'POST', {requestId: randomUUID(), text: '将预算改为 600000 元。', expectedRevision: v1.revision}, 202);
+  v1 = await settleCand(cid, 1);
+  assert.equal(v1.blocks[1].text, '2027 试点预算 600000 元。');
+  // Now release the main proposal run so model calls initiative-propose-revision(p2Id)
+  releaseModel();
+  const p2 = await waitProposal(p2Id);
+  assert.match(midRunToolError, /strategy_proposal_baseline_changed/);
+  assert.equal(p2.status, 'ended', 'mid-run baseline change must prevent proposal from becoming proposed');
+  assert.equal(p2.newText, undefined);
+
+  // Case C: Created before busy rejection, then block changes before retry dispatch -> dispatch must REJECT 409 strategy_proposal_baseline_changed
+  const mainSession = (await req(`${base}/session?scopeKey=${encodeURIComponent(scopeKey)}`)).session;
+  const beforeHold2 = provider.requests.length;
+  provider.setResponder(() => ({text: '阻塞', hold: true}));
+  const holdReqId = randomUUID();
+  await req(`${base}/messages?scopeKey=${encodeURIComponent(scopeKey)}`, 'POST', {requestId: holdReqId, text: '先占住主会话。', expectedRevision: mainSession.revision}, 202);
+  await provider.waitForRequests(beforeHold2 + 1);
+  const p3Id = randomUUID();
+  await req(`${base}/candidates/${cid}/versions/1/revise-proposal`, 'POST', {operationId: p3Id, blockId: 'budget', request: '预算改为 650000。'}, 409);
+  await req(`${base}/stop?scopeKey=${encodeURIComponent(scopeKey)}`, 'POST', {expectedRequestId: holdReqId});
+  for (let n = 0; n < 500; n++) {
+    const d = await req(`${base}/session?scopeKey=${encodeURIComponent(scopeKey)}`);
+    if (!d.busy && d.session.lastRun?.status !== 'accepted') break;
+    await delay(20);
+  }
+  // Candidate session updates budget to 700000 before P3 is dispatched
+  provider.setResponder((ctx: any) => ctx.recentToolResults.length
+    ? {text: '更新到 700000。'}
+    : {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-candidate', operationId: randomUUID(), candidateBlocks: [blocks200k[0]!, {id: 'budget', label: '预算与资源', text: '2027 试点预算 700000 元。'}]}}]}
+  );
+  await req(`${base}/candidates/${cid}/versions/1/messages`, 'POST', {requestId: randomUUID(), text: '将预算改为 700000 元。', expectedRevision: v1.revision}, 202);
+  v1 = await settleCand(cid, 1);
+  const providerCountBeforeDispatch = provider.requests.length;
+  const staleDispatch = await req(`${base}/candidates/${cid}/versions/1/revise-proposal`, 'POST', {operationId: p3Id, blockId: 'budget', request: '预算改为 650000。'}, 409);
+  assert.equal(staleDispatch.code, 'strategy_proposal_baseline_changed');
+  assert.equal(provider.requests.length, providerCountBeforeDispatch, 'stale baseline must reject before invoking provider');
+});
+

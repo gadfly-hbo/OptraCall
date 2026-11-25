@@ -11,7 +11,7 @@ import { initiativeScopeKey } from '../strategy-initiative-types.ts';
 import type { ManagementStage, StrategyStage } from './ManagementTabs.tsx';
 import * as api from './strategy-initiative-client.ts';
 import type { CandidateDetail, InitiativeFile, InitiativeHistory, InitiativePublication, InitiativeRecord, InitiativeSessionDetail, KickoffReportReadback, KickoffReportVersion, ReportsView } from './strategy-initiative-client.ts';
-import { Badge, CandidateBody, InitiativeFilePanel, KickoffBody, LifecyclePlaceholderDialog, candidateLabel, candidateStatus, kickoffPatchTargets, latestBatch, mainSessionPresentation, matchPendingUploadFile, publicationFor } from './strategy-initiative-view.tsx';
+import { Badge, CandidateBody, InitiativeFilePanel, KickoffBody, LifecyclePlaceholderDialog, candidateLabel, candidateStatus, kickoffPatchTargets, latestBatch, mainSessionPresentation, matchPendingUploadFile, parsePendingUploadLedger, publicationFor, removePendingUpload, upsertPendingUpload } from './strategy-initiative-view.tsx';
 import type { PatchTarget, PendingInitiativeUpload, ReportFileEntry } from './strategy-initiative-view.tsx';
 import { StrategyCheckPanel, StrategyReleaseReview, StrategyVersionsPanel, LegacyDiscussionReadback, ReportVersionDialog, VersionReceiptDialog, verificationSourceLabels } from './StrategyInitiativeGovernance.tsx';
 import type { CandidateRef, LegacyDiscussionAccess } from './StrategyInitiativeGovernance.tsx';
@@ -26,18 +26,13 @@ const journalKey = (id: string, scopeKey: string) => `optracall.strategy-initiat
 const uploadJournalKey = (id: string, scopeKey: string) => `optracall.strategy-initiative.upload-pending.v1:${id}:${scopeKey}`;
 const readDraft = (id: string, scopeKey: string): string => { try { return sessionStorage.getItem(draftKey(id, scopeKey)) || ''; } catch { return ''; } };
 const saveDraft = (id: string, scopeKey: string, text: string) => { try { sessionStorage.setItem(draftKey(id, scopeKey), text); } catch { /* input stays in memory */ } };
-const readPendingUpload = (id: string, scopeKey: string): PendingInitiativeUpload | null => {
-  try {
-    const raw = sessionStorage.getItem(uploadJournalKey(id, scopeKey));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as PendingInitiativeUpload;
-    if (!parsed || typeof parsed !== 'object' || parsed.initiativeId !== id || parsed.workspaceScopeKey !== scopeKey || typeof parsed.operationId !== 'string' || typeof parsed.sha256 !== 'string' || typeof parsed.name !== 'string') return null;
-    return parsed.status === 'uploading' ? { ...parsed, status: 'unknown' } : parsed;
-  } catch { return null; }
+const readPendingUploads = (id: string, scopeKey: string): PendingInitiativeUpload[] => {
+  try { return parsePendingUploadLedger(sessionStorage.getItem(uploadJournalKey(id, scopeKey)), id, scopeKey); }
+  catch { return []; }
 };
-const savePendingUpload = (id: string, scopeKey: string, value: PendingInitiativeUpload | null) => {
+const savePendingUploads = (id: string, scopeKey: string, list: PendingInitiativeUpload[]) => {
   try {
-    if (value) sessionStorage.setItem(uploadJournalKey(id, scopeKey), JSON.stringify(value));
+    if (list.length > 0) sessionStorage.setItem(uploadJournalKey(id, scopeKey), JSON.stringify(list));
     else sessionStorage.removeItem(uploadJournalKey(id, scopeKey));
   } catch { /* metadata stays in memory */ }
 };
@@ -212,16 +207,24 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
   const [preview, setPreview] = useState<{ title: string; content: string } | null>(null);
   const [sourcePreview, setSourcePreview] = useState<SourcePreview | null>(null);
   const [fileBusy, setFileBusy] = useState(false), [fileError, setFileError] = useState('');
-  const [pendingUpload, setPendingUpload] = useState<PendingInitiativeUpload | null>(() => readPendingUpload(id, scopeKey));
-  const pendingUploadRef = useRef<PendingInitiativeUpload | null>(pendingUpload);
-  const pendingUploadPayloadRef = useRef<{ operationId: string; contentBase64: string } | null>(null);
+  const [pendingUploads, setPendingUploads] = useState<PendingInitiativeUpload[]>(() => readPendingUploads(id, scopeKey));
+  const pendingUploadsRef = useRef<PendingInitiativeUpload[]>(pendingUploads);
+  const pendingUploadPayloadsRef = useRef<Map<string, string>>(new Map());
+  const [pendingUploadPayloadIds, setPendingUploadPayloadIds] = useState<ReadonlySet<string>>(() => new Set());
   const [legacyId, setLegacyId] = useState('');
   const alive = useRef(true), presentedSnapshot = useRef<InitiativeSessionDetail['snapshot']>(null);
-  const rememberPendingUpload = (value: PendingInitiativeUpload | null) => {
-    pendingUploadRef.current = value;
-    setPendingUpload(value);
-    savePendingUpload(id, scopeKey, value);
-    if (!value || pendingUploadPayloadRef.current?.operationId !== value.operationId) pendingUploadPayloadRef.current = null;
+  const syncPendingUploadPayloadIds = () => { setPendingUploadPayloadIds(new Set(pendingUploadPayloadsRef.current.keys())); };
+  const updatePendingUploads = (updater: (current: PendingInitiativeUpload[]) => PendingInitiativeUpload[]) => {
+    const next = updater(pendingUploadsRef.current);
+    pendingUploadsRef.current = next;
+    setPendingUploads(next);
+    savePendingUploads(id, scopeKey, next);
+    const activeIds = new Set(next.map(item => item.operationId));
+    let pruned = false;
+    for (const key of pendingUploadPayloadsRef.current.keys()) {
+      if (!activeIds.has(key)) { pendingUploadPayloadsRef.current.delete(key); pruned = true; }
+    }
+    if (pruned) syncPendingUploadPayloadIds();
   };
   const rememberPending = (value: typeof pending) => {
     pendingRef.current = value;
@@ -270,14 +273,18 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
     if (sessionResult.status === 'fulfilled') applySession(sessionResult.value, reportResult.status !== 'fulfilled');
     if (fileResult.status === 'fulfilled') {
       setFiles(fileResult.value.files);
-      const pendingItem = pendingUploadRef.current;
-      if (pendingItem && pendingItem.status !== 'uploading') {
-        const matched = matchPendingUploadFile(pendingItem, fileResult.value.files);
-        if (matched.kind === 'matched') {
-          rememberPendingUpload(null);
-          setFileError('');
-          setNotice(`已核对原上传操作（${pendingItem.operationId.slice(0, 8)}）：文件「${matched.file.name}」已保存于 ${matched.file.directory}，未重复上传。`);
-        }
+      const matchedItems = pendingUploadsRef.current
+        .filter(item => item.status !== 'uploading')
+        .map(item => ({ item, match: matchPendingUploadFile(item, fileResult.value.files) }))
+        .filter((entry): entry is { item: PendingInitiativeUpload; match: { kind: 'matched'; file: InitiativeFile } } => entry.match.kind === 'matched');
+      if (matchedItems.length > 0) {
+        const matchedIds = new Set(matchedItems.map(entry => entry.item.operationId));
+        updatePendingUploads(list => list.filter(item => !matchedIds.has(item.operationId)));
+        setFileError('');
+        const first = matchedItems[0]!;
+        setNotice(matchedItems.length === 1
+          ? `已核对原上传操作（${first.item.operationId.slice(0, 8)}）：文件「${first.match.file.name}」已保存于 ${first.match.file.directory}，未重复上传。`
+          : `已核对 ${matchedItems.length} 条原上传操作，原文件均已保存且未重复上传。`);
       }
     }
     if (candidateResult.status === 'fulfilled') setCandidates(candidateResult.value.candidates);
@@ -407,15 +414,16 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
   };
   const executeUpload = async (record: PendingInitiativeUpload, contentBase64: string) => {
     setFileBusy(true); setFileError('');
-    pendingUploadPayloadRef.current = { operationId: record.operationId, contentBase64 };
-    rememberPendingUpload({ ...record, status: 'uploading', errorCode: undefined, errorMessage: undefined, unreachable: false });
+    pendingUploadPayloadsRef.current.set(record.operationId, contentBase64);
+    syncPendingUploadPayloadIds();
+    updatePendingUploads(list => upsertPendingUpload(list, { ...record, status: 'uploading', errorCode: undefined, errorMessage: undefined, unreachable: false }));
     try {
       const uploaded = await api.uploadInitiativeFile(id, {
         operationId: record.operationId, directory: record.directory, name: record.name, contentBase64,
         ...(record.scopeKey ? { scopeKey: record.scopeKey } : {}),
       });
       if (!alive.current) return;
-      rememberPendingUpload(null);
+      updatePendingUploads(list => removePendingUpload(list, record.operationId));
       try {
         const result = await api.listInitiativeFiles(id, scopeKey);
         if (alive.current) setFiles(result.files);
@@ -429,15 +437,15 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
       const uncertain = !isReqErr || fault.uncertain || fault.status === 0 || fault.status >= 500 || fault.code === 'strategy_file_operation_conflict';
       const msg = errorText(fault);
       if (uncertain) {
-        rememberPendingUpload({
+        updatePendingUploads(list => upsertPendingUpload(list, {
           ...record,
           status: 'unknown',
           unreachable: isReqErr && fault.status === 0,
           errorCode: isReqErr ? fault.code : undefined,
           errorMessage: msg,
-        });
+        }));
       } else {
-        rememberPendingUpload(null);
+        updatePendingUploads(list => removePendingUpload(list, record.operationId));
       }
       setFileError(msg);
     } finally { if (alive.current) setFileBusy(false); }
@@ -466,8 +474,8 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
       if (alive.current) { setFileError(errorText(fault)); setFileBusy(false); }
     }
   };
-  const checkPendingUpload = async () => {
-    const currentPending = pendingUploadRef.current;
+  const checkPendingUpload = async (operationId: string) => {
+    const currentPending = pendingUploadsRef.current.find(item => item.operationId === operationId);
     if (!currentPending || fileBusy) return;
     setFileBusy(true); setFileError('');
     try {
@@ -476,37 +484,37 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
       setFiles(result.files);
       const matched = matchPendingUploadFile(currentPending, result.files);
       if (matched.kind === 'matched') {
-        rememberPendingUpload(null);
+        updatePendingUploads(list => removePendingUpload(list, currentPending.operationId));
         setNotice(`已核对原上传操作（${currentPending.operationId.slice(0, 8)}）：文件「${matched.file.name}」已保存于 ${matched.file.directory}（fileId ${matched.file.fileId.slice(0, 8)}），未重复上传。`);
       } else if (matched.kind === 'conflict') {
         setFileError(`原操作编号 ${currentPending.operationId.slice(0, 8)} 已对应不同文件「${matched.file.name}」；未覆盖或重复上传。`);
       } else {
-        rememberPendingUpload({ ...currentPending, status: 'not-found', unreachable: false, errorMessage: undefined, checkedAt: new Date().toISOString() });
+        updatePendingUploads(list => upsertPendingUpload(list, { ...currentPending, status: 'not-found', unreachable: false, errorMessage: undefined, checkedAt: new Date().toISOString() }));
         setNotice(`已只读核对当前事项文件列表，尚未发现原上传操作（${currentPending.operationId.slice(0, 8)}）的已保存记录。`);
       }
     } catch (fault) {
       if (!alive.current) return;
       const isReqErr = fault instanceof api.StrategyInitiativeRequestError;
       const msg = errorText(fault);
-      rememberPendingUpload({
+      updatePendingUploads(list => upsertPendingUpload(list, {
         ...currentPending,
         status: 'unknown',
         unreachable: isReqErr && fault.status === 0,
         errorCode: isReqErr ? fault.code : undefined,
         errorMessage: msg,
         checkedAt: new Date().toISOString(),
-      });
+      }));
       setFileError(msg);
     } finally { if (alive.current) setFileBusy(false); }
   };
-  const retryPendingUpload = async () => {
-    const currentPending = pendingUploadRef.current;
-    const payload = pendingUploadPayloadRef.current;
-    if (!currentPending || fileBusy || !payload || payload.operationId !== currentPending.operationId) return;
-    await executeUpload(currentPending, payload.contentBase64);
+  const retryPendingUpload = async (operationId: string) => {
+    const currentPending = pendingUploadsRef.current.find(item => item.operationId === operationId);
+    const contentBase64 = pendingUploadPayloadsRef.current.get(operationId);
+    if (!currentPending || fileBusy || !contentBase64) return;
+    await executeUpload(currentPending, contentBase64);
   };
-  const reselectPendingUpload = async (file: File) => {
-    const currentPending = pendingUploadRef.current;
+  const reselectPendingUpload = async (operationId: string, file: File) => {
+    const currentPending = pendingUploadsRef.current.find(item => item.operationId === operationId);
     if (!currentPending || fileBusy) return;
     if (file.size > 50 * 1024 * 1024) { setFileError('单文件不超过 50 MiB。'); return; }
     setFileBusy(true); setFileError('');
@@ -524,9 +532,9 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
       if (alive.current) { setFileError(errorText(fault)); setFileBusy(false); }
     }
   };
-  const dismissPendingUpload = () => {
+  const dismissPendingUpload = (operationId: string) => {
     if (fileBusy) return;
-    rememberPendingUpload(null);
+    updatePendingUploads(list => removePendingUpload(list, operationId));
     setFileError('');
     setNotice('已放弃本地待核上传记录；服务端已有文件不受影响。');
   };
@@ -663,14 +671,14 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
     <div className="si-side">
       <CaseFormError error={fileError} />
       <InitiativeFilePanel files={files} reports={scopedVersions} candidates={candidates} batches={history?.verifications ?? []} scopeKey={scopeKey} busy={fileBusy}
-        pendingUpload={pendingUpload}
-        hasPendingUploadPayload={Boolean(pendingUpload && pendingUploadPayloadRef.current?.operationId === pendingUpload.operationId)}
+        pendingUploads={pendingUploads}
+        pendingUploadPayloadIds={pendingUploadPayloadIds}
         onUpload={(directory, file, scopeExclusive) => { void upload(directory, file, scopeExclusive); }}
         onOpenFile={file => { void openFile(file); }}
         onOpenReport={(entry: ReportFileEntry) => setPreview({ title: entry.name, content: entry.content })}
-        onCheckPendingUpload={() => { void checkPendingUpload(); }}
-        onRetryPendingUpload={() => { void retryPendingUpload(); }}
-        onReselectPendingUpload={file => { void reselectPendingUpload(file); }}
+        onCheckPendingUpload={opId => { void checkPendingUpload(opId); }}
+        onRetryPendingUpload={opId => { void retryPendingUpload(opId); }}
+        onReselectPendingUpload={(opId, file) => { void reselectPendingUpload(opId, file); }}
         onDismissPendingUpload={dismissPendingUpload} />
     </div>
     {dialog === 'new-candidate' && <NewCandidateDialog initiativeId={id} scope={scope} anchorNo={anchor?.reportNo} onClose={() => setDialog(null)} onCreated={async candidate => { setDialog(null); await refresh(); setSelectedCandidate({ candidateId: candidate.candidateId, no: candidate.no }); setNotice('候选独立会话已启动；完成后回到主窗口核对。'); }} />}
@@ -795,9 +803,21 @@ export interface ReviseFeedbackSummary {
   feedback?: api.RevisionProposalFeedback;
 }
 
+export interface SubmittedProposalSnapshot {
+  proposalId: string;
+  requestId?: string;
+  baseLabel: string;
+  baseSha256: string;
+  blockId: string;
+  blockLabel: string;
+  baselineText: string;
+  request: string;
+}
+
 export function ReviseDialog<T>({
   title, baseLabel, baseSha256, targets, maxText, propose, readProposal, onSubmit, onDone, onClose,
   readMainDiscussion, modelLabel, initialFeedback = null,
+  initialBusy = false, initialStep = 'intent', initialSubmitted = null, initialProposedText = '',
 }: {
   title: string; baseLabel: string; baseSha256: string; targets: PatchTarget[]; maxText: number;
   propose: (input: { operationId: string; blockId: string; request: string }) => Promise<{ proposal: { proposalId: string }; requestId?: string }>;
@@ -807,50 +827,61 @@ export function ReviseDialog<T>({
   readMainDiscussion?: () => Promise<InitiativeSessionDetail | null>;
   modelLabel?: string;
   initialFeedback?: ReviseFeedbackSummary | null;
+  initialBusy?: boolean;
+  initialStep?: 'intent' | 'waiting' | 'diff';
+  initialSubmitted?: SubmittedProposalSnapshot | null;
+  initialProposedText?: string;
 }) {
   const [blockId, setBlockId] = useState(targets[0]?.blockId ?? '');
   const target = targets.find(item => item.blockId === blockId) ?? targets[0];
   const [request, setRequest] = useState('');
-  const [step, setStep] = useState<'intent' | 'waiting' | 'diff'>('intent');
-  const [proposalId, setProposalId] = useState(''), [proposalRequestId, setProposalRequestId] = useState<string | undefined>(undefined), [proposedText, setProposedText] = useState('');
+  const [step, setStep] = useState<'intent' | 'waiting' | 'diff'>(initialStep);
+  const [submitted, setSubmitted] = useState<SubmittedProposalSnapshot | null>(initialSubmitted);
+  const [proposedText, setProposedText] = useState(initialProposedText);
+  const [attemptCount, setAttemptCount] = useState(0);
   const [lastFeedback, setLastFeedback] = useState<ReviseFeedbackSummary | null>(initialFeedback);
   const [showDiscussion, setShowDiscussion] = useState(false);
   const [discussionDetail, setDiscussionDetail] = useState<InitiativeSessionDetail | null>(null);
   const [discussionLoading, setDiscussionLoading] = useState(false);
   const [discussionError, setDiscussionError] = useState('');
-  const [busy, setBusy] = useState(false), [error, setError] = useState('');
+  const [busy, setBusy] = useState(initialBusy), [error, setError] = useState('');
   const operationId = useOperationId();
   const alive = useRef(true);
-  const activeProposalRef = useRef('');
-  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  const activeProposalRef = useRef(initialSubmitted?.proposalId ?? '');
+  const submissionSeqRef = useRef(0);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; submissionSeqRef.current += 1; activeProposalRef.current = ''; }; }, []);
   useEffect(() => {
-    if (step !== 'waiting' || !proposalId) return;
+    if (step !== 'waiting' || !submitted) return;
     let cancelled = false;
-    activeProposalRef.current = proposalId;
-    const watchedId = proposalId;
-    const watchedBlockId = target?.blockId ?? blockId;
-    const watchedBlockLabel = target?.label ?? blockId;
+    activeProposalRef.current = submitted.proposalId;
+    const watched = submitted;
     const poll = () => {
-      void readProposal(watchedId).then(result => {
-        if (cancelled || !alive.current || activeProposalRef.current !== watchedId) return;
+      void readProposal(watched.proposalId).then(result => {
+        if (cancelled || !alive.current || activeProposalRef.current !== watched.proposalId) return;
         const p = result.proposal;
         if (p.status === 'proposed' && p.newText) {
           setProposedText(p.newText);
           setLastFeedback(null);
           setStep('diff');
         } else if (p.status === 'ended' || p.status === 'failed') {
+          activeProposalRef.current = '';
+          setSubmitted(null);
+          setAttemptCount(value => value + 1);
           setLastFeedback({
-            proposalId: watchedId,
-            requestId: p.feedback?.requestId ?? p.requestId ?? proposalRequestId,
-            blockId: watchedBlockId,
-            blockLabel: watchedBlockLabel,
+            proposalId: watched.proposalId,
+            requestId: p.feedback?.requestId ?? p.requestId ?? watched.requestId,
+            blockId: watched.blockId,
+            blockLabel: watched.blockLabel,
             status: p.status,
             feedback: p.feedback,
           });
           setStep('intent');
         }
       }).catch(fault => {
-        if (!cancelled && alive.current && activeProposalRef.current === watchedId) {
+        if (!cancelled && alive.current && activeProposalRef.current === watched.proposalId) {
+          activeProposalRef.current = '';
+          setSubmitted(null);
+          setAttemptCount(value => value + 1);
           setError(errorText(fault));
           setStep('intent');
         }
@@ -858,7 +889,7 @@ export function ReviseDialog<T>({
     };
     const timer = setInterval(poll, 1500);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [step, proposalId]);
+  }, [step, submitted]);
   const openDiscussion = async () => {
     if (!readMainDiscussion) return;
     if (showDiscussion) { setShowDiscussion(false); return; }
@@ -872,43 +903,83 @@ export function ReviseDialog<T>({
       if (alive.current) setDiscussionLoading(false);
     }
   };
+  const closeDialog = () => {
+    submissionSeqRef.current += 1;
+    activeProposalRef.current = '';
+    onClose();
+  };
   const startProposal = async (event: FormEvent) => {
     event.preventDefault();
-    if (!request.trim() || !target || busy) return;
+    const cleanedRequest = request.trim();
+    if (!cleanedRequest || !target || busy) return;
+    const snapshotBase = {
+      baseLabel,
+      baseSha256,
+      blockId: target.blockId,
+      blockLabel: target.label,
+      baselineText: target.text,
+      request: cleanedRequest,
+    };
+    const seq = ++submissionSeqRef.current;
     setBusy(true); setError(''); setLastFeedback(null); setShowDiscussion(false);
     try {
-      const id = operationId({ baseSha256, blockId: target.blockId, request: request.trim(), attempt: proposalId || 'first' });
-      const result = await propose({ operationId: id, blockId: target.blockId, request: request.trim() });
-      if (!alive.current) return;
-      activeProposalRef.current = result.proposal.proposalId;
-      setProposalId(result.proposal.proposalId);
-      setProposalRequestId(result.requestId);
+      const id = operationId({ baseSha256: snapshotBase.baseSha256, blockId: snapshotBase.blockId, request: snapshotBase.request, attempt: attemptCount });
+      const result = await propose({ operationId: id, blockId: snapshotBase.blockId, request: snapshotBase.request });
+      if (!alive.current || submissionSeqRef.current !== seq) return;
+      const nextSubmitted: SubmittedProposalSnapshot = {
+        ...snapshotBase,
+        proposalId: result.proposal.proposalId,
+        requestId: result.requestId,
+      };
+      activeProposalRef.current = nextSubmitted.proposalId;
+      setSubmitted(nextSubmitted);
+      setProposedText('');
       setStep('waiting');
-    } catch (fault) { if (alive.current) setError(errorText(fault)); }
-    finally { if (alive.current) setBusy(false); }
+    } catch (fault) { if (alive.current && submissionSeqRef.current === seq) setError(errorText(fault)); }
+    finally { if (alive.current && submissionSeqRef.current === seq) setBusy(false); }
   };
-  const noActualChange = Boolean(target && proposedText === target.text);
+  const noActualChange = Boolean(submitted && proposedText === submitted.baselineText);
+  const liveSubmittedTarget = submitted ? targets.find(item => item.blockId === submitted.blockId) : undefined;
+  const liveBaselineChanged = Boolean(submitted && (baseSha256 !== submitted.baseSha256 || !liveSubmittedTarget || liveSubmittedTarget.text !== submitted.baselineText));
   const adopt = async (event: FormEvent) => {
     event.preventDefault();
-    if (busy || !target || !proposedText.trim() || noActualChange) return;
+    if (busy || !submitted || !proposedText.trim() || noActualChange) return;
+    const active = submitted;
     setBusy(true); setError('');
     try {
-      const expectedOldSha256 = await sha256Of(target.text);
-      const id = operationId({ baseSha256, blockId: target.blockId, request: request.trim(), newText: proposedText, proposalId });
-      const result = await onSubmit({ operationId: id, baseSha256, request: request.trim(), patches: [{ blockId: target.blockId, expectedOldSha256, newText: proposedText }], proposalId });
+      const expectedOldSha256 = await sha256Of(active.baselineText);
+      const id = operationId({ baseSha256: active.baseSha256, blockId: active.blockId, request: active.request, newText: proposedText, proposalId: active.proposalId });
+      const result = await onSubmit({
+        operationId: id,
+        baseSha256: active.baseSha256,
+        request: active.request,
+        patches: [{ blockId: active.blockId, expectedOldSha256, newText: proposedText }],
+        proposalId: active.proposalId,
+      });
       await onDone(result);
     } catch (fault) { if (alive.current) setError(errorText(fault)); }
     finally { if (alive.current) setBusy(false); }
   };
-  return <CaseDialog title={title} subtitle={`基于 ${baseLabel}（指纹 ${baseSha256.slice(0, 12)}…）。描述修改意图，由 Agent 严格在所选块内拟改；核对差异后采纳另存，其他章节保留原文。`} busy={busy} onClose={() => { activeProposalRef.current = ''; onClose(); }} className="si-version-dialog">
+  const returnToIntent = () => {
+    submissionSeqRef.current += 1;
+    activeProposalRef.current = '';
+    setSubmitted(null);
+    setProposedText('');
+    setError('');
+    setAttemptCount(value => value + 1);
+    setStep('intent');
+  };
+  const subtitleLabel = submitted ? submitted.baseLabel : baseLabel;
+  const subtitleSha = submitted ? submitted.baseSha256 : baseSha256;
+  return <CaseDialog title={title} subtitle={`基于 ${subtitleLabel}（指纹 ${subtitleSha.slice(0, 12)}…）。描述修改意图，由 Agent 严格在所选块内拟改；核对差异后采纳另存，其他章节保留原文。`} busy={busy} onClose={closeDialog} className="si-version-dialog">
     {step === 'intent' && <form onSubmit={startProposal}>
       <div className="si-dialog-scroll">
-        <div className="case-field"><label htmlFor="si-revise-block">修改位置（单块限定）</label><select id="si-revise-block" value={blockId} onChange={event => setBlockId(event.target.value)}>{targets.map(item => <option key={item.blockId} value={item.blockId}>{item.label}（{item.blockId}）</option>)}</select></div>
+        <div className="case-field"><label htmlFor="si-revise-block">修改位置（单块限定）</label><select id="si-revise-block" disabled={busy} value={blockId} onChange={event => setBlockId(event.target.value)}>{targets.map(item => <option key={item.blockId} value={item.blockId}>{item.label}（{item.blockId}）</option>)}</select></div>
         {target && <div className="si-revise-baseline" aria-label="当前所选块原文">
           <strong>当前修改对象：{baseLabel} · 「{target.label}」（{target.blockId}）</strong>
           <p>{target.text || '（该块当前正文为空）'}</p>
         </div>}
-        <div className="case-field"><label htmlFor="si-revise-request">修改意图</label><textarea id="si-revise-request" required rows={3} maxLength={2000} value={request} onChange={event => setRequest(event.target.value)} placeholder="例如：将三店试点调整为两店，先核对导购工时。" /></div>
+        <div className="case-field"><label htmlFor="si-revise-request">修改意图</label><textarea id="si-revise-request" required disabled={busy} rows={3} maxLength={2000} value={request} onChange={event => setRequest(event.target.value)} placeholder="例如：将三店试点调整为两店，先核对导购工时。" /></div>
         {lastFeedback && <div className={`si-proposal-feedback si-notice ${lastFeedback.status === 'failed' ? 'si-notice-warning' : ''}`} role="status" aria-label="本轮拟改反馈">
           {lastFeedback.status === 'ended' ? (
             lastFeedback.feedback?.replyText ? <>
@@ -937,22 +1008,23 @@ export function ReviseDialog<T>({
         </div>}
       </div>
       <CaseFormError error={error} />
-      <div className="case-dialog-actions"><button type="button" className="secondary-button" onClick={() => { activeProposalRef.current = ''; onClose(); }}>取消</button><button type="submit" className="primary-button" disabled={!request.trim() || busy}>{busy ? '正在提交…' : '请 Agent 拟改'}</button></div>
+      <div className="case-dialog-actions"><button type="button" className="secondary-button" onClick={closeDialog}>取消</button><button type="submit" className="primary-button" disabled={!request.trim() || busy}>{busy ? '正在提交…' : '请 Agent 拟改'}</button></div>
     </form>}
-    {step === 'waiting' && <div className="si-dialog-scroll">
-      <p className="si-muted" role="status">Agent 正在基于准确基线拟改「{target?.label}」（{target?.blockId}）；完成后在此核对差异或查看 Agent 澄清回复。未采纳前不另存版本。</p>
-      <div className="si-revise-baseline"><strong>本轮修改意图</strong><p>{request}</p></div>
+    {step === 'waiting' && submitted && <div className="si-dialog-scroll">
+      <p className="si-muted" role="status">Agent 正在基于准确基线拟改「{submitted.blockLabel}」（{submitted.blockId}）；完成后在此核对差异或查看 Agent 澄清回复。未采纳前不另存版本。</p>
+      <div className="si-revise-baseline"><strong>本轮修改意图（{submitted.baseLabel} · 「{submitted.blockLabel}」）</strong><p>{submitted.request}</p></div>
       <CaseFormError error={error} />
-      <div className="case-dialog-actions"><button type="button" className="secondary-button" onClick={() => { activeProposalRef.current = ''; onClose(); }}>取消</button></div>
+      <div className="case-dialog-actions"><button type="button" className="secondary-button" onClick={closeDialog}>取消</button></div>
     </div>}
-    {step === 'diff' && <form onSubmit={adopt}>
+    {step === 'diff' && submitted && <form onSubmit={adopt}>
       <div className="si-dialog-scroll">
-        <p>{baseLabel} · 仅修改「{target?.label}」（{target?.blockId}）。其他章节以原字节和顺序复用。</p>
+        <p>{submitted.baseLabel} · 仅修改「{submitted.blockLabel}」（{submitted.blockId}）。其他章节以原字节和顺序复用。</p>
+        {liveBaselineChanged && <p className="si-notice si-notice-warning" role="status">提示：当前正文已发生变化，本提案仍绑定提交时基线；如需基于最新正文修改，请返回重新拟改。</p>}
         {noActualChange && <p className="si-notice si-notice-warning" role="status">Agent 拟改内容与当前原文完全一致（无实际变化），无需另存新版本；可返回调整修改意图或改选修改位置。</p>}
-        <div className="si-diff"><div className="si-diff-before"><strong>原文</strong><p>{target?.text}</p></div><div className="si-diff-after"><strong>Agent 拟改</strong><p>{proposedText}</p></div></div>
+        <div className="si-diff"><div className="si-diff-before"><strong>原文</strong><p>{submitted.baselineText}</p></div><div className="si-diff-after"><strong>Agent 拟改</strong><p>{proposedText}</p></div></div>
       </div>
       <CaseFormError error={error} />
-      <div className="case-dialog-actions"><button type="button" className="secondary-button" disabled={busy} onClick={() => setStep('intent')}>返回修改意图</button><button type="submit" className="primary-button" disabled={busy || noActualChange}>{busy ? '正在另存…' : '采纳并另存新版本'}</button></div>
+      <div className="case-dialog-actions"><button type="button" className="secondary-button" disabled={busy} onClick={returnToIntent}>返回修改意图</button><button type="submit" className="primary-button" disabled={busy || noActualChange}>{busy ? '正在另存…' : '采纳并另存新版本'}</button></div>
     </form>}
   </CaseDialog>;
 }

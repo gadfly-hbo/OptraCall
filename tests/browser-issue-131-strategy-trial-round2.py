@@ -138,22 +138,35 @@ class SyntheticProviderState:
         if '"parentVersion"' in user_text:
             with self.lock:
                 self.observations['item_d_parent_version_seen'] = True
-            if step > 0:
-                return {'text': '已基于父版新建候选并补齐可承接目标，请重新锁定并检验。'}
-            return {
-                'calls': [{
-                    'name': 'strategy_goals',
-                    'arguments': {
-                        'action': 'initiative-save-candidate',
-                        'operationId': str(_uuid.uuid4()),
-                        'candidateBlocks': [
-                            {'id': 'positioning', 'label': '定位与增长', 'text': '门店效率优先：优化排班与动线，提升单店坪效。'},
-                            {'id': 'budget', 'label': '预算与资源', 'text': '2027 试点投入 40 万元，覆盖 2 家标杆门店。'},
-                        ],
-                        'candidateGoals': ['试点门店单店人效同比提升 15%'],
-                    },
-                }],
-            }
+            if step == 0:
+                first_line = user_text.split('\n', 1)[0]
+                ctx_obj = json.loads(first_line)
+                pv = ctx_obj['parentVersion']
+                return {
+                    'calls': [{
+                        'name': 'strategy_goals',
+                        'arguments': {
+                            'action': 'initiative-read-candidate',
+                            'candidateId': pv['candidateId'],
+                            'no': pv['no'],
+                        },
+                    }],
+                }
+            if step == 1:
+                parent_read = json.loads(message_text(recent_tools[0].get('content', '{}')))
+                parent_blocks = parent_read['candidate']['blocks']
+                return {
+                    'calls': [{
+                        'name': 'strategy_goals',
+                        'arguments': {
+                            'action': 'initiative-save-candidate',
+                            'operationId': str(_uuid.uuid4()),
+                            'candidateBlocks': parent_blocks,
+                            'candidateGoals': ['试点门店单店人效同比提升 15%'],
+                        },
+                    }],
+                }
+            return {'text': '已读取父版正文并新建候选补齐可承接目标，请重新锁定并检验。'}
 
         # 5. Candidate 1 creation (Item B invalid-field self-correction -> 0-goal legal draft)
         if '会员复购优先' in user_text:
@@ -474,7 +487,7 @@ try:
             recovery_box.get_by_text('尚未发现原上传记录').wait_for(timeout=10_000)
 
             # Mismatched file rejected before network POST
-            reselect_input = page.locator('input[aria-label="重选原文件并按原编号重试"]')
+            reselect_input = page.locator('input[aria-label^="重选原文件并按原编号重试"]').first
             reselect_input.set_input_files(file_wrong)
             page.get_by_text('文件名或 SHA-256 指纹不一致').wait_for(timeout=5_000)
 
@@ -512,7 +525,78 @@ try:
             files_after_check = api(f'/api/strategy/initiatives/{initiative_id}/files')['files']
             assert len([f for f in files_after_check if f['name'] == '错误替代文件.txt']) == 1, 'read-only check resolved without duplicate'
             page.unroute(f'**/api/strategy/initiatives/{initiative_id}/files*')
+
+            # 6. Rework Gap 1: first UNKNOWN preserved across 2nd success, 3rd UNKNOWN, reload, and independent recovery
+            files_dir = os.path.dirname(file_rec)
+            file_u1 = os.path.join(files_dir, 'first-unknown.txt')
+            file_s2 = os.path.join(files_dir, 'second-new.txt')
+            file_u3 = os.path.join(files_dir, 'third-unknown.txt')
+            with open(file_u1, 'wb') as fh:
+                fh.write('第一条未知上传样本。'.encode('utf-8'))
+            with open(file_s2, 'wb') as fh:
+                fh.write('第二条正常上传样本。'.encode('utf-8'))
+            with open(file_u3, 'wb') as fh:
+                fh.write('第三条未知上传样本。'.encode('utf-8'))
+
+            multi_ops = {'u1': None, 'u3': None, 'u1_retry': None, 'fail_names': {'first-unknown.txt', 'third-unknown.txt'}}
+
+            def intercept_multi(route):
+                req = route.request
+                if req.method == 'POST' and f'/api/strategy/initiatives/{initiative_id}/files' in req.url:
+                    payload = json.loads(req.post_data or '{}')
+                    name = payload.get('name')
+                    op = payload.get('operationId')
+                    if name == 'first-unknown.txt' and multi_ops['u1'] is None:
+                        multi_ops['u1'] = op
+                    elif name == 'first-unknown.txt':
+                        multi_ops['u1_retry'] = op
+                    elif name == 'third-unknown.txt' and multi_ops['u3'] is None:
+                        multi_ops['u3'] = op
+                    if name in multi_ops['fail_names']:
+                        multi_ops['fail_names'].remove(name)
+                        route.fulfill(status=503, content_type='application/json', body=json.dumps({'code': 'strategy_file_write_unknown', 'message': '合成503未知'}))
+                        return
+                route.continue_()
+
+            page.route(f'**/api/strategy/initiatives/{initiative_id}/files*', intercept_multi)
+            file_input.set_input_files(file_u1)
+            card_u1 = page.locator('[aria-label="待核上传记录 first-unknown.txt"]')
+            card_u1.wait_for(timeout=10_000)
+            page.get_by_role('button', name='＋ 上传资料').wait_for(timeout=10_000)
+
+            # Second upload succeeds -> first-unknown.txt MUST NOT be overwritten or cleared!
+            file_input.set_input_files(file_s2)
+            page.get_by_text('second-new.txt').first.wait_for(timeout=10_000)
+            page.get_by_role('button', name='＋ 上传资料').wait_for(timeout=10_000)
+            assert card_u1.is_visible(), 'first UNKNOWN must remain visible after second upload succeeds'
+
+            # Third upload also returns 503 -> BOTH first-unknown.txt and third-unknown.txt exist simultaneously!
+            file_input.set_input_files(file_u3)
+            card_u3 = page.locator('[aria-label="待核上传记录 third-unknown.txt"]')
+            card_u3.wait_for(timeout=10_000)
+            page.get_by_role('button', name='＋ 上传资料').wait_for(timeout=10_000)
+            assert card_u1.is_visible() and card_u3.is_visible(), 'both UNKNOWN records must coexist'
+
+            # Reload preserves BOTH records
+            page.reload(wait_until='networkidle')
+            page.get_by_role('button', name='战略选择').click()
+            card_u1 = page.locator('[aria-label="待核上传记录 first-unknown.txt"]')
+            card_u3 = page.locator('[aria-label="待核上传记录 third-unknown.txt"]')
+            card_u1.wait_for(timeout=10_000)
+            card_u3.wait_for(timeout=10_000)
+
+            # Independent check + verified reselect for first-unknown.txt -> succeeds with SAME original operationId while third-unknown.txt stays!
+            card_u1.get_by_role('button', name='核对原上传结果').click()
+            card_u1.get_by_text('尚未发现原上传记录').wait_for(timeout=10_000)
+            card_u1.locator('input[aria-label="重选原文件并按原编号重试 first-unknown.txt"]').set_input_files(file_u1)
+            card_u1.wait_for(state='detached', timeout=10_000)
+            assert multi_ops['u1_retry'] == multi_ops['u1'], 'reselected retry must reuse exact first operationId'
+            assert card_u3.is_visible(), 'resolving first UNKNOWN must not drop third UNKNOWN'
+            card_u3.get_by_role('button', name='放弃待核记录').click()
+            card_u3.wait_for(state='detached', timeout=10_000)
+            page.unroute(f'**/api/strategy/initiatives/{initiative_id}/files*')
             report['checks']['item_a_upload_recovery'] = 'PASS'
+            report['checks']['rework_gap1_multi_pending_uploads'] = 'PASS'
 
             # ========================
             # Seed Kickoff Report & Send 1 main discussion message so main session transcript exists
@@ -547,6 +631,33 @@ try:
             page.locator('#si-main-text').fill('请记住：试点优先控制预算上限。')
             page.get_by_role('button', name='发送讨论').click()
             page.get_by_text('已记录本轮战略讨论要点').wait_for(timeout=15_000)
+
+            # Rework Gap 3 (kickoff shared ReviseDialog): delayed 202 freezes inputs & close-in-flight leaves no error/drift
+            kickoff_delay = {'active': True}
+
+            def delay_kickoff_propose(route):
+                if route.request.method == 'POST' and kickoff_delay['active']:
+                    kickoff_delay['active'] = False
+                    time.sleep(0.8)
+                route.continue_()
+
+            page.route(f'**/api/strategy/initiatives/{initiative_id}/reports/**/revise-proposal*', delay_kickoff_propose)
+            page.get_by_role('button', name='限定修改').click()
+            krev_dlg = page.get_by_role('dialog')
+            krev_dlg.locator('#si-revise-request').fill('核对时间视野说明。')
+            krev_dlg.get_by_role('button', name='请 Agent 拟改').click()
+            krev_dlg.get_by_role('button', name='正在提交…').wait_for(timeout=5_000)
+            assert krev_dlg.locator('#si-revise-block').is_disabled(), 'kickoff revise block select must be disabled while submitting'
+            assert krev_dlg.locator('#si-revise-request').is_disabled(), 'kickoff revise textarea must be disabled while submitting'
+            krev_dlg.get_by_role('button', name='取消').click()
+            krev_dlg.wait_for(state='detached', timeout=5_000)
+            page.unroute(f'**/api/strategy/initiatives/{initiative_id}/reports/**/revise-proposal*')
+            # Wait for the cancelled/background proposal main run to settle so main session is idle before Plans phase
+            for _ in range(100):
+                sess = api(f'/api/strategy/initiatives/{initiative_id}/session?scopeKey=department%3A%3Ahean-east')
+                if not sess.get('busy') and sess.get('session', {}).get('lastRun', {}).get('status') != 'accepted':
+                    break
+                time.sleep(0.1)
 
             # Enter Plans phase
             page.get_by_role('button', name='进入方案成型').click()
@@ -594,13 +705,30 @@ try:
             feedback_box.get_by_role('button', name='查看主会话原讨论').click()
             rev_dlg.locator('[aria-label="主会话原讨论只读回看"]').get_by_text('预算在「预算与资源」块').first.wait_for(timeout=10_000)
 
-            # Reselect 'budget' block -> baseline preview updates -> Agent proposes patch -> adopt v2!
+            # Rework Gap 3: Reselect 'budget' block + delay 202 response -> verify inputs frozen while submitting & diff strictly bound to submitted block
+            delayed_once = {'active': True}
+
+            def delay_propose(route):
+                if route.request.method == 'POST' and delayed_once['active']:
+                    delayed_once['active'] = False
+                    time.sleep(0.8)
+                route.continue_()
+
+            page.route(f'**/api/strategy/initiatives/{initiative_id}/candidates/**/revise-proposal*', delay_propose)
             rev_dlg.locator('#si-revise-block').select_option('budget')
             assert '预算与资源' in baseline_box.inner_text()
             assert '80 万元' in baseline_box.inner_text()
             rev_dlg.locator('#si-revise-request').fill('请把试点预算上限改为 50 万元，先做 2 家店。')
             rev_dlg.get_by_role('button', name='请 Agent 拟改').click()
+            # While delayed 202 is in flight, select & textarea MUST be disabled (cannot switch block or mutate intent)
+            rev_dlg.get_by_role('button', name='正在提交…').wait_for(timeout=5_000)
+            assert rev_dlg.locator('#si-revise-block').is_disabled(), 'block select must be disabled while revise-proposal POST is in flight'
+            assert rev_dlg.locator('#si-revise-request').is_disabled(), 'intent textarea must be disabled while revise-proposal POST is in flight'
+            page.unroute(f'**/api/strategy/initiatives/{initiative_id}/candidates/**/revise-proposal*')
+
             rev_dlg.get_by_role('button', name='采纳并另存新版本').wait_for(timeout=20_000)
+            assert '预算与资源' in rev_dlg.inner_text()
+            assert '80 万元' in rev_dlg.locator('.si-diff-before').inner_text()
             assert '50 万元' in rev_dlg.locator('.si-diff-after').inner_text()
             rev_dlg.get_by_role('button', name='采纳并另存新版本').click()
             rev_dlg.wait_for(state='detached', timeout=10_000)
@@ -608,6 +736,7 @@ try:
             # Untouched positioning block keeps exact original bytes
             assert '聚焦华东存量门店会员复购，先试点再推广。' in page.locator('[aria-label="候选详情"]').inner_text()
             report['checks']['item_c_revise_clarification_and_adopt'] = 'PASS'
+            report['checks']['rework_gap3_revise_freeze_and_snapshot'] = 'PASS'
 
             # ========================
             # ITEM D (Path 1): 0-goal upfront notice -> unlocked draft supplements goals via candidate session -> lock -> verify -> release -> handoff

@@ -280,6 +280,8 @@ export class StrategyInitiativeReports {
     if (input.proposalId !== undefined) {
       const proposal = file.proposals.find(p => p.proposalId === input.proposalId);
       if (!proposal || proposal.status !== 'proposed' || proposal.target.kind !== 'report' || proposal.target.no !== no || input.patches.length !== 1 || input.patches[0]!.blockId !== proposal.blockId || input.patches[0]!.newText !== proposal.newText) throw new StrategyDiscussionFault('strategy_proposal_unavailable');
+      const currentBlock = reportBlockText(base.fields, proposal.blockId);
+      if (currentBlock === undefined || createHash('sha256').update(currentBlock).digest('hex') !== proposal.baselineSha256 || input.patches[0]!.expectedOldSha256 !== proposal.baselineSha256) throw new StrategyDiscussionFault('strategy_proposal_baseline_changed');
     }
     const fields = structuredClone(base.fields);
     const applied: { blockId: string; oldSha256: string; newSha256: string }[] = [];
@@ -351,6 +353,11 @@ export class StrategyInitiativeReports {
     const file = this.read(id);
     const proposal = file.proposals.find(p => p.proposalId === proposalId);
     if (!proposal || proposal.status !== 'pending') throw new StrategyDiscussionFault('strategy_proposal_unavailable');
+    if (proposal.target.kind === 'report') {
+      const version = file.versions.find(v => v.no === proposal.target.no);
+      const currentBlock = version ? reportBlockText(version.fields, proposal.blockId) : undefined;
+      if (currentBlock === undefined || createHash('sha256').update(currentBlock).digest('hex') !== proposal.baselineSha256) throw new StrategyDiscussionFault('strategy_proposal_baseline_changed');
+    }
     if (typeof newText !== 'string' || !newText.trim() || newText.length > 8000) throw new StrategyDiscussionFault('strategy_kickoff_fields_invalid', 400);
     proposal.newText = newText;
     proposal.status = 'proposed';
