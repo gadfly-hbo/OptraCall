@@ -9,13 +9,64 @@ import { parseGoalBasis } from './strategy-goals-types.ts';
 import type { GoalActionArrangement, GoalArrangementInput } from './strategy-goals-types.ts';
 import type { GoalAdoptionInput, GoalAdoptionProvenance, GoalBasis, GoalContextSnapshot, GoalDraftInput, GoalFeedback, GoalFeedbackInput, GoalMutation, GoalOperationReceipt, GoalRef, GoalRelation, GoalRelationInput, GoalRelationRevisionInput, GoalRelationVersion, GoalRevisionInput, GoalSourceRef, GoalVersion, StrategyGoalRecord, StrategyGoalsIndex } from './strategy-goals-types.ts';
 import type { StrategyMapPublicationIdentity } from './strategy-map-types.ts';
+import type {
+  DecompositionAlignmentInput,
+  DecompositionCaseDraftIntent,
+  DecompositionCaseDraftIntentInput,
+  DecompositionCommittedGoal,
+  DecompositionCommittedRelation,
+  DecompositionCycleReview,
+  DecompositionCycleReviewInput,
+  DecompositionDraft,
+  DecompositionDraftInput,
+  DecompositionOperationRecoveryResult,
+  DecompositionProgressCheck,
+  DecompositionProgressCheckInput,
+  DecompositionProjectHandoff,
+  DecompositionProjectHandoffInput,
+  DecompositionProjectHandoffPreview,
+  DecompositionPublication,
+  DecompositionPublicationSnapshot,
+  DecompositionPublicationSummary,
+  DecompositionPublishInput,
+  DecompositionPublishOperationRecord,
+  DecompositionPublishPreview,
+  DecompositionThresholdConfig,
+  GoalWorkspaceView,
+  GsaPlanConfirmInput,
+  GsaPlanDraft,
+  GsaPlanVersion,
+  NextCycleDraft,
+  NextCycleDraftInput,
+  PreConfirmEstimateRecord,
+  ProgressCaseChoice,
+  ReachabilityEstimate,
+  StrategyReturnInput,
+  StrategyReturnRecord,
+} from './strategy-goal-decomposition-types.ts';
+import {
+  GoalDecompositionError,
+  classifyReviewConclusion,
+  evaluateProgressComparison,
+  freezeRowCheckpoints,
+  parseDecompositionDraftInput,
+  parseGoalFormalOrigin,
+  parsePlannedActions,
+  parseReachabilityEstimate,
+  parseStageCheckpoints,
+  reqText,
+  reqUuid,
+  sha256Canonical,
+  validateDecompositionForPublish,
+} from './strategy-goal-decomposition-validation.ts';
 
 export class StrategyGoalsError extends Error {
   readonly code: string;
   readonly status: number;
-  constructor(code: string, status = 400) { super(code); this.code = code; this.status = status; }
+  readonly details?: Record<string, unknown>;
+  constructor(code: string, status = 400, details?: Record<string, unknown>) { super(code); this.code = code; this.status = status; this.details = details; }
 }
-function fail(code: string, status = 400): never { throw new StrategyGoalsError(code, status); }
+function fail(code: string, status = 400, details?: Record<string, unknown>): never { throw new StrategyGoalsError(code, status, details); }
 const object = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const text = (v: unknown, max = 4000): string => typeof v === 'string' && v.trim() && v.length <= max ? v.trim() : fail('invalid_strategy_goal');
 const uuid = (v: unknown): string => typeof v === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(v) ? v : fail('invalid_strategy_goal_id');
@@ -23,9 +74,30 @@ const positive = (v: unknown): number => typeof v === 'number' && Number.isSafeI
 const canonical = (v: unknown): string => Array.isArray(v) ? `[${v.map(canonical).join(',')}]` : object(v) ? `{${Object.keys(v).filter(k => v[k] !== undefined).sort().map(k => `${JSON.stringify(k)}:${canonical(v[k])}`).join(',')}}` : JSON.stringify(v);
 type TableGoalRef = GoalRef & { publication?: StrategyMapPublicationIdentity };
 type GoalTableRow = { input: GoalDraftInput; expected: GoalRef | null };
-type StoredIndex = StrategyGoalsIndex & { schemaVersion: 1 | 2 | 3; tableReceipts?: Record<string,TableGoalRef[]>; operations: GoalOperationReceipt[] };
+type StoredIndex = StrategyGoalsIndex & {
+  schemaVersion: 1 | 2 | 3 | 4;
+  tableReceipts?: Record<string,TableGoalRef[]>;
+  operations: GoalOperationReceipt[];
+  preConfirmEstimates?: Record<string, PreConfirmEstimateRecord>;
+  gsaDrafts?: Record<string, GsaPlanDraft>;
+  gsaPlans?: Record<string, GsaPlanVersion[]>;
+  gsaPlanOperations?: Record<string, { operationId: string; requestHash: string; goalId: string; planVersion: number; goalVersion: number; completedAt: string }>;
+  decompositionDrafts?: Record<string, DecompositionDraft>;
+  decompositionPublications?: Record<string, DecompositionPublicationSummary[]>;
+  activeDecompositionVersions?: Record<string, number>;
+  decompositionOperations?: DecompositionPublishOperationRecord[];
+  thresholds?: Record<string, DecompositionThresholdConfig>;
+  progressChecks?: Record<string, DecompositionProgressCheck[]>;
+  caseDraftIntents?: Record<string, DecompositionCaseDraftIntent[]>;
+  projectHandoffs?: Record<string, DecompositionProjectHandoff[]>;
+  cycleReviews?: Record<string, DecompositionCycleReview[]>;
+  nextCycleDrafts?: Record<string, NextCycleDraft[]>;
+  strategyReturns?: Record<string, StrategyReturnRecord[]>;
+};
 const empty = (): StoredIndex => ({ schemaVersion: 1, goals: [], relations: [], feedback: [], operations: [] });
 const MAX_BYTES = 4 * 1024 * 1024;
+const MAX_BLOB_BYTES = 2 * 1024 * 1024;
+const defaultThreshold = (): DecompositionThresholdConfig => ({ configured: false, adverseDirection: 'below', unit: 'percent' });
 function goalRef(value: GoalRef): GoalRef {
   if (!object(value)) fail('invalid_strategy_goal_reference');
   return { goalId: uuid(value.goalId), version: positive(value.version) };
@@ -150,6 +222,7 @@ function draft(input: GoalDraftInput): GoalDraftInput {
     ...(input.source === undefined ? {} : { source: sourceRef(input.source) }),
     ...(input.usageContext === undefined ? {} : { usageContext: parseUsageContext(input.usageContext) }),
     ...(input.strategyContext === undefined ? {} : { strategyContext: strategyContext(input.strategyContext) }),
+    ...(input.formalOrigin === undefined ? {} : { formalOrigin: parseGoalFormalOrigin(input.formalOrigin) }),
   };
   if (value.dueAt && !Number.isFinite(Date.parse(value.dueAt))) fail('invalid_strategy_goal_due_date');
   return value;
@@ -177,7 +250,19 @@ export class StrategyGoalsStore {
   readonly dataRoot: string;
   readonly root: string;
   readonly file: string;
-  constructor(dataRoot: string) { this.dataRoot = path.resolve(dataRoot); this.root = path.join(this.dataRoot, 'strategy-goals'); this.file = path.join(this.root, 'index.json'); }
+  readonly blobsDir: string;
+  readonly disableDecomposition: boolean;
+  private readonly inFlightPublishOps = new Set<string>();
+  constructor(dataRoot: string, options?: { disableDecomposition?: boolean }) {
+    this.dataRoot = path.resolve(dataRoot);
+    this.root = path.join(this.dataRoot, 'strategy-goals');
+    this.file = path.join(this.root, 'index.json');
+    this.blobsDir = path.join(this.root, 'blobs');
+    this.disableDecomposition = options?.disableDecomposition === true;
+  }
+  private assertDecompositionWritable(): void {
+    if (this.disableDecomposition) fail('goal_decomposition_disabled', 403);
+  }
   private directory(name: string, create: boolean): boolean {
     let stat: fs.Stats;
     try { stat = fs.lstatSync(name); }
@@ -185,11 +270,60 @@ export class StrategyGoalsStore {
     if (!stat.isDirectory() || stat.isSymbolicLink()) fail('unsafe_strategy_goals_storage', 503);
     return true;
   }
+  private writeSnapshotBlob(snapshot: DecompositionPublicationSnapshot): string {
+    this.directory(this.dataRoot, true);
+    this.directory(this.root, true);
+    this.directory(this.blobsDir, true);
+    const bytes = Buffer.from(JSON.stringify(snapshot, null, 2) + '\n');
+    if (bytes.length > MAX_BLOB_BYTES) fail('decomposition_snapshot_too_large', 413);
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    const target = path.join(this.blobsDir, `${digest}.json`);
+    if (fs.existsSync(target)) {
+      const existing = fs.lstatSync(target);
+      if (!existing.isFile() || existing.isSymbolicLink()) fail('unsafe_strategy_goals_storage', 503);
+      return digest;
+    }
+    const temp = `${target}.${randomUUID()}.tmp`;
+    const fd = fs.openSync(temp, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY | fs.constants.O_NOFOLLOW, 0o600);
+    try { fs.writeFileSync(fd, bytes); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+    try {
+      fs.renameSync(temp, target);
+      const dir = fs.openSync(this.blobsDir, 'r');
+      try { fs.fsyncSync(dir); } finally { fs.closeSync(dir); }
+    } catch {
+      fail('decomposition_blob_write_failed', 503);
+    } finally {
+      if (fs.existsSync(temp)) fs.unlinkSync(temp);
+    }
+    return digest;
+  }
+  private readSnapshotBlob(expectedSha256: string): DecompositionPublicationSnapshot {
+    if (!/^[a-f0-9]{64}$/.test(expectedSha256)) fail('decomposition_publication_unavailable', 409);
+    const target = path.join(this.blobsDir, `${expectedSha256}.json`);
+    let stat: fs.BigIntStats;
+    try { stat = fs.lstatSync(target, { bigint: true }); }
+    catch { return fail('decomposition_publication_unavailable', 409); }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1n || stat.size > BigInt(MAX_BLOB_BYTES)) {
+      fail('decomposition_publication_unavailable', 409);
+    }
+    const fd = fs.openSync(target, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    try {
+      const bytes = fs.readFileSync(fd);
+      const actualSha = createHash('sha256').update(bytes).digest('hex');
+      if (actualSha !== expectedSha256) fail('decomposition_publication_corrupt', 409);
+      return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as DecompositionPublicationSnapshot;
+    } catch (error) {
+      if (error instanceof StrategyGoalsError) throw error;
+      return fail('decomposition_publication_corrupt', 409);
+    } finally {
+      fs.closeSync(fd);
+    }
+  }
   private load(ownLock = false): StoredIndex {
     if (!this.directory(this.dataRoot, false) || !this.directory(this.root, false)) return empty();
     let before: fs.BigIntStats;
     try { before = fs.lstatSync(this.file, { bigint: true }); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT' && fs.readdirSync(this.root).every(name => ownLock && name === '.write.lock')) return empty(); return fail('strategy_goals_storage_unavailable', 503); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT' && fs.readdirSync(this.root).every(name => (ownLock && name === '.write.lock') || name === 'blobs')) return empty(); return fail('strategy_goals_storage_unavailable', 503); }
     if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1n || before.size > BigInt(MAX_BYTES)) fail('unsafe_strategy_goals_storage', 503);
     const fd = fs.openSync(this.file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
     try {
@@ -198,7 +332,7 @@ export class StrategyGoalsStore {
       const bytes = fs.readFileSync(fd), after = fs.fstatSync(fd, { bigint: true }), current = fs.lstatSync(this.file, { bigint: true });
       if (BigInt(bytes.length) !== initial.size || after.mtimeNs !== initial.mtimeNs || after.ctimeNs !== initial.ctimeNs || current.ino !== initial.ino || current.dev !== initial.dev || current.nlink !== 1n) fail('strategy_goals_storage_changed', 503);
       const value: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
-      if (!object(value) || ![1, 2, 3].includes(value.schemaVersion as number) || !Array.isArray(value.goals) || !Array.isArray(value.relations) || !Array.isArray(value.feedback) || !Array.isArray(value.operations) || value.schemaVersion !== 1 && !Array.isArray(value.arrangements)) fail('invalid_strategy_goals_storage', 503);
+      if (!object(value) || ![1, 2, 3, 4].includes(value.schemaVersion as number) || !Array.isArray(value.goals) || !Array.isArray(value.relations) || !Array.isArray(value.feedback) || !Array.isArray(value.operations) || value.schemaVersion !== 1 && !Array.isArray(value.arrangements)) fail('invalid_strategy_goals_storage', 503);
       const index = value as unknown as StoredIndex, ids = new Set<string>();
       for (const record of index.goals) {
         uuid(record.id); positive(record.currentVersion);
@@ -288,6 +422,26 @@ export class StrategyGoalsStore {
     catch { fail('strategy_goals_write_unknown', 503); }
     finally { if (fs.existsSync(temp)) fs.unlinkSync(temp); }
   }
+  private withLock<T>(apply: (index: StoredIndex) => { result: T; dirty: boolean }): T {
+    this.directory(this.dataRoot, true); this.directory(this.root, true);
+    const lock = path.join(this.root, '.write.lock'), token = randomUUID();
+    let fd: number;
+    try { fd = fs.openSync(lock, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY | fs.constants.O_NOFOLLOW, 0o600); }
+    catch { return fail('strategy_goals_locked', 503); }
+    const lockStat = fs.fstatSync(fd);
+    try {
+      fs.writeFileSync(fd, token); fs.fsyncSync(fd);
+      const index = this.load(true);
+      const outcome = apply(index);
+      if (outcome.dirty) this.write(index);
+      return structuredClone(outcome.result);
+    } finally {
+      fs.closeSync(fd);
+      const current = fs.lstatSync(lock);
+      if (!current.isFile() || current.isSymbolicLink() || current.ino !== lockStat.ino || current.dev !== lockStat.dev || fs.readFileSync(lock, 'utf8') !== token) fail('strategy_goals_lock_changed', 503);
+      fs.unlinkSync(lock);
+    }
+  }
   private mutate<T extends GoalOperationReceipt['result']>(operationId: string, kind: GoalOperationReceipt['kind'], request: unknown, apply: (index: StoredIndex) => T, previousRequests: readonly unknown[] = []): T {
     uuid(operationId);
     this.directory(this.dataRoot, true); this.directory(this.root, true);
@@ -310,7 +464,7 @@ export class StrategyGoalsStore {
       // Existing versions are never rewritten on read; the first v1.2 write
       // marks the original authority's format and later writes never downgrade it.
       const v12 = (value: unknown): boolean => object(value) && (value.usageContext !== undefined || value.strategyContext !== undefined || value.adoptionProvenance !== undefined || object(value.source) && value.source.authority === 'strategy-discussion');
-      if (v12(result)) { index.schemaVersion = 3; index.arrangements ??= []; }
+      if (v12(result) && index.schemaVersion < 3) { index.schemaVersion = 3; index.arrangements ??= []; }
       index.operations.push({ operationId, kind, requestHash, completedAt: new Date().toISOString(), result: structuredClone(result) });
       this.write(index); return structuredClone(result);
     } finally {
@@ -320,7 +474,16 @@ export class StrategyGoalsStore {
       fs.unlinkSync(lock);
     }
   }
-  list(): StrategyGoalsIndex { const { schemaVersion: _, operations: __, tableReceipts: ___, ...value } = this.load(); return structuredClone(value); }
+  /** Explicitly project only legacy generic directory fields; never leak decomposition drafts/checks/ops. */
+  list(): StrategyGoalsIndex {
+    const index = this.load();
+    return structuredClone({
+      goals: index.goals,
+      relations: index.relations,
+      feedback: index.feedback,
+      ...(index.arrangements !== undefined ? { arrangements: index.arrangements } : {}),
+    });
+  }
   recordArrangement(input: GoalArrangementInput & GoalMutation, options?: { assertWritable?(): void }): GoalActionArrangement {
     const body = arrangementInput(input);
     return this.mutate(input.operationId, 'arrange', body, index => {
@@ -542,6 +705,1382 @@ export class StrategyGoalsStore {
     return this.mutate(input.operationId, 'create', body, index => {
       const id = randomUUID(), value: GoalVersion = { ...body, goalId: id, version: 1, status: 'candidate', createdAt: new Date().toISOString() };
       index.goals.push({ id, currentVersion: 1, adoptedVersion: null, versions: [value] }); return value;
+    });
+  }
+
+  // ---- Goal Management & Decomposition (schemaVersion 4, GM01–GM13 / UI01–UI04) ----
+
+  private bumpSchema4(index: StoredIndex): void {
+    index.schemaVersion = 4;
+    index.arrangements ??= [];
+  }
+
+  private resolveFormalTarget(version: GoalVersion, preConfirmEstimate?: ReachabilityEstimate): GsaPlanVersion['formalTarget'] {
+    if (version.formalOrigin) {
+      return {
+        value: version.formalOrigin.targetValue,
+        unit: version.formalOrigin.unit,
+        metricKind: version.formalOrigin.metricKind,
+        period: version.formalOrigin.period,
+      };
+    }
+    if (preConfirmEstimate) {
+      return {
+        value: preConfirmEstimate.formalTargetValue,
+        unit: preConfirmEstimate.unit,
+        metricKind: preConfirmEstimate.metricKind,
+        period: preConfirmEstimate.period,
+      };
+    }
+    return {
+      value: 0,
+      unit: version.measurement.kind === 'quantitative' ? (version.measurement.sapMetric.metricName ?? '项') : '项',
+      metricKind: 'milestone',
+      period: version.dueAt?.slice(0, 7) ?? '当期',
+    };
+  }
+
+  getPreConfirmEstimate(draftId: string): PreConfirmEstimateRecord | null {
+    const id = reqUuid(draftId, 'invalid_goal_draft_id');
+    return structuredClone(this.load().preConfirmEstimates?.[id] ?? null);
+  }
+
+  savePreConfirmEstimate(
+    draftId: string,
+    scope: import('./strategy-goals-types.ts').GoalScope,
+    estimateInput: unknown,
+    updatedBy: 'user' | 'agent' = 'user',
+    agentSource?: import('./strategy-goals-types.ts').GoalRoleSuggestionRef,
+  ): PreConfirmEstimateRecord {
+    this.assertDecompositionWritable();
+    const id = reqUuid(draftId, 'invalid_goal_draft_id');
+    const estimate = parseReachabilityEstimate(estimateInput);
+    return this.withLock(index => {
+      this.bumpSchema4(index);
+      const record: PreConfirmEstimateRecord = {
+        draftId: id,
+        scope: structuredClone(scope),
+        estimate,
+        updatedAt: new Date().toISOString(),
+        updatedBy,
+        ...(agentSource ? { agentSource: parseGoalRoleSuggestion(agentSource) } : {}),
+      };
+      (index.preConfirmEstimates ??= {})[id] = record;
+      return { result: record, dirty: true };
+    });
+  }
+
+  saveGsaPlanDraft(goalId: string, raw: { plannedActions?: unknown; stageCheckpoints?: unknown; preConfirmEstimate?: unknown }): GsaPlanDraft {
+    this.assertDecompositionWritable();
+    const id = uuid(goalId);
+    const plannedActions = raw.plannedActions === undefined ? [] : parsePlannedActions(raw.plannedActions, false);
+    const stageCheckpoints = parseStageCheckpoints(raw.stageCheckpoints);
+    const preConfirmEstimate = raw.preConfirmEstimate === undefined ? undefined : parseReachabilityEstimate(raw.preConfirmEstimate);
+    return this.withLock(index => {
+      if (!index.goals.some(g => g.id === id)) fail('strategy_goal_not_found', 404);
+      this.bumpSchema4(index);
+      const saved: GsaPlanDraft = {
+        goalId: id,
+        plannedActions,
+        stageCheckpoints,
+        ...(preConfirmEstimate ? { preConfirmEstimate } : {}),
+        updatedAt: new Date().toISOString(),
+      };
+      (index.gsaDrafts ??= {})[id] = saved;
+      return { result: saved, dirty: true };
+    });
+  }
+
+  listGsaPlans(goalId: string): GsaPlanVersion[] {
+    const id = uuid(goalId);
+    const index = this.load();
+    if (!index.goals.some(g => g.id === id)) fail('strategy_goal_not_found', 404);
+    return structuredClone(index.gsaPlans?.[id] ?? []);
+  }
+
+  readGsaPlan(goalId: string, planVersion: number): GsaPlanVersion {
+    const id = uuid(goalId);
+    positive(planVersion);
+    const plans = this.listGsaPlans(id);
+    const found = plans.find(p => p.planVersion === planVersion);
+    if (!found) fail('gsa_plan_not_found', 404);
+    return found;
+  }
+
+  /** Atomically confirms G + S + Planned A in a single lock (GM02/GM09). Never creates Tasks/Cases/Board authorizations. */
+  confirmGsaPlan(goalId: string, input: GsaPlanConfirmInput): { goal: GoalVersion; gsaPlan: GsaPlanVersion; replayed: boolean } {
+    this.assertDecompositionWritable();
+    const id = uuid(goalId);
+    const operationId = reqUuid(input.operationId);
+    positive(input.expectedGoalVersion);
+    if (input.expectedAdoptedVersion !== undefined && input.expectedAdoptedVersion !== null) positive(input.expectedAdoptedVersion);
+    if (!Number.isSafeInteger(input.expectedPlanVersion) || input.expectedPlanVersion < 0) fail('invalid_gsa_plan_version', 400);
+    const plannedActions = parsePlannedActions(input.plannedActions, true);
+    const stageCheckpoints = parseStageCheckpoints(input.stageCheckpoints);
+    const decision = reqText(input.decision, 4000, 'strategy_goal_decision_required');
+    const confirmedBy = input.confirmedBy?.trim() ? reqText(input.confirmedBy, 300) : '负责人';
+    const preConfirmEstimate = input.preConfirmEstimate === undefined ? undefined : parseReachabilityEstimate(input.preConfirmEstimate);
+    const revisedBody = input.goalRevision === undefined ? undefined : draft(input.goalRevision);
+    const supersedesReason = input.supersedesReason?.trim() ? reqText(input.supersedesReason, 1000) : undefined;
+    const requestHash = sha256Canonical({
+      goalId: id,
+      expectedGoalVersion: input.expectedGoalVersion,
+      expectedAdoptedVersion: input.expectedAdoptedVersion ?? null,
+      expectedPlanVersion: input.expectedPlanVersion,
+      revisedBody,
+      plannedActions,
+      stageCheckpoints,
+      decision,
+      confirmedBy,
+      preConfirmEstimate,
+      supersedesReason,
+    });
+
+    return this.withLock(index => {
+      const priorOp = index.gsaPlanOperations?.[operationId];
+      if (priorOp) {
+        if (priorOp.requestHash !== requestHash || priorOp.goalId !== id) fail('strategy_goal_operation_conflict', 409);
+        const rec = index.goals.find(g => g.id === id);
+        const gv = rec?.versions.find(v => v.version === priorOp.goalVersion);
+        const pv = index.gsaPlans?.[id]?.find(p => p.planVersion === priorOp.planVersion);
+        if (!gv || !pv) fail('strategy_goal_operation_conflict', 409);
+        return { result: { goal: gv, gsaPlan: pv, replayed: true as boolean }, dirty: false };
+      }
+      const record = index.goals.find(g => g.id === id);
+      if (!record) fail('strategy_goal_not_found', 404);
+      if (record.currentVersion !== input.expectedGoalVersion) fail('strategy_goal_conflict', 409);
+      if (input.expectedAdoptedVersion !== undefined && record.adoptedVersion !== input.expectedAdoptedVersion) {
+        fail('strategy_goal_adoption_changed', 409);
+      }
+      const existingPlans = index.gsaPlans?.[id] ?? [];
+      if (existingPlans.length !== input.expectedPlanVersion) fail('gsa_plan_conflict', 409);
+
+      const now = new Date().toISOString();
+      let targetVersion = record.versions.find(v => v.version === record.currentVersion)!;
+      if (revisedBody) {
+        if (targetVersion.structured && groupScopeKey(revisedBody.scope) !== groupScopeKey(targetVersion.scope)) {
+          fail('strategy_goal_table_origin_mismatch', 409);
+        }
+        const nextGoal: GoalVersion = {
+          ...revisedBody,
+          ...(targetVersion.structured ? { structured: targetVersion.structured } : {}),
+          goalId: id,
+          version: record.currentVersion + 1,
+          status: 'adopted',
+          createdAt: now,
+          adoptedAt: now,
+          adoptionDecision: decision,
+        };
+        record.versions.push(nextGoal);
+        record.currentVersion = nextGoal.version;
+        record.adoptedVersion = nextGoal.version;
+        targetVersion = nextGoal;
+      } else if (targetVersion.status === 'candidate') {
+        targetVersion.status = 'adopted';
+        targetVersion.adoptedAt = now;
+        targetVersion.adoptionDecision = decision;
+        record.adoptedVersion = targetVersion.version;
+      }
+      // Note: if targetVersion is ALREADY 'adopted' (e.g. legacy adopted goal or A-only update),
+      // we preserve its original adoptedAt and adoptionDecision untouched!
+
+      const planId = existingPlans[0]?.planId ?? randomUUID();
+      const planVersion = existingPlans.length + 1;
+      const formalTarget = this.resolveFormalTarget(targetVersion, preConfirmEstimate);
+      const goalHash = goalContentSha256(targetVersion);
+      const origin: GsaPlanVersion['origin'] = targetVersion.formalOrigin ?? { kind: 'legacy-adopted-goal' };
+      const corePlan = {
+        planId,
+        planVersion,
+        goal: { goalId: targetVersion.goalId, version: targetVersion.version },
+        goalContentSha256: goalHash,
+        formalTarget,
+        strategies: [...(targetVersion.strategies ?? [])],
+        plannedActions,
+        stageCheckpoints,
+        planKind: 'planned-not-authorized' as const,
+        origin,
+        confirmedBy,
+        confirmedAt: now,
+        decision,
+        ...(planVersion > 1 ? { previousPlanVersion: planVersion - 1 } : {}),
+        ...(supersedesReason ? { supersedesReason } : {}),
+      };
+      const gsaPlan: GsaPlanVersion = {
+        ...corePlan,
+        contentSha256: sha256Canonical(corePlan),
+      };
+      this.bumpSchema4(index);
+      (index.gsaPlans ??= {})[id] = [...existingPlans, gsaPlan];
+      if (index.gsaDrafts?.[id]) delete index.gsaDrafts[id];
+      (index.gsaPlanOperations ??= {})[operationId] = {
+        operationId,
+        requestHash,
+        goalId: id,
+        planVersion: gsaPlan.planVersion,
+        goalVersion: targetVersion.version,
+        completedAt: now,
+      };
+      return { result: { goal: targetVersion, gsaPlan, replayed: false }, dirty: true };
+    });
+  }
+
+  saveDecompositionDraft(
+    goalId: string,
+    raw: DecompositionDraftInput,
+    meta: { updatedBy: 'user' | 'agent'; agentSource?: import('./strategy-goals-types.ts').GoalRoleSuggestionRef } = { updatedBy: 'user' },
+  ): { draft: DecompositionDraft; validation: ReturnType<typeof validateDecompositionForPublish> } {
+    this.assertDecompositionWritable();
+    const id = uuid(goalId);
+    const input = parseDecompositionDraftInput(raw);
+    return this.withLock(index => {
+      if (!index.goals.some(g => g.id === id)) fail('strategy_goal_not_found', 404);
+      const plans = index.gsaPlans?.[id] ?? [];
+      const activePlan = plans.at(-1) ?? null;
+      if (!activePlan) fail('gsa_plan_required', 409);
+      if (activePlan.planId !== input.gsaPlanId || activePlan.planVersion !== input.gsaPlanVersion || activePlan.contentSha256 !== input.gsaPlanSha256) {
+        fail('gsa_plan_changed', 409);
+      }
+      const existing = index.decompositionDrafts?.[id];
+      const currentRev = existing?.revision ?? 0;
+      if (currentRev !== input.expectedDraftRevision) fail('decomposition_draft_conflict', 409);
+
+      const nextRev = currentRev + 1;
+      const now = new Date().toISOString();
+      const bodyWithoutHash = {
+        draftId: existing?.draftId ?? randomUUID(),
+        goalId: id,
+        gsaPlanId: activePlan.planId,
+        gsaPlanVersion: activePlan.planVersion,
+        gsaPlanSha256: activePlan.contentSha256,
+        revision: nextRev,
+        updatedAt: now,
+        updatedBy: meta.updatedBy,
+        ...(meta.agentSource ? { agentSource: parseGoalRoleSuggestion(meta.agentSource) } : {}),
+        estimate: input.estimate,
+        rows: input.rows,
+        reserves: input.reserves,
+        gapStrategies: input.gapStrategies,
+        views: input.views,
+        timePlan: input.timePlan,
+        ...(existing?.alignmentRecord ? { alignmentRecord: existing.alignmentRecord } : {}),
+        ...(input.notes ? { notes: input.notes } : {}),
+      };
+      const contentSha256 = sha256Canonical({
+        gsaPlanId: bodyWithoutHash.gsaPlanId,
+        gsaPlanVersion: bodyWithoutHash.gsaPlanVersion,
+        gsaPlanSha256: bodyWithoutHash.gsaPlanSha256,
+        estimate: bodyWithoutHash.estimate,
+        rows: bodyWithoutHash.rows,
+        reserves: bodyWithoutHash.reserves,
+        gapStrategies: bodyWithoutHash.gapStrategies,
+        views: bodyWithoutHash.views,
+        timePlan: bodyWithoutHash.timePlan,
+        notes: bodyWithoutHash.notes,
+      });
+      const saved: DecompositionDraft = { ...bodyWithoutHash, contentSha256 };
+      this.bumpSchema4(index);
+      (index.decompositionDrafts ??= {})[id] = saved;
+      const validation = validateDecompositionForPublish(activePlan, saved, index.goals);
+      return { result: { draft: saved, validation }, dirty: true };
+    });
+  }
+
+  alignDecompositionCrossConflict(goalId: string, raw: DecompositionAlignmentInput): { draft: DecompositionDraft; validation: ReturnType<typeof validateDecompositionForPublish> } {
+    this.assertDecompositionWritable();
+    const id = uuid(goalId);
+    reqUuid(raw.operationId);
+    const alignedBy = reqText(raw.alignedBy, 300, 'alignment_basis_required');
+    const basis = reqText(raw.basis, 2000, 'alignment_basis_required');
+    if (!Array.isArray(raw.cellUpdates) || !raw.cellUpdates.length || raw.cellUpdates.length > 100) {
+      fail('invalid_alignment_updates', 400);
+    }
+    const updates = new Map<string, number>();
+    for (const item of raw.cellUpdates) {
+      if (!object(item) || typeof item.value !== 'number' || !Number.isFinite(item.value) || item.value < 0) {
+        fail('invalid_alignment_updates', 400);
+      }
+      updates.set(reqText(item.crossCellId, 200), item.value);
+    }
+
+    return this.withLock(index => {
+      const activePlan = index.gsaPlans?.[id]?.at(-1) ?? null;
+      if (!activePlan) fail('gsa_plan_required', 409);
+      if (activePlan.planId !== raw.gsaPlanId || activePlan.planVersion !== raw.gsaPlanVersion || activePlan.contentSha256 !== raw.gsaPlanSha256) {
+        fail('gsa_plan_changed', 409);
+      }
+      const existing = index.decompositionDrafts?.[id];
+      if (!existing) fail('decomposition_draft_not_found', 404);
+      if (existing.revision !== raw.expectedDraftRevision) fail('decomposition_draft_conflict', 409);
+
+      const changes: { crossCellId: string; label: string; viewId: string; from: number; to: number }[] = [];
+      const nextViews = existing.views.map(view => ({
+        ...view,
+        cells: view.cells.map(cell => {
+          const nextVal = updates.get(cell.crossCellId);
+          if (nextVal === undefined) return cell;
+          if (Math.abs(cell.value - nextVal) > 1e-6) {
+            changes.push({ crossCellId: cell.crossCellId, label: cell.label, viewId: view.viewId, from: cell.value, to: nextVal });
+          }
+          return { ...cell, value: nextVal, basis: `${cell.basis}（对齐确认：${basis}）` };
+        }),
+      }));
+      const nextRows = existing.rows.map(row => {
+        if (!row.crossCellId || !updates.has(row.crossCellId)) return row;
+        const nextVal = updates.get(row.crossCellId)!;
+        return {
+          ...row,
+          targetValue: nextVal,
+          basis: `${row.basis}（双方对齐：${basis}）`,
+          checkpoints: row.checkpoints.map((cp, idx, arr) =>
+            idx === arr.length - 1 && cp.status === 'planned' ? { ...cp, targetValue: nextVal } : cp,
+          ),
+        };
+      });
+
+      const now = new Date().toISOString();
+      const nextDraftCore = {
+        ...existing,
+        revision: existing.revision + 1,
+        updatedAt: now,
+        updatedBy: 'user' as const,
+        rows: nextRows,
+        views: nextViews,
+        alignmentRecord: { alignedAt: now, alignedBy, basis, changes },
+      };
+      const contentSha256 = sha256Canonical({
+        gsaPlanId: nextDraftCore.gsaPlanId,
+        gsaPlanVersion: nextDraftCore.gsaPlanVersion,
+        gsaPlanSha256: nextDraftCore.gsaPlanSha256,
+        estimate: nextDraftCore.estimate,
+        rows: nextDraftCore.rows,
+        reserves: nextDraftCore.reserves,
+        gapStrategies: nextDraftCore.gapStrategies,
+        views: nextDraftCore.views,
+        timePlan: nextDraftCore.timePlan,
+        notes: nextDraftCore.notes,
+      });
+      const updated: DecompositionDraft = { ...nextDraftCore, contentSha256 };
+      this.bumpSchema4(index);
+      index.decompositionDrafts![id] = updated;
+      const validation = validateDecompositionForPublish(activePlan, updated, index.goals);
+      return { result: { draft: updated, validation }, dirty: true };
+    });
+  }
+
+  /** Strictly read-only publish preview (GM06). Zero writes, zero operation records. */
+  previewDecompositionPublish(
+    goalId: string,
+    input: { gsaPlanId: string; gsaPlanVersion: number; gsaPlanSha256: string; draftRevision: number; draftSha256: string; expectedActiveVersion: number | null },
+  ): DecompositionPublishPreview {
+    const id = uuid(goalId);
+    const index = this.load();
+    if (!index.goals.some(g => g.id === id)) fail('strategy_goal_not_found', 404);
+    const activePlan = index.gsaPlans?.[id]?.at(-1) ?? null;
+    if (!activePlan) fail('gsa_plan_required', 409);
+    if (activePlan.planId !== input.gsaPlanId || activePlan.planVersion !== input.gsaPlanVersion || activePlan.contentSha256 !== input.gsaPlanSha256) {
+      fail('gsa_plan_changed', 409);
+    }
+    const currentDraft = index.decompositionDrafts?.[id];
+    if (!currentDraft) fail('decomposition_draft_not_found', 404);
+    if (currentDraft.revision !== input.draftRevision || currentDraft.contentSha256 !== input.draftSha256) {
+      fail('decomposition_draft_changed', 409);
+    }
+    const activeVersion = index.activeDecompositionVersions?.[id] ?? null;
+    if (activeVersion !== input.expectedActiveVersion) fail('decomposition_active_version_changed', 409);
+
+    const validation = validateDecompositionForPublish(activePlan, currentDraft, index.goals);
+    const existingPubs = index.decompositionPublications?.[id] ?? [];
+    const goalsById = new Map(index.goals.map(g => [g.id, g]));
+    const committedGoals = currentDraft.rows
+      .filter(r => r.commitAsGoal)
+      .map(row => {
+        const existing = row.linkedGoalId ? goalsById.get(row.linkedGoalId) : undefined;
+        let action: 'create-and-adopt' | 'reuse-adopted' | 'revise-and-adopt' = 'create-and-adopt';
+        if (existing) {
+          const adoptedVer = existing.adoptedVersion ? existing.versions.find(v => v.version === existing.adoptedVersion) : undefined;
+          if (
+            adoptedVer &&
+            adoptedVer.title === row.title &&
+            adoptedVer.outcome === row.outcome &&
+            adoptedVer.responsible === row.responsible &&
+            JSON.stringify(adoptedVer.strategies ?? []) === JSON.stringify([row.strategy])
+          ) {
+            action = 'reuse-adopted';
+          } else {
+            action = 'revise-and-adopt';
+          }
+        }
+        return {
+          rowId: row.rowId,
+          ...(row.linkedGoalId ? { linkedGoalId: row.linkedGoalId } : {}),
+          ...(existing ? { expectedGoalVersion: existing.currentVersion, expectedAdoptedVersion: existing.adoptedVersion } : {}),
+          action,
+          title: row.title,
+          outcome: row.outcome,
+          scope: row.scope,
+          responsible: row.responsible,
+          strategy: row.strategy,
+          targetValue: row.targetValue,
+          unit: row.unit,
+          checkpoints: row.checkpoints,
+        };
+      });
+
+    return structuredClone({
+      ok: validation.ok,
+      issues: validation.issues,
+      validation,
+      gsaPlan: activePlan,
+      draftRevision: currentDraft.revision,
+      draftSha256: currentDraft.contentSha256,
+      expectedActiveVersion: activeVersion,
+      nextPublicationVersion: existingPubs.length + 1,
+      committedGoals,
+      summary: {
+        formalTargetValue: validation.formalTargetValue,
+        estimatedValue: validation.estimatedValue,
+        gapValue: validation.gapValue,
+        allocatedTotal: validation.allocatedTotal,
+        reserveTotal: validation.reserveTotal,
+        gapCoverageTotal: validation.gapCoverageTotal,
+      },
+    });
+  }
+
+  /**
+   * Atomic decomposition publish with durable 3-state lost-response recovery (GM06, GM08, GM13).
+   * Writes immutable snapshot blob first, then commits publication + committed adopted child Goals +
+   * parent-child GoalRelations + active pointer + operation receipt in ONE index.json atomic rename.
+   */
+  publishDecomposition(
+    goalId: string,
+    input: DecompositionPublishInput,
+    hooks?: { preCommitFault?: () => void },
+  ): { publication: DecompositionPublication; operation: DecompositionPublishOperationRecord; replayed: boolean } {
+    this.assertDecompositionWritable();
+    const id = uuid(goalId);
+    const operationId = reqUuid(input.operationId);
+    const reason = input.reason?.trim() ? reqText(input.reason, 1000) : undefined;
+    const requestFingerprint = sha256Canonical({
+      goalId: id,
+      gsaPlanId: input.gsaPlanId,
+      gsaPlanVersion: input.gsaPlanVersion,
+      gsaPlanSha256: input.gsaPlanSha256,
+      draftRevision: input.draftRevision,
+      draftSha256: input.draftSha256,
+      expectedActiveVersion: input.expectedActiveVersion,
+      reason,
+    });
+
+    this.inFlightPublishOps.add(operationId);
+    try {
+      return this.withLock(index => {
+        const ops = (index.decompositionOperations ??= []);
+        const priorOp = ops.find(op => op.operationId === operationId);
+        if (priorOp) {
+          if (priorOp.goalId !== id || priorOp.requestFingerprint !== requestFingerprint) {
+            fail('decomposition_operation_conflict', 409);
+          }
+          if (priorOp.status === 'committed') {
+            const pubSummary = index.decompositionPublications?.[id]?.find(p => p.version === priorOp.publicationVersion);
+            if (!pubSummary) fail('decomposition_publication_unavailable', 409);
+            const snapshot = this.readSnapshotBlob(pubSummary.snapshotSha256);
+            return { result: { publication: { ...pubSummary, snapshot }, operation: priorOp, replayed: true as boolean }, dirty: false };
+          }
+          if (priorOp.status === 'abandoned') {
+            fail('decomposition_operation_abandoned', 409);
+          }
+          // status === 'not-committed-retryable': strictly requires explicit retry + CAS stateRevision!
+          if (input.explicitRetry !== true || input.expectedOperationStateRevision !== priorOp.stateRevision) {
+            fail('decomposition_retry_requires_explicit_cas', 409);
+          }
+        }
+
+        const parentGoalRecord = index.goals.find(g => g.id === id);
+        if (!parentGoalRecord) fail('strategy_goal_not_found', 404);
+        const activePlan = index.gsaPlans?.[id]?.at(-1) ?? null;
+        if (!activePlan) fail('gsa_plan_required', 409);
+        if (activePlan.planId !== input.gsaPlanId || activePlan.planVersion !== input.gsaPlanVersion || activePlan.contentSha256 !== input.gsaPlanSha256) {
+          fail('gsa_plan_changed', 409);
+        }
+        const currentDraft = index.decompositionDrafts?.[id];
+        if (!currentDraft) fail('decomposition_draft_not_found', 404);
+        if (currentDraft.revision !== input.draftRevision || currentDraft.contentSha256 !== input.draftSha256) {
+          fail('decomposition_draft_changed', 409);
+        }
+        const activeVersion = index.activeDecompositionVersions?.[id] ?? null;
+        if (activeVersion !== input.expectedActiveVersion) fail('decomposition_active_version_changed', 409);
+
+        const validation = validateDecompositionForPublish(activePlan, currentDraft, index.goals);
+        if (!validation.ok) {
+          const hasCas = validation.issues.some(i => i.code === 'row_cas_conflict' || i.code === 'gsa_plan_mismatch');
+          fail(hasCas ? 'decomposition_row_cas_conflict' : 'decomposition_validation_failed', hasCas ? 409 : 400, { issues: validation.issues });
+        }
+
+        const now = new Date().toISOString();
+        // Pre-commit hook / blob persistence: any failure BEFORE mutating goals/publications can be durably
+        // recorded as 'not-committed-retryable' with zero partial commit!
+        const nextPubVersion = (index.decompositionPublications?.[id]?.length ?? 0) + 1;
+        const publicationId = randomUUID();
+        const committedGoals: DecompositionCommittedGoal[] = [];
+        const committedRelations: DecompositionCommittedRelation[] = [];
+
+        // Stage child goal/relation mutations on a deep clone first so preCommitFault/blob write leaves index untouched!
+        const stagedGoals = structuredClone(index.goals);
+        const stagedRelations = structuredClone(index.relations);
+        const parentGoalVersion = parentGoalRecord.versions.find(v => v.version === activePlan.goal.version)!;
+        const updatedDraftRows = currentDraft.rows.map(row => {
+          if (!row.commitAsGoal) return structuredClone(row);
+          let childRecord = row.linkedGoalId ? stagedGoals.find(g => g.id === row.linkedGoalId) : undefined;
+          let adoptedChild: GoalVersion;
+          const childDraftInput: GoalDraftInput = draft({
+            title: row.title,
+            outcome: row.outcome,
+            perspective: parentGoalVersion.perspective,
+            scope: row.scope,
+            measurement: { kind: 'deliverable', criterion: row.milestoneCriterion || `${row.scopeLabel}：${row.outcome}` },
+            baseline: { state: 'pending', description: row.basis || '由上层目标拆解发布承接' },
+            responsible: row.responsible,
+            ...(parentGoalVersion.dueAt ? { dueAt: parentGoalVersion.dueAt } : {}),
+            strategies: [row.strategy],
+            strategyContext: { summary: `来自总目标 ${id} 拆解表 v${nextPubVersion} · 行 ${row.rowId}` },
+            ...(row.targetValue !== null ? {
+              formalOrigin: {
+                kind: 'manual-exception' as const,
+                reason: `由总目标 ${id} 拆解正式版 v${nextPubVersion}（行 ${row.rowId}）承接`,
+                period: activePlan.formalTarget.period,
+                targetValue: row.targetValue,
+                unit: row.unit,
+                metricKind: row.metricKind,
+              },
+            } : {}),
+          });
+          if (!childRecord) {
+            const newChildId = randomUUID();
+            adoptedChild = {
+              ...childDraftInput,
+              goalId: newChildId,
+              version: 1,
+              status: 'adopted',
+              createdAt: now,
+              adoptedAt: now,
+              adoptionDecision: `随总目标拆解表 v${nextPubVersion}（行 ${row.rowId}）一次正式发布采用，未授权经营执行。`,
+            };
+            childRecord = { id: newChildId, currentVersion: 1, adoptedVersion: 1, versions: [adoptedChild] };
+            stagedGoals.push(childRecord);
+          } else {
+            const currentAdopted = childRecord.adoptedVersion ? childRecord.versions.find(v => v.version === childRecord!.adoptedVersion) : undefined;
+            const unchanged = Boolean(
+              currentAdopted &&
+              currentAdopted.title === childDraftInput.title &&
+              currentAdopted.outcome === childDraftInput.outcome &&
+              currentAdopted.responsible === childDraftInput.responsible &&
+              canonical(currentAdopted.scope) === canonical(childDraftInput.scope) &&
+              (currentAdopted.formalOrigin?.targetValue ?? null) === row.targetValue &&
+              (currentAdopted.formalOrigin?.unit ?? row.unit) === row.unit &&
+              canonical(currentAdopted.strategies ?? []) === canonical(childDraftInput.strategies ?? []),
+            );
+            if (unchanged && currentAdopted) {
+              adoptedChild = currentAdopted;
+            } else {
+              adoptedChild = {
+                ...childDraftInput,
+                goalId: childRecord.id,
+                version: childRecord.currentVersion + 1,
+                status: 'adopted',
+                createdAt: now,
+                adoptedAt: now,
+                adoptionDecision: `随总目标拆解表 v${nextPubVersion}（行 ${row.rowId}）修订发布采用，未授权经营执行。`,
+              };
+              childRecord.versions.push(adoptedChild);
+              childRecord.currentVersion = adoptedChild.version;
+              childRecord.adoptedVersion = adoptedChild.version;
+            }
+          }
+
+          committedGoals.push({
+            rowId: row.rowId,
+            goalId: adoptedChild.goalId,
+            version: adoptedChild.version,
+            adoptedVersion: adoptedChild.version,
+            title: adoptedChild.title,
+            scope: adoptedChild.scope,
+            responsible: adoptedChild.responsible,
+            strategy: row.strategy,
+            targetValue: row.targetValue,
+            unit: row.unit,
+          });
+
+          // Create or reuse contribution relation from child -> parent exact adopted GoalRef
+          const relBody = {
+            from: { goalId: adoptedChild.goalId, version: adoptedChild.version },
+            to: { goalId: activePlan.goal.goalId, version: activePlan.goal.version },
+            kind: 'contribution' as const,
+            responsibility: `${row.responsible}（${row.scopeLabel}）`,
+            rationale: row.basis || `总目标拆解表 v${nextPubVersion} 责任行 ${row.rowId}`,
+          };
+          let rel = stagedRelations.find(r => canonical(relationInput(r)) === canonical(relBody));
+          if (!rel) {
+            rel = { ...relBody, id: randomUUID(), revision: 1, createdAt: now, history: [] };
+            stagedRelations.push(rel);
+          }
+          committedRelations.push({
+            rowId: row.rowId,
+            relationId: rel.id,
+            revision: rel.revision,
+            from: relBody.from,
+            to: relBody.to,
+          });
+
+          return {
+            ...structuredClone(row),
+            linkedGoalId: adoptedChild.goalId,
+            expectedGoalVersion: childRecord.currentVersion,
+            expectedAdoptedVersion: childRecord.adoptedVersion,
+          };
+        });
+
+        const snapshot: DecompositionPublicationSnapshot = {
+          gsaPlan: structuredClone(activePlan),
+          estimate: structuredClone(currentDraft.estimate),
+          rows: updatedDraftRows,
+          reserves: structuredClone(currentDraft.reserves),
+          gapStrategies: structuredClone(currentDraft.gapStrategies),
+          views: structuredClone(currentDraft.views),
+          timePlan: structuredClone(currentDraft.timePlan),
+          frozenCheckpoints: freezeRowCheckpoints(updatedDraftRows),
+          ...(currentDraft.alignmentRecord ? { alignmentRecord: structuredClone(currentDraft.alignmentRecord) } : {}),
+          ...(currentDraft.notes ? { notes: currentDraft.notes } : {}),
+        };
+
+        let snapshotSha256: string;
+        try {
+          hooks?.preCommitFault?.();
+          snapshotSha256 = this.writeSnapshotBlob(snapshot);
+        } catch (err) {
+          // Clean pre-commit failure: zero goals/publications mutated. Durably record 'not-committed-retryable'!
+          const code = err instanceof StrategyGoalsError || err instanceof GoalDecompositionError ? err.code : 'decomposition_pre_commit_failed';
+          const detail = err instanceof Error ? err.message : String(err);
+          this.bumpSchema4(index);
+          if (priorOp) {
+            priorOp.status = 'not-committed-retryable';
+            priorOp.attempts += 1;
+            priorOp.settledAt = now;
+            priorOp.failureCode = code;
+            priorOp.failureDetail = detail;
+            priorOp.stateRevision += 1;
+          } else {
+            ops.push({
+              operationId,
+              goalId: id,
+              action: 'publish-decomposition',
+              requestFingerprint,
+              status: 'not-committed-retryable',
+              attempts: 1,
+              startedAt: now,
+              settledAt: now,
+              failureCode: code,
+              failureDetail: detail,
+              stateRevision: 1,
+            });
+          }
+          this.write(index);
+          fail('decomposition_publish_not_committed', 503, { operationId, retryable: true, failureCode: code });
+        }
+
+        // Commit everything atomically into index.json!
+        index.goals = stagedGoals;
+        index.relations = stagedRelations;
+        // Keep draft's stable linkedGoalId & CAS expectations synced AND recompute contentSha256 consistently
+        const syncedDraftContent = {
+          gsaPlanId: currentDraft.gsaPlanId,
+          gsaPlanVersion: currentDraft.gsaPlanVersion,
+          gsaPlanSha256: currentDraft.gsaPlanSha256,
+          estimate: currentDraft.estimate,
+          rows: updatedDraftRows,
+          reserves: currentDraft.reserves,
+          gapStrategies: currentDraft.gapStrategies,
+          views: currentDraft.views,
+          timePlan: currentDraft.timePlan,
+          ...(currentDraft.alignmentRecord ? { alignmentRecord: currentDraft.alignmentRecord } : {}),
+          ...(currentDraft.notes ? { notes: currentDraft.notes } : {}),
+        };
+        index.decompositionDrafts![id] = {
+          ...currentDraft,
+          rows: updatedDraftRows,
+          contentSha256: sha256Canonical(syncedDraftContent),
+        };
+        const summary: DecompositionPublicationSummary = {
+          publicationId,
+          goalId: id,
+          version: nextPubVersion,
+          gsaPlanId: activePlan.planId,
+          gsaPlanVersion: activePlan.planVersion,
+          gsaPlanSha256: activePlan.contentSha256,
+          draftRevision: currentDraft.revision,
+          draftSha256: currentDraft.contentSha256,
+          snapshotSha256,
+          operationId,
+          publishedAt: now,
+          ...(reason ? { reason } : {}),
+          ...(nextPubVersion > 1 ? { previousVersion: nextPubVersion - 1 } : {}),
+          committedGoals,
+          committedRelations,
+        };
+        this.bumpSchema4(index);
+        (index.decompositionPublications ??= {})[id] = [...(index.decompositionPublications[id] ?? []), summary];
+        (index.activeDecompositionVersions ??= {})[id] = nextPubVersion;
+
+        let settledOp: DecompositionPublishOperationRecord;
+        if (priorOp) {
+          priorOp.status = 'committed';
+          priorOp.attempts += 1;
+          priorOp.settledAt = now;
+          priorOp.publicationId = publicationId;
+          priorOp.publicationVersion = nextPubVersion;
+          delete priorOp.failureCode;
+          delete priorOp.failureDetail;
+          priorOp.stateRevision += 1;
+          settledOp = priorOp;
+        } else {
+          settledOp = {
+            operationId,
+            goalId: id,
+            action: 'publish-decomposition',
+            requestFingerprint,
+            status: 'committed',
+            attempts: 1,
+            startedAt: now,
+            settledAt: now,
+            publicationId,
+            publicationVersion: nextPubVersion,
+            stateRevision: 1,
+          };
+          ops.push(settledOp);
+        }
+        return {
+          result: { publication: { ...summary, snapshot }, operation: settledOp, replayed: false },
+          dirty: true,
+        };
+      });
+    } finally {
+      this.inFlightPublishOps.delete(operationId);
+    }
+  }
+
+  /** Read-only 3-state operation recovery lookup (GM08). Never creates sessions or writes records. */
+  getDecompositionOperation(goalId: string, operationId: string): DecompositionOperationRecoveryResult {
+    const id = uuid(goalId);
+    const opId = reqUuid(operationId);
+    if (this.inFlightPublishOps.has(opId)) {
+      return { found: true, status: 'in-flight', retryable: false };
+    }
+    const index = this.load();
+    if (!index.goals.some(g => g.id === id)) fail('strategy_goal_not_found', 404);
+    const op = index.decompositionOperations?.find(item => item.operationId === opId && item.goalId === id);
+    if (!op) {
+      return { found: false, status: 'unknown', retryable: false };
+    }
+    if (op.status === 'committed') {
+      const summary = index.decompositionPublications?.[id]?.find(p => p.version === op.publicationVersion);
+      if (!summary) fail('decomposition_publication_unavailable', 409);
+      const snapshot = this.readSnapshotBlob(summary.snapshotSha256);
+      return structuredClone({
+        found: true,
+        status: 'committed',
+        retryable: false,
+        operation: op,
+        publication: { ...summary, snapshot },
+      });
+    }
+    if (op.status === 'not-committed-retryable') {
+      return structuredClone({
+        found: true,
+        status: 'not-committed-retryable',
+        retryable: true,
+        operation: op,
+      });
+    }
+    return structuredClone({
+      found: true,
+      status: op.status,
+      retryable: false,
+      operation: op,
+    });
+  }
+
+  /** Explicitly closes a provably-uncommitted operation so the user can edit and start a new intent. */
+  abandonDecompositionOperation(goalId: string, operationId: string, expectedStateRevision: number): DecompositionPublishOperationRecord {
+    this.assertDecompositionWritable();
+    const id = uuid(goalId);
+    const opId = reqUuid(operationId);
+    positive(expectedStateRevision);
+    return this.withLock(index => {
+      const op = index.decompositionOperations?.find(item => item.operationId === opId && item.goalId === id);
+      if (!op) fail('decomposition_operation_not_found', 404);
+      if (op.status === 'abandoned') return { result: op, dirty: false };
+      if (op.status !== 'not-committed-retryable' || op.stateRevision !== expectedStateRevision) {
+        fail('decomposition_operation_cannot_abandon', 409);
+      }
+      op.status = 'abandoned';
+      op.settledAt = new Date().toISOString();
+      op.stateRevision += 1;
+      return { result: op, dirty: true };
+    });
+  }
+
+  listDecompositionPublications(goalId: string, offset = 0, limit = 20): { total: number; offset: number; limit: number; activeVersion: number | null; items: DecompositionPublicationSummary[] } {
+    const id = uuid(goalId);
+    const index = this.load();
+    if (!index.goals.some(g => g.id === id)) fail('strategy_goal_not_found', 404);
+    const all = index.decompositionPublications?.[id] ?? [];
+    const safeOffset = Math.max(0, Math.min(all.length, Number.isSafeInteger(offset) ? offset : 0));
+    const safeLimit = Math.max(1, Math.min(100, Number.isSafeInteger(limit) ? limit : 20));
+    return structuredClone({
+      total: all.length,
+      offset: safeOffset,
+      limit: safeLimit,
+      activeVersion: index.activeDecompositionVersions?.[id] ?? null,
+      items: all.slice(safeOffset, safeOffset + safeLimit),
+    });
+  }
+
+  readDecompositionPublication(goalId: string, version: number): DecompositionPublication {
+    const id = uuid(goalId);
+    positive(version);
+    const index = this.load();
+    if (!index.goals.some(g => g.id === id)) fail('strategy_goal_not_found', 404);
+    const summary = index.decompositionPublications?.[id]?.find(p => p.version === version);
+    if (!summary) fail('decomposition_publication_not_found', 404);
+    const snapshot = this.readSnapshotBlob(summary.snapshotSha256);
+    return structuredClone({ ...summary, snapshot });
+  }
+
+  // ---- GM10 / GM11: Thresholds, Immutable Progress Checks & Independent Case Draft Intents ----
+
+  setThreshold(goalId: string, input: Partial<DecompositionThresholdConfig>): DecompositionThresholdConfig {
+    this.assertDecompositionWritable();
+    const id = uuid(goalId);
+    const configured = Boolean(input.configured);
+    const adverseDirection = input.adverseDirection === 'above' ? 'above' : 'below';
+    const unit = input.unit === 'percentage-points' ? 'percentage-points' : 'percent';
+    const magnitudePct = input.magnitudePct === undefined ? undefined : (typeof input.magnitudePct === 'number' && Number.isFinite(input.magnitudePct) && input.magnitudePct > 0 ? input.magnitudePct : fail('invalid_threshold_config', 400));
+    const consecutivePeriods = input.consecutivePeriods === undefined ? undefined : (Number.isSafeInteger(input.consecutivePeriods) && Number(input.consecutivePeriods) >= 1 ? Number(input.consecutivePeriods) : fail('invalid_threshold_config', 400));
+    if (configured && magnitudePct === undefined && consecutivePeriods === undefined) {
+      fail('invalid_threshold_config', 400);
+    }
+    return this.withLock(index => {
+      if (!index.goals.some(g => g.id === id)) fail('strategy_goal_not_found', 404);
+      this.bumpSchema4(index);
+      const saved: DecompositionThresholdConfig = {
+        configured,
+        ...(configured && magnitudePct !== undefined ? { magnitudePct } : {}),
+        ...(configured && consecutivePeriods !== undefined ? { consecutivePeriods } : {}),
+        adverseDirection,
+        unit,
+        updatedAt: new Date().toISOString(),
+      };
+      (index.thresholds ??= {})[id] = saved;
+      return { result: saved, dirty: true };
+    });
+  }
+
+  recordProgressCheck(goalId: string, input: DecompositionProgressCheckInput): { check: DecompositionProgressCheck; replayed: boolean } {
+    this.assertDecompositionWritable();
+    const id = uuid(goalId);
+    const operationId = reqUuid(input.operationId);
+    positive(input.publicationVersion);
+    const rowId = reqText(input.rowId, 120);
+    const checkpointId = reqText(input.checkpointId, 120);
+    if (!['comparable', 'partial-missing', 'incomparable', 'observing'].includes(input.comparability)) {
+      fail('invalid_progress_comparability', 400);
+    }
+    if (!object(input.actualSource) || !Array.isArray(input.actualPeriods) || !input.actualPeriods.length || input.actualPeriods.length > 52) {
+      fail('invalid_progress_check', 400);
+    }
+    const actualSource = {
+      ref: reqText(input.actualSource.ref, 300),
+      label: reqText(input.actualSource.label, 300),
+      cutoffAt: reqText(input.actualSource.cutoffAt, 100),
+      ...(input.actualSource.coverageNote?.trim() ? { coverageNote: reqText(input.actualSource.coverageNote, 1000) } : {}),
+    };
+
+    return this.withLock(index => {
+      const record = index.goals.find(g => g.id === id);
+      if (!record) fail('strategy_goal_not_found', 404);
+      const existingChecks = index.progressChecks?.[id] ?? [];
+      const prior = existingChecks.find(c => c.operationId === operationId);
+      if (prior) return { result: { check: prior, replayed: true as boolean }, dirty: false };
+
+      const pubSummary = index.decompositionPublications?.[id]?.find(p => p.version === input.publicationVersion);
+      if (!pubSummary) fail('decomposition_publication_not_found', 404);
+      const snapshot = this.readSnapshotBlob(pubSummary.snapshotSha256);
+
+      // Freeze planned values strictly from this exact immutable publication snapshot (NEVER from current draft!)
+      const plannedPeriods = input.actualPeriods.map(ap => {
+        const tp = snapshot.timePlan.find(t => t.periodId === ap.periodId);
+        if (tp) {
+          return { periodId: tp.periodId, label: tp.label, plannedValue: tp.targetValue, status: tp.status };
+        }
+        const cp = snapshot.frozenCheckpoints.find(c => c.checkpointId === checkpointId && (rowId === 'G-TOTAL' || c.rowId === rowId));
+        if (cp) {
+          return { periodId: ap.periodId, label: ap.label || cp.label, plannedValue: cp.targetValue, status: cp.status };
+        }
+        return fail('decomposition_checkpoint_not_found', 404);
+      });
+
+      const thresholdSnapshot = structuredClone(index.thresholds?.[id] ?? defaultThreshold());
+      const scopeKey = rowId === 'G-TOTAL'
+        ? `${id}:G-TOTAL`
+        : `${id}:${rowId}`;
+      const metricId = input.metricId?.trim() || snapshot.estimate.sapMetric?.id || snapshot.estimate.metricKind;
+      const periodGranularity = input.periodGranularity ?? (snapshot.timePlan[0]?.granularity ?? 'week');
+      const periodSequenceKey = input.periodSequenceKey?.trim() || input.actualPeriods.map(p => p.periodId).join(',');
+
+      const evaluated = evaluateProgressComparison({
+        comparability: input.comparability,
+        plannedPeriods,
+        actualPeriods: input.actualPeriods,
+        threshold: thresholdSnapshot,
+        priorChecks: existingChecks,
+        scopeKey,
+        metricId,
+        periodGranularity,
+        currentSequenceKey: periodSequenceKey,
+        ...(input.supplementOfCheckId?.trim() ? { supplementOfCheckId: input.supplementOfCheckId.trim() } : {}),
+      });
+
+      const check: DecompositionProgressCheck = {
+        checkId: `CHECK-${String(existingChecks.length + 1).padStart(3, '0')}`,
+        goalId: id,
+        gsaPlanId: pubSummary.gsaPlanId,
+        gsaPlanVersion: pubSummary.gsaPlanVersion,
+        gsaPlanSha256: pubSummary.gsaPlanSha256,
+        publicationId: pubSummary.publicationId,
+        publicationVersion: pubSummary.version,
+        rowId,
+        checkpointId,
+        scopeKey,
+        metricId,
+        periodGranularity,
+        periodSequenceKey,
+        actualSource,
+        comparability: input.comparability,
+        ...(input.missingCoverageNote?.trim() ? { missingCoverageNote: reqText(input.missingCoverageNote, 1000) } : {}),
+        periods: evaluated.periods,
+        overallPending: evaluated.overallPending,
+        overallAbsoluteDiff: evaluated.overallAbsoluteDiff,
+        overallVariancePct: evaluated.overallVariancePct,
+        thresholdSnapshot,
+        trigger: evaluated.trigger,
+        caseChoice: null,
+        ...(input.supplementOfCheckId?.trim() ? { supplementOfCheckId: reqText(input.supplementOfCheckId, 120) } : {}),
+        recordedAt: new Date().toISOString(),
+        operationId,
+      };
+      this.bumpSchema4(index);
+      (index.progressChecks ??= {})[id] = [...existingChecks, check];
+      return { result: { check, replayed: false }, dirty: true };
+    });
+  }
+
+  setCheckCaseChoice(
+    goalId: string,
+    checkId: string,
+    input: { operationId: string; kind: ProgressCaseChoice['kind']; caseId?: string; intentId?: string; title?: string; strategy?: string; note?: string },
+  ): { check: DecompositionProgressCheck; caseDraftIntent?: DecompositionCaseDraftIntent } {
+    this.assertDecompositionWritable();
+    const id = uuid(goalId);
+    const operationId = reqUuid(input.operationId);
+    return this.withLock(index => {
+      const record = index.goals.find(g => g.id === id);
+      if (!record) fail('strategy_goal_not_found', 404);
+      const checks = index.progressChecks?.[id] ?? [];
+      const check = checks.find(c => c.checkId === checkId);
+      if (!check) fail('progress_check_not_found', 404);
+      const now = new Date().toISOString();
+      const note = input.note?.trim() ? reqText(input.note, 2000) : undefined;
+      let createdIntent: DecompositionCaseDraftIntent | undefined;
+
+      if (input.kind === 'observe' || input.kind === 'supplement') {
+        check.caseChoice = { kind: input.kind, ...(note ? { note } : {}), decidedAt: now };
+      } else if (input.kind === 'continue-existing') {
+        const caseId = reqText(input.caseId, 120, 'case_id_required');
+        check.caseChoice = { kind: 'continue-existing', caseId, ...(note ? { note } : {}), decidedAt: now };
+      } else if (input.kind === 'create-new-draft') {
+        const intents = (index.caseDraftIntents ??= {})[id] ?? [];
+        const requestedIntentId = input.intentId?.trim() ? reqText(input.intentId, 120) : `CASE-DRAFT-${randomUUID().slice(0, 8)}`;
+        const existingIntent = intents.find(item => item.intentId === requestedIntentId || item.operationId === operationId);
+        if (existingIntent) {
+          createdIntent = existingIntent;
+        } else {
+          const gsaPlan = index.gsaPlans?.[id]?.find(p => p.planVersion === check.gsaPlanVersion);
+          const goalRefBound = gsaPlan?.goal ?? { goalId: id, version: record.adoptedVersion ?? record.currentVersion };
+          const goalVer = record.versions.find(v => v.version === goalRefBound.version)!;
+          const strategy = input.strategy?.trim() || goalVer.strategies?.[0] || '当前目标策略';
+          createdIntent = {
+            intentId: requestedIntentId,
+            operationId,
+            goalId: id,
+            goalRef: goalRefBound,
+            strategy,
+            title: input.title?.trim() || `${check.checkId} 偏差独立决策草稿`,
+            scope: goalVer.scope,
+            period: gsaPlan?.formalTarget.period ?? goalVer.dueAt?.slice(0, 7) ?? '当期',
+            kind: 'deviation-followup',
+            status: 'draft-pending-confirmation',
+            checkId: check.checkId,
+            gsaPlanRef: { planId: check.gsaPlanId, planVersion: check.gsaPlanVersion, contentSha256: check.gsaPlanSha256 },
+            publicationRef: { publicationId: check.publicationId, version: check.publicationVersion, rowId: check.rowId, checkpointId: check.checkpointId },
+            actualSourceRef: check.actualSource.ref,
+            evidenceSummary: note || `负责人在 ${check.checkId}（拆解表 v${check.publicationVersion} / ${check.rowId} / ${check.checkpointId}，实绩 ${check.actualSource.ref}）选择另建 Case 草稿。`,
+            createdAt: now,
+          };
+          index.caseDraftIntents[id] = [...intents, createdIntent];
+        }
+        check.caseChoice = { kind: 'create-new-draft', intentId: createdIntent.intentId, ...(note ? { note } : {}), decidedAt: now };
+      } else {
+        fail('invalid_case_choice', 400);
+      }
+
+      this.bumpSchema4(index);
+      return { result: { check, ...(createdIntent ? { caseDraftIntent: createdIntent } : {}) }, dirty: true };
+    });
+  }
+
+  /** Supports both proactive pilot Case drafts (directly from adopted G+S) and independent follow-up Case drafts. */
+  createCaseDraftIntent(goalId: string, input: DecompositionCaseDraftIntentInput): { intent: DecompositionCaseDraftIntent; replayed: boolean } {
+    this.assertDecompositionWritable();
+    const id = uuid(goalId);
+    const operationId = reqUuid(input.operationId);
+    const title = reqText(input.title, 300);
+    const strategy = reqText(input.strategy, 2000);
+    const evidenceSummary = reqText(input.evidenceSummary, 4000);
+    if (input.kind !== 'deviation-followup' && input.kind !== 'proactive-pilot') fail('invalid_case_draft_intent', 400);
+
+    return this.withLock(index => {
+      const record = index.goals.find(g => g.id === id);
+      if (!record) fail('strategy_goal_not_found', 404);
+      const targetVersion = input.goalVersion ?? record.adoptedVersion;
+      if (!targetVersion) fail('strategy_goal_not_adopted', 409);
+      const goalVer = record.versions.find(v => v.version === targetVersion);
+      if (!goalVer || goalVer.status !== 'adopted') fail('strategy_goal_not_adopted', 409);
+      if (goalVer.strategies?.length && !goalVer.strategies.includes(strategy)) {
+        fail('case_strategy_not_found', 409);
+      }
+
+      const intents = (index.caseDraftIntents ??= {})[id] ?? [];
+      const priorByOp = intents.find(item => item.operationId === operationId || (input.intentId && item.intentId === input.intentId));
+      if (priorByOp) {
+        if (priorByOp.title !== title || priorByOp.strategy !== strategy || priorByOp.checkId !== input.checkId) {
+          fail('case_draft_intent_conflict', 409);
+        }
+        return { result: { intent: priorByOp, replayed: true as boolean }, dirty: false };
+      }
+
+      const check = input.checkId ? index.progressChecks?.[id]?.find(c => c.checkId === input.checkId) : undefined;
+      if (input.checkId && !check) fail('progress_check_not_found', 404);
+      const activePlan = index.gsaPlans?.[id]?.at(-1);
+
+      const intent: DecompositionCaseDraftIntent = {
+        intentId: input.intentId?.trim() || `CASE-DRAFT-${randomUUID().slice(0, 8)}`,
+        operationId,
+        goalId: id,
+        goalRef: { goalId: id, version: goalVer.version },
+        strategy,
+        title,
+        scope: goalVer.scope,
+        period: activePlan?.formalTarget.period ?? goalVer.dueAt?.slice(0, 7) ?? '当期',
+        kind: input.kind,
+        status: 'draft-pending-confirmation',
+        ...(check ? {
+          checkId: check.checkId,
+          gsaPlanRef: { planId: check.gsaPlanId, planVersion: check.gsaPlanVersion, contentSha256: check.gsaPlanSha256 },
+          publicationRef: { publicationId: check.publicationId, version: check.publicationVersion, rowId: check.rowId, checkpointId: check.checkpointId },
+          actualSourceRef: check.actualSource.ref,
+        } : activePlan ? {
+          gsaPlanRef: { planId: activePlan.planId, planVersion: activePlan.planVersion, contentSha256: activePlan.contentSha256 },
+        } : {}),
+        evidenceSummary,
+        createdAt: new Date().toISOString(),
+      };
+      this.bumpSchema4(index);
+      index.caseDraftIntents[id] = [...intents, intent];
+      return { result: { intent, replayed: false }, dirty: true };
+    });
+  }
+
+  // ---- UI04: Read-only Project Handoff Preview & Explicit Handoff Confirmation ----
+
+  previewProjectHandoff(goalId: string, publicationVersion: number, rowId: string, checkpointId?: string): DecompositionProjectHandoffPreview {
+    const id = uuid(goalId);
+    positive(publicationVersion);
+    const cleanRowId = reqText(rowId, 120);
+    const index = this.load();
+    const pubSummary = index.decompositionPublications?.[id]?.find(p => p.version === publicationVersion);
+    if (!pubSummary) fail('decomposition_publication_not_found', 404);
+    const snapshot = this.readSnapshotBlob(pubSummary.snapshotSha256);
+    const row = snapshot.rows.find(r => r.rowId === cleanRowId);
+    if (!row) fail('decomposition_row_not_found', 404);
+    const checkpoint = checkpointId
+      ? snapshot.frozenCheckpoints.find(cp => cp.rowId === cleanRowId && cp.checkpointId === checkpointId)
+      : snapshot.frozenCheckpoints.find(cp => cp.rowId === cleanRowId);
+    if (!checkpoint) fail('decomposition_frozen_checkpoint_unavailable', 409);
+
+    const existing = index.projectHandoffs?.[id]?.find(h => h.publicationVersion === publicationVersion && h.rowId === cleanRowId);
+    const committed = pubSummary.committedGoals.find(g => g.rowId === cleanRowId);
+    const goalRefBound: GoalRef = committed ? { goalId: committed.goalId, version: committed.version } : snapshot.gsaPlan.goal;
+
+    return structuredClone({
+      ok: true,
+      ...(existing ? { existing } : {}),
+      goalRef: goalRefBound,
+      gsaPlanRef: { planId: snapshot.gsaPlan.planId, planVersion: snapshot.gsaPlan.planVersion, contentSha256: snapshot.gsaPlan.contentSha256 },
+      publicationId: pubSummary.publicationId,
+      publicationVersion: pubSummary.version,
+      rowId: row.rowId,
+      rowTitle: row.title,
+      scope: row.scope,
+      responsible: row.responsible,
+      strategy: row.strategy,
+      targetValue: row.targetValue,
+      unit: row.unit,
+      checkpoint,
+      note: '仅预览并固定准确版本引用，不自动创建任务、人员安排或行动授权。',
+    });
+  }
+
+  confirmProjectHandoff(goalId: string, input: DecompositionProjectHandoffInput): { handoff: DecompositionProjectHandoff; replayed: boolean } {
+    this.assertDecompositionWritable();
+    const id = uuid(goalId);
+    const operationId = reqUuid(input.operationId);
+    const preview = this.previewProjectHandoff(id, input.publicationVersion, input.rowId, input.checkpointId);
+    return this.withLock(index => {
+      const list = (index.projectHandoffs ??= {})[id] ?? [];
+      const existing = list.find(h => h.operationId === operationId || (h.publicationVersion === preview.publicationVersion && h.rowId === preview.rowId));
+      if (existing) return { result: { handoff: existing, replayed: true as boolean }, dirty: false };
+      const handoff: DecompositionProjectHandoff = {
+        handoffId: randomUUID(),
+        operationId,
+        goalId: id,
+        goalRef: preview.goalRef,
+        gsaPlanRef: preview.gsaPlanRef,
+        publicationId: preview.publicationId,
+        publicationVersion: preview.publicationVersion,
+        rowId: preview.rowId,
+        rowTitle: preview.rowTitle,
+        scope: preview.scope,
+        responsible: preview.responsible,
+        strategy: preview.strategy,
+        targetValue: preview.targetValue,
+        unit: preview.unit,
+        checkpoint: preview.checkpoint,
+        projectPlanStatus: 'draft-reference-only',
+        authorityStatus: 'not-authorized',
+        ...(input.linkedProjectId ? { linkedProjectId: reqUuid(input.linkedProjectId) } : {}),
+        createdAt: new Date().toISOString(),
+      };
+      this.bumpSchema4(index);
+      index.projectHandoffs[id] = [...list, handoff];
+      return { result: { handoff, replayed: false }, dirty: true };
+    });
+  }
+
+  // ---- GM12: Cycle Review, Next-Cycle Draft & Return to Strategy Choice ----
+
+  recordCycleReview(goalId: string, input: DecompositionCycleReviewInput): { review: DecompositionCycleReview; replayed: boolean } {
+    this.assertDecompositionWritable();
+    const id = uuid(goalId);
+    const operationId = reqUuid(input.operationId);
+    const period = reqText(input.period, 100);
+    if (typeof input.actualFinalValue !== 'number' || !Number.isFinite(input.actualFinalValue)) fail('invalid_cycle_review', 400);
+    const actualSourceRef = reqText(input.actualSourceRef, 500);
+    const conclusions = (input.conclusions ?? []).map(classifyReviewConclusion);
+
+    return this.withLock(index => {
+      const record = index.goals.find(g => g.id === id);
+      if (!record) fail('strategy_goal_not_found', 404);
+      const existingReviews = index.cycleReviews?.[id] ?? [];
+      const prior = existingReviews.find(r => r.operationId === operationId);
+      if (prior) return { result: { review: prior, replayed: true as boolean }, dirty: false };
+
+      const adoptedList = record.versions.filter(v => v.status === 'adopted');
+      if (!adoptedList.length) fail('strategy_goal_not_adopted', 409);
+      const initialAdopted = adoptedList[0]!;
+      const lastEffective = adoptedList.find(v => v.version === record.adoptedVersion) ?? adoptedList.at(-1)!;
+      const plans = index.gsaPlans?.[id] ?? [];
+      const firstPlan = plans.find(p => p.goal.version === initialAdopted.version);
+      const lastPlan = plans.filter(p => p.goal.version === lastEffective.version).at(-1);
+
+      const initialTarget = firstPlan?.formalTarget ?? this.resolveFormalTarget(initialAdopted);
+      const lastTarget = lastPlan?.formalTarget ?? this.resolveFormalTarget(lastEffective);
+      const varianceValue = Number((input.actualFinalValue - lastTarget.value).toFixed(6));
+      const outcomeSummary = varianceValue >= 0
+        ? `依据最后生效的正式目标 (${lastTarget.value}${lastTarget.unit})，实际完成 ${input.actualFinalValue}${lastTarget.unit}，超出目标 ${varianceValue}${lastTarget.unit}（期初承诺 ${initialTarget.value}${initialTarget.unit} 仅作备忘；总量达成不直接证明单条策略因果成立）。`
+        : `依据最后生效的正式目标 (${lastTarget.value}${lastTarget.unit})，实际完成 ${input.actualFinalValue}${lastTarget.unit}，低于目标 ${Math.abs(varianceValue)}${lastTarget.unit}（期初承诺 ${initialTarget.value}${initialTarget.unit} 仅作备忘）。`;
+
+      const review: DecompositionCycleReview = {
+        reviewId: randomUUID(),
+        operationId,
+        goalId: id,
+        period,
+        initialFormalTarget: {
+          goalRef: { goalId: id, version: initialAdopted.version },
+          ...(firstPlan ? { gsaPlanVersion: firstPlan.planVersion } : {}),
+          value: initialTarget.value,
+          unit: initialTarget.unit,
+          memoOnly: true,
+        },
+        lastEffectiveFormalTarget: {
+          goalRef: { goalId: id, version: lastEffective.version },
+          ...(lastPlan ? { gsaPlanVersion: lastPlan.planVersion } : {}),
+          value: lastTarget.value,
+          unit: lastTarget.unit,
+        },
+        actualFinalValue: input.actualFinalValue,
+        actualSourceRef,
+        varianceValue,
+        outcomeSummary,
+        preservedCheckIds: (index.progressChecks?.[id] ?? []).map(c => c.checkId),
+        conclusions,
+        recordedAt: new Date().toISOString(),
+      };
+      this.bumpSchema4(index);
+      (index.cycleReviews ??= {})[id] = [...existingReviews, review];
+      return { result: { review, replayed: false }, dirty: true };
+    });
+  }
+
+  createNextCycleDraft(goalId: string, input: NextCycleDraftInput): { nextCycleDraft: NextCycleDraft; replayed: boolean } {
+    this.assertDecompositionWritable();
+    const id = uuid(goalId);
+    const operationId = reqUuid(input.operationId);
+    const reviewId = reqUuid(input.reviewId);
+    const nextPeriod = reqText(input.nextPeriod, 100);
+    if (!Array.isArray(input.selectedConclusionIds) || !input.selectedConclusionIds.length) {
+      fail('cycle_review_conclusions_required', 400);
+    }
+
+    return this.withLock(index => {
+      const record = index.goals.find(g => g.id === id);
+      if (!record) fail('strategy_goal_not_found', 404);
+      const list = (index.nextCycleDrafts ??= {})[id] ?? [];
+      const prior = list.find(d => d.operationId === operationId);
+      if (prior) return { result: { nextCycleDraft: prior, replayed: true as boolean }, dirty: false };
+      const review = index.cycleReviews?.[id]?.find(r => r.reviewId === reviewId);
+      if (!review) fail('cycle_review_not_found', 404);
+      const currentGoal = record.versions.find(v => v.version === (record.adoptedVersion ?? record.currentVersion))!;
+      const targetScope = input.targetScope ?? currentGoal.scope;
+      const scopeChanged = canonical(targetScope) !== canonical(currentGoal.scope);
+
+      const selectedConclusions = input.selectedConclusionIds.map(cid => {
+        const found = review.conclusions.find(c => c.id === cid);
+        if (!found) fail('cycle_review_conclusion_not_found', 404);
+        // Cross-scope promotion ALWAYS forces hypothesis-unverified!
+        if (scopeChanged) {
+          return { ...found, targetScopeSameAsOriginal: false, classification: 'hypothesis-unverified' as const };
+        }
+        return found;
+      });
+
+      const nextCycleDraft: NextCycleDraft = {
+        draftId: randomUUID(),
+        operationId,
+        sourceGoalId: id,
+        sourceReviewId: reviewId,
+        nextPeriod,
+        targetScope,
+        selectedConclusions,
+        status: 'draft-not-adopted',
+        createdAt: new Date().toISOString(),
+      };
+      this.bumpSchema4(index);
+      index.nextCycleDrafts[id] = [...list, nextCycleDraft];
+      return { result: { nextCycleDraft, replayed: false }, dirty: true };
+    });
+  }
+
+  recordStrategyReturn(goalId: string, input: StrategyReturnInput): { strategyReturn: StrategyReturnRecord; replayed: boolean } {
+    this.assertDecompositionWritable();
+    const id = uuid(goalId);
+    const operationId = reqUuid(input.operationId);
+    const reviewId = reqUuid(input.reviewId);
+    const reason = reqText(input.reason, 2000);
+    if (!Array.isArray(input.evidenceRefs) || !input.evidenceRefs.length) fail('strategy_return_evidence_required', 400);
+
+    return this.withLock(index => {
+      const record = index.goals.find(g => g.id === id);
+      if (!record) fail('strategy_goal_not_found', 404);
+      const list = (index.strategyReturns ??= {})[id] ?? [];
+      const prior = list.find(r => r.operationId === operationId);
+      if (prior) return { result: { strategyReturn: prior, replayed: true as boolean }, dirty: false };
+      const review = index.cycleReviews?.[id]?.find(r => r.reviewId === reviewId);
+      if (!review) fail('cycle_review_not_found', 404);
+      const adoptedGoal = record.versions.find(v => v.version === (record.adoptedVersion ?? record.currentVersion));
+      const formalOrigin = adoptedGoal?.formalOrigin;
+
+      const strategyReturn: StrategyReturnRecord = {
+        returnId: randomUUID(),
+        operationId,
+        goalId: id,
+        reviewId,
+        reason,
+        selectedConclusionIds: [...(input.selectedConclusionIds ?? [])],
+        evidenceRefs: input.evidenceRefs.map(e => reqText(e, 500)),
+        ...(formalOrigin?.kind === 'strategy-publication' ? {
+          originalStrategyPublicationRef: {
+            initiativeId: formalOrigin.initiativeId,
+            publicationId: formalOrigin.publicationId,
+            contentSha256: formalOrigin.contentSha256,
+          },
+        } : {}),
+        status: 'returned-for-review',
+        createdAt: new Date().toISOString(),
+      };
+      this.bumpSchema4(index);
+      index.strategyReturns[id] = [...list, strategyReturn];
+      return { result: { strategyReturn, replayed: false }, dirty: true };
+    });
+  }
+
+  /** Unified read-only workspace projection for a single goalId. Never modifies disk or leaks across goals. */
+  getGoalWorkspace(goalId: string): GoalWorkspaceView {
+    const id = uuid(goalId);
+    const index = this.load();
+    const goal = index.goals.find(g => g.id === id);
+    if (!goal) fail('strategy_goal_not_found', 404);
+    const gsaPlans = index.gsaPlans?.[id] ?? [];
+    const activeGsaPlan = gsaPlans.at(-1) ?? null;
+    const gsaDraft = index.gsaDrafts?.[id] ?? null;
+    const currentDraft = index.decompositionDrafts?.[id] ?? null;
+    const validation = currentDraft ? validateDecompositionForPublish(activeGsaPlan, currentDraft, index.goals) : null;
+    const publications = index.decompositionPublications?.[id] ?? [];
+    const activePublicationVersion = index.activeDecompositionVersions?.[id] ?? null;
+    let activePublication: DecompositionPublication | null = null;
+    if (activePublicationVersion !== null) {
+      const summary = publications.find(p => p.version === activePublicationVersion);
+      if (summary) {
+        activePublication = { ...summary, snapshot: this.readSnapshotBlob(summary.snapshotSha256) };
+      }
+    }
+    return structuredClone({
+      goal,
+      gsaPlans,
+      activeGsaPlan,
+      gsaDraft,
+      draft: currentDraft,
+      validation,
+      publications,
+      activePublicationVersion,
+      activePublication,
+      checks: index.progressChecks?.[id] ?? [],
+      threshold: index.thresholds?.[id] ?? defaultThreshold(),
+      caseDraftIntents: index.caseDraftIntents?.[id] ?? [],
+      handoffs: index.projectHandoffs?.[id] ?? [],
+      reviews: index.cycleReviews?.[id] ?? [],
+      nextCycleDrafts: index.nextCycleDrafts?.[id] ?? [],
+      strategyReturns: index.strategyReturns?.[id] ?? [],
     });
   }
 }

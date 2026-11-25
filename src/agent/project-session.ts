@@ -2,7 +2,7 @@ import { taskSourceDeliveryType, taskSourceDeliveryDetails, tracksTaskSource } f
 import { packageIdentity } from './skill-catalog.ts';
 import { taskPurpose, approvedTaskSkills } from '../host/task-assignment.ts';
 import {goalContextSourceTool} from './goal-context-source.ts';
-import { strategyDiscussionTool, projectDiscussionSourceTool, editableGoalTool, explainGoalProposalError, STRATEGY_DISCUSSION_ACTIONS } from './strategy-discussion.ts';
+import { strategyDiscussionTool, projectDiscussionSourceTool, editableGoalTool, goalEstimateTool, goalDecompositionTool, explainGoalProposalError, STRATEGY_DISCUSSION_ACTIONS } from './strategy-discussion.ts';
 import { methodIssueTool } from './method-issue.ts';
 import { quotedDecisionTool } from './quoted-decisions.ts';
 import type { AnalysisDeliveryReceipt } from '../host/analysis-delivery.ts';
@@ -786,7 +786,15 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       // 止损作用域限于已确认的战略共创全量工具；business-role 的 project-sources/goal-draft 变体不纳入，
       // 避免在未呈现该诊断的消费者处静默取消。顺序执行复用 Pi 原生 executionMode，使批次内逐工具结算计数。
       const loopGuard = !variant;
-      const baseTool = variant === 'project-sources' ? projectDiscussionSourceTool : variant === 'goal-draft' ? editableGoalTool : strategyDiscussionTool;
+      const baseTool = variant === 'project-sources'
+        ? projectDiscussionSourceTool
+        : variant === 'goal-draft'
+          ? editableGoalTool
+          : variant === 'goal-estimate'
+            ? goalEstimateTool
+            : variant === 'goal-decomposition'
+              ? goalDecompositionTool
+              : strategyDiscussionTool;
       return [{
         ...baseTool,
         ...(loopGuard ? { executionMode: 'sequential' as const } : {}),
@@ -812,7 +820,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
             return result as {content:({type:'text';text:string}|{type:'image';data:string;mimeType:string})[];details:Record<string,unknown>};
           } catch (error) {
             if (isRead && !originalRun!.strategyLoopStopped) noteStrategyRead(originalRun!, String(action), strategyReadFingerprint({ code: (error as {code?:unknown})?.code ?? (error as Error)?.message, details: (error as {details?:unknown})?.details }));
-            if (action === 'propose-goal' && variant !== 'goal-draft') throw explainGoalProposalError(error);
+            if (action === 'propose-goal' && variant !== 'goal-draft' && variant !== 'goal-estimate' && variant !== 'goal-decomposition') throw explainGoalProposalError(error);
             throw error;
           }
         }
@@ -826,10 +834,20 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       let parent: AgentSession;
       const contextAdapter = scopeToolContexts ? createToolContextAdapter((ctx, signal) => qualifyToolInvocation(parent, ctx, signal)) : undefined;
       const analysisAssetsDir = path.resolve(o.codeRoot, 'extensions/analysis-assets');
-      const strategySkillPaths = strategyInitiative() ? [
-        path.join(analysisAssetsDir, 'deep-research', 'SKILL.md'),
-        path.resolve(o.codeRoot, 'extensions/strategy-assets/grill-me/SKILL.md'),
-      ] : undefined;
+      const goalAnalysisVariant = o.workspace?.discussionTools === 'goal-estimate' || o.workspace?.discussionTools === 'goal-decomposition';
+      const strategySkillPaths = strategyInitiative()
+        ? [
+            path.join(analysisAssetsDir, 'deep-research', 'SKILL.md'),
+            path.resolve(o.codeRoot, 'extensions/strategy-assets/grill-me/SKILL.md'),
+          ]
+        : goalAnalysisVariant
+          ? [
+              path.join(analysisAssetsDir, 'target-forecast', 'SKILL.md'),
+              path.join(analysisAssetsDir, 'roi-forecast', 'SKILL.md'),
+              path.join(analysisAssetsDir, 'coupon-forecast', 'SKILL.md'),
+              path.join(analysisAssetsDir, 'data-analysis', 'SKILL.md'),
+            ]
+          : undefined;
       const customTools = [...createGoalContextTools(sessionManager), ...createStrategyTools(sessionManager), ...(simulationTools ?? []), ...(modelPackTools ?? []), ...createCandidateTools(sessionManager), ...createPersonalContextTools(sessionManager), ...createBoundDbLinkTools(sessionManager), ...(o.reportCalculationReviewEnabled ? [createReportReviewTool(() => parent)] : [])];
       const delegation = !fixedInput() && !o.workspace && !restrictedMemberPack && (!o.protectedExecution || ordinaryManaged());
       const searchGuidance: ExtensionFactory = pi => {

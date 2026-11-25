@@ -11,6 +11,8 @@ import { DownloadVersion,type ChoiceHandoff } from './StrategyChoicePanel.tsx';
 import { managementTitle, ManagementTabs, type ManagementRoute,type ManagementStage } from './ManagementTabs.tsx';
 import { resolveNewUsageContext, type UsageContext } from '../usage-context-types.ts';
 import { StrategyInitiativeWorkbench } from './StrategyInitiativeWorkbench.tsx';
+import { GoalDecompositionWorkspace } from './GoalDecompositionWorkspace.tsx';
+import { ExecutionHandoffDialog, GoalSwitcherDialog, RelatedDecisionsDialog, VersionsAndSourcesDialog } from './GoalAuxiliaryDialogs.tsx';
 import type { InitiativeHandoffReceipt, InitiativePublication } from './strategy-initiative-client.ts';
 import * as discussionApi from './strategy-discussion-client.ts';
 import type { ClientProject, PublicModelConfiguration } from './project-types.ts';
@@ -94,6 +96,7 @@ type EditorFields = {
   title: string; outcome: string; perspective: GoalPerspective; scopeKind: GoalScope['kind']; scopeId: string; scopeName: string; enterpriseId: string;
   bsc: string; measureKind: GoalMeasurement['kind']; metricId: string; metricVersion: string; metricName: string; target: string; criterion: string;
   baselineState: 'known' | 'pending'; baseline: string; responsible: string; dueAt: string; strategies: string; resources: string; conditions: string;
+  formalPeriod: string; formalTargetValue: string; formalUnit: string; formalMetricKind: 'amount' | 'ratio' | 'milestone'; formalReason: string;
 };
 function GoalEditor({ active, handoff, suggestion, initial, record, index, enterprises, metrics, metricsKnown, onSaved, onClose, onManageMetrics, confirmation }: {
   active: boolean;
@@ -114,7 +117,13 @@ function GoalEditor({ active, handoff, suggestion, initial, record, index, enter
     metricName: proposed?.measurement.kind === 'quantitative' ? proposed.measurement.sapMetric.metricName ?? '' : '',
     criterion: proposed?.measurement.kind === 'deliverable' ? proposed.measurement.criterion : '', baselineState: proposed?.baseline.state ?? 'pending', baseline: proposed?.baseline.description ?? '', responsible: proposed?.responsible ?? '', dueAt: proposed?.dueAt?.slice(0, 10) ?? '',
     strategies: proposed?.strategies?.join('\n') ?? '', resources: proposed?.resources?.join('\n') ?? '', conditions: proposed?.necessaryConditions?.join('\n') ?? '',
+    formalPeriod: proposed?.formalOrigin?.period ?? '',
+    formalTargetValue: proposed?.formalOrigin ? String(proposed.formalOrigin.targetValue) : '',
+    formalUnit: proposed?.formalOrigin?.unit ?? '万元',
+    formalMetricKind: proposed?.formalOrigin?.metricKind ?? 'amount',
+    formalReason: proposed?.formalOrigin?.kind === 'manual-exception' ? proposed.formalOrigin.reason : '当前范围尚未发布正式战略目标',
   }));
+  const [formalNotice, setFormalNotice] = useState('');
   const state = useGoalMutation(onSaved), disabled = state.busy || Boolean(state.pending) || Boolean(confirmation?.busy || confirmation?.locked);
   const metricKey = (metric: { id: string; version: string; metricName: string }) => JSON.stringify([metric.id, metric.version, metric.metricName]);
   const metricOptions = metrics.flatMap(entry => entry.metricNames.map(metricName => ({ id: entry.id, version: entry.version, metricName, label: `${metricName} · ${entry.id} @ ${entry.version}` })));
@@ -123,11 +132,38 @@ function GoalEditor({ active, handoff, suggestion, initial, record, index, enter
   const knownScopes = [...new Map(index.goals.map(x => current(x).scope).filter(x => x.kind === fields.scopeKind && (x.kind !== 'department' || x.enterpriseId === fields.enterpriseId)).map(x => [x.id, x])).values()];
   const knownScope = fields.scopeKind === 'enterprise' ? enterprises.find(x => x.id === fields.scopeId) : knownScopes.find(x => x.id === fields.scopeId);
   const scope: GoalScope = { kind: fields.scopeKind, id: knownScope?.id ?? (fields.scopeKind === 'personal' ? 'self' : fields.scopeId.trim()), name: knownScope?.name ?? fields.scopeName.trim(), ...(fields.scopeKind === 'department' && fields.enterpriseId ? { enterpriseId: fields.enterpriseId } : {}) };
+  useEffect(() => {
+    if (initial || !scope.id) { setFormalNotice(''); return; }
+    let cancelled = false;
+    void api.formalSources(scope).then(res => {
+      if (cancelled) return;
+      if (res.formalPublications.length) {
+        setFormalNotice(`当前范围已有 ${res.formalPublications.length} 份适用正式战略发布，请优先从「战略发布」带入正式目标；手工例外创建同周期目标将被 Host 拦截。`);
+      } else {
+        setFormalNotice('');
+      }
+    }).catch(() => { if (!cancelled) setFormalNotice(''); });
+    return () => { cancelled = true; };
+  }, [initial, scope.kind, scope.id, scope.enterpriseId]);
+  const formalValNum = fields.formalTargetValue.trim() === '' ? NaN : Number(fields.formalTargetValue);
+  const parsedFormalOrigin = proposed?.formalOrigin?.kind === 'strategy-publication'
+    ? proposed.formalOrigin
+    : Number.isFinite(formalValNum) && fields.formalPeriod.trim() && fields.formalUnit.trim()
+      ? {
+          kind: 'manual-exception' as const,
+          reason: fields.formalReason.trim() || '当前范围无适用正式战略发布，手动拟定例外',
+          period: fields.formalPeriod.trim(),
+          targetValue: formalValNum,
+          unit: fields.formalUnit.trim(),
+          metricKind: fields.formalMetricKind,
+        }
+      : undefined;
   const input: GoalDraftInput = {
     title: fields.title.trim(), outcome: fields.outcome.trim(), perspective: fields.perspective, scope, responsible: fields.responsible.trim(),
     measurement: fields.measureKind === 'quantitative' ? { kind: 'quantitative', sapMetric: { authority: 'sap-metric', id: fields.metricId, version: fields.metricVersion, metricName: fields.metricName }, ...(fields.target.trim() ? { target: fields.target.trim() } : {}) } : { kind: 'deliverable', criterion: fields.criterion.trim() },
     baseline: { state: fields.baselineState, description: fields.baseline.trim() }, ...(fields.bsc.trim() ? { bscPerspective: fields.bsc.trim() } : {}), ...(fields.dueAt ? { dueAt: proposed?.dueAt?.slice(0,10) === fields.dueAt ? proposed.dueAt : fields.dueAt } : {}),
     strategies: lines(fields.strategies), resources: lines(fields.resources), necessaryConditions: lines(fields.conditions),
+    ...(parsedFormalOrigin ? { formalOrigin: parsedFormalOrigin } : {}),
     ...(initial?.structured && {structured:initial.structured}),
     ...(proposed?.usageContext && { usageContext: proposed.usageContext }),
     ...(proposed?.roleSuggestion && { roleSuggestion: proposed.roleSuggestion }),
@@ -148,12 +184,14 @@ function GoalEditor({ active, handoff, suggestion, initial, record, index, enter
     void state.save(initial ? 'revise' : 'create', input, operationId => initial && record ? api.revise(record.id, { ...input, expectedVersion: record.currentVersion, operationId }) : api.create({ ...input, operationId }));
   };
   return <CaseDialog active={active} title={confirmation ? '核对并采用目标／GSA' : initial ? '提出目标修订' : '新建候选目标'} subtitle="先保存候选，核对范围、衡量和待补前提，再明确采纳。旧Case和报告继续引用当时版本。" className="sg-dialog" busy={state.busy || Boolean(confirmation?.busy)} onClose={onClose}><form onSubmit={submit}>
+    {formalNotice && <p className="case-notice" role="status">{formalNotice}</p>}
     <Field id={`${id}-title`} label="目标名称"><input id={`${id}-title`} required maxLength={300} disabled={disabled} value={fields.title} onChange={e => change('title', e.target.value)} /></Field>
     <Field id={`${id}-outcome`} label="当期结果要求"><textarea id={`${id}-outcome`} required rows={3} maxLength={4000} disabled={disabled} value={fields.outcome} onChange={e => change('outcome', e.target.value)} /></Field>
     <div className="case-form-row"><Field id={`${id}-perspective`} label="适用视角"><select id={`${id}-perspective`} disabled={disabled} value={fields.perspective} onChange={e => change('perspective', e.target.value as GoalPerspective)}>{Object.entries(perspectiveLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></Field><Field id={`${id}-scope-kind`} label="职责层级"><select id={`${id}-scope-kind`} disabled={disabled} value={fields.scopeKind} onChange={e => { const kind = e.target.value as GoalScope['kind']; setFields(old => ({ ...old, scopeKind: kind, scopeId: kind === 'enterprise' ? enterprises[0]?.id ?? '' : kind === 'personal' ? 'self' : '', scopeName: kind === 'enterprise' ? enterprises[0]?.name ?? '' : kind === 'personal' ? '个人工作' : '', enterpriseId: '' })); }}>{Object.entries(scopeLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></Field></div>
     {fields.scopeKind !== 'personal' && <Field id={`${id}-enterprise`} label={fields.scopeKind === 'department' ? '上层组织（已知时引用，可选）' : '当前企业'}><select id={`${id}-enterprise`} required={fields.scopeKind === 'enterprise'} disabled={disabled} value={fields.scopeKind === 'enterprise' ? fields.scopeId : fields.enterpriseId} onChange={e => fields.scopeKind === 'enterprise' ? change('scopeId', e.target.value) : setFields(old => ({ ...old, enterpriseId: e.target.value, scopeId: '', scopeName: '' }))}><option value="">{fields.scopeKind === 'department' ? '上层未知 · 仍可开展' : '请选择已明确的企业'}</option>{enterprises.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select>{!enterprises.length && <p className="case-help">当前尚未取得企业目录；部门与个人可沿已知职责开展，不据此获得企业资料权限。组织主体需在原Studio明确。<button type="button" className="text-button" disabled={disabled} onClick={onManageMetrics}>前往原Studio</button></p>}</Field>}
     {fields.scopeKind !== 'enterprise' && <><Field id={`${id}-known-scope`} label="已有职责范围（可选）"><select id={`${id}-known-scope`} disabled={disabled} value={knownScopes.some(x => x.id === fields.scopeId) ? fields.scopeId : ''} onChange={e => { const item = knownScopes.find(x => x.id === e.target.value); setFields(old => ({ ...old, scopeId: item?.id ?? '', scopeName: item?.name ?? old.scopeName })); }}><option value="">本次明确范围</option>{knownScopes.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>{fields.scopeKind === 'department' && <><p className="case-help">这是本次声明的部门／业务模块职责；上层未知时保持未知，不强建组织，也不自动取得企业资料或SAP指标权限。</p><Field id={`${id}-department-id`} label="部门职责标识（用户声明）"><input id={`${id}-department-id`} required maxLength={300} disabled={disabled || knownScopes.some(x => x.id === fields.scopeId)} value={fields.scopeId} onChange={e => change('scopeId', e.target.value)} /></Field></>}<Field id={`${id}-scope-name`} label={fields.scopeKind === 'department' ? '部门职责名称（用户声明）' : '职责范围名称'}><input id={`${id}-scope-name`} required maxLength={300} disabled={disabled || knownScopes.some(x => x.id === fields.scopeId)} value={fields.scopeName} onChange={e => change('scopeName', e.target.value)} /></Field></>}
     <div className="case-form-row"><Field id={`${id}-responsible`} label="责任与协同"><input id={`${id}-responsible`} required maxLength={300} disabled={disabled} value={fields.responsible} onChange={e => change('responsible', e.target.value)} /></Field><Field id={`${id}-due`} label="期限（可选）"><input id={`${id}-due`} type="date" disabled={disabled} value={fields.dueAt} onChange={e => change('dueAt', e.target.value)} /></Field></div>
+    <details open={Boolean(fields.formalTargetValue)}><summary>正式目标数值与周期（用于总 GSA 与拆解，可选）</summary><div className="case-form-row"><Field id={`${id}-formal-period`} label="目标周期（如 2027-01）"><input id={`${id}-formal-period`} maxLength={100} disabled={disabled} value={fields.formalPeriod} onChange={e => change('formalPeriod', e.target.value)} placeholder="2027-01" /></Field><Field id={`${id}-formal-kind`} label="指标类型"><select id={`${id}-formal-kind`} disabled={disabled} value={fields.formalMetricKind} onChange={e => change('formalMetricKind', e.target.value as EditorFields['formalMetricKind'])}><option value="amount">金额 / 数量可加总</option><option value="ratio">比率 / 百分比</option><option value="milestone">里程碑交付</option></select></Field></div><div className="case-form-row"><Field id={`${id}-formal-val`} label="正式目标值"><input id={`${id}-formal-val`} type="number" step="any" disabled={disabled} value={fields.formalTargetValue} onChange={e => change('formalTargetValue', e.target.value)} placeholder="例如 120" /></Field><Field id={`${id}-formal-unit`} label="单位"><input id={`${id}-formal-unit`} maxLength={60} disabled={disabled} value={fields.formalUnit} onChange={e => change('formalUnit', e.target.value)} placeholder="万元 / % / 项" /></Field></div><Field id={`${id}-formal-reason`} label="来源说明（手动例外原因）"><input id={`${id}-formal-reason`} maxLength={1000} disabled={disabled} value={fields.formalReason} onChange={e => change('formalReason', e.target.value)} /></Field></details>
     <details><summary>BSC 视角（可选）</summary><Field id={`${id}-bsc`} label="BSC归属／目标关系视角（可选）"><input id={`${id}-bsc`} list={`${id}-bsc-options`} maxLength={300} disabled={disabled} value={fields.bsc} onChange={e => change('bsc', e.target.value)} /><datalist id={`${id}-bsc-options`}>{bscLabels(fields.perspective).map(x => <option key={x} value={x} />)}</datalist><p className="case-help">按组织或个人的实际贡献归类，不要求四类齐备或平均分配资源。</p></Field></details>
     <Field id={`${id}-measure`} label="衡量方式"><select id={`${id}-measure`} disabled={disabled} value={fields.measureKind} onChange={e => change('measureKind', e.target.value as GoalMeasurement['kind'])}><option value="deliverable">可核对的成果／交付标准</option><option value="quantitative">引用已发布SAP指标</option></select></Field>
     {fields.measureKind === 'deliverable' ? <Field id={`${id}-criterion`} label="成果核对标准"><textarea id={`${id}-criterion`} required rows={3} maxLength={4000} disabled={disabled} value={fields.criterion} onChange={e => change('criterion', e.target.value)} /></Field> : <><p className="case-help">从原Studio正式发布目录选择具体指标及准确包版本；定义和口径沿原SAP，选择不代表效果已经验证。<button type="button" className="text-button" disabled={disabled} onClick={onManageMetrics}>查看原SAP指标管理</button></p><Field id={`${id}-metric`} label="准确SAP指标与发布包版本"><select id={`${id}-metric`} required disabled={disabled} value={selectedMetric ? metricKey(selectedMetric) : ''} onChange={e => { const metric = metricOptions.find(value => metricKey(value) === e.target.value); setFields(old => ({ ...old, metricId: metric?.id ?? '', metricVersion: metric?.version ?? '', metricName: metric?.metricName ?? '' })); }}><option value="">请选择原目录中准确已发布的具体指标</option>{metricOptions.map(metric => <option key={metricKey(metric)} value={metricKey(metric)}>{metric.label}</option>)}</select>{!metricsKnown && <p className="case-help">原SAP发布目录暂不可读取，请在原Studio核对；未据此判定没有指标。</p>}{metricsKnown && !metricOptions.length && <p className="case-help">原目录尚无可选发布指标，可先在原Studio建设，或明确可核对的成果标准。</p>}{fields.metricId && !selectedMetric && <p className="case-help">旧准确引用保留：{fields.metricId} @ {fields.metricVersion} / {fields.metricName || '旧版尚未明确具体指标'}。本次新稿需从原目录明确选择；不会自动跟随最新版。</p>}</Field><Field id={`${id}-target`} label="当期衡量要求（可选）"><textarea id={`${id}-target`} rows={2} maxLength={4000} disabled={disabled} value={fields.target} onChange={e => change('target', e.target.value)} /></Field></>}
@@ -453,13 +491,23 @@ export function StrategyGoalsPage({ teachReview,onReturnReview,clearTeachReview,
   const [suggestion,setSuggestion]=useState<GoalDraftInput>();
   const openEditor = (mode: typeof editor, fromRole?:GoalDraftInput) => { setSuggestion(fromRole); setEditorGoal(value && record ? structuredClone({ value, record }) : null); if (mode === 'feedback') setEditorSources(structuredClone(sources)); setEditor(mode); };
   const openRelation = (initial?: GoalRelation) => { setRelationEditor(initial); openEditor('relation'); };
+  const [auxDialog, setAuxDialog] = useState<'switch' | 'versions' | 'decisions' | 'handoffs' | null>(null);
+  const [auxWorkspace, setAuxWorkspace] = useState<import('../strategy-goal-decomposition-types.ts').GoalWorkspaceView | null>(null);
+  const openAuxDialog = (kind: 'switch' | 'versions' | 'decisions' | 'handoffs') => {
+    setAuxDialog(kind);
+    if (kind !== 'switch' && selectedId) {
+      setAuxWorkspace(null);
+      const targetId = selectedId;
+      void api.getWorkspace(targetId).then(ws => setAuxWorkspace(ws)).catch(() => setAuxWorkspace(null));
+    }
+  };
   const relationTable = <div className="sg-table-scroll"><table className="sg-table"><thead><tr><th>目标关系</th><th>职责与协同</th><th>依据／必要条件</th><th>版本</th></tr></thead><tbody>{relations.map(x => <tr key={x.id}><td>{goalName(index, x.from)}<br /><strong>{relationLabels[x.kind]}</strong> → {goalName(index, x.to)}</td><td>{x.responsibility}</td><td>{x.rationale}</td><td>关系 v{x.revision}<br /><button type="button" className="text-button" onClick={() => openRelation(x)}>修订关系</button>{x.history.length > 0 && <details><summary>历史</summary>{x.history.map(v => <p key={v.revision}>v{v.revision} · {goalName(index, v.from)} → {goalName(index, v.to)}<br />{v.responsibility}<br />{v.rationale}</p>)}</details>}</td></tr>)}</tbody></table>{!relations.length && <p className="sg-muted">此准确目标版本尚无已记录关系，不据此推断业务上没有贡献或必要条件。</p>}</div>;
   if(teachReview&&onReturnReview)return <TeachReviewPanel key={JSON.stringify(teachReview)} owner={teachReview} onReturn={onReturnReview}
     onGoal={()=>{clearPublicationHandoff();setSelectedId(teachReview.goalId);setSelectedVersion(teachReview.version);setHandoff(undefined);setDraftScopeKey('');setPerspective('all');clearTeachReview?.();onStage('history');}}
     onStrategy={source=>{setDiscussionFocus({source,id:crypto.randomUUID()});clearTeachReview?.();onStage('strategy-versions');}}/>;
-  return <section className="case-board strategy-goals-page workspace-management-page" aria-labelledby={id+'-heading'}><header className="case-board-heading"><div><h1 id={id+'-heading'} ref={heading} tabIndex={-1}>{managementTitle(management)}</h1><p>{area === 'strategy' ? '围绕战略事项完成开题、候选比较、两道检验与正式发布；在「战略发布」确认准确版本后，才可带入目标管理。' : '核对目标和策略，再承接年度决策事项。'}</p></div>{area==='gsa' && <StrategyWorkbookImport target="goals" scopes={scopes} onSaved={result=>{void refresh().then(()=>{if(result.goals?.[0]){setSelectedId(result.goals[0].goalId);setSelectedVersion(result.goals[0].version);}onStage('goals');setNotice('已保存目标候选，可逐项核对并采用。');});}}/>}{area==='gsa' && <button type="button" className="primary-button" disabled={loading} onClick={() => openEditor('create')}>＋ 新建候选目标</button>}</header>
+  return <section className="case-board strategy-goals-page workspace-management-page" aria-labelledby={id+'-heading'}><header className="case-board-heading"><div><h1 id={id+'-heading'} ref={heading} tabIndex={-1}>{managementTitle(management)}</h1><p>{area === 'strategy' ? '围绕战略事项完成开题、候选比较、两道检验与正式发布；在「战略发布」确认准确版本后，才可带入目标管理。' : '确认总目标 GSA、与 Agent 协作拆解发布、跟进阶段偏差并完成到期复盘。'}</p></div>{area==='gsa' && <StrategyWorkbookImport target="goals" scopes={scopes} onSaved={result=>{void refresh().then(()=>{if(result.goals?.[0]){setSelectedId(result.goals[0].goalId);setSelectedVersion(result.goals[0].version);}onStage('goals');setNotice('已保存目标候选，可逐项核对并采用。');});}}/>}{area==='gsa' && !value && <button type="button" className="primary-button" disabled={loading} onClick={() => openEditor('create')}>＋ 新建候选目标</button>}</header>
     <CaseFormError error={error} />{index.unavailableGoalSources?.length ? <p role="status">部分目标的准确来源暂不可读取，请核对原版本与权限。{index.unavailableGoalSources.join('、')}</p> : null}{notice && <p className="case-notice" role="status">{notice}</p>}{sourceNotice && <p className="case-notice" role="status">{sourceNotice}</p>}
-    {area==='gsa' && caseSource && <aside className="sg-panel"><strong>新增 Case 的原来源</strong>{goalOwner&&<GoalOrigin key={JSON.stringify(goalOwner)} owner={goalOwner}/>}{stage!=='goals'&&<button className="text-button" onClick={()=>onStage('goals')}>与目标管理 Agent 核对</button>}<p>{caseSource.kind==='task'?'项目 '+caseSource.projectId+' · Task '+caseSource.taskId:'Case '+caseSource.caseId+' · v'+caseSource.caseRevision}</p><button className="text-button" onClick={clearCaseSource}>移除本次来源</button></aside>}
+    {area==='gsa' && caseSource && <aside className="sg-panel"><strong>新增 Case 的原来源</strong>{goalOwner&&<GoalOrigin key={JSON.stringify(goalOwner)} owner={goalOwner}/>}<p>{caseSource.kind==='task'?'项目 '+caseSource.projectId+' · Task '+caseSource.taskId:'Case '+caseSource.caseId+' · v'+caseSource.caseRevision}</p><button className="text-button" onClick={clearCaseSource}>移除本次来源</button>{goalOwner && <details className="goal-role-discussion" open><summary>围绕原来源与目标管理 Agent 核对</summary><BusinessRoleConversation owner={goalOwner} showInlineTitle={false} onGoalDraft={(draft:GoalDraftInput,source:GoalRoleSuggestionRef)=>openEditor(roleGoal ? 'revise' : 'create',{...draft,roleSuggestion:source})} /></details>}</aside>}
     {area === 'gsa' && exactPublicationHandoff && <aside className="sg-goal-source-banner" aria-label="战略发布承接来源">
       <div>
         <strong>来自战略发布的目标承接</strong>
@@ -474,35 +522,119 @@ export function StrategyGoalsPage({ teachReview,onReturnReview,clearTeachReview,
       </select></label>}
       {!value && !loading && <p className="sg-muted" role="status">回执对应的准确目标版本暂不可读取。可刷新目标与来源后再核对。</p>}
     </aside>}
-    {(area !== 'strategy' || stage === 'bsc') && <ManagementTabs route={management} onStage={onStage} />}
+    {area === 'strategy' && stage === 'bsc' && <ManagementTabs route={management} onStage={onStage} />}
     <div hidden={area !== 'strategy' || stage === 'bsc'}><StrategyInitiativeWorkbench stage={area === 'strategy' ? stage : 'co-create'} onStage={onStage} active={active && area==='strategy'} navigation={area === 'strategy' && stage !== 'bsc' ? <ManagementTabs route={management} onStage={onStage} /> : null} legacyFocus={discussionFocus} configurations={configurations} selectedConfigurationId={selectedConfigurationId} onSettings={onSettings} access={{ active: active && area==='strategy', scopes, projects, configurations, selectedConfigurationId, onSettings, getGoalScope: ref => versionFor(index, ref)?.scope, selectedGoal: value, onStage, onGoalsChanged: async goals=>{await refresh();const first=goals?.[0];if(first){clearPublicationHandoff();clearCaseSource?.();setHandoff(undefined);setPerspective('all');setSelectedId(first.goalId);setSelectedVersion(first.version);}}, onReviewHandoff: reviewHandoff, onReviewCandidate: (goal, discussionId, reload) => { void refresh().then(() => setDiscussionCandidate({ goal: structuredClone(goal), discussionId, reload })); } }} /></div>
     {stage === 'strategy-versions' && <button className="text-button" onClick={() => onStage('bsc')}>BSC／战略目标关系（按需）</button>}
     {stage === 'bsc' && <button className="text-button" onClick={() => onStage('strategy-versions')}>← 返回版本管理</button>}
-    {area==='gsa' && handoff && <aside className="sg-panel"><strong>已交接的战略选择表 · v{handoff.version}</strong><p>{handoff.summary}</p><button type="button" className="secondary-button" onClick={()=>openEditor('create')}>沿此版建立目标候选</button> <button className="text-button" onClick={()=>setHandoff(undefined)}>返回现有目标</button></aside>}
-    {(area==='gsa' || stage==='bsc') && <>
-    <div className="case-board-toolbar"><div className="case-board-filters"><label htmlFor={`${id}-perspective`}>适用视角</label><select id={`${id}-perspective`} value={perspective} onChange={e => setPerspective(e.target.value as typeof perspective)}><option value="all">全部视角</option>{Object.entries(perspectiveLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select><button type="button" className="text-button" disabled={loading} onClick={() => { void refresh(); }}>刷新目标与来源</button></div><span className="sg-muted">{index.goals.length}个目标 · 候选与已采纳版本分别保留</span></div>
-    {loading && !index.goals.length ? <p className="case-message" role="status">正在读取目标记录…</p> : !visible.length ? <div className="sg-empty"><h2>{index.goals.length ? '此视角尚无已记录目标' : '从一个适用目标开始'}</h2><p>可以复用已有目标，也可先保存候选。无需先编完整组织层级或填满全部BSC维度。</p><button type="button" className="secondary-button" onClick={() => openEditor('create')}>新建候选目标</button></div> : <GoalItemsTable records={visible} selected={exactPublicationHandoff && !value ? '' : selectedId} onSelect={select}/>}
-    {value && record && <section className="sg-panel sg-goal-summary"><div className="sg-row-between"><div><h2>{value.title}</h2><p className="sg-muted">{perspectiveLabels[value.perspective]} · {scopeLabels[value.scope.kind]}：{value.scope.name}</p></div><label>查看准确版本 <select className="sg-select" value={value.version} onChange={e => { clearPublicationHandoff(); setSelectedVersion(Number(e.target.value)); }}>{record.versions.map(x => <option key={x.version} value={x.version}>v{x.version} · {x.status === 'candidate' ? '候选' : '已采纳'}{x.version === record.adoptedVersion ? ' · 当前采用' : ''}</option>)}</select></label></div>{stage==='history'&&<DownloadVersion key={refKey(value)} route={'/api/strategy/goals/'+value.goalId+'/versions/'+value.version+'/export'} disabled={loading||Boolean(error)}/>}<details><summary>目标说明</summary><p>{value.outcome}</p></details><GoalTableOrigin goal={value}/>{stage==='cases'&&onInspectCase&&<AnnualCases records={cases} goal={value} onOpen={onInspectCase}/ >}{(value.strategyContext || value.usageContext || value.source) && <details className="sg-origin"><summary>战略背景与准确来源</summary>{value.usageContext && <p>本目标用途：{value.usageContext.kind === 'organization' ? '组织' : value.usageContext.kind === 'department' ? '部门／业务模块' : '个人'} · {value.usageContext.background || '未补充背景'}</p>}{value.strategyContext && <><p>{value.strategyContext.summary}</p>{value.strategyContext.methods?.length ? <p>参考方法：{value.strategyContext.methods.map(method => method.name).join(' ＋ ')}</p> : null}</>}{value.source && <><p>原来源：{authorityLabels[value.source.authority]} · 准确版 {value.source.version}</p>{value.source.authority === 'strategy-discussion' && <button type="button" className="text-button" onClick={() => {onStage('strategy-versions');setDiscussionFocus({ source: value.source as GoalDiscussionSourceRef, id: crypto.randomUUID() });}}>查看原战略讨论</button>}<details><summary>准确引用身份</summary><pre>{JSON.stringify(value.source, null, 2)}</pre></details></>}</details>}<dl className="sg-goal-facts"><div><dt>衡量依据</dt><dd>{value.measurement.kind === 'quantitative' ? <>SAP指标 {value.measurement.sapMetric.metricName || '旧版未明确具体指标'} · {value.measurement.sapMetric.id} · 准确发布版 {value.measurement.sapMetric.version}<br />{value.measurement.target}<br /><button type="button" className="text-button" onClick={onManageMetrics}>查看原SAP指标</button></> : value.measurement.criterion}</dd></div><div><dt>基线</dt><dd>{value.baseline.state === 'pending' ? '待补：' : ''}{value.baseline.description}</dd></div><div><dt>责任与期限</dt><dd>{value.responsible} · {value.dueAt ? value.dueAt.slice(0, 10) : '期限未记录'}</dd></div></dl>{stage === 'adopt' && !ready && <GoalAdoptionComparison candidate={value} adopted={record.versions.find(version => version.version === record.adoptedVersion)} />}<div className="sg-row">{!ready && <button type="button" className="primary-button" disabled={loading} onClick={() => openEditor('adopt')}>核对并采纳此版本</button>}{value.structured?<GoalCaseAction key={refKey(value)} goal={value} disabled={!ready||loading} onOpen={async strategy=>{
-      if(onInspectCase){const {caseId}=await goalCaseMatch(refOf(value),strategy);
-        if(caseId){onInspectCase(caseId);return;}}
-      onOpenCase({...refOf(value),strategy});
-    }}/>:<button type="button" className="secondary-button" disabled={!ready || loading} onClick={() => onOpenCase(refOf(value))}>从此目标创建Case</button>}<button type="button" className="secondary-button" disabled={!ready || loading} onClick={() => onStartProject(refOf(value), resolveNewUsageContext({ goal: value }))}>从此目标开始项目</button><button type="button" className="text-button" disabled={loading} onClick={() => openEditor('revise')}>提出目标修订</button></div>{!ready && <p className="sg-muted">候选尚不能作为正式Case主目标。采纳不会替换旧引用，也不会自动创建Case、启动任务或执行经营动作。</p>}</section>}
-    {goalOwner && stage === 'goals' && <details className="goal-role-discussion" open={Boolean(caseSource || handoff) || undefined}>
-      <summary>与目标管理 Agent 讨论</summary>
-      {!handoff && <label className="role-owner-selector">目标管理对话
-        <select className="sg-select" value={standaloneDraft ? scopeKey(draftScope) : ''} onChange={event=>setDraftScopeKey(event.target.value)}>
-          {value && <option value="">所选目标 · {value.title} v{value.version}</option>}
-          {scopes.map(scope=><option key={scopeKey(scope)} value={scopeKey(scope)}>独立草稿 · {scope.name}</option>)}
-        </select>
-      </label>}
-      <BusinessRoleConversation owner={goalOwner} showInlineTitle={false} onGoalDraft={(draft:GoalDraftInput,source:GoalRoleSuggestionRef)=>openEditor(roleGoal ? 'revise' : 'create',{...draft,roleSuggestion:source})} />
-    </details>}
-    {value && record && <>
-      {view === 'bsc' && <><div className="sg-grid">{[...new Set([...bscLabels(perspective), ...visible.map(x => current(x).bscPerspective).filter((x): x is string => Boolean(x))])].map(label => <section className="sg-panel" key={label}><h3>{label}</h3>{visible.filter(x => current(x).bscPerspective === label).map(x => <p key={x.id}><button type="button" className="text-button" onClick={() => select(x.id)}>{current(x).title} · v{current(x).version}</button></p>)}{!visible.some(x => current(x).bscPerspective === label) && <p className="sg-muted">尚未记录此类目标；不要求平均配置或凑齐维度。</p>}</section>)}</div><section className="sg-panel"><div className="sg-row-between"><h2>当前准确版本的目标关系</h2><button type="button" className="secondary-button" disabled={!ready || options.length < 2 || loading} onClick={() => openRelation()}>增加目标关系</button></div>{relationTable}</section></>}
-      {stage === 'goals' && <><section className="sg-panel"><div className="sg-row-between"><h2>同一目标，按职责承接</h2><button type="button" className="secondary-button" disabled={!ready || options.length < 2 || loading} onClick={() => openRelation()}>记录贡献关系</button></div><p className="sg-muted">企业BSC与GSA直接引用同一目标版本；部门和个人按职责贡献，不复制一份企业指标或机械分摊比例。</p>{relationTable}</section><section className="sg-panel"><h2>策略、资源与必要条件</h2><div className="sg-goal-conditions">{([['策略安排', value.strategies], ['资源与约束', value.resources], ['必要条件／待核前提', value.necessaryConditions]] as const).map(([label, items]) => <div key={label}><h3>{label}</h3>{items?.length ? <ul>{items.map((item, i) => <li key={i}>{item}</li>)}</ul> : <p className="sg-muted">尚未记录，不据此推定前提成立。</p>}</div>)}</div></section><ReadGoalArrangements key={refKey(value)} goal={value} board={board} onOpenBoard={onOpenBoard}/></>}
-      {view === 'history' && <><ReadGoalArrangements key={refKey(value)} goal={value} board={board} onOpenBoard={onOpenBoard}/><section className="sg-panel"><h2>目标版本</h2><ul className="sg-history">{record.versions.slice().reverse().map(x => <li key={x.version}><div className="sg-row-between"><strong>{x.title} · v{x.version}</strong><span className={`sg-badge ${x.status === 'candidate' ? 'pending' : ''}`}>{x.status === 'candidate' ? '候选待采纳' : '已采纳'}</span></div><p className="sg-muted">保存于{caseDate(x.createdAt)}{x.adoptedAt ? ` · 采纳于${caseDate(x.adoptedAt)}` : ''}</p>{x.adoptionDecision && <p>明确决定：{x.adoptionDecision}</p>}<button type="button" className="text-button" onClick={() => { clearPublicationHandoff(); setSelectedVersion(x.version); }}>查看这一版</button></li>)}</ul><p className="sg-muted">目标更新不会静默改写已确认方案、Case、报告或人的旧选择。受影响工作按原引用核对。</p></section><section className="sg-panel"><div className="sg-row-between"><h2>三层反馈及原记录</h2><button type="button" className="secondary-button" disabled={!ready || loading} onClick={() => openEditor('feedback')}>记录目标层反馈</button></div>{feedback.length ? <ul className="sg-history">{feedback.map(x => <li key={x.id}><strong>{feedbackLabels[x.level]}</strong><p>{x.note}</p><p className="sg-muted">来源：{sources.find(s => s.ref.authority === x.source.authority && s.ref.id === x.source.id)?.label ?? '原记录'} · 准确版{x.source.version} · {caseDate(x.createdAt)}</p></li>)}</ul> : <p className="sg-muted">此准确目标版本尚无反馈引用。选择、实际执行、效果成熟度分别以原记录核对。</p>}</section></>}
+    {area==='gsa' && handoff && <aside className="sg-panel"><strong>已交接的战略选择表 · v{handoff.version}</strong><p>{handoff.summary}</p><button type="button" className="secondary-button" onClick={()=>openEditor('create')}>沿此版建立目标候选</button> <button type="button" className="text-button" onClick={()=>setHandoff(undefined)}>返回现有目标</button></aside>}
+
+    {/* Confirmed A Integrated Goal Management Main Workspace (area === 'gsa') */}
+    {area === 'gsa' && (
+      loading && !index.goals.length ? (
+        <p className="case-message" role="status">正在读取目标记录…</p>
+      ) : !value || !record ? (
+        <div className="sg-empty">
+          <h2>{index.goals.length ? '请选择或切换目标' : '从确认第一个总目标 GSA 开始'}</h2>
+          <p>可从正式战略发布承接目标，也可在无适用战略发布时新建候选目标，随后与 Agent 协作完成拆解、发布与跟进。</p>
+          <div className="sg-row" style={{ justifyContent: 'center' }}>
+            <button type="button" className="primary-button" onClick={() => openEditor('create')}>＋ 新建候选目标</button>
+            {index.goals.length > 0 && <button type="button" className="secondary-button" onClick={() => openAuxDialog('switch')}>切换目标</button>}
+          </div>
+        </div>
+      ) : (
+        <GoalDecompositionWorkspace
+          record={record}
+          goal={value}
+          cases={cases}
+          estimateDraftId={stableDraftId(value.scope)}
+          onOpenSwitcher={() => openAuxDialog('switch')}
+          onOpenVersions={() => openAuxDialog('versions')}
+          onOpenDecisions={() => openAuxDialog('decisions')}
+          onOpenHandoffs={() => openAuxDialog('handoffs')}
+          onCreateNewGoal={() => openEditor('create')}
+          onReviseGoal={() => openEditor('revise')}
+          onAdoptGoal={() => openEditor('adopt')}
+          onOpenCase={onOpenCase}
+          onStartProject={() => onStartProject(refOf(value), resolveNewUsageContext({ goal: value }))}
+          onGoalsReload={refresh}
+          onGoalDraftSuggestion={(draft, source) => openEditor('revise', { ...draft, roleSuggestion: source })}
+        />
+      )
+    )}
+
+    {/* Strategy -> Optional BSC view preserved */}
+    {stage === 'bsc' && <>
+      <div className="case-board-toolbar"><div className="case-board-filters"><label htmlFor={`${id}-perspective`}>适用视角</label><select id={`${id}-perspective`} value={perspective} onChange={e => setPerspective(e.target.value as typeof perspective)}><option value="all">全部视角</option>{Object.entries(perspectiveLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select><button type="button" className="text-button" disabled={loading} onClick={() => { void refresh(); }}>刷新目标与来源</button></div><span className="sg-muted">{index.goals.length}个目标 · 候选与已采纳版本分别保留</span></div>
+      {visible.length > 0 && <GoalItemsTable records={visible} selected={selectedId} onSelect={select}/>}
+      {value && record && <>
+        <div className="sg-grid">{[...new Set([...bscLabels(perspective), ...visible.map(x => current(x).bscPerspective).filter((x): x is string => Boolean(x))])].map(label => <section className="sg-panel" key={label}><h3>{label}</h3>{visible.filter(x => current(x).bscPerspective === label).map(x => <p key={x.id}><button type="button" className="text-button" onClick={() => select(x.id)}>{current(x).title} · v{current(x).version}</button></p>)}{!visible.some(x => current(x).bscPerspective === label) && <p className="sg-muted">尚未记录此类目标；不要求平均配置或凑齐维度。</p>}</section>)}</div>
+        <section className="sg-panel"><div className="sg-row-between"><h2>当前准确版本的目标关系</h2><button type="button" className="secondary-button" disabled={!ready || options.length < 2 || loading} onClick={() => openRelation()}>增加目标关系</button></div>{relationTable}</section>
+      </>}
     </>}
-    </>}
+
+    {/* Auxiliary on-demand dialogs for Goal Workspace */}
+    {auxDialog === 'switch' && (
+      <GoalSwitcherDialog
+        active={active}
+        goals={index.goals}
+        selectedId={selectedId}
+        perspective={perspective}
+        onPerspective={setPerspective}
+        onSelect={select}
+        onCreateNew={() => openEditor('create')}
+        onClose={() => setAuxDialog(null)}
+      />
+    )}
+    {auxDialog === 'versions' && value && record && (
+      <VersionsAndSourcesDialog
+        active={active}
+        record={record}
+        selectedVersion={value}
+        workspace={auxWorkspace}
+        index={index}
+        relations={relations}
+        feedback={feedback}
+        onSelectVersion={ver => { clearPublicationHandoff(); setSelectedVersion(ver); }}
+        onOpenRelation={rel => openRelation(rel)}
+        onOpenFeedback={() => openEditor('feedback')}
+        onOpenStrategyDiscussion={src => {
+          onStage('strategy-versions');
+          setDiscussionFocus({ source: src as GoalDiscussionSourceRef, id: crypto.randomUUID() });
+        }}
+        onClose={() => setAuxDialog(null)}
+      />
+    )}
+    {auxDialog === 'decisions' && value && (
+      <RelatedDecisionsDialog
+        active={active}
+        goal={value}
+        cases={cases}
+        workspace={auxWorkspace}
+        onInspectCase={onInspectCase}
+        onOpenCase={onOpenCase}
+        onClose={() => setAuxDialog(null)}
+      />
+    )}
+    {auxDialog === 'handoffs' && value && (
+      <ExecutionHandoffDialog
+        active={active}
+        goal={value}
+        workspace={auxWorkspace}
+        board={board}
+        arrangementsNode={<ReadGoalArrangements key={refKey(value)} goal={value} board={board} onOpenBoard={onOpenBoard} />}
+        onStartProject={() => onStartProject(refOf(value), resolveNewUsageContext({ goal: value }))}
+        onOpenBoard={onOpenBoard}
+        onWorkspaceChanged={async () => {
+          await refresh();
+          if (selectedId) {
+            const ws = await api.getWorkspace(selectedId).catch(() => null);
+            setAuxWorkspace(ws);
+          }
+        }}
+        onClose={() => setAuxDialog(null)}
+      />
+    )}
+
     {discussionCandidate && <DiscussionCandidateAdoption active={active} candidate={discussionCandidate.goal} discussionId={discussionCandidate.discussionId} index={index} enterprises={enterprises} metrics={metrics} metricsKnown={metricsKnown} onManageMetrics={onManageMetrics} onClose={() => setDiscussionCandidate(undefined)} onAdopted={async ref => { await discussionCandidate.reload(); clearPublicationHandoff(); setSelectedId(ref.goalId); setSelectedVersion(ref.version); onStage('goals'); setDiscussionCandidate(undefined); setNotice('已采用准确目标版本；原GSA与Case／项目入口沿同一记录承接，未授权经营执行。'); }} />}
     {(editor === 'create' || editor === 'revise') && <GoalEditor active={active} suggestion={suggestion} handoff={editor==='create'?handoff:undefined} key={editor === 'create' ? 'new' : editorGoal ? refKey(editorGoal.value) : 'revise'} initial={editor === 'revise' ? editorGoal?.value : undefined} record={editor === 'revise' ? editorGoal?.record : undefined} index={index} enterprises={enterprises} metrics={metrics} metricsKnown={metricsKnown} onSaved={saved} onClose={() => setEditor(null)} onManageMetrics={onManageMetrics} />}
     {editor === 'adopt' && editorGoal && <GoalAdoptionDialog active={active} value={editorGoal.value} record={editorGoal.record} onSaved={saved} onClose={() => setEditor(null)} />}

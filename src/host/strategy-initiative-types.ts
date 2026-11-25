@@ -100,6 +100,7 @@ export interface CandidateVersion {
   parent?: { candidateId: string; no: number };
   blocks: CandidateBlock[];
   goals: string[];
+  formalGoals?: import('./strategy-goal-decomposition-types.ts').StrategicFormalGoal[];
   contentSha256: string;
   configurationId: string;
   configurationRevision: number;

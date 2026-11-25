@@ -3,7 +3,7 @@ import type { GoalArrangementView, GoalSourceRef, GoalVersion } from './strategy
 type DocumentRow = readonly string[];
 type DocumentTable = { title: string; columns: readonly string[]; rows: readonly DocumentRow[] };
 export type VersionDocument = {
-  kind: '战略选择表' | 'GSA 表';
+  kind: '战略选择表' | 'GSA 表' | '总目标 GSA 计划表' | '目标拆解正式表';
   title: string;
   version: number;
   status: string;
@@ -90,3 +90,151 @@ export function gsaVersionDocument(goal: GoalVersion, currentAdopted: boolean, a
     ],
   };
 }
+
+export function gsaPlanVersionDocument(
+  goal: GoalVersion,
+  plan: import('./strategy-goal-decomposition-types.ts').GsaPlanVersion,
+  isCurrent: boolean,
+  arrangements: readonly GoalArrangementView[],
+): VersionDocument {
+  const exact = arrangements.filter(item => item.goal.goalId === goal.goalId && item.goal.version === goal.version);
+  const actualRows = exact.length
+    ? exact.map(item => [item.title, item.scope, item.actions.map(a => `${a.taskId} @ ${a.taskVersion}`).join('\n'), dateText(item.createdAt)])
+    : [['尚无已授权记录', '本总目标计划 A 仅代表管理计划，不代表已授权行动。', '—', '—']];
+  const originText = plan.origin.kind === 'strategy-publication'
+    ? `正式战略发布 ${plan.origin.publicationId} · 候选 ${plan.origin.candidateId}:v${plan.origin.candidateNo} · 目标项 ${plan.origin.formalGoalId} · ${plan.origin.targetValue}${plan.origin.unit}（${plan.origin.period}）`
+    : plan.origin.kind === 'manual-exception'
+      ? `手动拟定例外 · ${plan.origin.targetValue}${plan.origin.unit}（${plan.origin.period}）· 原因：${plan.origin.reason}`
+      : '沿用原已采用目标（历史采用事实保持原样）';
+
+  return {
+    kind: '总目标 GSA 计划表',
+    title: goal.title,
+    version: plan.planVersion,
+    status: isCurrent ? '当前生效总 GSA 计划' : '历史总 GSA 计划（只读）',
+    scope: goal.scope.name,
+    createdAt: plan.confirmedAt,
+    identity: `${plan.planId} / v${plan.planVersion} · Goal ${plan.goal.goalId}:v${plan.goal.version}`,
+    tables: [
+      {
+        title: '总目标 G、策略 S 与计划 A（非行动授权）',
+        columns: ['条目', '本版正文'],
+        rows: [
+          ['G · 正式目标', `${goal.outcome}\n正式值：${plan.formalTarget.value}${plan.formalTarget.unit}（${plan.formalTarget.period}）`],
+          ['来源依据', originText],
+          ['S · 策略', entries(plan.strategies)],
+          ['计划 A（仅计划，非授权）', entries(plan.plannedActions.map(a => `${a.id} · ${a.summary}${a.checkpoint ? `（检查点：${a.checkpoint}）` : ''}`))],
+          ['上层阶段检查点', entries(plan.stageCheckpoints.map(c => `${c.id} · ${c.label}${c.targetDate ? ` · ${c.targetDate}` : ''}${c.observationBasis ? ` · ${c.observationBasis}` : ''}`))],
+          ['确认人与说明', `${plan.confirmedBy} · ${plan.decision}`],
+          ['内容指纹', plan.contentSha256],
+        ],
+      },
+      {
+        title: '实际行动授权记录（与计划 A 分别列示）',
+        columns: ['安排标题', '范围', '看板行动引用', '记录时间'],
+        rows: actualRows,
+      },
+    ],
+  };
+}
+
+/** Strictly reads ONLY from the immutable publication.snapshot (never from mutable draft state). */
+export function decompositionPublicationDocument(
+  goal: GoalVersion,
+  publication: import('./strategy-goal-decomposition-types.ts').DecompositionPublication,
+  isCurrent: boolean,
+): VersionDocument {
+  const snap = publication.snapshot;
+  const allocationRows = snap.rows.map(row => [
+    row.rowId,
+    row.scopeLabel,
+    row.targetValue === null ? '待定' : `${row.targetValue}${row.unit}`,
+    row.responsible,
+    row.strategy,
+    row.contributionNature,
+    row.commitAsGoal ? (row.linkedGoalId ? `正式采用 (${row.linkedGoalId})` : '正式采用') : '非正式目标行',
+  ]);
+  const reserveRows = snap.reserves.map(r => [
+    r.id,
+    r.purpose,
+    `${r.amount}${r.unit}`,
+    r.owner,
+    r.basis ?? '单独预留，不自动采用为子目标',
+  ]);
+  const gapRows = snap.gapStrategies.map(g => [
+    g.id,
+    g.name,
+    g.strategy,
+    `${g.expectedContribution}${g.unit}`,
+    g.nonOverlappingScope,
+    g.basis,
+  ]);
+  const checkpointRows = snap.frozenCheckpoints.map(cp => [
+    cp.checkpointId,
+    cp.rowId,
+    cp.label,
+    cp.date,
+    cp.targetValue === null ? '本期未定计划' : `${cp.targetValue}${cp.unit}`,
+    cp.status,
+    cp.evidenceSource,
+  ]);
+  const timePlanRows = snap.timePlan.map(tp => [
+    tp.periodId,
+    tp.label,
+    `${tp.startDate} ~ ${tp.endDate}`,
+    tp.targetValue === null ? '本期未定计划' : `${tp.targetValue}${tp.unit}`,
+    tp.status,
+    tp.checkpointId ?? '—',
+    tp.constraintNote ?? '—',
+  ]);
+
+  return {
+    kind: '目标拆解正式表',
+    title: goal.title,
+    version: publication.version,
+    status: isCurrent ? '当前生效拆解正式版' : '历史拆解正式版（只读）',
+    scope: goal.scope.name,
+    createdAt: publication.publishedAt,
+    identity: `${publication.publicationId} / v${publication.version} · GSA ${publication.gsaPlanId}:v${publication.gsaPlanVersion}`,
+    tables: [
+      {
+        title: '正式目标、测算与差额（分别保留）',
+        columns: ['条目', '本版冻结值'],
+        rows: [
+          ['正式目标值', `${snap.estimate.formalTargetValue}${snap.estimate.unit}`],
+          ['同口径可达测算值', snap.estimate.estimatedValue === null ? '部分待补' : `${snap.estimate.estimatedValue}${snap.estimate.unit}`],
+          ['差额（正式 − 测算）', snap.estimate.gapValue === null ? '待核' : `${snap.estimate.gapValue}${snap.estimate.unit}`],
+          ['测算依据', snap.estimate.basis],
+          ['发布说明', publication.reason ?? '正式拆解发布'],
+          ['快照指纹', publication.snapshotSha256],
+        ],
+      },
+      {
+        title: '责任拆解明细（本版冻结）',
+        columns: ['行标识', '责任范围', '正式值', '负责人', '策略 S', '贡献性质', '采用状态'],
+        rows: allocationRows.length ? allocationRows : [['—', '无', '—', '—', '—', '—', '—']],
+      },
+      {
+        title: '预留项（有用途与责任人，不自动采用）',
+        columns: ['预留标识', '用途', '金额', '责任人', '依据'],
+        rows: reserveRows.length ? reserveRows : [['—', '无预留', '0', '—', '—']],
+      },
+      {
+        title: '测算缺口补足策略（预期增量，非已实现结果）',
+        columns: ['策略标识', '名称', '补缺策略', '预期贡献', '不重叠范围', '依据'],
+        rows: gapRows.length ? gapRows : [['—', '无正缺口或未列补缺策略', '—', '0', '—', '—']],
+      },
+      {
+        title: '本版冻结的行级检查点',
+        columns: ['检查点 ID', '目标行', '名称', '日期', '计划值', '状态', '证据来源'],
+        rows: checkpointRows.length ? checkpointRows : [['—', '—', '无冻结行级检查点', '—', '—', '—', '—']],
+      },
+      {
+        title: '本版冻结的时间计划',
+        columns: ['阶段 ID', '阶段', '区间', '计划值', '状态', '汇总检查点', '经营约束'],
+        rows: timePlanRows.length ? timePlanRows : [['—', '—', '—', '—', '—', '—', '—']],
+      },
+    ],
+  };
+}
+

@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import './fixtures/register-ui.ts';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-test('V12-05 daily Goal view uses GSA while BSC remains a collapsed optional tool', async () => {
+test('V12-05 daily Goal view uses integrated GSA workspace while BSC remains a collapsed optional tool', async () => {
   const { StrategyGoalsPage } = await import('../src/host/ui/StrategyGoalsPage.tsx');
   const html = renderToStaticMarkup(createElement(StrategyGoalsPage, { active: false, management:{area:'gsa',stage:'goals'}, onStage() {}, onOpenCase() {}, onStartProject() {}, onManageMetrics() {} }));
-  assert.match(html, /aria-current="page"[^>]*>目标与策略/);
-  assert.match(html, /年度决策事项/);
+  assert.match(html, /目标管理/);
+  assert.doesNotMatch(html, /aria-current="page"[^>]*>目标与策略/);
   assert.doesNotMatch(html, /BSC 目标与关系/);
   const compare = renderToStaticMarkup(createElement(StrategyGoalsPage, {active:false,management:{area:'strategy',stage:'strategy-versions'},onStage(){},onOpenCase(){},onStartProject(){},onManageMetrics(){}}));
   assert.match(compare, /BSC／战略目标关系（按需）/);

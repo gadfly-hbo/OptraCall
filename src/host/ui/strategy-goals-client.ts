@@ -1,5 +1,36 @@
-import type { GoalAdoptionInput, GoalDraftInput, GoalFeedback, GoalFeedbackInput, GoalMutation, GoalOperationReceipt, GoalRef, GoalRelation, GoalRelationInput, GoalRelationRevisionInput, GoalRevisionInput, GoalVersion, StrategyGoalsIndex, StrategyGoalRecord } from '../strategy-goals-types.ts';
+import type { GoalAdoptionInput, GoalDraftInput, GoalFeedback, GoalFeedbackInput, GoalMutation, GoalOperationReceipt, GoalRef, GoalRelation, GoalRelationInput, GoalRelationRevisionInput, GoalRevisionInput, GoalScope, GoalVersion, StrategyGoalsIndex, StrategyGoalRecord } from '../strategy-goals-types.ts';
+import type {
+  DecompositionAlignmentInput,
+  DecompositionCaseDraftIntent,
+  DecompositionCaseDraftIntentInput,
+  DecompositionCycleReview,
+  DecompositionCycleReviewInput,
+  DecompositionDraft,
+  DecompositionDraftInput,
+  DecompositionProgressCheck,
+  DecompositionProgressCheckInput,
+  DecompositionProjectHandoff,
+  DecompositionProjectHandoffInput,
+  DecompositionProjectHandoffPreview,
+  DecompositionPublication,
+  DecompositionPublicationSummary,
+  DecompositionPublishInput,
+  DecompositionPublishOperationRecord,
+  DecompositionPublishPreview,
+  DecompositionThresholdConfig,
+  DecompositionValidationResult,
+  GoalWorkspaceView,
+  GsaPlanConfirmInput,
+  GsaPlanDraft,
+  GsaPlanVersion,
+  NextCycleDraft,
+  NextCycleDraftInput,
+  ReachabilityEstimate,
+  StrategyReturnInput,
+  StrategyReturnRecord,
+} from '../strategy-goal-decomposition-types.ts';
 import type { StrategyGoalSourceDirectory } from '../strategy-goal-sources.ts';
+import type { InitiativePublication } from './strategy-initiative-client.ts';
 import { metricRequest, type LibraryEntry } from '../../../extensions/business-plugins/metric-factory/ui/MetricFactoryPage.tsx';
 export type { LibraryEntry } from '../../../extensions/business-plugins/metric-factory/ui/MetricFactoryPage.tsx';
 
@@ -18,18 +49,60 @@ const messages: Record<string, string> = {
   strategy_goal_scope_unavailable: '企业或部门归属尚不能核对，请保留旧版本，并在修订候选中明确原企业及用户声明的部门职责。',
   strategy_goal_feedback_source_unavailable: '原记录暂不可读取或权限待核，请回原入口核对；未替换来源。',
   strategy_goal_feedback_source_changed: '原记录已有变化，请保留输入并重新核对准确来源版本。',
+  formal_strategy_goal_exists: '当前范围与周期已有正式战略目标发布，请直接引入正式战略目标，不能手工绕开正式来源。',
+  cross_view_conflict: '交叉视角存在冲突，当前不能正式发布；请先在对齐区核对各视角原值并由人确认对齐后再发布。',
+  decomposition_validation_failed: '拆解草稿未通过发布校验，请按阻断说明修正后再发布。',
+  goal_decomposition_disabled: '目标拆解写入已按安全回退参数停用；已有版本与历史记录保持只读可查。',
+  decomposition_publish_in_flight: '同一发布意图正在处理中，请先只读核对原操作结果，不要重复发布。',
+  decomposition_retry_requires_explicit_cas: '该未提交发布意图需显式确认重试并携带当前操作状态版本，未自动重试。',
+  decomposition_operation_conflict: '该操作编号已用于不同发布内容，请先查回原操作记录；本次未新增版本。',
+  decomposition_operation_abandoned: '原发布意图已放弃，不可重试；请核对草稿后发起新的发布。',
+  decomposition_draft_changed: '拆解草稿或总目标 GSA 计划已变化，请刷新最新草稿后重新核对。',
+  decomposition_row_cas_conflict: '拆解行基线版本已过期，未覆盖他人或新版本的行修改；请刷新核对。',
+  decomposition_frozen_checkpoint_unavailable: '所选检查点未在目标拆解正式版本中冻结，不能作为执行承接依据。',
+  decomposition_blob_integrity_failed: '拆解正式版快照完整性校验未通过；未静默修复或替换，请核对原存储。',
+  gsa_plan_planned_actions_required: '总目标 GSA 至少需要填写一条明确的计划 A 才能确认并进入拆解。',
 };
+
 export class StrategyGoalsRequestError extends Error {
-  constructor(readonly code: string, readonly status: number) { super(messages[code] ?? (status === 409 ? '记录或版本发生变化，请先刷新核对。' : '请求未完成，请保留输入并核对本地服务。')); }
+  constructor(
+    readonly code: string,
+    readonly status: number,
+    readonly details?: Record<string, unknown>,
+    serverMessage?: string,
+  ) {
+    super(messages[code] ?? serverMessage ?? (status === 409 ? '记录或版本发生变化，请先刷新核对。' : '请求未完成，请保留输入并核对本地服务。'));
+  }
 }
+
 async function request<T>(route = '', method = 'GET', input?: unknown): Promise<T> {
-  const response = await fetch(`/api/strategy/${route}`, { method, mode: 'same-origin', credentials: 'omit', cache: 'no-store', headers: { 'content-type': 'application/json', 'x-optracall-client': '1' }, ...(input === undefined ? {} : { body: JSON.stringify(input) }) });
-  const value = await response.json();
-  if (!response.ok) throw new StrategyGoalsRequestError(value.code ?? 'strategy_goals_request_failed', response.status);
+  const response = await fetch(`/api/strategy/${route}`, {
+    method,
+    mode: 'same-origin',
+    credentials: 'omit',
+    cache: 'no-store',
+    headers: { 'content-type': 'application/json', 'x-optracall-client': '1' },
+    ...(input === undefined ? {} : { body: JSON.stringify(input) }),
+  });
+  let value: Record<string, unknown> = {};
+  try {
+    value = (await response.json()) as Record<string, unknown>;
+  } catch {
+    value = {};
+  }
+  if (!response.ok) {
+    throw new StrategyGoalsRequestError(
+      typeof value.code === 'string' ? value.code : 'strategy_goals_request_failed',
+      response.status,
+      value.details && typeof value.details === 'object' ? (value.details as Record<string, unknown>) : undefined,
+      typeof value.message === 'string' ? value.message : undefined,
+    );
+  }
   return value as T;
 }
+
 const goalPath = (id: string) => `goals/${encodeURIComponent(id)}`;
-export const readGoal = (id:string) => request<{goal:StrategyGoalRecord}>(goalPath(id));
+export const readGoal = (id: string) => request<{ goal: StrategyGoalRecord }>(goalPath(id));
 export const list = () => request<StrategyGoalsIndex>('goals');
 export const feedbackSources = () => request<StrategyGoalSourceDirectory>('sources');
 export async function publishedMetrics(): Promise<LibraryEntry[]> {
@@ -45,5 +118,63 @@ export const reviseRelation = (id: string, input: GoalRelationRevisionInput) => 
 export const feedback = (input: GoalFeedbackInput & GoalMutation) => request<{ feedback: GoalFeedback }>('feedback', 'POST', input);
 export const operation = (id: string) => request<{ operation: GoalOperationReceipt | null }>(`operations/${encodeURIComponent(id)}`);
 export const goalError = (error: unknown) => error instanceof StrategyGoalsRequestError ? error.message : '请求结果尚未核实，请保留输入并核对原操作。';
+export const versionArrangements = (goal: GoalRef) => request<{ arrangements: import('../strategy-goals-types.ts').GoalArrangementView[] }>(`${goalPath(goal.goalId)}/versions/${goal.version}/arrangements`);
 
-export const versionArrangements = (goal: GoalRef) => request<{arrangements:import('../strategy-goals-types.ts').GoalArrangementView[]}>(goalPath(goal.goalId) + '/versions/' + goal.version + '/arrangements');
+// --- Goal Management Refactor (GM01–GM13 / UI01–UI04) ---
+export const formalSources = (scope: Pick<GoalScope, 'kind' | 'id' | 'enterpriseId'>) => {
+  const params = new URLSearchParams({ scopeKind: scope.kind, scopeId: scope.id });
+  if (scope.enterpriseId) params.set('enterpriseId', scope.enterpriseId);
+  return request<{ scopeKey: string; formalPublications: InitiativePublication[]; recordOnlyPublications: InitiativePublication[] }>(`goals/formal-sources?${params.toString()}`);
+};
+export const getPreConfirmEstimate = (draftId: string) =>
+  request<{ estimateRecord: { draftId: string; estimate: ReachabilityEstimate; updatedAt: string } | null; estimate: ReachabilityEstimate | null }>(`goals/draft-estimates/${encodeURIComponent(draftId)}`);
+export const savePreConfirmEstimate = (draftId: string, scope: GoalScope, estimate: ReachabilityEstimate) =>
+  request<{ estimateRecord: unknown; estimate: ReachabilityEstimate }>(`goals/draft-estimates/${encodeURIComponent(draftId)}`, 'POST', { scope, estimate });
+
+export const getWorkspace = (goalId: string) => request<GoalWorkspaceView>(`${goalPath(goalId)}/workspace`);
+export const reconcileFormal = (goalId: string, input: { operationId: string; expectedVersion: number }) =>
+  request<{ goal: GoalVersion; comparison: { manualValue: number | null; publishedValue: number; unit: string; publicationId: string } }>(`${goalPath(goalId)}/reconcile-formal`, 'POST', input);
+export const saveGsaPlanDraft = (goalId: string, input: Partial<GsaPlanDraft>) =>
+  request<{ gsaDraft: GsaPlanDraft }>(`${goalPath(goalId)}/gsa-plan/draft`, 'POST', input);
+export const confirmGsaPlan = (goalId: string, input: GsaPlanConfirmInput) =>
+  request<{ goal: GoalVersion; gsaPlan: GsaPlanVersion; replayed: boolean }>(`${goalPath(goalId)}/gsa-plan/confirm`, 'POST', input);
+export const listGsaPlans = (goalId: string) =>
+  request<{ gsaPlans: GsaPlanVersion[] }>(`${goalPath(goalId)}/gsa-plans`);
+
+export const saveDecompositionDraft = (goalId: string, input: DecompositionDraftInput) =>
+  request<{ draft: DecompositionDraft; validation: DecompositionValidationResult }>(`${goalPath(goalId)}/decomposition/draft`, 'POST', input);
+export const alignDecompositionCrossConflict = (goalId: string, input: DecompositionAlignmentInput) =>
+  request<{ draft: DecompositionDraft; validation: DecompositionValidationResult }>(`${goalPath(goalId)}/decomposition/align`, 'POST', input);
+export const previewDecompositionPublish = (goalId: string, input: { gsaPlanId: string; gsaPlanVersion: number; gsaPlanSha256: string; draftRevision: number; draftSha256: string; expectedActiveVersion: number | null }) =>
+  request<DecompositionPublishPreview>(`${goalPath(goalId)}/decomposition/publish-preview`, 'POST', input);
+export const publishDecomposition = (goalId: string, input: DecompositionPublishInput) =>
+  request<{ publication: DecompositionPublication; operation: DecompositionPublishOperationRecord; replayed: boolean }>(`${goalPath(goalId)}/decomposition/publish`, 'POST', input);
+export const getDecompositionOperation = (goalId: string, operationId: string) =>
+  request<{ found: boolean; status: 'committed' | 'in-flight' | 'not-committed-retryable' | 'abandoned' | 'unknown'; retryable: boolean; operation?: DecompositionPublishOperationRecord; publication?: DecompositionPublication }>(`${goalPath(goalId)}/decomposition/operations/${encodeURIComponent(operationId)}`);
+export const abandonDecompositionOperation = (goalId: string, operationId: string, expectedStateRevision: number) =>
+  request<{ operation: DecompositionPublishOperationRecord }>(`${goalPath(goalId)}/decomposition/operations/${encodeURIComponent(operationId)}/abandon`, 'POST', { expectedStateRevision });
+export const listDecompositionPublications = (goalId: string, offset = 0, limit = 20) =>
+  request<{ total: number; offset: number; limit: number; activeVersion: number | null; items: DecompositionPublicationSummary[] }>(`${goalPath(goalId)}/decomposition/publications?offset=${offset}&limit=${limit}`);
+export const readDecompositionPublication = (goalId: string, version: number) =>
+  request<{ publication: DecompositionPublication }>(`${goalPath(goalId)}/decomposition/publications/${version}`);
+
+export const setDecompositionThreshold = (goalId: string, input: Partial<DecompositionThresholdConfig>) =>
+  request<{ threshold: DecompositionThresholdConfig }>(`${goalPath(goalId)}/decomposition/threshold`, 'POST', input);
+export const recordProgressCheck = (goalId: string, input: DecompositionProgressCheckInput) =>
+  request<{ check: DecompositionProgressCheck; replayed: boolean }>(`${goalPath(goalId)}/decomposition/checks`, 'POST', input);
+export const setCheckCaseChoice = (goalId: string, checkId: string, input: Record<string, unknown>) =>
+  request<{ check: DecompositionProgressCheck; caseDraftIntent?: DecompositionCaseDraftIntent }>(`${goalPath(goalId)}/decomposition/checks/${encodeURIComponent(checkId)}/case-choice`, 'POST', input);
+
+export const createCaseDraftIntent = (goalId: string, input: DecompositionCaseDraftIntentInput) =>
+  request<{ intent: DecompositionCaseDraftIntent; replayed: boolean }>(`${goalPath(goalId)}/case-draft-intents`, 'POST', input);
+export const previewProjectHandoff = (goalId: string, input: { publicationVersion: number; rowId: string; checkpointId?: string }) =>
+  request<DecompositionProjectHandoffPreview>(`${goalPath(goalId)}/decomposition/handoffs/preview`, 'POST', input);
+export const confirmProjectHandoff = (goalId: string, input: DecompositionProjectHandoffInput) =>
+  request<{ handoff: DecompositionProjectHandoff; replayed: boolean }>(`${goalPath(goalId)}/decomposition/handoffs`, 'POST', input);
+
+export const recordCycleReview = (goalId: string, input: DecompositionCycleReviewInput) =>
+  request<{ review: DecompositionCycleReview; replayed: boolean }>(`${goalPath(goalId)}/cycle-reviews`, 'POST', input);
+export const createNextCycleDraft = (goalId: string, input: NextCycleDraftInput) =>
+  request<{ nextCycleDraft: NextCycleDraft; replayed: boolean }>(`${goalPath(goalId)}/next-cycle-draft`, 'POST', input);
+export const recordStrategyReturn = (goalId: string, input: StrategyReturnInput) =>
+  request<{ strategyReturn: StrategyReturnRecord; replayed: boolean }>(`${goalPath(goalId)}/return-to-strategy`, 'POST', input);

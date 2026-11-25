@@ -16,7 +16,8 @@ const goalViews: ReadonlyArray<[GoalStage, string]> = [
 export const managementTitle = (route: ManagementRoute) => route.area === 'strategy' ? '战略选择' : '目标管理';
 
 export function ManagementTabs({route, onStage}: {route: ManagementRoute; onStage: (stage: ManagementStage) => void}) {
-  const views = route.area === 'strategy' ? strategyViews : goalViews;
+  if (route.area === 'gsa') return null;
+  const views = strategyViews;
   const selected = route.stage === 'bsc' ? 'strategy-versions' : route.stage;
   function moveTab(event:KeyboardEvent<HTMLElement>) {
     if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;
@@ -28,7 +29,7 @@ export function ManagementTabs({route, onStage}: {route: ManagementRoute; onStag
     onStage(views[next]![0]);
     buttons[next]?.focus();
   }
-  return <nav className="sg-tabs workspace-management-tabs" aria-label={`${managementTitle(route)}工作视图`} onKeyDown={route.area==='strategy'?moveTab:undefined}>
+  return <nav className="sg-tabs workspace-management-tabs" aria-label={`${managementTitle(route)}工作视图`} onKeyDown={moveTab}>
     {views.map(([stage, label]) => <button key={stage} type="button" aria-current={selected === stage ? 'page' : undefined} onClick={() => onStage(stage)}>{label}</button>)}
   </nav>;
 }
