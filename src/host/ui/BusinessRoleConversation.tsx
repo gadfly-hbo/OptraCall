@@ -21,20 +21,24 @@ type ConversationProps = {
   owner: BusinessRoleOwner;
   readOnly?: boolean;
   showInlineTitle?: boolean;
+  openingPrompt?: string;
   onGoalDraft?: (draft: GoalDraftInput, source: GoalRoleSuggestionRef) => void;
+  onSettled?: () => void;
 };
-export function BusinessRoleConversation({owner,readOnly,showInlineTitle,onGoalDraft}:ConversationProps){
+export function BusinessRoleConversation({owner,readOnly,showInlineTitle,openingPrompt,onGoalDraft,onSettled}:ConversationProps){
   const key=JSON.stringify(owner);
-  return <ScopedConversation key={key} owner={owner} ownerKey={key} readOnly={readOnly} showInlineTitle={showInlineTitle} onGoalDraft={onGoalDraft}/>;
+  return <ScopedConversation key={key} owner={owner} ownerKey={key} openingPrompt={openingPrompt} readOnly={readOnly} showInlineTitle={showInlineTitle} onGoalDraft={onGoalDraft} onSettled={onSettled}/>;
 }
-function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,onGoalDraft}:ConversationProps & {ownerKey:string}){
+function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,openingPrompt,onGoalDraft,onSettled}:ConversationProps & {ownerKey:string}){
   const base='/api/business-role?'+new URLSearchParams({owner:ownerKey});
   const title=businessRoleNames[owner.role];
   const inputId=useId();
   const storage='optracall.role-discussion.v1.'+ownerKey;
-  const [text,setText]=useState(()=>sessionStorage.getItem(storage+'.draft')??'');
+  const [text,setText]=useState(()=>sessionStorage.getItem(storage+'.draft')??openingPrompt??'');
   const [pending,setPending]=useState<StrategyDiscussionMessage|undefined>(()=>{try{return JSON.parse(sessionStorage.getItem(storage+'.request')??'null')??undefined;}catch{return undefined;}});
   const pendingRef=useRef(pending);
+  const onSettledRef=useRef(onSettled);
+  onSettledRef.current=onSettled;
   const alive=useRef(false), seq=useRef(0);
   const [view,setView]=useState<RoleView>();
   const [error,setError]=useState(''),[busy,setBusy]=useState(false),[stream,setStream]=useState('');
@@ -83,7 +87,8 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,onGo
       if(controller.signal.aborted)return;
       if(event.type==='text.delta')setStream(old=>projectDiscussionStreaming(old,event));
       if(event.type==='run.settled'||event.type==='snapshot'&&event.snapshot.status==='idle'){
-        setStream('');void load(controller.signal).catch(f=>{if(!controller.signal.aborted)onError(f);});
+        setStream('');
+        void load(controller.signal).then(()=>{ if(event.type==='run.settled') onSettledRef.current?.(); }).catch(f=>{if(!controller.signal.aborted)onError(f);});
       }
     },controller.signal,base+'&action=events').catch(f=>{if(!controller.signal.aborted)onError(f);});
     return ()=>controller.abort();
@@ -110,6 +115,14 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,onGo
       } catch(e){onError(e);}
     } finally{if(alive.current)setBusy(false);}
   }
+  const openingSent = useRef(false);
+  useEffect(() => {
+    if (!openingPrompt || openingSent.current || readOnly || busy || !view || view.discussion ||
+        !view.configurationId || pendingRef.current || text !== openingPrompt) return;
+    openingSent.current = true;
+    void send();
+  }, [openingPrompt, readOnly, busy, view, text]);
+
   function prepareReplacement(originalId?:string){
     if(originalId)sessionStorage.setItem(storage+'.replace',originalId);
     else sessionStorage.removeItem(storage+'.replace');

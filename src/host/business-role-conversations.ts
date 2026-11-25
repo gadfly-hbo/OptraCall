@@ -13,17 +13,19 @@ export function parseBusinessRoleOwner(input: unknown): BusinessRoleOwner {
   switch(input.role) {
     case 'strategy':
     case 'goal':{
-      keys(input,['role','goalId','version','caseSource','teachReview']);
+      keys(input,['role','goalId','version','caseSource','teachReview','analysisVariant','actualId']);
       if(!Number.isSafeInteger(input.version)||Number(input.version)<1) return invalid();
       if(input.teachReview!==undefined){
-        if(input.caseSource || !object(input.teachReview))return invalid();
+        if(input.caseSource || input.actualId !== undefined || input.analysisVariant!==undefined || !object(input.teachReview))return invalid();
         const review=input.teachReview;keys(review,['caseId','issueId','choiceId','reviewId']);
         return {role:input.role,goalId:discussionId(input.goalId),version:Number(input.version),teachReview:{
           caseId:discussionId(review.caseId),issueId:discussionId(review.issueId),choiceId:discussionId(review.choiceId),reviewId:discussionId(review.reviewId),
         }};
       }
       if(input.role==='strategy')return invalid();
-      return {role:'goal',goalId:discussionId(input.goalId),version:Number(input.version),...(input.caseSource===undefined?{}:{caseSource:parseCaseCreationSource(input.caseSource)})};
+      if(input.analysisVariant!==undefined && input.analysisVariant!=='goal-decomposition') return invalid();
+      if(input.actualId !== undefined && (input.analysisVariant !== 'goal-decomposition' || input.caseSource)) return invalid();
+      return {role:'goal',goalId:discussionId(input.goalId),version:Number(input.version),...(input.actualId === undefined ? {} : {actualId:discussionId(input.actualId)}),...(input.caseSource===undefined?{}:{caseSource:parseCaseCreationSource(input.caseSource)}),...(input.analysisVariant==='goal-decomposition'?{analysisVariant:'goal-decomposition' as const}:{})};
     }
     case 'case':
       keys(input,['role','caseId','itemId']);
@@ -37,7 +39,16 @@ export function parseBusinessRoleOwner(input: unknown): BusinessRoleOwner {
       }
       return {role:'project',projectId:discussionId(input.projectId)};
     case 'goal-draft': {
-      keys(input,['role','draftId','scope','strategyChoice','caseSource']);
+      keys(input,['role','draftId','scope','strategyChoice','caseSource','analysisVariant','nextCycleSourceGoalId','goalRef']);
+      if(input.analysisVariant!==undefined && input.analysisVariant!=='goal-estimate') return invalid();
+      let goalRef;
+      if (input.goalRef !== undefined) {
+        if (input.analysisVariant !== 'goal-estimate' || input.nextCycleSourceGoalId || input.strategyChoice || input.caseSource || !object(input.goalRef)) return invalid();
+        keys(input.goalRef, ['goalId','version']);
+        if (input.goalRef.goalId !== input.draftId || !Number.isSafeInteger(input.goalRef.version) || Number(input.goalRef.version) < 1) return invalid();
+        goalRef = {goalId:discussionId(input.goalRef.goalId), version:Number(input.goalRef.version)};
+      }
+      if(input.nextCycleSourceGoalId !== undefined && (input.strategyChoice || input.caseSource || input.analysisVariant)) return invalid();
       let strategyChoice;
       if(input.strategyChoice!==undefined){
         if(!object(input.strategyChoice))return invalid();
@@ -50,7 +61,7 @@ export function parseBusinessRoleOwner(input: unknown): BusinessRoleOwner {
       const scope=input.scope;keys(scope,['kind','id','name','enterpriseId']);
       const kind=scope.kind;
       if(kind!=='enterprise'&&kind!=='department'&&kind!=='personal') return invalid();
-      return {role:'goal-draft',draftId:discussionId(input.draftId),...(input.caseSource===undefined?{}:{caseSource:parseCaseCreationSource(input.caseSource)}),...(strategyChoice?{strategyChoice}:{}),scope:{kind,id:shortText(scope.id),name:shortText(scope.name),...(scope.enterpriseId===undefined?{}:{enterpriseId:shortText(scope.enterpriseId)})}};
+      return {role:'goal-draft',draftId:discussionId(input.draftId),...(goalRef ? {goalRef} : {}),...(input.nextCycleSourceGoalId === undefined ? {} : {nextCycleSourceGoalId:discussionId(input.nextCycleSourceGoalId)}),...(input.caseSource===undefined?{}:{caseSource:parseCaseCreationSource(input.caseSource)}),...(strategyChoice?{strategyChoice}:{}),...(input.analysisVariant==='goal-estimate'?{analysisVariant:'goal-estimate' as const}:{}),scope:{kind,id:shortText(scope.id),name:shortText(scope.name),...(scope.enterpriseId===undefined?{}:{enterpriseId:shortText(scope.enterpriseId)})}};
     }
     default: return invalid();
   }

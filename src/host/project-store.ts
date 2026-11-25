@@ -15,7 +15,17 @@ export interface UploadedFile { id: string; originalName: string; path: string; 
 export interface FeedbackTaskOrigin { handoffId: string; operationId: string; requestHash: string }
 export interface PlanTaskOrigin { confirmationId: string; taskKey: string; requestHash: string }
 export interface TaskRecord { createRequestFingerprint?: string; createFingerprint?: string; assignment?: TaskAssignment; id: string; name: string; createdAt: string; updatedAt: string; draft: string; configuration: ProjectConfiguration; sessionStorage: 'legacy' | 'task'; sessionFile?: string; lastRun?: ProjectRun; sessionDirectory: string; simulationTools?: boolean; tradeAreaTools?: boolean; weatherTools?: boolean; modelTools?: boolean; feedbackOrigin?: FeedbackTaskOrigin; reviewDraftIds?: string[]; archivedAt?: string | null; planOrigin?: PlanTaskOrigin }
-export interface ProjectRecord { goalOrigin?: {goal: import('./strategy-goals-types.ts').GoalRef}; stages?: ProjectStage[]; agreements?: ProjectAgreement[]; schemaVersion: 2; id: string; name: string; createdAt: string; updatedAt: string; configuration: ProjectConfiguration; uploads: UploadedFile[]; archivedAt: string | null; tasks: TaskRecord[]; rootPath: string }
+export interface ProjectDecompositionHandoffOrigin {
+  goalId: string;
+  handoffId: string;
+  gsaPlanId: string;
+  gsaPlanVersion: number;
+  publicationId: string;
+  publicationVersion: number;
+  rowId: string;
+  checkpointId: string;
+}
+export interface ProjectRecord { goalOrigin?: { goal: import('./strategy-goals-types.ts').GoalRef; decompositionHandoff?: ProjectDecompositionHandoffOrigin }; stages?: ProjectStage[]; agreements?: ProjectAgreement[]; schemaVersion: 2; id: string; name: string; createdAt: string; updatedAt: string; configuration: ProjectConfiguration; uploads: UploadedFile[]; archivedAt: string | null; tasks: TaskRecord[]; rootPath: string }
 export interface FileNode { name: string; path: string; kind: 'file' | 'directory'; bytes?: number; children?: FileNode[] }
 export class ProjectStoreFault extends Error { code: string; constructor(code: string) { super(code); this.code = code; } }
 
@@ -216,7 +226,32 @@ export class ProjectStore {
     if (value.goalOrigin !== undefined) {
       const origin=value.goalOrigin;
       if (!object(origin) || !object(origin.goal) || typeof origin.goal.goalId !== 'string' || !uuid.test(origin.goal.goalId) || !Number.isSafeInteger(origin.goal.version) || Number(origin.goal.version)<1) return fail('invalid_project_metadata');
-      goalOrigin={goal:{goalId:origin.goal.goalId,version:Number(origin.goal.version)}};
+      let decompositionHandoff: ProjectDecompositionHandoffOrigin | undefined;
+      if (origin.decompositionHandoff !== undefined) {
+        const h = origin.decompositionHandoff;
+        if (
+          !object(h) ||
+          (h.goalId !== undefined && (typeof h.goalId !== 'string' || !uuid.test(h.goalId))) ||
+          typeof h.handoffId !== 'string' || !uuid.test(h.handoffId) ||
+          typeof h.gsaPlanId !== 'string' || !uuid.test(h.gsaPlanId) ||
+          !Number.isSafeInteger(h.gsaPlanVersion) || Number(h.gsaPlanVersion) < 1 ||
+          typeof h.publicationId !== 'string' || !uuid.test(h.publicationId) ||
+          !Number.isSafeInteger(h.publicationVersion) || Number(h.publicationVersion) < 1 ||
+          typeof h.rowId !== 'string' || !h.rowId.trim() ||
+          typeof h.checkpointId !== 'string' || !h.checkpointId.trim()
+        ) return fail('invalid_project_metadata');
+        decompositionHandoff = {
+          goalId: typeof h.goalId === 'string' ? h.goalId : origin.goal.goalId,
+          handoffId: h.handoffId,
+          gsaPlanId: h.gsaPlanId,
+          gsaPlanVersion: Number(h.gsaPlanVersion),
+          publicationId: h.publicationId,
+          publicationVersion: Number(h.publicationVersion),
+          rowId: h.rowId,
+          checkpointId: h.checkpointId,
+        };
+      }
+      goalOrigin={goal:{goalId:origin.goal.goalId,version:Number(origin.goal.version)},...(decompositionHandoff?{decompositionHandoff}:{})};
     }
     return { ...(goalOrigin ? {goalOrigin} : {}), ...(stages ? { stages } : {}), ...(agreements ? { agreements } : {}), schemaVersion: 2, id, name, createdAt: value.createdAt, updatedAt: value.updatedAt, configuration, uploads, archivedAt: value.archivedAt as string | null, tasks };
   }

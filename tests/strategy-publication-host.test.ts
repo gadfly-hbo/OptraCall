@@ -1,3 +1,4 @@
+import {formalGoal} from './fixtures/strategy-formal-goal.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -58,7 +59,7 @@ test('真实 Host：发布门禁、单一有效、原子替代、撤销禁重发
   const a = await lockedPassedCandidate(req, provider, base, stores, '会员复购优先', ['90天二购率达到12%']);
 
   assert.deepEqual((await req(`${base}/publications`)).publications, []);
-  const publishInput = {operationId: randomUUID(), candidateId: a.cid, no: 1, sha256: a.locked.contentSha256, batchId: a.batch.batchId, confirmed: true, expectedActive: null};
+  const publishInput = {operationId: randomUUID(), candidateId: a.cid, no: 1, sha256: a.locked.contentSha256, batchId: a.batch.batchId, confirmed: true, formalGoals: [formalGoal('90天二购率达到12%',12,'%')], expectedActive: null};
   assert.equal((await req(`${base}/publications`, 'POST', {...publishInput, confirmed: false}, 400)).code, 'strategy_publication_confirmation_required');
   assert.deepEqual((await req(`${base}/publications`)).publications, [], 'skipped confirmation writes nothing');
   assert.equal((await req(`${base}/publications`, 'POST', {...publishInput, operationId: randomUUID(), sha256: '0'.repeat(64)}, 409)).code, 'strategy_candidate_version_conflict');
@@ -77,6 +78,13 @@ test('真实 Host：发布门禁、单一有效、原子替代、撤销禁重发
   assert.equal(goal.versions[0].status, 'candidate');
   assert.equal(goal.versions[0].title, '90天二购率达到12%');
   assert.match(goal.versions[0].strategyContext.summary, new RegExp(pubA.publicationId));
+  // The selected destination is personal, while the signed source map belongs to stores.
+  const adopted = await req(`/api/strategy/goals/${goal.id}/gsa-plan/confirm`, 'POST', {
+    operationId: randomUUID(), expectedPlanVersion: 0, expectedGoalVersion:1, expectedAdoptedVersion:null, decision:'沿本批回执承接',
+    plannedActions:[{id:'a1',summary:'月初组织复购试点',checkpoint:'月末',observationBasis:'经核实的成交清单'}],
+  },201);
+  assert.equal(adopted.gsaPlan.origin.publicationId,pubA.publicationId);
+
   assert.deepEqual((await req(`${base}/publications/${pubA.publicationId}/handoff`, 'POST', handoffInput)).handoff, handoff);
   assert.equal((await req('/api/strategy/goals')).goals.length, 1, 'duplicate handoff does not create goals');
 
@@ -88,7 +96,7 @@ test('真实 Host：发布门禁、单一有效、原子替代、撤销禁重发
   assert.equal(replacedA.state, 'replaced');
   assert.equal(replacedA.replacedBy, pubB.publicationId);
   assert.equal((await req(`${base}/publications/${pubA.publicationId}/handoff`, 'POST', {operationId: randomUUID(), scope: personal, selected: [0]}, 409)).code, 'strategy_publication_not_active');
-  assert.equal((await req(`/api/strategy/goals/${handoff.goals[0].goalId}`)).goal.versions[0].status, 'candidate', 'old handoff goal remains readable');
+  assert.equal((await req(`/api/strategy/goals/${handoff.goals[0].goalId}`)).goal.versions[0].status, 'adopted', 'the explicitly adopted handoff goal remains readable after replacement');
 
   const withdrawn = (await req(`${base}/publications/${pubB.publicationId}/withdraw`, 'POST', {operationId: randomUUID()})).publication;
   assert.equal(withdrawn.state, 'withdrawn');

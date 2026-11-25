@@ -1,5 +1,6 @@
 import { parseCaseCreationSource, readCaseOriginRevision } from './case-creation-source.ts';
 import type { StrategyGoalsStore } from './strategy-goals-store.ts';
+import { checkPublicationAccess } from './goal-decomposition-access.ts';
 import { assertAdoptedGoalRefs } from './strategy-goals-routes.ts';
 import { randomUUID } from 'node:crypto';
 import { CaseStore, CaseStoreError } from './case-store.ts';
@@ -30,6 +31,7 @@ type Dependencies = {
   assertActive: (project: ProjectRecord) => void;
   decorateProject: (project: ProjectRecord) => unknown | Promise<unknown>;
   enterpriseScope?: CaseEnterpriseScopeHooks; goals?: StrategyGoalsStore;
+  validateScope?: (scope: import('./strategy-goals-types.ts').GoalScope) => void;
   validateGoal?: (goal: import('./strategy-goals-types.ts').GoalVersion) => Promise<void>;
   readSource?: import('./personal-retention-types.ts').ReadPersonalSource;
 };
@@ -46,7 +48,7 @@ function nullableString(value: unknown): string | null { return value == null ? 
 function mutation(input: Record<string, unknown>) { return { operationId: string(input.operationId), expectedRevision: number(input.expectedRevision) }; }
 
 /** Case routes share the Host lifecycle queue; original project identity stays in ProjectStore. */
-export function createCaseRoutes({ cases, projects, configuration, mutate, assertActive, decorateProject, enterpriseScope, goals, validateGoal, readSource }: Dependencies) {
+export function createCaseRoutes({ cases, projects, configuration, mutate, assertActive, decorateProject, enterpriseScope, goals, validateGoal, validateScope, readSource }: Dependencies) {
   const enterpriseForLink = (caseId: string, projectId?: string, useDefault = false): string | undefined => {
     if (!enterpriseScope) return undefined;
     const known = [enterpriseScope.caseEnterpriseId(caseId), ...cases.listProjectLinks(caseId).map(link => enterpriseScope.projectEnterpriseId(link.projectId)), ...(projectId ? [enterpriseScope.projectEnterpriseId(projectId)] : [])].filter((id): id is string => id !== undefined);
@@ -87,6 +89,21 @@ export function createCaseRoutes({ cases, projects, configuration, mutate, asser
     }
     if (scopes.size > 1) throw new CaseRouteError('case_enterprise_conflict', 409);
     return [...scopes][0];
+  }
+  async function verifyCheck(goalId: string, checkId: string) {
+    if (!goals) throw new CaseRouteError('goal_source_unavailable', 409);
+    const basis = goals.checkCaseBasis(goalId, checkId);
+    await checkPublicationAccess(goals, goalId, basis.publication, validateGoal, validateScope);
+    return basis.check;
+  }
+  async function verifyIntent(source: unknown) {
+    if (!goals || !source || typeof source !== 'object' || !('goalId' in source) || !('intentId' in source) ||
+        typeof source.goalId !== 'string' || typeof source.intentId !== 'string') throw new CaseRouteError('invalid_case_goal_intent', 400);
+    const intent = goals.caseIntent({goalId: source.goalId, intentId: source.intentId});
+    await validateGoal?.(goals.read(intent.goalRef));
+    validateScope?.(intent.scope);
+    if (intent.checkId) await verifyCheck(intent.goalId, intent.checkId);
+    return intent;
   }
   async function artifactView(artifact: CaseArtifactRecord, linked: Set<string>, adoption?: ArtifactAdoption): Promise<CaseArtifactView> {
     let project: ProjectRecord | undefined;
@@ -192,7 +209,11 @@ export function createCaseRoutes({ cases, projects, configuration, mutate, asser
         const sourceScope = !previous && creationSource ? await sourceEnterprise(creationSource) : undefined;
         const enterprise = !previous && goalBinding ? await bindingEnterprise(goalBinding, sourceScope) : sourceScope;
         const scope = !previous && enterpriseScope ? { enterpriseScopeIntent: enterprise ?? enterpriseScope.defaultEnterpriseId?.() ?? null } : undefined;
-        const record = cases.createCase({ operationId, title: string(input.title), description: optionalString(input.description), ...(goalBinding ? { goalBinding } : {}), ...(creationSource ? { creationSource } : {}) }, scope);
+        const intent = input.goalIntent === undefined ? undefined : await verifyIntent(input.goalIntent);
+        if (intent && (!goalBinding || goalBinding.primary.goalId !== intent.goalRef.goalId ||
+            goalBinding.primary.version !== intent.goalRef.version || goalBinding.strategy !== intent.strategy)) throw new CaseRouteError('case_goal_intent_mismatch', 409);
+        const goalIntent = intent ? {goalId: intent.goalId, intentId: intent.intentId} : undefined;
+        const record = cases.createCase({ operationId, title: string(input.title), description: optionalString(input.description), ...(goalBinding ? { goalBinding } : {}), ...(goalIntent ? {goalIntent} : {}), ...(creationSource ? { creationSource } : {}) }, scope);
         await recordEnterprise(record.id, undefined, cases.getOperation(operationId)?.enterpriseScopeIntent ?? undefined, { operationId, caseCreated: true });
         return { case: record };
       }) };
@@ -246,7 +267,23 @@ export function createCaseRoutes({ cases, projects, configuration, mutate, asser
       const record = cases.getCase(caseId), projectLinks = cases.listProjectLinks(caseId), linked = new Set(projectLinks.map(link => link.projectId));
       const adoptions = cases.getArtifactAdoptions(caseId);
       const events = cases.getEvents('case', caseId), creationSource = events.find(e => e.eventType === 'case_created')?.changes.creationSource?.after as CaseCreationSource | undefined;
-      return { body: { case: record, ...(creationSource ? { creationSource } : {}), goalBinding: cases.getGoalBinding(caseId), projectLinks, artifacts: await Promise.all(cases.getArtifacts(caseId, { includeUnlinked: true }).map(artifact => artifactView(artifact, linked, adoptions.get(artifact.id)))), pendingOperations: [...cases.listPendingProjectOperations(caseId), ...cases.listPendingArtifactAdoptions(caseId)], events, projectEvents: projectLinks.flatMap(link => cases.getEvents('project', link.projectId)) } };
+      const sourceIntent = events.find(e => e.eventType === 'case_created')?.changes.goalIntent?.after as import('./case-types.ts').CaseGoalIntentRef | undefined;
+      const unavailableGoalEvidence: NonNullable<import('./case-types.ts').CaseDetail['unavailableGoalEvidence']> = [];
+      let goalIntentEvidence;
+      if (sourceIntent) {
+        try { goalIntentEvidence = await verifyIntent(sourceIntent); }
+        catch { unavailableGoalEvidence.push(sourceIntent); }
+      }
+      const goalCheckEvidence = [];
+      let continuedChecks: import('./strategy-goal-decomposition-types.ts').DecompositionProgressCheck[] = [];
+      let goalEvidenceIndexUnavailable = false;
+      try { continuedChecks = goals?.continuedCaseChecks(caseId) ?? []; }
+      catch { goalEvidenceIndexUnavailable = true; }
+      for (const check of continuedChecks) {
+        try { goalCheckEvidence.push(await verifyCheck(check.goalId, check.checkId)); }
+        catch { unavailableGoalEvidence.push({goalId: check.goalId, checkId: check.checkId}); }
+      }
+      return { body: { case: record, ...(goalIntentEvidence ? {goalIntentEvidence} : {}), ...(goalEvidenceIndexUnavailable ? {goalEvidenceIndexUnavailable} : {}), ...(goalCheckEvidence.length ? {goalCheckEvidence} : {}), ...(unavailableGoalEvidence.length ? {unavailableGoalEvidence} : {}), ...(creationSource ? { creationSource } : {}), goalBinding: cases.getGoalBinding(caseId), projectLinks, artifacts: await Promise.all(cases.getArtifacts(caseId, { includeUnlinked: true }).map(artifact => artifactView(artifact, linked, adoptions.get(artifact.id)))), pendingOperations: [...cases.listPendingProjectOperations(caseId), ...cases.listPendingArtifactAdoptions(caseId)], events, projectEvents: projectLinks.flatMap(link => cases.getEvents('project', link.projectId)) } };
     }
     if (action === 'goals') {
       if (method === 'GET') return { body: { goalBinding: cases.getGoalBinding(caseId), binding: cases.getGoalBinding(caseId), history: cases.getGoalBindingHistory(caseId) } };

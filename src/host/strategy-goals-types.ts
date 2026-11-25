@@ -65,6 +65,7 @@ export interface GoalDraftInput {
   source?: GoalSourceRef;
   usageContext?: UsageContext;
   strategyContext?: GoalStrategyContext;
+  formalOrigin?: import('./strategy-goal-decomposition-types.ts').GoalFormalOrigin;
 }
 export interface GoalVersion extends GoalDraftInput, GoalRef {
   status: 'candidate' | 'adopted';

@@ -3,6 +3,7 @@ import {existsSync, lstatSync, openSync, readFileSync, writeFileSync, fsyncSync,
 import {createHash, randomUUID} from 'node:crypto';
 import {StrategyDiscussionFault} from './strategy-discussion-fault.ts';
 import {parseGoalDraft} from './strategy-goals-store.ts';
+import {parseStrategicFormalGoal} from './strategy-goal-decomposition-validation.ts';
 import {StrategyInitiativeStore} from './strategy-initiative-store.ts';
 import type {CandidateVersion, VerificationBatch} from './strategy-initiative-types.ts';
 import type {GoalDraftInput, GoalOperationReceipt, GoalRef, GoalScope, GoalVersion} from './strategy-goals-types.ts';
@@ -33,6 +34,8 @@ export interface InitiativePublication {
   replacedBy?: string;
   withdrawnAt?: string;
   withdrawOperationId?: string;
+  handoffEligible?: boolean;
+  formalGoals?: import('./strategy-goal-decomposition-types.ts').StrategicFormalGoal[];
   handoffs: { operationId: string; requestFingerprint: string; scope: GoalScope; goals: { goalId: string; version: number }[]; at: string }[];
 }
 type HandoffReservation = {publicationId: string; operationId: string; requestFingerprint: string; receiptBytes: number; legacyFingerprint?: string};
@@ -106,7 +109,7 @@ export function createStrategyInitiativePublications(options: {
 
   async function publish(id: string, input: Record<string, unknown>) {
     initiatives.get(id);
-    if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['operationId', 'candidateId', 'no', 'sha256', 'batchId', 'template', 'confirmed', 'expectedActive'].includes(key))) fail('strategy_publication_fields_invalid', 400);
+    if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['operationId', 'candidateId', 'no', 'sha256', 'batchId', 'template', 'confirmed', 'expectedActive', 'formalGoals'].includes(key))) fail('strategy_publication_fields_invalid', 400);
     if (typeof input.operationId !== 'string' || !uuid.test(input.operationId)) fail('strategy_publication_operation_invalid', 400);
     if (input.confirmed !== true) fail('strategy_publication_confirmation_required', 400);
     if (input.expectedActive !== null && typeof input.expectedActive !== 'string') fail('strategy_publication_fields_invalid', 400);
@@ -118,6 +121,11 @@ export function createStrategyInitiativePublications(options: {
     if (!batch || typeof input.batchId !== 'string' || input.batchId !== batch.batchId) fail('strategy_verification_credentials_required');
     const template = input.template === undefined ? '树形地图' : input.template;
     if (typeof template !== 'string' || !template.trim() || template.length > 100) fail('strategy_publication_fields_invalid', 400);
+    const submittedFormalGoals = input.formalGoals !== undefined
+      ? (Array.isArray(input.formalGoals) && input.formalGoals.length <= 20
+          ? input.formalGoals.map(g => parseStrategicFormalGoal(g))
+          : fail('strategy_publication_fields_invalid', 400))
+      : undefined;
     const fingerprint = hash(input);
     return options.mutate(() => {
       const file = readFile(id);
@@ -143,12 +151,21 @@ export function createStrategyInitiativePublications(options: {
         previous.replacedAt = now;
         previous.replacedBy = publicationId;
       }
+      const parsedFormalGoals = submittedFormalGoals ?? (current.formalGoals?.length
+        ? current.formalGoals.map(g => parseStrategicFormalGoal(g))
+        : undefined);
+      if (parsedFormalGoals && new Set(parsedFormalGoals.map(goal => goal.id)).size !== parsedFormalGoals.length) {
+        fail('strategy_publication_goal_invalid', 400);
+      }
       const publication: InitiativePublication = {
         publicationId, initiativeId: id, scopeKey: candidate.scopeKey, candidateId: candidate.candidateId, no: candidate.no,
         contentSha256: current.lock.fingerprint, lockOperationId: current.lock.operationId,
         batchId: credentials.batchId, gateRefs: [credentials.gates[0].ref, credentials.gates[1].ref],
         operationId: input.operationId as string, requestFingerprint: fingerprint,
-        state: 'active', template: template as string, publishedAt: now, handoffs: [],
+        state: 'active', template: template as string, publishedAt: now,
+        handoffEligible: Boolean(parsedFormalGoals?.length),
+        ...(parsedFormalGoals?.length ? { formalGoals: parsedFormalGoals } : {}),
+        handoffs: [],
       };
       file.publications.push(publication);
       writeFile(id, file);
@@ -187,18 +204,40 @@ export function createStrategyInitiativePublications(options: {
     if (!Array.isArray(input.selected) || !input.selected.length || input.selected.length > 20 || input.selected.some(i => !Number.isSafeInteger(i))) fail('strategy_publication_fields_invalid', 400);
     const candidate = candidates.version(id, publication.candidateId, publication.no);
     const selected = [...new Set(input.selected as number[])].sort((a, b) => a - b);
-    if (selected.some(i => i < 0 || i >= candidate.goals.length)) fail('strategy_publication_goal_invalid', 400);
+    if (selected.some(i => i < 0 || i >= (publication.formalGoals?.length || candidate.goals.length))) fail('strategy_publication_goal_invalid', 400);
     const drafts = selected.map(index => {
       const text = candidate.goals[index]!;
+      const formal = publication.formalGoals?.[index];
       return parseGoalDraft({
-        title: text, outcome: text,
+        title: formal?.title ?? text,
+        outcome: formal?.outcome ?? text,
         perspective: suppliedScope.kind === 'personal' ? 'personal' : 'profit',
         scope: suppliedScope,
-        measurement: {kind: 'deliverable', criterion: text},
-        baseline: {state: 'pending', description: '战略发布承接，基线待核。'},
-        responsible: '待指定',
-        strategies: [candidate.title],
+        measurement: formal?.sapMetric
+          ? { kind: 'quantitative', sapMetric: formal.sapMetric, target: `${formal.targetValue} ${formal.unit}` }
+          : { kind: 'deliverable', criterion: formal?.outcome ?? text },
+        baseline: formal?.baseline
+          ? { state: formal.baseline.state, description: formal.baseline.description }
+          : { state: 'pending', description: '战略发布承接，基线待核。' },
+        responsible: formal?.responsible ?? '待指定',
+        ...(formal?.dueAt ? { dueAt: formal.dueAt } : {}),
+        strategies: formal?.strategies?.length ? formal.strategies : [candidate.title],
         strategyContext: {summary: `来源：战略发布 ${publicationId} · 候选 ${publication.candidateId}:${publication.no} · 指纹 ${publication.contentSha256}`},
+        ...(formal ? {
+          formalOrigin: {
+            kind: 'strategy-publication' as const,
+            initiativeId: id,
+            publicationId,
+            candidateId: publication.candidateId,
+            candidateNo: publication.no,
+            contentSha256: publication.contentSha256,
+            formalGoalId: formal.id,
+            targetValue: formal.targetValue,
+            unit: formal.unit,
+            period: formal.period,
+            metricKind: formal.metricKind,
+          },
+        } : {}),
       });
     });
     const scope = drafts[0]!.scope;
@@ -224,6 +263,8 @@ export function createStrategyInitiativePublications(options: {
         ? reservation.legacyFingerprint
         : suppliedFingerprint === requestFingerprint ? undefined : suppliedFingerprint;
       if (!reservation && current.state !== 'active') fail('strategy_publication_not_active');
+      if (!reservation && current.handoffEligible === false) fail('strategy_publication_record_only');
+      if (current.handoffEligible && drafts.some(draft => draft.formalOrigin?.kind !== 'strategy-publication')) fail('strategy_publication_goal_invalid', 400);
       if (current.state === 'active') {
         for (const draft of drafts) await options.validateGoal?.(draft, 'create');
       }
@@ -275,6 +316,19 @@ export function createStrategyInitiativePublications(options: {
       initiatives.get(id);
       const all = readFile(id).publications;
       return structuredClone(scopeKey === undefined ? all : all.filter(p => p.scopeKey === scopeKey));
+    },
+    listActiveForScope(scopeKey: string): InitiativePublication[] {
+      const result: InitiativePublication[] = [];
+      for (const init of initiatives.list()) {
+        try {
+          for (const pub of readFile(init.id).publications) {
+            if (pub.state === 'active' && pub.scopeKey === scopeKey) result.push(structuredClone(pub));
+          }
+        } catch {
+          // Skip unreadable initiative files without mutating them
+        }
+      }
+      return result;
     },
   };
 }

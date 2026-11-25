@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>目标管理 Demo · A / B 并排对照</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f6f5fa;color:#1f1e28;font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}button,a{font:inherit}a{color:#6550c9;text-underline-offset:3px}button{border:1px solid #d9d5e8;border-radius:7px;background:white;color:#585668;padding:7px 12px;cursor:pointer}button[aria-pressed=true]{background:#eeebfb;border-color:#b6a8e8;color:#523db3}button:focus-visible,a:focus-visible{outline:3px solid #795ac6;outline-offset:3px}header{padding:19px 24px 15px;background:white;border-bottom:1px solid #e2e0ec}h1{font-size:20px;letter-spacing:-.3px;margin:0 0 5px}header p{margin:0;color:#585668;font-size:12px}.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px}.toolbar span{font-size:12px;color:#696679;margin-left:5px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:18px 20px 22px}.option{min-width:0;border:1px solid #e2e0ec;border-radius:10px;overflow:hidden;background:white}.option-head{padding:13px 15px;border-bottom:1px solid #e2e0ec}.title-row{display:flex;align-items:center;justify-content:space-between;gap:10px}h2{font-size:15px;margin:0}.option-head p{margin:5px 0 0;font-size:12px;color:#585668}.option-head a{font-size:12px;white-space:nowrap}.viewport{overflow:hidden;position:relative;background:#f6f5fa;height:680px}.viewport iframe{display:block;border:0;max-width:none;transform-origin:top left;background:white}.foot{padding:10px 15px;border-top:1px solid #e2e0ec;font-size:11px;color:#696679}.note{padding:0 22px 20px;font-size:12px;color:#585668}.note p{margin:0 0 5px}@media(max-width:950px){.grid{grid-template-columns:1fr;padding:12px;gap:14px}header{padding:16px}.toolbar span{margin-left:0;flex-basis:100%}.note{padding:0 14px 16px}}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>目标管理 · 两份 Demo 并排看</h1>
+    <p>两份方案独立保留，共用已确认的目标拆解业务规则。页面结构与入口不同，尚未选定采用方案。</p>
+    <div class="toolbar" role="group" aria-label="对照显示方式">
+      <button type="button" id="desktop" aria-pressed="true">桌面视口 · 1440px 缩放</button>
+      <button type="button" id="adaptive" aria-pressed="false">自适应视口</button>
+      <span>两边均可直接操作。若文字偏小，可点各自的“单独打开”。</span>
+    </div>
+  </header>
+  <main class="grid">
+    <section class="option" aria-labelledby="option-a-title">
+      <div class="option-head"><div class="title-row"><h2 id="option-a-title">A · 调整前的业务工作区</h2><a href="ui-demo-original.html" target="_blank" rel="noopener">单独打开 A ↗</a></div><p>直接从总目标 GSA 开始，以 Agent 对话和目标拆解表为主要工作区。</p></div>
+      <div class="viewport"><iframe id="option-a" title="方案 A · 调整前的业务工作区" src="ui-demo-original.html" sandbox="allow-scripts allow-forms allow-modals allow-same-origin"></iframe></div>
+      <div class="foot">保留调整前的布局与交互。只隔离浏览器演示暂存，避免与 B 互相影响。</div>
+    </section>
+    <section class="option" aria-labelledby="option-b-title">
+      <div class="option-head"><div class="title-row"><h2 id="option-b-title">B · 最新 main 界面对齐方案</h2><a href="ui-demo.html" target="_blank" rel="noopener">单独打开 B ↗</a></div><p>保留 main 的导航、目标列表和四个工作视图，从所选目标进入拆解。</p></div>
+      <div class="viewport"><iframe id="option-b" title="方案 B · 最新 main 界面对齐方案" src="ui-demo.html" sandbox="allow-scripts allow-forms allow-modals allow-same-origin"></iframe></div>
+      <div class="foot">真实界面基线为 main d4b60b5。新增拆解、发布与跟进仍为合成原型。</div>
+    </section>
+  </main>
+  <div class="note"><p>建议用两份方案各走一次正常发布，再比较交叉冲突和发布失答恢复。A 的演示场景在顶部，B 在底部“原型评审”折叠区。</p><p>两份演示暂存互不覆盖，刷新可恢复各自进度。两份都使用虚构资料与脚本模拟，不办理真实业务发布或行动授权。</p></div>
+  <script>
+    let mode='desktop';
+    function fit(){
+      for(const frame of document.querySelectorAll('iframe')){
+        const box=frame.parentElement;
+        const width=box.clientWidth;
+        const height=Math.max(580,Math.min(850,innerHeight-230));
+        const scale=mode==='desktop'?width/1440:1;
+        box.style.height=height+'px';
+        frame.style.width=(mode==='desktop'?1440:width)+'px';
+        frame.style.height=(height/scale)+'px';
+        frame.style.transform='scale('+scale+')';
+      }
+    }
+    for(const id of ['desktop','adaptive'])document.getElementById(id).addEventListener('click',()=>{
+      mode=id;
+      for(const option of ['desktop','adaptive'])document.getElementById(option).setAttribute('aria-pressed',String(mode===option));
+      fit();
+    });
+    const observer=new ResizeObserver(fit);
+    for(const box of document.querySelectorAll('.viewport'))observer.observe(box);
+    addEventListener('resize',fit);
+    fit();
+  </script>
+</body>
+</html>

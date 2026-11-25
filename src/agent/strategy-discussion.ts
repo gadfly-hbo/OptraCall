@@ -1,10 +1,10 @@
 import { strategyMapDraftSchema } from './strategy-map-schema.ts';
 import { Type } from 'typebox';
-export type StrategyDiscussionAction = 'read-goals' | 'find-sources' | 'read-source' | 'read-import-source' | 'propose-map-draft' | 'propose-goal' | 'adopt-goal' | 'operation' | 'public-search' | 'read-map' | 'save-map' | 'initiative-files' | 'initiative-read-file' | 'initiative-read-kickoff' | 'initiative-save-kickoff' | 'initiative-save-candidate' | 'initiative-save-verification' | 'initiative-read-candidate' | 'initiative-propose-revision' | 'initiative-read-skill';
+export type StrategyDiscussionAction = 'read-goals' | 'find-sources' | 'read-source' | 'read-import-source' | 'propose-map-draft' | 'propose-goal' | 'adopt-goal' | 'operation' | 'public-search' | 'read-map' | 'save-map' | 'initiative-files' | 'initiative-read-file' | 'initiative-read-kickoff' | 'initiative-save-kickoff' | 'initiative-save-candidate' | 'initiative-save-verification' | 'initiative-read-candidate' | 'initiative-propose-revision' | 'initiative-read-skill' | 'goal-read-context' | 'goal-read-skill' | 'goal-run-script' | 'goal-save-estimate' | 'goal-save-decomposition-draft' | 'goal-analyze-progress' | 'goal-assess-actual';
 export type StrategyDiscussionToolContext = { requestId:string; sessionId:string; toolCallId:string; signal:AbortSignal; assertCurrent():void; originalUserText:string; userQuoteEligible:boolean; goalBasis?:import('../host/strategy-goals-types.ts').GoalBasis; importSourceIds?:string[]; selectedImportPages?:Record<string,number[]>; importMode?:'review-draft'; draftGroupId?:string; supersedesDraftEntryId?:string; targetMapRef?:{mapId:string;version:number}; registerCleanup?:(cleanup:(options:{retryFailed?:boolean})=>Promise<void>)=>void };
 export type StrategyDiscussionToolContent = {type:'text';text:string} | {type:'image';data:string;mimeType:string};
 export type StrategyDiscussionPort = (action:StrategyDiscussionAction,input:Record<string,unknown>,context:StrategyDiscussionToolContext)=>Promise<{content:StrategyDiscussionToolContent[];details:Record<string,unknown>}>;
-export const STRATEGY_DISCUSSION_ACTIONS = ['read-goals','find-sources','read-source','read-import-source','propose-map-draft','propose-goal','adopt-goal','operation','public-search','read-map','save-map','initiative-files','initiative-read-file','initiative-read-kickoff','initiative-save-kickoff','initiative-save-candidate','initiative-save-verification','initiative-read-candidate','initiative-propose-revision','initiative-read-skill'] as const;
+export const STRATEGY_DISCUSSION_ACTIONS = ['read-goals','find-sources','read-source','read-import-source','propose-map-draft','propose-goal','adopt-goal','operation','public-search','read-map','save-map','initiative-files','initiative-read-file','initiative-read-kickoff','initiative-save-kickoff','initiative-save-candidate','initiative-save-verification','initiative-read-candidate','initiative-propose-revision','initiative-read-skill','goal-read-context','goal-read-skill','goal-run-script','goal-save-estimate','goal-save-decomposition-draft','goal-analyze-progress','goal-assess-actual'] as const;
 const exact = { additionalProperties: false };
 const nonblank = (maxLength = 4000) => Type.String({ minLength: 1, maxLength, pattern: '\\S' });
 const textList = Type.Array(nonblank(), { maxItems: 100 });
@@ -140,4 +140,92 @@ export const editableGoalTool = {
   label:'可编辑 GSA 建议',
   description:'propose-goal 仅返回由用户核对的目标建议。使用当前范围；提供 title、outcome、perspective（profit、nonprofit 或 personal）、responsible、baseline {state:known 或 pending,description}、measurement {kind:deliverable,criterion} 或已发布的 SAP metric，以及具体 strategies 数组。可选 resources、necessaryConditions、dueAt。只使用有依据的内容。',
   parameters:Type.Object({action:Type.Literal('propose-goal'),draft:Type.Record(Type.String(),Type.Unknown())},{additionalProperties:false}),
+};
+
+const approvedGoalSkillUnion = Type.Union([
+  Type.Literal('target-forecast'),
+  Type.Literal('roi-forecast'),
+  Type.Literal('coupon-forecast'),
+  Type.Literal('data-analysis'),
+]);
+
+export const goalEstimateTool = {
+  name: strategyDiscussionTool.name,
+  label: '确认前总目标可达测算与建议',
+  description: [
+    'goal-read-context 读取当前草稿范围、已保存的确认前测算及可用技能清单。',
+    'goal-read-skill 读取 Host 固定的已核定技能（target-forecast / roi-forecast / coupon-forecast / data-analysis）的 SKILL.md 或 references/*。',
+    'goal-run-script 以结构化 JSON 输入（scriptInput）运行已核定技能脚本（例如 target-forecast 的 forecast.py run），不接受任意命令或路径；TargetForecast 仅适用于净支付 GMV、月份和情景推演。',
+    'goal-save-estimate 保存确认前可达性测算草稿（正式目标、测算值、差额与依据分别保存），不会采用或发布正式目标。',
+    'propose-goal 返回由用户核对的可编辑 GSA 目标建议。',
+  ].join(' '),
+  parameters: Type.Object({
+    action: Type.Union([
+      Type.Literal('goal-read-context'),
+      Type.Literal('goal-read-skill'),
+      Type.Literal('goal-run-script'),
+      Type.Literal('goal-save-estimate'),
+      Type.Literal('propose-goal'),
+    ]),
+    skill: Type.Optional(approvedGoalSkillUnion),
+    path: Type.Optional(nonblank(300)),
+    script: Type.Optional(nonblank(100)),
+    command: Type.Optional(nonblank(60)),
+    scriptInput: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+    estimate: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+    draft: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+  }, exact),
+};
+
+export const goalDecompositionTool = {
+  name: strategyDiscussionTool.name,
+  label: '目标拆解分析与草稿输出',
+  description: [
+    'goal-read-context 读取当前已确认总 GSA 计划版、拆解草稿、最新校验问题及已发布版概要。',
+    'goal-read-skill 读取 Host 固定的已核定技能（target-forecast / roi-forecast / coupon-forecast / data-analysis）原文与参考资料。',
+    'goal-run-script 以结构化 JSON 输入运行已核定技能脚本，获得可复算引擎版本与输入摘要；不可传任意命令或文件路径。',
+    'goal-save-decomposition-draft 按准确 gsaPlanId / gsaPlanVersion / gsaPlanSha256 与 expectedDraftRevision 保存目标拆解草稿，并即时返回 Host 确定性校验结果（金额对平、预留用途与责任人、同口径交叉冲突、补缺覆盖等）。测算填写实据覆盖的 scope，量化目标还须保留 sapMetric（id、version、metricName）；不同范围或不同指标定义继续标待核。本工具仅保存草稿，不发布、不采用、不授权执行。',
+    '实绩专属对话按已提交凭证判断覆盖、指标与成熟度，goal-assess-actual 写入该证据的核对结果。comparability 取 comparable、partial-missing、observing 或 incomparable，并用 assessmentNote 说明依据。实绩提供报告原文时按资料提取 observation 的原文逐字引句 quote、实际数值 actualValue、指标 metric（沿计划定义或 SAP ID@版本）、unit、scope 和 periodId，以及覆盖 coverage 和成熟度 maturity；证据不足保持待核。',
+    'goal-analyze-progress 只读读取指定正式拆解版与阶段检查记录，辅助可比性与偏差说明。',
+    'propose-goal 返回由用户核对的 GSA 修订建议。',
+  ].join(' '),
+  parameters: Type.Object({
+    action: Type.Union([
+      Type.Literal('goal-read-context'),
+      Type.Literal('goal-read-skill'),
+      Type.Literal('goal-run-script'),
+      Type.Literal('goal-save-decomposition-draft'),
+      Type.Literal('goal-analyze-progress'),
+      Type.Literal('goal-assess-actual'),
+      Type.Literal('propose-goal'),
+    ]),
+    skill: Type.Optional(approvedGoalSkillUnion),
+    path: Type.Optional(nonblank(300)),
+    script: Type.Optional(nonblank(100)),
+    command: Type.Optional(nonblank(60)),
+    scriptInput: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+    gsaPlanId: Type.Optional(nonblank(120)),
+    gsaPlanVersion: Type.Optional(Type.Integer({ minimum: 1 })),
+    gsaPlanSha256: Type.Optional(Type.String({ pattern: '^[a-f0-9]{64}$' })),
+    expectedDraftRevision: Type.Optional(Type.Integer({ minimum: 0 })),
+    estimate: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+    rows: Type.Optional(Type.Array(Type.Record(Type.String(), Type.Unknown()), { maxItems: 200 })),
+    reserves: Type.Optional(Type.Array(Type.Record(Type.String(), Type.Unknown()), { maxItems: 50 })),
+    gapStrategies: Type.Optional(Type.Array(Type.Record(Type.String(), Type.Unknown()), { maxItems: 50 })),
+    views: Type.Optional(Type.Array(Type.Record(Type.String(), Type.Unknown()), { maxItems: 20 })),
+    timePlan: Type.Optional(Type.Array(Type.Record(Type.String(), Type.Unknown()), { maxItems: 400 })),
+    notes: Type.Optional(Type.String({ maxLength: 4000 })),
+    publicationVersion: Type.Optional(Type.Integer({ minimum: 1 })),
+    comparability: Type.Optional(Type.Union(['comparable','partial-missing','observing','incomparable'].map(value => Type.Literal(value)))),
+    assessmentNote: Type.Optional(nonblank(1000)),
+    observation: Type.Optional(Type.Object({
+      quote: nonblank(4000), actualValue: Type.Optional(Type.Number()),
+      basis: Type.Optional(Type.Object({
+        metric: nonblank(400), unit:nonblank(80), scope:nonblank(400), periodId:nonblank(120),
+        coverage:Type.Union(['complete','partial','unknown'].map(value => Type.Literal(value))),
+        maturity:Type.Union(['closed','open','unknown'].map(value => Type.Literal(value))),
+      }, exact)),
+    }, exact)),
+    draft: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+  }, exact),
 };

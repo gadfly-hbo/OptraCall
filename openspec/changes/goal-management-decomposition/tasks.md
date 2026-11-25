@@ -1,0 +1,43 @@
+# 目标管理任务目标执行清单
+
+本轮目标是以确认提交 `0a45c50205060009cd92c19ed0cc6fa6e4ae2570` 和用户已确认的 A 集成 Demo，对标并修正同一份 Spec／任务清单。确认的 HTML 为 `3fcbe15f7df00fc09e6625d47edb75f2350827524f97faa36fc9eb382f1034f0`，本轮不修改。原 A／B 继续保留。业务验收为 [GM01–GM13](spec.md)，界面保留能力为 UI01–UI04，逐项映射见 Spec §7.3。UI 确认、文稿对标与正式工程完成分别记录。
+
+## A 确认包准备
+
+- [x] A1 固定讨论稿与最新主线。讨论稿 0a45c50，再次 fetch main 仍为 d4b60b5，核对工程规范 v1.15、产品方向及 Interface v3。已独立启动该 main 的真实 Host／React UI 并点验目标列表、采用、原 Agent 对话／放大及主题／760px 导航。
+- [x] A2 写 Spec 与业务边界。验收 GM01–GM13、同一权威与原子发布、三个异常分类、最少人工动作及 Pi 实际能力差额可核对。
+- [x] A3 完成原 A／B 对照（历史准备）。B `7d0fbb56…` 的 77 条业务断言及独立原型复核通过；A 沿原 `435064da…` 界面，对照页 9 项隔离检查通过。两份保留，结果不扩大为新集成稿已通过。
+- [x] A4 用户确认界面取舍。A 为主要工作区，吸收 main 的四项必要能力，取消四个旧一级 tab，保留公共外壳。具体 Demo 确认另记 A7。
+- [x] A5 完成 [A 集成 Demo](ui-demo-integrated.html)。四项按需入口随时可达，保留 A 的主要布局与正常最短路径，冻结候选 `3fcbe15f…`。旧 A／B／对照文件未改。
+- [x] A6 完成集成稿验证。冻结候选通过 77 条核心及 51 条辅助／导出／隔离／视口断言，0 页面错误；非作者对最终受影响项独立增量 23 项通过。发现项与修正、准确身份和工程未验证范围见 [验证记录](review.md)。
+- [x] A7 用户确认准确集成 UI。本轮明确“确认采用，UIdemo确认后，你再检查下spec里面是否做对标了”，记录冻结 HTML 身份，不扩大为对更新后 Spec／清单或产品开发的自动批准。
+- [x] A8 按已确认 UI 对标 Spec／清单，17 项逐项标入口、范围、未演示要求和任务。两位非作者完成只读文稿及受影响增量复核，无剩余必修项；文档一致性与冻结 HTML 指纹检查见 [验证记录](review.md)及[静态回执](assets/spec-ui-alignment-check.json)。
+- [x] A9 用户确认发单用 Spec 及任务清单。PM 已保存确认提交 `ea59d7c44a73d21e6bad8287a3612529010bb9d6` 并发布开发工单，B–E 依此启动。[发单记录](dispatch.md) · [Issue #136](https://github.com/gadfly-hbo/OptraCall/issues/136)
+
+## B 总 GSA 与 Agent 最小可运行切片
+
+- [x] B1 GM01–03 先写总 GSA 与战略承接的真实正反例，再实现同表一次确认。已实现 `POST /api/strategy/goals/:id/gsa-plan/confirm`、`GET /api/strategy/goals/formal-sources`、`POST /api/strategy/goals/:id/reconcile-formal` 及独立不可变 GSA 计划版与 schema 4 兼容升级；覆盖无正式值手动拟定例外、后发布核对补挂不覆写历史、缺计划 A 阻断、仅改上层 A 生成新计划版及旧目标兼容。证据见 [goal-decomposition-core.test.ts](../../../tests/goal-decomposition-core.test.ts)、[goal-decomposition-full.test.ts](../../../tests/goal-decomposition-full.test.ts) 与 [result.md](result.md)。
+- [x] B2 GM03、13 分别核定确认前准确 goal-draft owner 的测算变体（`goal-estimate`）与确认后准确 goal owner 的拆解变体（`goal-decomposition`），沿用既有 `business-role-discussion` 域、统一 Pi SDK 1.4.0 及受限工作台工具与固定技能脚本执行（`optracall-forecast-2`、`optracall-variance-check-2` 等），保留原未启用能力的权限且 `--disable-goal-decomposition` 同时禁工具。证据见 `npm run check:agent-sessions` PASS 与 [result.md](result.md)。
+- [x] B3 GM03–05 两个受限分析入口均已验证真实 Host→统一 Pi 1.4.0→合成 Provider→真实 Python `forecast.py` 工具→草稿写回→重开读回，保持正式/测算/差额三值独立，不固化方法，迟到写入或仅上层 A 改版后旧草稿被确定性 CAS 拦截。证据见 [goal-decomposition-core.test.ts](../../../tests/goal-decomposition-core.test.ts)。
+
+## C 拆解、发布与恢复
+
+- [x] C1 GM04–07 已实现确定性 Host 校验引擎（`src/host/strategy-goal-decomposition-validation.ts`），覆盖金额合计+明确预留校验（不自动平差）、比率同口径分子分母校验、里程碑成果标准校验、多视角交叉冲突（50/45、30/35 阻断且不可用预留/缺口抵消）、重复交叉格、重叠补缺范围及负缺口零补缺放行，并接通人工对齐重汇总与 Agent 修稿接缝。证据见 [goal-decomposition-core.test.ts](../../../tests/goal-decomposition-core.test.ts) 与 [goal-decomposition-full.test.ts](../../../tests/goal-decomposition-full.test.ts)。
+- [x] C2 GM06、08 已实现只读发布预览零写入（`POST .../decomposition/publish-preview`）、确认发布前端先持久化原意图（不可读/损坏即锁死）并严格绑定预览快照（漂移拦截），服务端在单次原子提交中完成冻结拆解正式版、明确承诺的正式子目标及关系、有效指针和回执落盘，稳定行复用 `GoalRef`、逐行 CAS 防覆盖、同号同内容回放、同号异内容 409 及子目标越权范围拦截。证据见 [goal-decomposition-core.test.ts](../../../tests/goal-decomposition-core.test.ts) 与 [goal-decomposition-full.test.ts](../../../tests/goal-decomposition-full.test.ts)。
+- [x] C3 GM08 已完成真实丢响应、浏览器刷新及 Host 重启的三态恢复（`committed` 回原版、`unknown`/`in-flight` 保持锁定待核、`not-committed-retryable` 经显式状态 CAS 重试或放弃，显式重试再次失答自动回退 `unknown`），并隔离其他目标互不干扰。证据见 [goal-decomposition-core.test.ts](../../../tests/goal-decomposition-core.test.ts)、[goal-decomposition-full.test.ts](../../../tests/goal-decomposition-full.test.ts) 及真实 Chromium E2E。
+- [x] C4 GM09、UI01–UI04 已退休旧 4 个目标管理一级 tab、保留策略 4 tab 与公共外壳，落地确认 A 集成工作区与 4 项按需辅助弹窗（切换目标、版本与来源、关联决策、执行承接含 `ReadGoalArrangements` 与冻结检查点承接预览/确认），关闭原型缺口 #1（导出与承接严格读冻结快照，绝不泄漏草稿）、#2（按原权威/范围与原 `GoalRef` 承接，不扩权不造假）与 #3（操作期权限撤销阻断读回与导出），并回归 Case/Task/Project/Teach 原入口全部通过。证据见 [v12-strategy-ui.test.ts](../../../tests/v12-strategy-ui.test.ts)、[result.md](result.md) 及真实 Chromium E2E。
+
+## D 跟进、Case 与复盘
+
+- [x] D1 GM10 已实现阶段跟进检查（`POST .../decomposition/checks`），支持选择冻结拆解版、责任行、冻结检查点与计划阶段；固定父计划/冻结检查点/实绩来源/当时阈值/触发与选择；完整覆盖部分门店缺失（不给整体偏差%、不计连续）、观察窗、口径变化、补齐追加（不覆写原记录）、零计划不伪算百分比及无阈值比较。证据见 [goal-decomposition-full.test.ts](../../../tests/goal-decomposition-full.test.ts) 与 [GoalDecompositionWorkspace.tsx](../../../src/host/ui/GoalDecompositionWorkspace.tsx)。
+- [x] D2 GM11 已实现幅度（含 `%` 与 `percentage-points`）与严格相邻同口径连续期数触发（跳期不误触、不跨未知期拼接），支持继续观察、安排补证、续接已有未关闭 Case（`caseId`）、另建独立 Case 草稿意图及无拆解表主动试点 Case 草稿；同意图稳定去重、不同独立意图分别保留原检查，绝不自动建案。证据见 [goal-decomposition-full.test.ts](../../../tests/goal-decomposition-full.test.ts)。
+- [x] D3 GM12 已实现周期到期复盘（`POST .../reviews`）、下期草案起草（`POST .../next-cycle-draft`）与带原证据回送战略（`POST .../strategy-return`），严格以最后生效正式目标评估（120→110→112 实测验证）、保留期初备忘与历史检查，未成熟/未验证因果/扩范围结论一律标为待验证假设且不自动采用或发布。证据见 [goal-decomposition-full.test.ts](../../../tests/goal-decomposition-full.test.ts)。
+
+## E 完整候选与交付
+
+- [x] E1 已验证 schema 4 兼容升级、拆解快照外置文件与分页预算（`limit`/`offset`）、`--disable-goal-decomposition` 安全回退（已有数据只读、写路由与 Agent 工具均返回 403）、企业范围权限撤销操作期阻断（读/导出/承接）及旧目标/native 原件保全。证据见 [goal-decomposition-full.test.ts](../../../tests/goal-decomposition-full.test.ts) 与 [result.md](result.md)。
+- [x] E2 已执行 `npm run check:agent-sessions`（PASS）、`npm run build`（`tsc --noEmit` + Vite + `stamp-build` PASS）、39 个受影响与下游回归测试文件共 **229/229 PASS**（0 fail，含真实 Host→Pi 1.4.0→合成 Provider→`forecast.py`、策略发布/讨论、Case/Project/Teach/权限及 UI）以及真实 Chromium Playwright E2E **7/7 PASS（0 pageerrors）**。说明：全仓 470 个测试文件的单进程 `npm run check` 受云端 2 vCPU 10 分钟单命令上限截断，完整全仓 CI 待 PM 建 PR 后由 GitHub Actions 执行。
+- [x] E3 已由独立非作者只读 Subagent（`f941ace1291e0273ef9246689e6d9580`）完成完整候选复核，检出 6 项 P0 与 8 项 P1，全部修复并经非作者二次复核确认 **PASS（0 P0, 0 P1 剩余）**；`spec.md` 与 `ui-demo-integrated.html` 指纹及 `package.json`/`package-lock.json` 均保持原样未改。四原则专项终检与 §7.3 三个原型缺口关闭记录见 [result.md](result.md)。
+- [ ] E4 已推送任务分支 `work/antigravity/issue-136-goal-management` 并于 Issue #136 提交交接回执；待 Codex PM 验收、开 PR、跑完整 CI 及获授权合并 `main`。运行采用与用户产品验收另行分别记录。
+
+发现的新问题先对应以上验收。直接阻塞或本次回归在有效范围内修复，独立功能或权限扩大补适用决定，其余记录后继续原任务。每项真实完成立即勾选并链接证据。当前 E4 待 PM 接管合并与 CI 完成后勾选。

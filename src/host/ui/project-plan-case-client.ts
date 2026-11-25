@@ -65,7 +65,7 @@ async function receipt(operationId: string, kind: string, request: Record<string
     if (operation.operationId !== operationId || operation.kind !== kind || operation.requestSha256 !== await hash({ kind, ...request })) return fail('project_plan_case_operation_conflict');
     return operation;
   }
-export async function inspectCreatedCase(input: {operationId:string;title:string;description:string;goalBinding:CaseGoalBindingInput;creationSource?:import('../case-types.ts').CaseCreationSource}) {
+export async function inspectCreatedCase(input: {operationId:string;title:string;description:string;goalBinding:CaseGoalBindingInput;goalIntent?:import('../case-types.ts').CaseGoalIntentRef;creationSource?:import('../case-types.ts').CaseCreationSource}) {
   const saved = await receipt(input.operationId, 'case_create', { ...input, title: input.title.trim(), judgement:'', nextStep:'', status:'pending' });
   const record = saved.result!;
   if (typeof record.id !== 'string' || !Number.isSafeInteger(record.revision) || saved.caseId !== record.id) return fail();

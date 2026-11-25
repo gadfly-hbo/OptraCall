@@ -171,7 +171,7 @@ export function App() {
   const openProjectPlan = (project: ClientProject) => { setPlanProjectId(project.id); setMountedPlans(previous => previous.includes(project.id) ? previous : [...previous, project.id]); setHelpOpen(false); setView('project-plan'); if (window.innerWidth <= 760) setSidebarOpen(false); };
   const [goalUsageForProject, setGoalUsageForProject] = useState<UsageContext>();
   const [goalProjectEntrances, setGoalProjectEntrances] = useState<Record<string, { goal: GoalRef; usageContext?: UsageContext }>>({});
-  const [goalForCase, setGoalForCase] = useState<GoalRef>(), [goalForProject, setGoalForProject] = useState<GoalRef>();
+  const [goalForCase, setGoalForCase] = useState<import('../case-types.ts').CaseGoalEntry>(), [goalForProject, setGoalForProject] = useState<GoalRef>(), [handoffForProject, setHandoffForProject] = useState<{ goalId: string; handoffId: string }>();
   const [studioLibraryArea, setStudioLibraryArea] = useState<StudioLibraryArea>('semantic');
   const [studioLibraryRequest, setStudioLibraryRequest] = useState<StudioLibraryRequest>();
   const [studioMounted, setStudioMounted] = useState(() => new URL(window.location.href).searchParams.has('studio'));
@@ -592,19 +592,30 @@ export function App() {
   };
   const stop = async () => { if (!active || !activeTask || !activeKey || !busy || current?.status === 'stopping') return; const projectId = active.id, taskId = activeTask.id, key = activeKey; changeUI(key, old => ({ ...old, status: 'stopping' })); try { if (current?.opening && question) await answerInteraction(projectId, taskId, { id: question.id, cancelled: true }); await stopTask(projectId, taskId, current?.snapshot?.cleanupRequestId); await refreshTask(projectId, taskId); } catch (error) { changeUI(key, old => ({ ...old, error: safeError(error), status: 'running' })); } };
   useEffect(() => { const keyboard = (event: KeyboardEvent) => { if (event.key === 'Escape' && !helpOpen && (view === 'chat' || view === 'studio') && !modalOpen && !document.querySelector('dialog[open]') && busy && !archived) { event.preventDefault(); void stop(); } }; document.addEventListener('keydown', keyboard); return () => document.removeEventListener('keydown', keyboard); });
-  function openProjectCreation(goal?: GoalRef, usageContext?: UsageContext) {
+  function openProjectCreation(goal?: GoalRef, usageContext?: UsageContext, decompositionHandoff?: { goalId: string; handoffId: string }) {
     setGoalForProject(goal);
     setGoalUsageForProject(usageContext);
+    setHandoffForProject(decompositionHandoff);
     setProjectDialogOpen(true);
   }
   function closeProjectCreation() {
     setProjectDialogOpen(false);
     setGoalForProject(undefined);
     setGoalUsageForProject(undefined);
+    setHandoffForProject(undefined);
   }
   const createProject = async (name: string, configurationId: string) => {
     const fromStudio = view === 'studio', enterpriseId = fromStudio ? studioEnterpriseId : undefined;
-    const project = await createDiskProject(name, configurationId,goalForProject ? {goal:goalForProject} : undefined);
+    const project = await createDiskProject(
+      name,
+      configurationId,
+      goalForProject
+        ? {
+            goal: goalForProject,
+            ...(handoffForProject ? { decompositionHandoff: handoffForProject } : {}),
+          }
+        : undefined,
+    );
     if (goalForProject) setGoalProjectEntrances(previous => ({ ...previous, [project.id]: { goal: structuredClone(goalForProject), ...(goalUsageForProject ? { usageContext: structuredClone(goalUsageForProject) } : {}) } }));
     closeProjectCreation();
     if (enterpriseId) {
@@ -612,7 +623,7 @@ export function App() {
       try { await associateStudioEnterprise({ kind: 'project', entityId: project.id, enterpriseId, requestId }); }
       catch (error) { if (error instanceof StudioRequestError && error.uncertain) setStudioProjectAssociationPending({ requestId, projectId: project.id, enterpriseId }); setGlobalError(`项目已创建，企业关联尚未核定，请保留该项目并核对归属。${safeError(error)}`); }
     }
-    setProjects(previous => [...previous, project]); selectContext(project.id); setFilesOpen(window.innerWidth > 1100);
+    setProjects(previous => [...previous.filter(p => p.id !== project.id), project]); selectContext(project.id); setFilesOpen(window.innerWidth > 1100);
     if (!fromStudio) openWorkspace('chat');
     if (window.innerWidth <= 760) setSidebarOpen(false);
   };
@@ -998,7 +1009,7 @@ export function App() {
         <div id="settings-domain-pack-panel" hidden={view !== 'capability-plans'}>{view === 'capability-plans' && <CapabilityPlansSettings onOpenStudio={() => { setStudioMounted(true); setHelpOpen(false); setView('studio'); }} />}</div>
         </div></div>
       </section>}
-      {goalMounted && <div hidden={view !== 'goals'} style={{ display: view === 'goals' ? 'flex' : 'none', flex: 1, minHeight: 0, minWidth: 0 }}><StrategyGoalsPage teachReview={teachReview} clearTeachReview={()=>setTeachReview(undefined)} onReturnReview={()=>{if(!teachReview)return;setCaseFocus(teachReview.teachReview.caseId);setCaseIssueFocus(teachReview.teachReview.issueId);setTeachReview(undefined);setView('cases');lastWorkspace.current='cases';}} caseSource={caseSource} clearCaseSource={()=>setCaseSource(undefined)} onInspectCase={id=>{setCaseFocus(id);setView('cases');lastWorkspace.current='cases';}} management={management} onStage={switchManagementStage} projects={projects} configurations={configurations} selectedConfigurationId={selectedId} onSettings={() => openSettings()} onOpenBoard={() => openWorkspace('decision')} active={view === 'goals' && !helpOpen} onOpenCase={goal => { setGoalForCase(goal); openWorkspace('cases'); }} onStartProject={(goal, usageContext) => { openWorkspace('projects'); openProjectCreation(goal, usageContext); }} onManageMetrics={() => openStudioProfessional({ kind: 'metrics' })} /></div>}
+      {goalMounted && <div hidden={view !== 'goals'} style={{ display: view === 'goals' ? 'flex' : 'none', flex: 1, minHeight: 0, minWidth: 0 }}><StrategyGoalsPage teachReview={teachReview} clearTeachReview={()=>setTeachReview(undefined)} onReturnReview={()=>{if(!teachReview)return;setCaseFocus(teachReview.teachReview.caseId);setCaseIssueFocus(teachReview.teachReview.issueId);setTeachReview(undefined);setView('cases');lastWorkspace.current='cases';}} caseSource={caseSource} clearCaseSource={()=>setCaseSource(undefined)} onInspectCase={id=>{setCaseFocus(id);setView('cases');lastWorkspace.current='cases';}} management={management} onStage={switchManagementStage} projects={projects} configurations={configurations} selectedConfigurationId={selectedId} onSettings={() => openSettings()} onOpenBoard={() => openWorkspace('decision')} active={view === 'goals' && !helpOpen} onOpenCase={goal => { setGoalForCase(goal); openWorkspace('cases'); }} onStartProject={(goal, usageContext, handoff) => { openWorkspace('projects'); openProjectCreation(goal, usageContext, handoff); }} onManageMetrics={() => openStudioProfessional({ kind: 'metrics' })} /></div>}
       {mountedPlans.map(projectId => { const project = projects.find(value => value.id === projectId); return project && <div key={projectId} hidden={view !== 'project-plan' || planProjectId !== projectId} style={{ display: view === 'project-plan' && planProjectId === projectId ? 'flex' : 'none', flex: 1, minHeight: 0, minWidth: 0 }}><ProjectPlanPage historyOnly project={project} initialGoal={project.goalOrigin?.goal ?? goalProjectEntrances[projectId]?.goal} initialUsageContext={goalProjectEntrances[projectId]?.usageContext} onBack={() => openWorkspace('projects')} onConfirmed={async () => { await refreshProjects(); setGoalProjectEntrances(previous => { const next = { ...previous }; delete next[projectId]; return next; }); }} onOpenTask={taskId => { void readTaskForNavigation(projectId, taskId).then(value => { mergeProject(value.project); return chooseTask(value.project, value.task); }).catch(error => setGlobalError(safeError(error))); }} onManageCapabilities={() => { selectContext(project.id); openWorkspace('chat'); setFilesOpen(true); }} /></div>; })}
       {studioMounted && <div hidden={view !== 'studio'} className="studio-workspace"><StudioPage libraryArea={studioLibraryArea} libraryRequest={studioLibraryRequest} onLibraryAreaChange={setStudioLibraryArea} onSwitchLibraryArea={openStudioLibrary} active={view === 'studio' && !helpOpen} currentProjectId={activeId} operatorProjectReady={boundProjectId === activeId} projects={projects} initialSystemId={studioFocus || undefined} onTargetConsumed={() => setStudioFocus('')} onSelectConstruction={selectStudioConstruction} onStartConstruction={system => runStudioConstruction(system, true)} onContinueConstruction={(system, goal) => runStudioConstruction(system, false, goal)} onOpenTask={(projectId, taskId) => { const project = projects.find(value => value.id === projectId), task = project?.tasks.find(value => value.id === taskId); if (project && task) void chooseTask(project, task, false); else void readTaskForNavigation(projectId, taskId).then(value => { mergeProject(value.project); return chooseTask(value.project, value.task, false); }).catch(error => setGlobalError(safeError(error))); }} renderConversation={(_system, workspace) => view === 'studio' && active?.id === workspace.project.id && activeTask?.id === workspace.task.id ? chatContent : <p className="studio-muted">正在核对当前建设任务与会话…</p>} onUseSystem={useStudioSystem} initialProfessionalTarget={studioProfessionalTarget} onProfessionalTargetConsumed={() => setStudioProfessionalTarget(undefined)} onCreateProject={() => openProjectCreation()} onEnterpriseChange={setStudioEnterpriseId} onNavigationGuard={registerStudioLeave} onModalChange={setStudioDialogOpen} /></div>}
       {capabilityMounted.includes('requirement') && <div hidden={view !== 'requirement'} style={{ display: view === 'requirement' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto' }}><RequirementPage backLabel={requirementReturnTask ? '返回分析任务' : '返回原工作'} initialInstanceId={requirementFocus} projects={projects} onProjectsChanged={() => { void listProjects().then(value => { if (mounted.current) setProjects(value); }).catch(() => {}); }} onBack={() => requirementReturnTask ? returnFromRequirements() : backFromCapability('requirement')} onSendToTask={(project, task, requirement) => { setRequirementContexts(previous => ({ ...previous, [taskKey(project.id, task.id)]: requirement })); void chooseTask(project, task); }} /></div>}

@@ -15,6 +15,8 @@ export type CaseRecord = {
 export type CaseCreationSource =
   | { kind: 'task'; projectId: string; taskId: string; reply?: import('./case-decision-types.ts').CaseIssueReply }
   | { kind: 'case'; caseId: string; caseRevision: number };
+export type CaseGoalIntentRef = { goalId: string; intentId: string };
+export type CaseGoalEntry = GoalRef & { strategy?: string; title?: string; description?: string; goalIntent?: CaseGoalIntentRef };
 export type CaseGoalBindingInput = { primary: GoalRef; related: GoalRef[]; strategy?: string; effectiveFrom?: string };
 export type CaseGoalBinding = CaseGoalBindingInput & { caseId: string; caseRevision: number; confirmedAt: string; operationId: string };
 export type CaseProjectLink = { caseId: string; projectId: string; linkedAt: string };
@@ -47,6 +49,10 @@ export type WorkEvent = {
 };
 export type CaseList = { cases: CaseRecord[]; projectLinks: CaseProjectLink[] };
 export type CaseDetail = {
+  goalIntentEvidence?: import('./strategy-goal-decomposition-types.ts').DecompositionCaseDraftIntent;
+  goalCheckEvidence?: import('./strategy-goal-decomposition-types.ts').DecompositionProgressCheck[];
+  goalEvidenceIndexUnavailable?: boolean;
+  unavailableGoalEvidence?: { goalId: string; checkId?: string; intentId?: string }[];
   case: CaseRecord; creationSource?: CaseCreationSource; goalBinding?: CaseGoalBinding | null; projectLinks: CaseProjectLink[]; artifacts: CaseArtifactView[];
   events: WorkEvent[]; projectEvents: WorkEvent[]; pendingOperations: OperationReceipt[];
 };
