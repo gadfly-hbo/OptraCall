@@ -34,6 +34,7 @@ export function resolveStudioSystemLocation(systemId: string | undefined, system
 }
 export interface StudioPageProps {
   libraryArea?: StudioLibraryArea; libraryRequest?: StudioLibraryRequest; onLibraryAreaChange?: (area: StudioLibraryArea) => void;
+  onSwitchLibraryArea?: (area: StudioLibraryArea) => void;
   active?: boolean;
   currentProjectId?: string;
   operatorProjectReady?: boolean;
@@ -510,6 +511,12 @@ type UnifiedView = 'foundation' | 'evolution' | 'publication';
 const categoryFor = (item: StudioFoundationItem): FoundationCategory => item.authority === 'enterprise' ? 'materials' : item.authority === 'sap-metric' ? 'metrics' : item.authority === 'sap-method' ? 'methods' : item.kind === 'binding' ? 'binding' : 'semantic';
 export const foundationStatus = (status: string) => ({ formal: '正式可用', 'formal-current': '正式可用', 'formal-history': '历史正式版', published: '已发布', enabled: '已启用来源', draft: '工作稿', candidate: '候选待核', unassigned: '待核归属', disabled: '已停用', restricted: '用途受限', suspected: '存在待核问题', conflict: '归属冲突', unavailable: '当前不可用' }[status] || '资格待核');
 
+const foundationStatusTone: Record<string, 'success' | 'warning' | 'error'> = {
+  formal: 'success', 'formal-current': 'success', published: 'success',
+  candidate: 'warning', unassigned: 'warning', restricted: 'warning', suspected: 'warning',
+  conflict: 'error', unavailable: 'error',
+};
+
 /** One product surface over the original stores and ordinary project task runtime. */
 export function StudioProjectAssociation({ project, directory, enterpriseId, disabled, onAssociate }: { project?: Pick<ClientProject, 'id' | 'name' | 'archivedAt'>; directory?: StudioEnterpriseDirectory; enterpriseId: string; disabled?: boolean; onAssociate: () => void }) {
   const enterprise = directory?.enterprises.find(item => item.id === enterpriseId);
@@ -523,6 +530,7 @@ export function StudioUnassignedAssetRow({ item, disabled, onInspect, onAssociat
 
 export function StudioPage(props: StudioPageProps) {
   const { active = true, projects, currentProjectId, libraryArea = 'semantic' } = props;
+  const otherLibraryArea = libraryArea === 'semantic' ? 'analytics' : 'semantic';
   const [directory, setDirectory] = useState<StudioEnterpriseDirectory>();
   const [enterpriseId, setEnterpriseId] = useState('');
   const [foundation, setFoundation] = useState<StudioFoundation>();
@@ -715,7 +723,23 @@ export function StudioPage(props: StudioPageProps) {
     ...contribution.system.assetRefs.filter(ref => ref.authority === currentContribution?.candidate.kind && (ref.authority === 'sap-metric' || ref.authority === 'sap-method')).map(ref => ({ label: referenceLabel(ref), ref })),
   ] : [];
   return <section className="studio-page studio-unified" aria-label={studioLibraryTitle(libraryArea)} hidden={!active} aria-busy={loading || busy}>
-    <header className="studio-heading"><div><h1 ref={heading} tabIndex={-1}>{studioLibraryTitle(libraryArea)}</h1><p>{libraryArea === 'semantic' ? '查业务口径、字段映射和原资料。' : '查指标怎么算，以及分析方法怎么用。'}</p></div><div className="studio-actions"><label className="studio-enterprise-picker"><span>当前企业</span><select aria-label="当前企业" value={enterpriseId} disabled={busy || Boolean(pending)} onChange={event => { void selectEnterprise(event.target.value); }}><option value="">尚未明确企业</option>{directory?.enterprises.map(enterprise => <option key={enterprise.id} value={enterprise.id}>{enterprise.name}</option>)}</select></label><button type="button" className="text-button" disabled={busy || Boolean(pending)} onClick={() => { void allowLeave().then(ok => { if (ok) setNewEnterprise(true); }); }}>新增企业</button></div></header>
+    <header className="studio-heading">
+      <div>
+        <h1 ref={heading} tabIndex={-1}>{studioLibraryTitle(libraryArea)}</h1>
+        <p>{libraryArea === 'semantic' ? '查业务口径、字段映射和原资料。' : '查指标怎么算，以及分析方法怎么用。'}</p>
+      </div>
+      <div className="studio-actions">
+        <label className="studio-enterprise-picker">
+          <span>当前企业</span>
+          <select aria-label="当前企业" value={enterpriseId} disabled={busy || Boolean(pending)} onChange={event => { void selectEnterprise(event.target.value); }}>
+            <option value="">尚未明确企业</option>
+            {directory?.enterprises.map(enterprise => <option key={enterprise.id} value={enterprise.id}>{enterprise.name}</option>)}
+          </select>
+        </label>
+        <button type="button" className="text-button" disabled={busy || Boolean(pending)} onClick={() => { void allowLeave().then(ok => { if (ok) setNewEnterprise(true); }); }}>新增企业</button>
+        {props.onSwitchLibraryArea && <button type="button" className="secondary-button" disabled={busy || Boolean(pending)} onClick={() => props.onSwitchLibraryArea?.(otherLibraryArea)}>切至{studioLibraryTitle(otherLibraryArea)}</button>}
+      </div>
+    </header>
     <StudioLibraryTabs area={libraryArea} tab={activeLibraryTab} busy={busy || Boolean(pending)} onSelect={tab => { void selectLibraryTab(tab); }} />
     {activeLibraryTab === 'workbench' && <div className="workspace-studio-workbench"><div><h2>体系工作台</h2><p className="studio-meta">同一企业的语义、指标和方法在这里一起建设和发布。</p></div><nav className="studio-foundation-nav" aria-label="体系工作台视图">{([['coverage', '覆盖与缺口'], ['evolution', '建设与演进'], ['publication', '发布与使用']] as const).map(([key, label]) => <button type="button" key={key} aria-pressed={key === (view === 'foundation' ? 'coverage' : view)} disabled={busy || Boolean(pending)} onClick={() => { void selectWorkbench(key); }}>{label}</button>)}</nav></div>}
     {error && <div className="studio-note is-error" role="alert">{error}</div>}{notice && <div className="studio-note" role="status">{notice}</div>}{pendingNotice}
@@ -727,7 +751,17 @@ export function StudioPage(props: StudioPageProps) {
         {activeLibraryTab === 'workbench' && <details className="workspace-studio-options"><summary>体系详情与校验</summary><StudioFoundationNavigation section={foundationSection} disabled={busy || Boolean(pending)} onSelect={next => { void allowLeave().then(ok => { if (ok) { setFoundationSection(next); setProfessional(undefined); requestAnimationFrame(() => heading.current?.focus()); } }); }} /></details>}
 
         {!professional && (activeLibraryTab === 'workbench' || !scopedFoundation) && <><StudioFoundationView foundation={scopedFoundation} section={foundationSection} loading={loading} catalogItems={foundationSection === 'assets' ? visibleItems : undefined} onRefresh={() => { const expected = scopeRef.current; setLoading(true); setError(''); void refreshFoundation().catch(error => { if (mounted.current && scopeRef.current === expected) setError(errorText(error)); }).finally(() => { if (mounted.current && scopeRef.current === expected) setLoading(false); }); }} onBuild={(goal, systemId) => { void startConstruction(goal, systemId); }} onModalChange={setCoverageModal} onOpenUsage={system => { void openCoverageUsage(system); }} onOpenWorkItems={system => { void openCoverageWorkItems(system); }} onOpenAsset={(system, asset) => { void openSystem(system, 'evolution', asset); }} onReadSource={(system, ref, returnFocus) => { void showItem({ authority: ref.authority, id: ref.id, version: ref.version, title: ref.title || ref.id, status: 'reference', ref, systemId: ref.authority === 'studio-source' ? ref.locator || system : system }, returnFocus); }} /></>}
-        {!professional && foundationSection === 'assets' && scopedFoundation && <><div className="studio-filterbar"><label className="studio-search"><span className="sr-only">搜索企业基础资产</span><input type="search" value={query} placeholder={'搜索' + ({semantic: '业务语义', binding: '数据映射', materials: '企业资料', metrics: '分析指标', methods: '分析方法', all: '资产'}[category])} onChange={event => setQuery(event.target.value)} /></label>{(category === 'materials' || category === 'metrics' || category === 'methods') && <button type="button" className="secondary-button" onClick={() => { void openProfessional({ kind: category }); }}>管理{category === 'materials' ? '企业资料' : category === 'metrics' ? '分析指标' : '分析方法'}</button>}<button type="button" className="text-button" disabled={loading} onClick={() => { void refreshFoundation().catch(error => setError(errorText(error))); }}>刷新资产</button></div>{visibleItems.length ? <div className="studio-table-wrap"><table className="studio-foundation-table"><thead><tr><th>资产</th><th>准确版本</th><th>当前资格</th><th>查看</th></tr></thead><tbody>{visibleItems.map((item, index) => <tr key={`${item.authority}:${item.id}:${item.version}:${index}`}><td><strong>{item.title || item.id}</strong></td><td>{item.version || '尚无正式版'}</td><td>{foundationStatus(item.status)}</td><td><button type="button" className="text-button" onClick={() => { void showItem(item); }}>查看准确资产</button></td></tr>)}</tbody></table></div> : !loading && <div className="studio-empty"><h2>{query ? '没有匹配的资产' : '本企业当前分类尚无资产'}</h2><p>可提前建设，或由普通分析任务贡献候选；候选不自动成为企业标准。</p>{(category === 'materials' || category === 'metrics' || category === 'methods') && <button type="button" className="secondary-button" onClick={() => { void openProfessional({ kind: category }); }}>进入专业管理</button>}</div>}</>}
+        {!professional && foundationSection === 'assets' && scopedFoundation && <><div className="studio-filterbar"><label className="studio-search"><span className="sr-only">搜索企业基础资产</span><input type="search" value={query} placeholder={'搜索' + ({semantic: '业务语义', binding: '数据映射', materials: '企业资料', metrics: '分析指标', methods: '分析方法', all: '资产'}[category])} onChange={event => setQuery(event.target.value)} /></label>{(category === 'materials' || category === 'metrics' || category === 'methods') && <button type="button" className="secondary-button" onClick={() => { void openProfessional({ kind: category }); }}>管理{category === 'materials' ? '企业资料' : category === 'metrics' ? '分析指标' : '分析方法'}</button>}<button type="button" className="text-button" disabled={loading} onClick={() => { void refreshFoundation().catch(error => setError(errorText(error))); }}>刷新资产</button></div>{visibleItems.length ? <div className="studio-table-wrap studio-catalog-table-wrap" tabIndex={0} role="region" aria-label="企业基础资产列表">
+          <table className="studio-foundation-table studio-catalog-table">
+            <thead><tr><th scope="col">资产</th><th scope="col">准确版本</th><th scope="col">当前资格</th><th scope="col">查看</th></tr></thead>
+            <tbody>{visibleItems.map((item, index) => <tr key={`${item.authority}:${item.id}:${item.version}:${index}`}>
+              <td><strong>{item.title || item.id}</strong>{item.title && item.title !== item.id && <code className="studio-catalog-id">{item.id}</code>}</td>
+              <td>{item.version ? <code className="studio-catalog-version">{item.version}</code> : '尚无正式版'}</td>
+              <td><Badge tone={foundationStatusTone[item.status] || ''}>{foundationStatus(item.status)}</Badge></td>
+              <td><button type="button" className="text-button" onClick={event => { void showItem(item, event.currentTarget); }}>查看准确资产</button></td>
+            </tr>)}</tbody>
+          </table>
+        </div> : !loading && <div className="studio-empty"><h2>{query ? '没有匹配的资产' : '本企业当前分类尚无资产'}</h2><p>可提前建设，或由普通分析任务贡献候选；候选不自动成为企业标准。</p>{(category === 'materials' || category === 'metrics' || category === 'methods') && <button type="button" className="secondary-button" onClick={() => { void openProfessional({ kind: category }); }}>进入专业管理</button>}</div>}</>}
         {seenProfessional.map(kind => <div key={`${enterpriseId}:${kind}`} hidden={professional?.kind !== kind} className="studio-professional-region"><div className="studio-row"><button type="button" className="text-button" onClick={() => { void allowLeave().then(ok => { if (ok) setProfessional(undefined); }); }}>← 返回当前目录</button></div>{kind === 'materials' ? <EnterpriseMaterialsPage active={professional?.kind === kind && active} enterpriseId={enterpriseId} allowedIds={allowedIds('enterprise')} initialMaterialId={professional?.kind === kind ? professional.id : undefined} initialRevisionId={professional?.kind === kind && typeof professional.version === 'string' ? professional.version : undefined} onSaved={onSaved('enterprise')} onNavigationGuard={guard => { guards.current.materials = guard; }} /> : kind === 'metrics' ? <MetricFactoryPage embedded active={professional?.kind === kind && active} enterpriseId={enterpriseId} allowedIds={allowedIds('sap-metric')} projects={eligibleProjects} onOpenTask={(project, task) => props.onOpenTask(project.id, task.id)} onProjectsChanged={() => { void refreshDirectory(); }} initialTarget={professional?.kind === kind && professional.id && typeof professional.version === 'string' ? { id: professional.id, version: professional.version } : undefined} onTargetConsumed={() => setProfessional(current => current ? { kind: current.kind } : current)} onSaved={onSaved('sap-metric')} onNavigationGuard={guard => { guards.current.metrics = guard; }} /> : <SapMethodsPage active={professional?.kind === kind && active} enterpriseId={enterpriseId} allowedIds={allowedIds('sap-method')} initialTarget={professional?.kind === kind && professional.id && professional.version !== undefined && Number.isSafeInteger(Number(professional.version)) ? { methodId: professional.id, version: Number(professional.version) } : undefined} onTargetConsumed={() => setProfessional(current => current ? { kind: current.kind } : current)} onSaved={onSaved('sap-method')} onNavigationGuard={guard => { guards.current.methods = guard; }} />}</div>)}
       </>}
       {view !== 'foundation' && <><div className="studio-foundation-tools"><label className="studio-field"><span>{view === 'publication' ? '查看发布与使用的体系' : '当前建设体系'}</span><select aria-label="当前建设体系" value={selectedSystemId} onChange={event => { void openSystem(event.target.value, view); }}><option value="">全部建设工作</option>{systems.map(system => <option key={system.id} value={system.id}>{system.name}</option>)}</select></label><div className="studio-actions"><button type="button" className="secondary-button" disabled={!selectedSystem} onClick={() => { if (selectedSystem) { setMaintenance(selectedSystem); setMaintenanceProject(eligibleProjects.find(project => project.id === currentProjectId)?.id || eligibleProjects[0]?.id || ''); setMaintenanceTask(''); } }}>接续维护</button><button type="button" className="primary-button" onClick={() => { void startConstruction(); }}>建设基础资产</button></div></div>

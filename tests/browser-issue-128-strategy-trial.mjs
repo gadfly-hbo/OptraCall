@@ -232,7 +232,9 @@ try {
   const publicationA = (await api(`${jointBase}/publications?scopeKey=${encodeURIComponent(jointKey)}`)).publications.find(item => item.state === 'active');
   await page.getByRole('button', {name: '带入目标管理'}).click();
   check('I128-03 新部门默认当前战略范围', await page.locator('#si-handoff-scope').inputValue() === jointKey && (await page.locator('#si-handoff-scope').innerText()).includes('当前战略范围'));
-  check('I128-03 历史误归属有补救说明', (await page.locator('dialog').innerText()).includes('历史误存个人范围') && (await page.locator('dialog').innerText()).includes('提出目标修订'));
+  const handoffDialog = page.getByRole('dialog', { name: '核对承接的目标与策略', exact: true });
+  const handoffText = await handoffDialog.innerText();
+  check('I128-03 历史误归属有补救说明', handoffText.includes('历史误存个人范围') && handoffText.includes('提出目标修订'));
   await page.selectOption('#si-handoff-scope', 'personal::self');
   await page.getByRole('button', {name: '保存目标候选'}).click();
   await page.waitForSelector('text=批目标候选已导入');

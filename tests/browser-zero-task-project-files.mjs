@@ -19,12 +19,14 @@ const toggle = page => page.getByRole('button', { name: /^(展开|收起)项目�
 
 async function assertDrawer(page, open) {
   const label = (open ? '收起' : '展开') + '项目文件';
-  await page.getByRole('button', { name: label, exact: true }).waitFor();
-  assert.equal(await toggle(page).getAttribute('aria-expanded'), String(open));
+  const toolbar = page.locator('.files-toggle');
+  await page.waitForFunction(expected => document.querySelector('.files-toggle')?.getAttribute('aria-label') === expected, label);
+  assert.equal(await toolbar.getAttribute('aria-label'), label);
+  assert.equal(await toolbar.getAttribute('aria-expanded'), String(open));
   await files(page).waitFor({ state: open ? 'visible' : 'hidden', timeout: 2500 }).catch(() => {
     assert.fail(`Project files must be ${open ? 'visible' : 'hidden'} when the toolbar is ${open ? 'expanded' : 'collapsed'}`);
   });
-  if (open) assert.equal(await toggle(page).getAttribute('aria-controls'), await files(page).getAttribute('id'));
+  if (open) assert.equal(await toolbar.getAttribute('aria-controls'), await files(page).getAttribute('id'));
 }
 
 async function createProject(page, name) {
@@ -154,6 +156,7 @@ try {
   await assertDrawer(narrow, false);
   await toggle(narrow).press('Enter');
   await assertDrawer(narrow, true);
+  assert.equal(await narrow.getByRole('dialog', { name: '任务检视区', exact: true }).count(), 1);
   await narrow.waitForFunction(() => document.activeElement === document.querySelector('#project-files h2'));
   await files(narrow).getByRole('button', { name: '关闭项目文件栏', exact: true }).press('Enter');
   await assertDrawer(narrow, false);

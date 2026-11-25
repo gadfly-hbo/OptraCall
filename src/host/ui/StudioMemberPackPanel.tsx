@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { decisionChoiceIssue } from '../../../extensions/business-plugins/studio/enterprise-pack-decisions.ts';
 import { PersonalDialog } from './PersonalDialog.tsx';
 import type { ClientProject } from './project-types.ts';
@@ -140,6 +140,7 @@ export function StudioMemberPackPanel({
   const [grantStores, setGrantStores] = useState('');
   const [grantAllowedPaths, setGrantAllowedPaths] = useState('');
   const [grantPurposeKeys, setGrantPurposeKeys] = useState('*');
+  const grantPeriodHintId = useId();
   const [grantPeriodFrom, setGrantPeriodFrom] = useState('');
   const [grantPeriodTo, setGrantPeriodTo] = useState('');
   const [grantGrain, setGrantGrain] = useState('store-month');
@@ -1595,27 +1596,29 @@ export function StudioMemberPackPanel({
                 </div>
               )}
               {grants.length > 0 ? (
-                <div className="studio-table-wrap">
-                  <table className="studio-foundation-table">
-                    <thead>
-                      <tr><th>授权项目/主体</th><th>授予方（Host 核定）</th><th>允许操作</th><th>范围与粒度</th><th>状态</th><th>操作</th></tr>
+                <div className="studio-table-wrap studio-grant-table-wrap">
+                  <table className="studio-foundation-table studio-grant-table" role="table" aria-label="项目资源授权">
+                    <thead role="rowgroup">
+                      <tr role="row"><th scope="col" role="columnheader">授权项目/主体</th><th scope="col" role="columnheader">授予方（Host 核定）</th><th scope="col" role="columnheader">允许操作</th><th scope="col" role="columnheader">范围与粒度</th><th scope="col" role="columnheader">状态</th><th scope="col" role="columnheader">操作</th></tr>
                     </thead>
-                    <tbody>
+                    <tbody role="rowgroup">
                       {grants.map(g => (
-                        <tr key={g.id}>
-                          <td>{projects.find(p => p.id === g.subjectId)?.name || g.subjectId}</td>
-                          <td>{g.grantor}</td>
-                          <td>{g.operations.map(op => opText[op]).join('、')}</td>
-                          <td>
-                            {g.scope.stores?.length ? `门店：${g.scope.stores.join('、')}` : '无门店明细范围'}
-                            {g.scope.allowedDataPaths?.length ? ` · 路径：${g.scope.allowedDataPaths.join('、')}` : ''}
-                            {g.purposeKeys?.length ? ` · 用途：${g.purposeKeys.join('、')}` : ''}
-                            {g.scope.periodFrom || g.scope.periodTo ? ` · 期间：${g.scope.periodFrom || '不限'} 至 ${g.scope.periodTo || '不限'}` : ''}
-                            {g.scope.grain ? ` · 粒度：${g.scope.grain}` : ''}
-                            {g.scope.summaryAssetId ? ` · 汇总 ${g.scope.summaryAssetId}@${g.scope.summaryVersion || ''}` : ''}
+                        <tr key={g.id} role="row">
+                          <td role="cell" data-caption="授权项目/主体">{projects.find(p => p.id === g.subjectId)?.name || g.subjectId}</td>
+                          <td role="cell" data-caption="授予方（Host 核定）">{g.grantor}</td>
+                          <td role="cell" data-caption="允许操作">{g.operations.map(op => opText[op]).join('、')}</td>
+                          <td role="cell" data-caption="范围与粒度">
+                            <ul className="studio-grant-scope">
+                              <li>{g.scope.stores?.length ? `门店：${g.scope.stores.join('、')}` : '无门店明细范围'}</li>
+                              {g.scope.allowedDataPaths?.length ? <li>路径：{g.scope.allowedDataPaths.join('、')}</li> : null}
+                              {g.purposeKeys?.length ? <li>用途：{g.purposeKeys.join('、')}</li> : null}
+                              {(g.scope.periodFrom || g.scope.periodTo) && <li>期间：{g.scope.periodFrom || '不限'} 至 {g.scope.periodTo || '不限'}</li>}
+                              {g.scope.grain && <li>粒度：{g.scope.grain}</li>}
+                              {g.scope.summaryAssetId && <li>汇总 {g.scope.summaryAssetId}@{g.scope.summaryVersion || ''}</li>}
+                            </ul>
                           </td>
-                          <td>{g.revokedAt ? `已撤回 (${g.revokedReason || ''})` : '有效'}</td>
-                          <td>
+                          <td role="cell" data-caption="状态">{g.revokedAt ? `已撤回 (${g.revokedReason || ''})` : <span className="studio-badge is-success">有效</span>}</td>
+                          <td role="cell" data-caption="操作">
                             {!g.revokedAt && !readOnlyRollback && grantAuthority && (
                               <button type="button" className="text-button" disabled={busy} onClick={() => { void handleRevokeGrant(g.id); }}>
                                 撤回授权
@@ -1663,8 +1666,11 @@ export function StudioMemberPackPanel({
                     </>
                   )}
                   <label className="studio-field"><span>授权用途 purposeKeys（逗号分隔，* 表示全部）</span><input required value={grantPurposeKeys} onChange={e => setGrantPurposeKeys(e.target.value)} /></label>
-                  <label className="studio-field"><span>数据期间起（YYYY-MM-DD）</span><input type="date" value={grantPeriodFrom} onChange={e => setGrantPeriodFrom(e.target.value)} /></label>
-                  <label className="studio-field"><span>数据期间止（YYYY-MM-DD）</span><input type="date" value={grantPeriodTo} onChange={e => setGrantPeriodTo(e.target.value)} /></label>
+                  <div className="studio-grant-dates">
+                    <label className="studio-field"><span>数据期间起（YYYY-MM-DD）</span><input type="date" value={grantPeriodFrom} aria-describedby={grantPeriodHintId} onChange={e => setGrantPeriodFrom(e.target.value)} /></label>
+                    <label className="studio-field"><span>数据期间止（YYYY-MM-DD）</span><input type="date" value={grantPeriodTo} aria-describedby={grantPeriodHintId} onChange={e => setGrantPeriodTo(e.target.value)} /></label>
+                    <p className="studio-meta" id={grantPeriodHintId}>数据期间留空的一端不限。</p>
+                  </div>
                   <label className="studio-field"><span>授权依据</span><input required value={grantBasis} onChange={e => setGrantBasis(e.target.value)} /></label>
                   <button type="submit" className="secondary-button" disabled={busy || !grantProjectId}>保存资源授权</button>
                 </form>

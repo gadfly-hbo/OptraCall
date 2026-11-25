@@ -17,19 +17,19 @@ const messages: Record<string, string> = {
 export class CaseRequestError extends Error {
   constructor(readonly code: string, readonly status: number, readonly details?: Record<string, unknown>) { super(messages[code] ?? (status === 409 ? '记录或版本发生变化，请刷新核对；未覆盖已有内容。' : '请求未完成，请检查输入或本地存储后重试。')); }
 }
-async function request<T>(route: string, method = 'GET', input?: unknown): Promise<T> {
-  const response = await fetch(`/api/${route}`, { method, credentials: 'omit', mode: 'same-origin', cache: 'no-store', headers: { 'content-type': 'application/json', 'x-optracall-client': '1' }, ...(input === undefined ? {} : { body: JSON.stringify(input) }) });
+async function request<T>(route: string, method = 'GET', input?: unknown, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(`/api/${route}`, { method, credentials: 'omit', mode: 'same-origin', cache: 'no-store', headers: { 'content-type': 'application/json', 'x-optracall-client': '1' }, ...(input === undefined ? {} : { body: JSON.stringify(input) }), ...(signal ? { signal } : {}) });
   const result = await response.json();
   if (!response.ok) throw new CaseRequestError(result.code ?? 'case_request_failed', response.status, result.details);
   return result as T;
 }
 const casePath = (id: string) => `cases/${encodeURIComponent(id)}`;
 const projectPath = (id: string) => `projects/${encodeURIComponent(id)}/work`;
-export const status = () => request<CaseStorageStatus>('cases/storage');
+export const status = (signal?: AbortSignal) => request<CaseStorageStatus>('cases/storage', 'GET', undefined, signal);
 export const init = () => request<CaseStorageStatus>('cases/storage/initialize', 'POST', {});
-export const list = () => request<CaseList>('cases');
+export const list = (signal?: AbortSignal) => request<CaseList>('cases', 'GET', undefined, signal);
 export const originReply = (id: string) => request<{text: string}>(casePath(id)+'/origin/reply');
-export const detail = (id: string) => request<CaseDetail>(casePath(id));
+export const detail = (id: string, signal?: AbortSignal) => request<CaseDetail>(casePath(id), 'GET', undefined, signal);
 export const create = (input: { operationId: string; title: string; description?: string; goalBinding: CaseGoalBindingInput; creationSource?: import('../case-types.ts').CaseCreationSource }) => request<{ case: CaseRecord }>('cases', 'POST', input);
 export const update = (id: string, input: CaseMutation & { title: string; description: string; judgement: string; nextStep: string }) => request<{ case: CaseRecord }>(casePath(id), 'PATCH', input);
 export const setStatus = (id: string, input: CaseMutation & { status: Exclude<CaseStatus, 'closed'> }) => request<{ case: CaseRecord }>(`${casePath(id)}/status`, 'POST', input);

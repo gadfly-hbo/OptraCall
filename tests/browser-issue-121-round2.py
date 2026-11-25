@@ -714,7 +714,7 @@ try:
         # ITEM 02 (P2): Studio construction form required hints & project guard
         # =====================================================================
         page1.goto(f"{base}/?project={proj_default['id']}", wait_until='domcontentloaded')
-        page1.get_by_role('button', name='分析资产').click()
+        page1.get_by_role('button', name='分析资产', exact=True).click()
         page1.get_by_role('button', name='体系工作台').click()
         page1.get_by_role('button', name='建设与演进').click()
         # Ensure Enterprise A is selected
@@ -790,7 +790,7 @@ try:
         # =====================================================================
         # Authenticate as seed-maintainer on proj_default so we have write authority on Enterprise A pack
         page1.goto(f"{base}/?project={proj_default['id']}", wait_until='domcontentloaded')
-        page1.get_by_role('button', name='分析资产').click()
+        page1.get_by_role('button', name='分析资产', exact=True).click()
         page1.get_by_role('button', name='体系工作台').click()
         page1.get_by_label('当前企业').select_option(eid_a)
         page1.get_by_role('navigation', name='体系工作台视图').get_by_role('button', name='覆盖与缺口').click()
@@ -848,7 +848,7 @@ try:
 
         # Full page reload -> U-02 MUST stay excluded!
         page1.reload(wait_until='domcontentloaded')
-        page1.get_by_role('button', name='分析资产').click()
+        page1.get_by_role('button', name='分析资产', exact=True).click()
         page1.get_by_role('button', name='体系工作台').click()
         page1.get_by_label('当前企业').select_option(eid_a)
         page1.get_by_role('navigation', name='体系工作台视图').get_by_role('button', name='覆盖与缺口').click()
@@ -876,7 +876,7 @@ try:
         page1.set_viewport_size({'width': 1440, 'height': 900})
         page1.goto(f"{base}/?project={proj_alt['id']}", wait_until='domcontentloaded')
         page1.locator(f'button[aria-label="在 {proj_alt["name"]} 中新建任务"]').click()
-        orig_modal = page1.locator('dialog[open]')
+        orig_modal = page1.get_by_role('dialog', name='新建任务', exact=True)
         orig_modal.wait_for(state='visible')
         orig_modal.locator('#task-name').fill('已有背景任务-验证双框')
         assert orig_modal.locator('label', has_text='默认 Skill').locator('input[type="checkbox"]').is_checked()
@@ -906,7 +906,7 @@ try:
             if page1.locator('button[aria-label="展开侧栏"]').is_visible():
                 page1.locator('button[aria-label="展开侧栏"]').click()
             page1.locator(f'button[aria-label="在 {proj_alt["name"]} 中新建任务"]').click()
-            modal = page1.locator('dialog[open]')
+            modal = page1.get_by_role('dialog', name='新建任务', exact=True)
             modal.wait_for(state='visible')
 
             # Check modal has strictly ONE 默认 Skill checkbox and clearly names target project/new task
@@ -927,7 +927,7 @@ try:
             # Verify keyboard Tab stays inside dialog / Escape closes cleanly
             if cycle_idx in (2, 4):
                 page1.keyboard.press('Tab')
-                in_dlg = page1.evaluate('Boolean(document.activeElement?.closest("dialog[open]"))')
+                in_dlg = modal.evaluate('(dialog) => dialog.contains(document.activeElement)')
                 assert in_dlg, f'Item 06 cycle {cycle_idx}: keyboard Tab escaped modal dialog!'
                 page1.keyboard.press('Escape')
             else:
@@ -940,7 +940,7 @@ try:
         if page1.locator('button[aria-label="展开侧栏"]').is_visible():
             page1.locator('button[aria-label="展开侧栏"]').click()
         page1.locator(f'button[aria-label="在 {proj_alt["name"]} 中新建任务"]').click()
-        modal = page1.locator('dialog[open]')
+        modal = page1.get_by_role('dialog', name='新建任务', exact=True)
         modal.wait_for(state='visible')
         modal.locator('#task-name').fill('关闭Skill新建任务对照')
         modal.locator('label', has_text='默认 Skill').locator('input[type="checkbox"]').uncheck()
@@ -970,7 +970,7 @@ try:
         b1_ctx = browser.new_context(viewport={'width': 1440, 'height': 900})
         b1 = b1_ctx.new_page()
         b1.goto(f"{base}/?project={proj_b_owner['id']}", wait_until='domcontentloaded')
-        b1.get_by_role('button', name='分析资产').click()
+        b1.get_by_role('button', name='分析资产', exact=True).click()
         b1.get_by_role('button', name='体系工作台').click()
         b1.locator(f'select[aria-label="当前企业"] option[value="{eid_b}"]').wait_for(state='attached', timeout=15000)
         b1.get_by_label('当前企业').select_option(eid_b)
@@ -1068,7 +1068,7 @@ try:
             'dataCutoffAt': '2026-07-31',
         }, cookie=b1_cookie_hdr)
         b1.reload(wait_until='domcontentloaded')
-        b1.get_by_role('button', name='分析资产').click()
+        b1.get_by_role('button', name='分析资产', exact=True).click()
         b1.get_by_role('button', name='体系工作台').click()
         b1.get_by_label('当前企业').select_option(eid_b)
         b1.get_by_role('navigation', name='体系工作台视图').get_by_role('button', name='覆盖与缺口').click()
@@ -1083,7 +1083,7 @@ try:
         b2_ctx = browser.new_context(viewport={'width': 1440, 'height': 900})
         b2 = b2_ctx.new_page()
         b2.goto(f"{base}/?project={proj_b_owner['id']}", wait_until='domcontentloaded')
-        b2.get_by_role('button', name='分析资产').click()
+        b2.get_by_role('button', name='分析资产', exact=True).click()
         b2.get_by_role('button', name='体系工作台').click()
         b2.get_by_label('当前企业').select_option(eid_b)
         b2.get_by_role('navigation', name='体系工作台视图').get_by_role('button', name='覆盖与缺口').click()
@@ -1158,7 +1158,7 @@ try:
         b4_ctx = browser.new_context(viewport={'width': 1440, 'height': 900})
         b4 = b4_ctx.new_page()
         b4.goto(f"{base}/?project={proj_c['id']}", wait_until='domcontentloaded')
-        b4.get_by_role('button', name='分析资产').click()
+        b4.get_by_role('button', name='分析资产', exact=True).click()
         b4.get_by_role('button', name='体系工作台').click()
         b4.get_by_label('当前企业').select_option(ent_c['id'])
         b4.get_by_role('navigation', name='体系工作台视图').get_by_role('button', name='建设与演进').click()

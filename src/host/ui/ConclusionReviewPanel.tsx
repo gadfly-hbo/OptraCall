@@ -17,6 +17,7 @@ import './conclusion-review.css';
 
 type Props = {
   project: ClientProject; task: ClientTask; taskBusy: boolean; filesRevision: number;
+  requestedReport?: ConclusionReviewReportCandidate;
   requirementContext?: RequirementContextSelection;
   caseContext?: { id: string; title: string; description: string; revision: number };
   enterpriseMaterials?: EnterpriseMaterialSelection[];
@@ -177,7 +178,7 @@ function BoardHandoff({ projectId, taskId, review, archived, refreshToken, onOpe
   </section>;
 }
 
-export function ConclusionReviewPanel({ project, task, taskBusy, filesRevision, requirementContext, caseContext, enterpriseMaterials = [], semanticContext, onClose, onOpenBoard, onCarry }: Props) {
+export function ConclusionReviewPanel({ project, task, taskBusy, filesRevision, requestedReport, requirementContext, caseContext, enterpriseMaterials = [], semanticContext, onClose, onOpenBoard, onCarry }: Props) {
   const uid = useId(), heading = useRef<HTMLHeadingElement>(null), alive = useRef(true), reportRequest = useRef(0);
   const pendingKey = `optracall.conclusion-review:${project.id}/${task.id}`;
   const [tab, setTab] = useState<'review' | 'history'>('review');
@@ -207,14 +208,20 @@ export function ConclusionReviewPanel({ project, task, taskBusy, filesRevision, 
       .then(async ([choices, gate, history]) => {
         if (controller.signal.aborted) return;
         setCandidates(choices); setTransition(gate); setReviews(history);
-        if (choices.preselected) setChosen(choices.reports.find(item => reportKey(item) === reportKey(choices.preselected!)));
+        const preferred = requestedReport ?? choices.preselected;
+        if (preferred) setChosen(choices.reports.find(item => reportKey(item) === reportKey(preferred)) ?? requestedReport);
         let previous: string | null = null;
         try { previous = sessionStorage.getItem(pendingKey); } catch { /* This browser can still show persisted review history. */ }
-        const selected = previous ?? history.find(activeReview)?.verificationId ?? history[0]?.verificationId;
+        if (previous) setPending(previous);
+        const matchingHistory = requestedReport ? history.filter(item => reportKey(item.review.report) === reportKey(requestedReport)) : history;
+        const selected = previous
+          ? (!requestedReport || matchingHistory.some(item => item.verificationId === previous) ? previous : undefined)
+          : matchingHistory.find(activeReview)?.verificationId ?? matchingHistory[0]?.verificationId;
         if (selected) {
-          setPending(previous ?? undefined);
           const record = await readConclusionReview(project.id, task.id, selected, controller.signal);
-          if (!controller.signal.aborted) apply(record);
+          if (controller.signal.aborted) return;
+          if (requestedReport && reportKey(record.review.report) !== reportKey(requestedReport)) throw new Error('原审查记录的报告版本未能核对。');
+          apply(record);
         }
       }).catch(fault => { if (!controller.signal.aborted) setError(faultText(fault)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
@@ -241,13 +248,20 @@ export function ConclusionReviewPanel({ project, task, taskBusy, filesRevision, 
   }, [project.id, task.id, current?.verificationId, current?.state, observe]);
   useEffect(() => { reportRequest.current++; setReportView(undefined); }, [current?.verificationId, current?.sourceStatus]);
 
-  const refresh = async (id = pending ?? current?.verificationId) => {
+  const refresh = async (id = pending ?? current?.verificationId, explicitHistorySelection = false) => {
     setLoading(true); setError(''); reportRequest.current++; setReportView(undefined);
     try {
       const [choices, gate, history] = await Promise.all([conclusionCandidates(project.id, task.id), conclusionTransition(project.id, task.id), listConclusionReviews(project.id, task.id)]);
       if (!alive.current) return;
       setCandidates(choices); setTransition(gate); setReviews(history);
-      if (id) apply(await readConclusionReview(project.id, task.id, id));
+      if (id) {
+        const record = await readConclusionReview(project.id, task.id, id);
+        if (!requestedReport || !form || explicitHistorySelection || reportKey(record.review.report) === reportKey(requestedReport)) apply(record);
+        else {
+          if (!activeReview(record)) savePending(undefined);
+          setNotice('已核对另一版报告的原审查请求。当前选择的报告版本保留。');
+        }
+      }
       setObserve(value => value + 1);
     } catch (fault) { if (alive.current) setError(faultText(fault)); }
     finally { if (alive.current) setLoading(false); }
@@ -258,9 +272,11 @@ export function ConclusionReviewPanel({ project, task, taskBusy, filesRevision, 
     ...(useCase && caseContext ? { caseId: caseContext.id, caseRevision: caseContext.revision } : {}),
     ...(useSap ? { useCurrentSap: true } : {}), ...(useEnterprise ? { enterpriseMaterials } : {}),
   });
-  const archived = Boolean(project.archivedAt), inProgress = activeReview(current), locked = loading || posting || inProgress || Boolean(pending);
+  const otherActiveReview = Boolean(requestedReport && form && reviews.some(item => activeReview(item) && reportKey(item.review.report) !== reportKey(requestedReport)));
+  const archived = Boolean(project.archivedAt), inProgress = activeReview(current), locked = loading || posting || inProgress || Boolean(pending) || otherActiveReview;
+  const choiceMissing = chosen && !candidates.reports.some(item => reportKey(item) === reportKey(chosen));
   const begin = async () => {
-    if (!chosen?.reviewable || !chosen.sha256 || locked || archived || taskBusy || transition?.state !== 'ready') return;
+    if (!chosen?.reviewable || !chosen.sha256 || choiceMissing || locked || archived || taskBusy || transition?.state !== 'ready') return;
     const input = selection(crypto.randomUUID());
     setPosting(true); setError(''); setNotice('');
     let dispatched = false;
@@ -310,9 +326,8 @@ export function ConclusionReviewPanel({ project, task, taskBusy, filesRevision, 
   };
   const output = current?.sourceStatus === 'unavailable' ? undefined : current?.reviewResult?.output;
   const updated = current?.reportChanged === true;
-  const choiceMissing = chosen && !candidates.reports.some(item => reportKey(item) === reportKey(chosen));
   return <aside className="conclusion-panel" aria-labelledby={uid + '-title'} onKeyDown={event => { if (event.key === 'Escape' && !reportView) { event.stopPropagation(); onClose(); } }}>
-    <header className="cnr-heading"><div><h2 id={uid + '-title'} ref={heading} tabIndex={-1}>审查结论与建议</h2><p>针对一版报告，核对重要主张的依据与适用条件。</p></div><button type="button" className="text-button" aria-label="收起审查面板" onClick={onClose}>收起</button></header>
+    <header className="cnr-heading"><div><h2 id={uid + '-title'} ref={heading} tabIndex={-1} data-panel-focus>审查结论与建议</h2><p>针对一版报告，核对重要主张的依据与适用条件。</p></div><button type="button" className="text-button" aria-label="收起审查面板" onClick={onClose}>收起</button></header>
     <nav className="cnr-tabs" aria-label="审查面板"><button type="button" aria-pressed={tab === 'review'} onClick={() => setTab('review')}>结论审查</button><button type="button" aria-pressed={tab === 'history'} onClick={() => setTab('history')}>历史记录</button></nav>
     <div className="cnr-body">
       {archived && <p className="cnr-notice">项目已归档，仅可回看审查与历史记录。</p>}
@@ -321,11 +336,12 @@ export function ConclusionReviewPanel({ project, task, taskBusy, filesRevision, 
       <div className="cnr-actions"><button type="button" className="text-button" disabled={posting || loading} onClick={() => void refresh()}>只读刷新</button>{loading && <span className="cnr-caption" role="status">正在读取记录…</span>}</div>
       {tab === 'history' ? <>
         <h3>结论与建议审查记录</h3>
-        {reviews.length ? <ul className="cnr-history-list">{reviews.map(review => <li key={review.verificationId}><button type="button" disabled={posting || loading || inProgress} onClick={() => { setTab('review'); void refresh(review.verificationId); }}><strong>{review.review.report.relativePath}</strong><small>{status[review.state]} · {timestamp(review.createdAt)}</small><small>{review.review.report.sha256}</small></button></li>)}</ul> : <p className="cnr-caption">尚无结论审查记录。</p>}
+        {reviews.length ? <ul className="cnr-history-list">{reviews.map(review => <li key={review.verificationId}><button type="button" disabled={posting || loading || inProgress} onClick={() => { setTab('review'); void refresh(review.verificationId, true); }}><strong>{review.review.report.relativePath}</strong><small>{status[review.state]} · {timestamp(review.createdAt)}</small><small>{review.review.report.sha256}</small></button></li>)}</ul> : <p className="cnr-caption">尚无结论审查记录。</p>}
         <VerificationPanel project={project} task={task} taskBusy={taskBusy} filesRevision={filesRevision} semanticContext={semanticContext} />
       </> : <>
         {transition && transition.state !== 'ready' && <p className="cnr-notice" role="status"><strong>待确认旧流程已收尾</strong><br />{transition.reason ?? '原记录仍可回看，旧流程收尾后可开始新审查。'}</p>}
         {pending && <p className="cnr-notice" role="status">本次启动结果尚未确认，操作编号 {pending}。请只读刷新原请求。</p>}
+        {otherActiveReview && <p className="cnr-notice" role="status">另一版报告仍在审查。可在历史记录核对原审查，当前报告版本保留。</p>}
         {form ? <>
           <div className="cnr-field"><label htmlFor={uid + '-report'}>报告版本</label><select id={uid + '-report'} value={chosen ? reportKey(chosen) : ''} disabled={locked || archived} onChange={event => { setChosen(candidates.reports.find(item => reportKey(item) === event.target.value)); setError(''); reportRequest.current++; setReportView(undefined); }}>
             <option value="">选择已保存的报告版本</option>
@@ -338,7 +354,8 @@ export function ConclusionReviewPanel({ project, task, taskBusy, filesRevision, 
             {candidates.reports.filter(item => !item.reviewable).map(item => <p key={reportKey(item)}>{item.relativePath} · {item.reason?.includes('too_large') ? '超过完整报告审查的技术限额。' : item.textStatus === 'not-utf8' ? '无法完整解码为 UTF-8 正文。' : '当前归属、授权或文件版本未能核对。'}</p>)}
           </details>}
           {candidates.limitations?.map((note, index) => <p className="cnr-caption" key={index}>{note}</p>)}
-          {chosen && <button type="button" className="text-button" disabled={posting || loading} onClick={() => void viewReport()}>查看本版报告</button>}
+          {chosen && <button type="button" className="text-button" disabled={posting || loading || Boolean(choiceMissing)} onClick={() => void viewReport()}>查看本版报告</button>}
+          {choiceMissing && <p className="cnr-notice" role="status">所选报告版本暂不可读取，原路径与指纹保留。</p>}
           <details className="cnr-evidence"><summary>审查依据 · 可选</summary>
             <p className="cnr-caption">所选报告全文将固定，以下为本次可选依据。</p>
             {candidates.basisFiles.map(file => <label key={file.relativePath}><input type="checkbox" checked={basis.includes(file.relativePath)} disabled={locked || archived} onChange={event => setBasis(previous => event.target.checked ? [...previous, file.relativePath] : previous.filter(path => path !== file.relativePath))} /><span>{file.relativePath}</span></label>)}
@@ -347,7 +364,7 @@ export function ConclusionReviewPanel({ project, task, taskBusy, filesRevision, 
             <label><input type="checkbox" checked={useSap} disabled={locked || archived} onChange={event => setUseSap(event.target.checked)} /><span>本次使用项目启用的 SAP</span></label>
             {enterpriseMaterials.length > 0 && <label><input type="checkbox" checked={useEnterprise} disabled={locked || archived} onChange={event => setUseEnterprise(event.target.checked)} /><span>附带本次已选企业资料 · {enterpriseMaterials.length} 项</span></label>}
           </details>
-          {!archived && <div className="cnr-actions"><button type="button" className="primary-button" disabled={locked || !chosen?.reviewable || !chosen.sha256 || taskBusy || transition?.state !== 'ready'} onClick={() => void begin()}>{posting ? '正在开始…' : '开始审查'}</button></div>}
+          {!archived && <div className="cnr-actions"><button type="button" className="primary-button" disabled={locked || !chosen?.reviewable || !chosen.sha256 || Boolean(choiceMissing) || taskBusy || transition?.state !== 'ready'} onClick={() => void begin()}>{posting ? '正在开始…' : '开始审查'}</button></div>}
           {taskBusy && <p className="cnr-caption">原分析任务正在运行，空闲后可开始审查。</p>}
         </> : current && <>
           <div className="cnr-version"><strong>{current.review.report.relativePath}</strong><code>{current.review.report.sha256}</code><small>{status[current.state]} · {timestamp(current.createdAt)}</small></div>

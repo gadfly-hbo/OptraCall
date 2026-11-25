@@ -131,3 +131,142 @@
   .si-dialog-scroll { max-height: calc(100dvh - 220px); }
   .si-gate-card { flex-direction: column; }
 }
+
+/* Context, evidence, and release hierarchy are scoped to the strategy workbench. */
+.si-workbench {
+  --si-positive: var(--success, #236446);
+  --si-positive-bg: var(--success-bg, #eaf6ef);
+}
+.app[data-theme="dark"] .si-workbench {
+  --si-positive: var(--success, #9bd6b8);
+  --si-positive-bg: var(--success-bg, #223a31);
+}
+.si-topbar {
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.si-context-controls, .si-context-actions, .si-lifecycle-placeholders {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: 8px 12px;
+}
+.si-context-controls { flex: 1 1 auto; }
+.si-context-controls .si-inline-picker select { min-width: 0; max-width: min(220px, 100%); }
+.si-inline-picker select { min-width: 0; min-height: 34px; }
+.si-panel .si-section-lead {
+  padding: 10px 12px;
+  background: var(--subtle);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.si-badge-positive, .si-notice-positive {
+  color: var(--si-positive);
+  background: var(--si-positive-bg);
+  border-color: transparent;
+}
+.si-candidate-grid { grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr)); }
+.si-gate-card {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  border-inline-start-width: 3px;
+}
+.si-gate-card[data-tone="positive"] { border-inline-start-color: var(--si-positive); }
+.si-gate-card[data-tone="warning"] { border-inline-start-color: var(--warning); }
+.si-gate-card[data-tone="error"] { border-inline-start-color: var(--error); }
+.si-gate-card[data-tone="accent"] { border-inline-start-color: var(--accent); }
+.si-gate-body > p { margin: 6px 0; }
+.si-pub-ref {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  padding: 2px 6px;
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+}
+.si-template-switch {
+  display: inline-flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  background: var(--subtle);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.si-template-switch > button {
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.si-template-switch > button[aria-pressed="true"] {
+  border-color: var(--line);
+  color: var(--accent);
+  background: var(--surface);
+  font-weight: 650;
+}
+.si-map { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.si-map > .si-map-node:first-child {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.si-map > .si-map-node:first-child span { color: var(--accent); }
+.si-map-grid { grid-template-columns: repeat(auto-fit, minmax(min(145px, 100%), 1fr)); }
+.si-map-node { min-width: 0; max-width: 100%; }
+.si-map-goal {
+  border-color: var(--line);
+  border-block-start: 2px solid var(--accent);
+  text-align: left;
+}
+.si-map-list .si-map-node { text-align: left; }
+.si-handoff-receipt {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: 14px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-inline-start: 3px solid var(--si-positive);
+  background: var(--si-positive-bg);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+.si-handoff-receipt strong { color: var(--si-positive); }
+.si-handoff-receipt p { margin: 4px 0 0; }
+.si-handoff-goals {
+  min-width: 0;
+  padding: 8px 12px;
+  margin: 12px 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--subtle);
+}
+.si-handoff-goals legend { padding: 0 5px; color: var(--muted); font-size: 12px; }
+.si-handoff-goals .si-check-row { padding: 8px; margin: 4px 0; border-radius: 6px; overflow-wrap: anywhere; }
+.si-handoff-goals .si-check-row:has(input:checked) { background: var(--accent-soft); }
+.si-handoff-goals input { flex: none; accent-color: var(--accent); }
+
+@media (max-width: 650px) {
+  .si-context-controls { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .si-context-controls .si-inline-picker {
+    display: grid;
+    grid-template-columns: minmax(60px, auto) minmax(0, 1fr);
+  }
+  .si-context-controls .si-inline-picker select { width: 100%; max-width: 100%; }
+  .si-gate-card, .si-map { padding: 10px; }
+}

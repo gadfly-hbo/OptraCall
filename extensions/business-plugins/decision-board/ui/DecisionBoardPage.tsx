@@ -114,12 +114,12 @@ export function DecisionBoardPage({ onOpenFeedbackTask, initialReview, initialRe
   if (reviewTarget) return <FeedbackReview key={reviewTarget.draftKey ?? `${reviewTarget.taskId}/${reviewTarget.revisionId ?? 'none'}`} boardTaskId={reviewTarget.taskId} feedbackRevisionId={reviewTarget.revisionId} selectedFile={reviewTarget.selectedFile} draftKey={reviewTarget.draftKey} onBack={() => setReviewTarget(null)} onOpenTask={onOpenFeedbackTask} />;
 
   return <div className="decision-page board-page">
-    <div className="decision-heading"><div><p className="eyebrow">DECISION BOARD</p><h1 ref={title} tabIndex={-1}>决策看板</h1><p>跨项目汇总分析报告，把判断、行动与反馈放在同一处。</p></div></div>
+    <header className="decision-heading"><div><p className="eyebrow">DECISION BOARD · 从建议到结果</p><h1 ref={title} tabIndex={-1}>决策看板</h1><p>跨项目汇总分析报告，把判断、行动与反馈放在同一处。</p></div><button type="button" className="secondary-button" onClick={() => setManualOpen(true)}>补充建议</button></header>
     {(error || loadError) && <p className="board-error" role="alert">{error || loadError}</p>}
     {board && <section className="decision-stats board-stats" aria-label="看板统计">
-      <div><span>报告<small>060_reports</small></span><strong>{board.stats.reports}<small>份</small></strong><p>各项目已保存的报告文件</p></div>
-      <div><span>待判断<small>含人工补充</small></span><strong>{board.stats.suggested}<small>项</small></strong><p>其中高优 {board.stats.highPrioritySuggested} 项</p></div>
-      <div><span>已采纳<small>行动跟进</small></span><strong>{board.stats.adopted}<small>项</small></strong><p>可拆解任务并跟进</p></div>
+      <div><span>已保存报告<small className="board-chip board-filename">060_reports</small></span><strong>{board.stats.reports}<small>份</small></strong><p>各项目已保存的报告文件</p></div>
+      <div><span>待判断建议<small className="board-chip warn">含人工补充</small></span><strong>{board.stats.suggested}<small>项</small></strong><p>其中高优 {board.stats.highPrioritySuggested} 项</p></div>
+      <div><span>已采纳<small className="board-chip board-adopted">行动跟进</small></span><strong>{board.stats.adopted}<small>项</small></strong><p>可拆解任务并跟进</p></div>
     </section>}
 
     <div className="board-toolbar">
@@ -142,7 +142,6 @@ export function DecisionBoardPage({ onOpenFeedbackTask, initialReview, initialRe
       </select>
       <span className="spacer" />
       {board && board.stats.dismissed > 0 && <label className="board-chip" id="dismissed-toggle"><input type="checkbox" id="show-dismissed" checked={showDismissed} onChange={event => setShowDismissed(event.target.checked)} />已驳回 <span id="dismissed-count">{board.stats.dismissed}</span></label>}
-      <button className="secondary-button" onClick={() => setManualOpen(true)}>补充建议</button>
     </div>
 
     <section className="board-reports" aria-label="项目报告">
@@ -157,7 +156,7 @@ export function DecisionBoardPage({ onOpenFeedbackTask, initialReview, initialRe
     <p className="board-context-note">采纳记录由用户决定；任务完成与业务效果分别回录。</p>
     <section className="decision-board" aria-label="决策泳道">
       <div className="decision-lane review">
-        <div className="decision-lane-heading"><h3><span aria-hidden="true">◇</span>判断建议</h3><span>{suggested.length} 项待判断</span></div>
+        <div className="decision-lane-heading"><h3><span aria-hidden="true">◇</span>判断建议</h3><span className="board-chip warn">{suggested.length} 项待判断</span></div>
         {!suggested.length && !(showDismissed && dismissed.length) ? <div className="board-lane-empty">暂无待判断建议。从上方报告触发“抽取建议”，或点“补充建议”登记报告外的判断。</div>
           : <>
             {suggested.map(item => <ItemCard key={item.id} item={item} report={sourceReport(item)} projectName={projectName(item.projectId)} disabled={pending !== null || projectArchived(item.projectId)}
@@ -167,7 +166,7 @@ export function DecisionBoardPage({ onOpenFeedbackTask, initialReview, initialRe
           </>}
       </div>
       <div className="decision-lane action">
-        <div className="decision-lane-heading"><h3><span aria-hidden="true">↗</span>行动跟进</h3><span>{adopted.length} 项已采纳</span></div>
+        <div className="decision-lane-heading"><h3><span aria-hidden="true">↗</span>行动跟进</h3><span className="board-chip board-adopted">{adopted.length} 项已采纳</span></div>
         {!adopted.length ? <div className="board-lane-empty">采纳建议后在这里拆解任务：负责人、截止日与执行状态。</div>
           : adopted.map(item => <ItemCard key={item.id} item={item} report={sourceReport(item)} projectName={projectName(item.projectId)} disabled={pending !== null || projectArchived(item.projectId)}
             onAddTask={() => setTaskTarget(item)}
@@ -177,7 +176,7 @@ export function DecisionBoardPage({ onOpenFeedbackTask, initialReview, initialRe
             onDismiss={() => setDismissTarget(item)} />)}
       </div>
       <div className="decision-lane feedback">
-        <div className="decision-lane-heading"><h3><span aria-hidden="true">↻</span>结果复盘</h3><span>{reviewTasks.length} 项任务已完成</span></div>
+        <div className="decision-lane-heading"><h3><span aria-hidden="true">↻</span>结果复盘</h3><span className="board-chip run">{reviewTasks.length} 项任务已完成</span></div>
         {!reviewTasks.length ? <div className="board-lane-empty">可在执行中或完成后回录反馈；评分选填，效果未知也可复盘。</div>
           : reviewTasks.map(({ task, item }) => <article className="decision-card" key={task.id} id={'board-task-'+task.id} tabIndex={-1}>
             <div className="board-card-top"><span className="board-chip">任务{TASK_STATUS_LABEL[task.status]}</span>{task.feedback && <span className="board-chip run">反馈 v{task.feedback.revisionNumber} · {task.feedback.score == null ? '未评分' : `${task.feedback.score}/5（主观）`}</span>}</div>

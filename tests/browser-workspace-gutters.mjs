@@ -94,7 +94,11 @@ try {
   await button('设置').click();
   const settingsTabs = page.getByRole('group', {name: '设置分类'});
   await settingsTabs.getByRole('button', {name: '业务模型包', exact: true}).click();
-  assert.deepEqual(await leftInsets(heading('业务模型包')), await leftInsets(settingsTabs), 'Embedded registry aligns with Settings');
+  const registryInsets = await leftInsets(heading('业务模型包'));
+  const settingsInsets = await leftInsets(settingsTabs);
+  assert.deepEqual(settingsInsets, expected, 'Settings categories align with the workspace gutter');
+  assert.ok(registryInsets[0] - settingsInsets[0] >= 216, 'Embedded registry sits beside the desktop Settings rail');
+  assert.ok(registryInsets.slice(1).every((inset, index) => inset - settingsInsets[index + 1] > 0 && inset - settingsInsets[index + 1] <= 24), 'Embedded registry has local card padding below the narrow settings categories');
   console.log('PASS history (empty and populated), capability pages and embedded Settings at', widths, 'Project insets', expected);
 } finally {
   await browser?.close();

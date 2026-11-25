@@ -1,0 +1,96 @@
+.settings-page { padding: 24px 28px 40px; }
+.settings-page .settings-heading, .settings-layout { max-width: 1240px; margin-inline: auto; }
+.settings-page .settings-heading { flex-wrap: wrap; margin-block-end: 18px; }
+.settings-page .settings-heading h1 { font-size: 22px; line-height: 1.3; font-weight: 650; }
+.settings-heading .back-button {
+  max-width: 100%;
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.settings-layout {
+  display: grid;
+  grid-template-columns: 216px minmax(0, 1fr);
+  align-items: start;
+  gap: 22px;
+}
+.settings-layout .settings-tabs {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.settings-group-label {
+  margin: 0;
+  padding: 8px 10px 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+.settings-layout .settings-tabs > button {
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  font-size: 13px;
+  text-align: start;
+}
+.settings-layout .settings-tabs > button > svg { display: none; }
+.settings-layout .settings-tabs > button:hover { background: var(--subtle); color: var(--ink); }
+.settings-layout .settings-tabs > button.active,
+.settings-layout .settings-tabs > button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 650;
+}
+.settings-content {
+  width: 100%;
+  min-width: 0;
+  max-width: 780px;
+  padding: clamp(14px, 2vw, 20px);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.settings-content > [hidden] { display: none; }
+.settings-content > div { min-width: 0; }
+.settings-content .page-heading { flex-wrap: wrap; margin-block-end: 14px; }
+.settings-content .settings-note { margin-block-end: 14px; }
+.settings-content .model-config-toolbar { align-items: end; flex-wrap: wrap; gap: 10px 14px; margin-block-end: 15px; }
+.settings-content .model-config-toolbar > .field { flex: 1 1 170px; }
+.settings-content .model-config-toolbar > button { margin-block-start: 0; }
+.settings-content .config-form { padding: 15px 0 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; }
+
+@media (max-width: 1000px) {
+  .settings-page { padding-inline: 20px; }
+}
+
+@media (max-width: 960px) {
+  .settings-layout { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .settings-layout .settings-tabs {
+    position: static;
+    flex-direction: row;
+    gap: 4px;
+    padding: 6px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  .settings-group-label { display: none; }
+  .settings-layout .settings-tabs > button { width: auto; white-space: nowrap; padding: 7px 11px; }
+}
+
+@media (max-width: 760px) {
+  .settings-page { padding: 16px 16px 28px; }
+  .settings-page .settings-heading h1 { font-size: 19px; }
+  .settings-content :is(.form-footer, .page-heading) > .primary-button { width: auto; }
+}

@@ -37,7 +37,7 @@ try {
     await panel.getByText('可以直接继续分析；无需先创建记录、收藏资料或填满计划表。', { exact: true }).waitFor();
     checks.push('真实Case详情显示决策记录空态，无需先建假设/策略');
   } else if (mode === 'continue') {
-    await detail.getByRole('button', { name: '继续提问', exact: true }).click();
+    await detail.getByRole('button', { name: '按此 Case 继续', exact: true }).click();
     await page.getByRole('textbox', { name: '消息', exact: true }).waitFor();
     await page.getByRole('status').filter({ hasText: `本次背景：${fixture.author.case.title}` }).waitFor();
     assert.equal(await page.getByRole('dialog', { name: '继续任务前核对背景', exact: true }).count(), 0);

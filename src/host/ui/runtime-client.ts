@@ -83,8 +83,19 @@ export async function uploadFile(id: string, file: File, directory: '010_draw' |
 }
 export async function copyToClean(id: string, path: string): Promise<void> { await request(`projects/${encodeURIComponent(id)}/files/copy-to-clean`, 'POST', { path }); }
 export async function saveReport(id: string, text: string): Promise<void> { await request(`projects/${encodeURIComponent(id)}/files/save-report`, 'POST', { name: `report-${new Date().toISOString().replace(/[:.]/g, '-')}.md`, text }); }
+function projectFileContent(id: string, path: string, expectedSha256?: string, signal?: AbortSignal): Promise<Response> {
+  const query = new URLSearchParams({ path });
+  if (expectedSha256) query.set('expectedSha256', expectedSha256);
+  return fetch(`/api/projects/${encodeURIComponent(id)}/files/content?${query}`, { credentials: 'same-origin', cache: 'no-store', headers: { 'x-optracall-client': '1' }, signal });
+}
+export async function readSavedReport(id: string, path: string, sha256: string, signal: AbortSignal): Promise<string> {
+  const response = await projectFileContent(id, path, sha256, signal);
+  if (response.status === 409) throw new HostRequestError('文件已变化，无法读取原版本。请核对原路径与版本。');
+  if (!response.ok) throw new HostRequestError('这版报告目前无法读取。原路径与版本保留。');
+  return new TextDecoder('utf-8', { fatal: true }).decode(await response.arrayBuffer());
+}
 export async function downloadFile(id: string, file: FileNode, expectedSha256?: string): Promise<void> {
-  const response = await fetch(`/api/projects/${encodeURIComponent(id)}/files/content?path=${encodeURIComponent(file.path)}${expectedSha256 ? `&expectedSha256=${encodeURIComponent(expectedSha256)}` : ''}`, { credentials: 'same-origin', cache: 'no-store', headers: { 'x-optracall-client': '1' } });
+  const response = await projectFileContent(id, file.path, expectedSha256);
   if (!response.ok) {
     if (response.status === 409) throw new HostRequestError('采用副本的内容已变化，与保存版本不一致；未下载，请先核对来源。', {}, 'artifact_version_changed');
     throw new HostRequestError('文件暂时无法下载，请刷新文件列表后重试。');

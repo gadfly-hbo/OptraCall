@@ -696,9 +696,31 @@ try:
         page.get_by_label('数据期间止（YYYY-MM-DD）').fill('2026-09-30')
         page.get_by_role('button', name='保存资源授权').click()
         page.get_by_text('原权责项目').first.wait_for(timeout=10_000)
-        page.get_by_role('cell', name='门店：星桥直营店 · 路径：020_clean/starbridge_orders.csv · 用途：store-first-purchase-30d-repurchase · 期间：2026-09-01 至 2026-09-30').wait_for(timeout=10_000)
+        grant_table = page.get_by_role('table', name='项目资源授权')
+        scope = grant_table.locator('td[data-caption="范围与粒度"]')
+        scope.wait_for(timeout=10_000)
+        assert scope.locator('li').all_text_contents() == [
+            '门店：星桥直营店',
+            '路径：020_clean/starbridge_orders.csv',
+            '用途：store-first-purchase-30d-repurchase',
+            '期间：2026-09-01 至 2026-09-30',
+        ], 'The grant table must preserve all of the exact authorized scope.'
+        page.set_viewport_size({'width': 390, 'height': 844})
+        assert scope.evaluate('(cell) => getComputedStyle(cell).display') == 'grid'
+        assert grant_table.evaluate('(table) => table.parentElement.scrollWidth <= table.parentElement.clientWidth + 1'), 'Grant scope must wrap within its narrow table.'
+        page.set_viewport_size({'width': 1440, 'height': 900})
         page.get_by_role('button', name='撤回授权').first.click()
         page.get_by_text('已撤回').first.wait_for(timeout=10_000)
+
+        # A cleared endpoint stays empty on save and is shown explicitly as unbounded.
+        period_end = page.get_by_label('数据期间止（YYYY-MM-DD）')
+        assert period_end.get_attribute('aria-describedby')
+        period_end.fill('')
+        page.get_by_role('button', name='保存资源授权').click()
+        open_ended_row = grant_table.get_by_role('row').filter(has_text='期间：2026-09-01 至 不限')
+        open_ended_row.get_by_text('期间：2026-09-01 至 不限', exact=True).wait_for(timeout=10_000)
+        open_ended_row.get_by_role('button', name='撤回授权').click()
+        open_ended_row.get_by_text('已撤回 (权限复核撤回)', exact=True).wait_for(timeout=10_000)
 
         # 3c. Switch to non-owner operator `store-analyst` -> grant creation form IMMEDIATELY disappears!
         page.get_by_label('业务操作者标识').fill('store-analyst')
