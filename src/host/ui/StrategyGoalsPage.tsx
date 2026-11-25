@@ -36,8 +36,8 @@ export interface StrategyGoalsPageProps {
   caseSource?:CaseCreationSource;clearCaseSource?:()=>void;onInspectCase?:(id:string)=>void;
   management: ManagementRoute; onStage: (stage: ManagementStage) => void;
   active?: boolean;
-  onOpenCase: (goal: GoalRef & {strategy?:string}) => void;
-  onStartProject: (goal: GoalRef, usageContext?: UsageContext) => void;
+  onOpenCase: (goal: GoalRef & { strategy?: string; title?: string; description?: string }) => void;
+  onStartProject: (goal: GoalRef, usageContext?: UsageContext, handoff?: { handoffId: string }) => void;
   onManageMetrics: () => void;
   onOpenBoard?: () => void;
   feedbackSources?: GoalFeedbackSource[];
@@ -476,13 +476,20 @@ export function StrategyGoalsPage({ teachReview,onReturnReview,clearTeachReview,
   },[active,goalsLoaded,originKey,enterpriseDirectory,projects,resolvedOrigin]);
   const standaloneDraft=Boolean(draftScopeKey)||!value;
   const roleGoal=!handoff&&!standaloneDraft?value:undefined;
-  const stableDraftId=(scope:GoalScope)=>{
+  const stableDraftId=(scope:GoalScope, goalIdKey?: string)=>{
     if(typeof window==='undefined')return '';
-    const key='optracall.gsa.draft:'+scopeKey(scope)+(caseSource?':'+JSON.stringify(caseSource):'');
+    const key='optracall.gsa.draft:'+scopeKey(scope)+(goalIdKey?':goal:'+goalIdKey:'')+(caseSource?':'+JSON.stringify(caseSource):'');
     const previous=localStorage.getItem(key);
     if(previous)return previous;
     const id=crypto.randomUUID();localStorage.setItem(key,id);return id;
   };
+  const [strategyReturns, setStrategyReturns] = useState<Awaited<ReturnType<typeof api.listStrategyReturns>>['strategyReturns']>([]);
+  useEffect(() => {
+    if (!active || area !== 'strategy') return;
+    let current = true;
+    void api.listStrategyReturns().then(res => { if (current) setStrategyReturns(res.strategyReturns); }).catch(() => { if (current) setStrategyReturns([]); });
+    return () => { current = false; };
+  }, [active, area, stage]);
   const goalOwner:BusinessRoleOwner|undefined=goalsLoaded&&resolvedOrigin===originKey&&active&&area==='gsa'&&(!exactPublicationHandoff||Boolean(value))?{...(
     handoff?{role:'goal-draft' as const,draftId:handoff.destination.draftId,scope:handoff.destination.scope,strategyChoice:{discussionId:handoff.discussionId,version:handoff.version}}:
     roleGoal?{role:'goal' as const,goalId:roleGoal.goalId,version:roleGoal.version}:{role:'goal-draft' as const,draftId:stableDraftId(draftScope),scope:draftScope}
@@ -498,7 +505,8 @@ export function StrategyGoalsPage({ teachReview,onReturnReview,clearTeachReview,
     if (kind !== 'switch' && selectedId) {
       setAuxWorkspace(null);
       const targetId = selectedId;
-      void api.getWorkspace(targetId).then(ws => setAuxWorkspace(ws)).catch(() => setAuxWorkspace(null));
+      const targetVer = value?.version;
+      void api.getWorkspace(targetId, targetVer).then(ws => setAuxWorkspace(ws)).catch(() => setAuxWorkspace(null));
     }
   };
   const relationTable = <div className="sg-table-scroll"><table className="sg-table"><thead><tr><th>目标关系</th><th>职责与协同</th><th>依据／必要条件</th><th>版本</th></tr></thead><tbody>{relations.map(x => <tr key={x.id}><td>{goalName(index, x.from)}<br /><strong>{relationLabels[x.kind]}</strong> → {goalName(index, x.to)}</td><td>{x.responsibility}</td><td>{x.rationale}</td><td>关系 v{x.revision}<br /><button type="button" className="text-button" onClick={() => openRelation(x)}>修订关系</button>{x.history.length > 0 && <details><summary>历史</summary>{x.history.map(v => <p key={v.revision}>v{v.revision} · {goalName(index, v.from)} → {goalName(index, v.to)}<br />{v.responsibility}<br />{v.rationale}</p>)}</details>}</td></tr>)}</tbody></table>{!relations.length && <p className="sg-muted">此准确目标版本尚无已记录关系，不据此推断业务上没有贡献或必要条件。</p>}</div>;
@@ -523,6 +531,25 @@ export function StrategyGoalsPage({ teachReview,onReturnReview,clearTeachReview,
       {!value && !loading && <p className="sg-muted" role="status">回执对应的准确目标版本暂不可读取。可刷新目标与来源后再核对。</p>}
     </aside>}
     {area === 'strategy' && stage === 'bsc' && <ManagementTabs route={management} onStage={onStage} />}
+    {area === 'strategy' && strategyReturns.length > 0 && (
+      <aside className="sg-panel" aria-label="来自目标复盘回送的原证据">
+        <details open>
+          <summary><strong>来自目标管理复盘回送的原证据 ({strategyReturns.length})</strong></summary>
+          <ul className="sg-history">
+            {strategyReturns.map(item => (
+              <li key={item.strategyReturn.returnId}>
+                <strong>{item.goal.title} · v{item.goal.version}</strong>（{item.goal.scope.name} · {item.review?.period ?? '当期'}）
+                <p>回送原因：{item.strategyReturn.reason}</p>
+                <p className="sg-muted">
+                  原证据引用：{item.strategyReturn.evidenceRefs.join('、')}
+                  {item.selectedConclusions.length ? ` · 选定结论：${item.selectedConclusions.map(c => `${c.title}(${c.classification === 'confirmed-evidence' ? '已核验' : '待验证假设'})`).join('；')}` : ''}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </details>
+      </aside>
+    )}
     <div hidden={area !== 'strategy' || stage === 'bsc'}><StrategyInitiativeWorkbench stage={area === 'strategy' ? stage : 'co-create'} onStage={onStage} active={active && area==='strategy'} navigation={area === 'strategy' && stage !== 'bsc' ? <ManagementTabs route={management} onStage={onStage} /> : null} legacyFocus={discussionFocus} configurations={configurations} selectedConfigurationId={selectedConfigurationId} onSettings={onSettings} access={{ active: active && area==='strategy', scopes, projects, configurations, selectedConfigurationId, onSettings, getGoalScope: ref => versionFor(index, ref)?.scope, selectedGoal: value, onStage, onGoalsChanged: async goals=>{await refresh();const first=goals?.[0];if(first){clearPublicationHandoff();clearCaseSource?.();setHandoff(undefined);setPerspective('all');setSelectedId(first.goalId);setSelectedVersion(first.version);}}, onReviewHandoff: reviewHandoff, onReviewCandidate: (goal, discussionId, reload) => { void refresh().then(() => setDiscussionCandidate({ goal: structuredClone(goal), discussionId, reload })); } }} /></div>
     {stage === 'strategy-versions' && <button className="text-button" onClick={() => onStage('bsc')}>BSC／战略目标关系（按需）</button>}
     {stage === 'bsc' && <button className="text-button" onClick={() => onStage('strategy-versions')}>← 返回版本管理</button>}
@@ -546,7 +573,7 @@ export function StrategyGoalsPage({ teachReview,onReturnReview,clearTeachReview,
           record={record}
           goal={value}
           cases={cases}
-          estimateDraftId={stableDraftId(value.scope)}
+          estimateDraftId={stableDraftId(value.scope, record.id)}
           onOpenSwitcher={() => openAuxDialog('switch')}
           onOpenVersions={() => openAuxDialog('versions')}
           onOpenDecisions={() => openAuxDialog('decisions')}
@@ -622,12 +649,12 @@ export function StrategyGoalsPage({ teachReview,onReturnReview,clearTeachReview,
         workspace={auxWorkspace}
         board={board}
         arrangementsNode={<ReadGoalArrangements key={refKey(value)} goal={value} board={board} onOpenBoard={onOpenBoard} />}
-        onStartProject={() => onStartProject(refOf(value), resolveNewUsageContext({ goal: value }))}
+        onStartProject={handoff => onStartProject(refOf(value), resolveNewUsageContext({ goal: value }), handoff ? { handoffId: handoff.handoffId } : undefined)}
         onOpenBoard={onOpenBoard}
         onWorkspaceChanged={async () => {
           await refresh();
           if (selectedId) {
-            const ws = await api.getWorkspace(selectedId).catch(() => null);
+            const ws = await api.getWorkspace(selectedId, value.version).catch(() => null);
             setAuxWorkspace(ws);
           }
         }}

@@ -341,7 +341,7 @@ export function RelatedDecisionsDialog({
   cases: CaseRecord[];
   workspace: GoalWorkspaceView | null;
   onInspectCase?: (caseId: string) => void;
-  onOpenCase: (goal: GoalRef & { strategy?: string }) => void;
+  onOpenCase: (goal: GoalRef & { strategy?: string; title?: string; description?: string }) => void;
   onClose: () => void;
 }) {
   const intents = workspace?.caseDraftIntents ?? [];
@@ -368,7 +368,16 @@ export function RelatedDecisionsDialog({
         </div>
         {intents.length ? (
           <ul className="sg-history">
-            {intents.map(intent => (
+            {intents.map(intent => {
+              const contextLines = [
+                `意图编号：${intent.intentId}（${intent.kind === 'proactive-pilot' ? '主动试点草稿' : '偏差跟进草稿'}）`,
+                `绑定目标：${intent.goalRef.goalId} · v${intent.goalRef.version} · 策略：${intent.strategy}`,
+                ...(intent.gsaPlanRef ? [`父 GSA 计划：v${intent.gsaPlanRef.planVersion}（${intent.gsaPlanRef.planId}）`] : []),
+                ...(intent.publicationRef ? [`冻结拆解版：v${intent.publicationRef.version} · 行 ${intent.publicationRef.rowId} · 检查点 ${intent.publicationRef.checkpointId}`] : []),
+                ...(intent.checkId ? [`原检查记录：${intent.checkId}`] : []),
+                `证据摘要：${intent.evidenceSummary}`,
+              ].join('\n');
+              return (
               <li key={intent.intentId}>
                 <div className="sg-row-between">
                   <strong>{intent.title}</strong>
@@ -382,8 +391,28 @@ export function RelatedDecisionsDialog({
                   {intent.publicationRef ? ` · 拆解版 v${intent.publicationRef.version} / ${intent.publicationRef.rowId}` : ''}
                 </p>
                 <p>{intent.evidenceSummary}</p>
+                <div className="sg-row">
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={goal.status !== 'adopted'}
+                    onClick={() => {
+                      onClose();
+                      onOpenCase({
+                        goalId: intent.goalRef.goalId,
+                        version: intent.goalRef.version,
+                        strategy: intent.strategy,
+                        title: intent.title,
+                        description: contextLines,
+                      });
+                    }}
+                  >
+                    带入原证据创建正式 Case
+                  </button>
+                </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
         ) : (
           <p className="sg-muted">尚无独立 Case 草稿意图。可在「阶段跟进」触发偏差后或直接从已采用 G+S 发起主动试点。</p>
@@ -415,7 +444,7 @@ export function ExecutionHandoffDialog({
   workspace: GoalWorkspaceView | null;
   board?: BoardView;
   arrangementsNode?: ReactNode;
-  onStartProject: () => void;
+  onStartProject: (handoff?: import('../strategy-goal-decomposition-types.ts').DecompositionProjectHandoff) => void;
   onOpenBoard?: () => void;
   onWorkspaceChanged: () => Promise<void>;
   onClose: () => void;
@@ -570,8 +599,20 @@ export function ExecutionHandoffDialog({
           <ul className="sg-history">
             {workspace.handoffs.map(h => (
               <li key={h.handoffId}>
-                <strong>{h.rowTitle}</strong> · 拆解版 v{h.publicationVersion} · 检查点 {h.checkpoint.label}（{h.checkpoint.date}）
-                <p className="sg-muted">状态：项目方案草稿参考 · 未授权经营行动 · 记录于 {caseDate(h.createdAt)}</p>
+                <div className="sg-row-between">
+                  <div>
+                    <strong>{h.rowTitle}</strong> · 拆解版 v{h.publicationVersion} · 检查点 {h.checkpoint.label}（{h.checkpoint.date} · 计划 {h.checkpoint.targetValue ?? '待定'}{h.unit}）
+                    <p className="sg-muted">GSA v{h.gsaPlanRef.planVersion} · 负责 {h.responsible} · 策略 {h.strategy} · 状态：项目方案草稿参考 · 未授权经营行动 · 记录于 {caseDate(h.createdAt)}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={goal.status !== 'adopted'}
+                    onClick={() => { onClose(); onStartProject(h); }}
+                  >
+                    带入冻结承接启动项目
+                  </button>
+                </div>
               </li>
             ))}
           </ul>

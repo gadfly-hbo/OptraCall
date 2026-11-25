@@ -461,13 +461,74 @@ export function validateDecompositionForPublish(
 ): DecompositionValidationResult {
   const issues: DecompositionValidationIssue[] = [];
   const formalTargetValue = gsaPlan?.formalTarget.value ?? draft.estimate.formalTargetValue;
-  const estimatedValue = draft.estimate.estimatedValue;
-  const gapValue = estimatedValue === null ? draft.estimate.gapValue : Number((formalTargetValue - estimatedValue).toFixed(6));
+  const formalUnit = gsaPlan?.formalTarget.unit ?? draft.estimate.unit;
+  const formalPeriod = gsaPlan?.formalTarget.period ?? draft.estimate.period;
+  const metricKind = gsaPlan?.formalTarget.metricKind ?? draft.estimate.metricKind;
+
+  // Caliber checks MUST run BEFORE computing amounts, gaps, or ratios (GM04 / GM06 / Item 2)
+  let estimateCaliberOk = true;
+  if (gsaPlan) {
+    if (
+      draft.estimate.unit !== formalUnit ||
+      draft.estimate.period !== formalPeriod ||
+      draft.estimate.metricKind !== metricKind
+    ) {
+      estimateCaliberOk = false;
+      issues.push({
+        code: 'incomparable_estimate_caliber',
+        message: `可达测算口径（${draft.estimate.metricKind} / ${draft.estimate.unit} / ${draft.estimate.period}）与总目标正式口径（${metricKind} / ${formalUnit} / ${formalPeriod}）不一致，不可直接计算差额。`,
+        details: {
+          estimate: { metricKind: draft.estimate.metricKind, unit: draft.estimate.unit, period: draft.estimate.period },
+          formal: { metricKind, unit: formalUnit, period: formalPeriod },
+        },
+      });
+    }
+  }
+
+  const estimatedValue = estimateCaliberOk ? draft.estimate.estimatedValue : null;
+  const gapValue = !estimateCaliberOk
+    ? null
+    : estimatedValue === null
+      ? draft.estimate.gapValue
+      : Number((formalTargetValue - estimatedValue).toFixed(6));
 
   const allocationRows = draft.rows.filter(r => r.contributionNature === 'allocation');
-  const allocatedTotal = Number(allocationRows.reduce((sum, r) => sum + (r.targetValue ?? 0), 0).toFixed(6));
-  const reserveTotal = Number(draft.reserves.reduce((sum, r) => sum + r.amount, 0).toFixed(6));
-  const gapCoverageTotal = Number(draft.gapStrategies.reduce((sum, g) => sum + g.expectedContribution, 0).toFixed(6));
+  let rowCaliberOk = true;
+  for (const row of allocationRows) {
+    if (row.unit !== formalUnit || row.metricKind !== metricKind) {
+      rowCaliberOk = false;
+      issues.push({
+        code: 'incomparable_row_caliber',
+        rowId: row.rowId,
+        message: `正式分配行 ${row.rowId} 口径（${row.metricKind} / ${row.unit}）与总目标口径（${metricKind} / ${formalUnit}）不一致，不能直接汇总相加。`,
+        details: { rowId: row.rowId, rowMetricKind: row.metricKind, rowUnit: row.unit, formalMetricKind: metricKind, formalUnit },
+      });
+    }
+  }
+  let reserveCaliberOk = true;
+  for (const res of draft.reserves) {
+    if (res.unit !== formalUnit) {
+      reserveCaliberOk = false;
+      issues.push({
+        code: 'incomparable_reserve_caliber',
+        message: `预留 ${res.id} 单位（${res.unit}）与总目标单位（${formalUnit}）不一致，不能直接计入同口径合计。`,
+        details: { reserveId: res.id, reserveUnit: res.unit, formalUnit },
+      });
+    }
+  }
+  for (const g of draft.gapStrategies) {
+    if (g.unit !== formalUnit) {
+      issues.push({
+        code: 'incomparable_gap_caliber',
+        message: `补缺策略 ${g.id} 单位（${g.unit}）与总目标单位（${formalUnit}）不一致，不能直接抵扣测算缺口。`,
+        details: { gapStrategyId: g.id, gapUnit: g.unit, formalUnit },
+      });
+    }
+  }
+
+  const allocatedTotal = Number(allocationRows.filter(r => r.unit === formalUnit && r.metricKind === metricKind).reduce((sum, r) => sum + (r.targetValue ?? 0), 0).toFixed(6));
+  const reserveTotal = Number(draft.reserves.filter(r => r.unit === formalUnit).reduce((sum, r) => sum + r.amount, 0).toFixed(6));
+  const gapCoverageTotal = Number(draft.gapStrategies.filter(g => g.unit === formalUnit).reduce((sum, g) => sum + g.expectedContribution, 0).toFixed(6));
 
   if (!gsaPlan || gsaPlan.plannedActions.length === 0) {
     issues.push({ code: 'gsa_plan_required', message: '总目标 GSA（含 G、S 与上层计划 A）尚未确认，不能发布拆解表。' });
@@ -510,9 +571,8 @@ export function validateDecompositionForPublish(
     }
   }
 
-  // Metric-specific rules (GM04 / GM06)
-  const metricKind = gsaPlan?.formalTarget.metricKind ?? draft.estimate.metricKind;
-  if (metricKind === 'amount') {
+  // Metric-specific rules (GM04 / GM06) — only sum amounts after same-caliber check passes
+  if (metricKind === 'amount' && rowCaliberOk && reserveCaliberOk) {
     const combined = Number((allocatedTotal + reserveTotal).toFixed(6));
     if (Math.abs(combined - formalTargetValue) > EPS) {
       issues.push({
@@ -523,13 +583,24 @@ export function validateDecompositionForPublish(
     }
   }
   for (const row of draft.rows) {
-    if (metricKind === 'ratio' && row.contributionNature === 'allocation' || row.metricKind === 'ratio') {
-      if (!row.ratio || row.ratio.denominator <= 0) {
+    if ((metricKind === 'ratio' && row.contributionNature === 'allocation') || row.metricKind === 'ratio') {
+      if (!row.ratio || !Number.isFinite(row.ratio.numerator) || !Number.isFinite(row.ratio.denominator) || row.ratio.denominator <= 0) {
         issues.push({
           code: 'invalid_ratio_rule',
           rowId: row.rowId,
           message: `比率目标行 ${row.rowId} 必须显式提供同口径分子与正数分母，不能简单平均各门店比率。`,
         });
+      } else if (row.targetValue !== null) {
+        const expected = row.unit.includes('%') || row.unit.includes('百分')
+          ? (row.ratio.numerator / row.ratio.denominator) * 100
+          : row.ratio.numerator / row.ratio.denominator;
+        if (Math.abs(expected - row.targetValue) > 0.05) {
+          issues.push({
+            code: 'invalid_ratio_rule',
+            rowId: row.rowId,
+            message: `比率目标行 ${row.rowId} 目标值 (${row.targetValue}${row.unit}) 与同口径分子/分母比值 (${Number(expected.toFixed(4))}${row.unit}) 不一致。`,
+          });
+        }
       }
     }
     if (metricKind === 'milestone' || row.contributionNature === 'milestone' || row.metricKind === 'milestone') {
@@ -619,8 +690,8 @@ export function validateDecompositionForPublish(
     }
   }
 
-  // Reachability gap coverage (GM06): only positive gaps require non-overlapping expected-increment strategies
-  if (gapValue !== null && gapValue > EPS) {
+  // Reachability gap coverage (GM06): only positive same-caliber gaps require non-overlapping expected-increment strategies
+  if (estimateCaliberOk && gapValue !== null && gapValue > EPS) {
     const scopeKeys = new Set<string>();
     for (const g of draft.gapStrategies) {
       if (!g.name.trim() || !g.strategy.trim() || !g.nonOverlappingScope.trim() || !g.scopeKey.trim() || !g.basis.trim() || g.expectedContribution <= 0) {
@@ -642,14 +713,15 @@ export function validateDecompositionForPublish(
     if (gapCoverageTotal + EPS < gapValue) {
       issues.push({
         code: 'gap_not_covered',
-        message: `测算缺口为 ${gapValue}${draft.estimate.unit}，当前不重叠补缺策略预期贡献合计 ${gapCoverageTotal}${draft.estimate.unit}，尚未覆盖正缺口。`,
+        message: `测算缺口为 ${gapValue}${formalUnit}，当前不重叠补缺策略预期贡献合计 ${gapCoverageTotal}${formalUnit}，尚未覆盖正缺口。`,
         details: { gapValue, gapCoverageTotal, shortfall: Number((gapValue - gapCoverageTotal).toFixed(6)) },
       });
     }
   }
 
-  // Row commitment rules, tracked checkpoints, and row-level CAS
+  // Row commitment rules, tracked checkpoints, relation invariants (Item 3), and row-level CAS
   const goalsById = existingGoals ? new Map(existingGoals.map(g => [g.id, g])) : undefined;
+  const seenLinkedGoalIds = new Set<string>();
   for (const row of draft.rows) {
     if (row.commitAsGoal && (row.contributionNature === 'aggregation' || (row.checkpoints.length > 0 && row.checkpoints.every(cp => cp.status === 'undecided')))) {
       issues.push({
@@ -668,30 +740,49 @@ export function validateDecompositionForPublish(
         });
       }
     }
-    if (row.commitAsGoal && row.linkedGoalId && goalsById) {
-      const existing = goalsById.get(row.linkedGoalId);
-      if (!existing) {
+    if (row.commitAsGoal && row.linkedGoalId) {
+      if (gsaPlan && row.linkedGoalId === gsaPlan.goal.goalId) {
         issues.push({
-          code: 'row_cas_conflict',
+          code: 'invalid_self_relation',
           rowId: row.rowId,
-          message: `子目标 ${row.rowId} 引用的原目标 ${row.linkedGoalId} 不存在。`,
+          message: `子目标行 ${row.rowId} 不能关联父目标自身（${row.linkedGoalId}），禁止产生自关联关系。`,
+          details: { rowId: row.rowId, linkedGoalId: row.linkedGoalId },
         });
-      } else if (
-        (row.expectedGoalVersion !== undefined && existing.currentVersion !== row.expectedGoalVersion) ||
-        (row.expectedAdoptedVersion !== undefined && existing.adoptedVersion !== row.expectedAdoptedVersion)
-      ) {
+      }
+      if (seenLinkedGoalIds.has(row.linkedGoalId)) {
         issues.push({
-          code: 'row_cas_conflict',
+          code: 'duplicate_linked_goal',
           rowId: row.rowId,
-          message: `子目标 ${row.rowId}（${existing.id}）已在原目标页发生并发变更（当前 v${existing.currentVersion} / 采用 v${existing.adoptedVersion ?? '无'}），请先核对差异，不能静默覆盖。`,
-          details: {
-            goalId: existing.id,
-            expectedGoalVersion: row.expectedGoalVersion,
-            actualGoalVersion: existing.currentVersion,
-            expectedAdoptedVersion: row.expectedAdoptedVersion,
-            actualAdoptedVersion: existing.adoptedVersion,
-          },
+          message: `子目标 ${row.linkedGoalId} 在多条正式承诺行中重复关联，不能重复提交同一子目标。`,
+          details: { rowId: row.rowId, linkedGoalId: row.linkedGoalId },
         });
+      }
+      seenLinkedGoalIds.add(row.linkedGoalId);
+      if (goalsById) {
+        const existing = goalsById.get(row.linkedGoalId);
+        if (!existing) {
+          issues.push({
+            code: 'row_cas_conflict',
+            rowId: row.rowId,
+            message: `子目标 ${row.rowId} 引用的原目标 ${row.linkedGoalId} 不存在。`,
+          });
+        } else if (
+          (row.expectedGoalVersion !== undefined && existing.currentVersion !== row.expectedGoalVersion) ||
+          (row.expectedAdoptedVersion !== undefined && existing.adoptedVersion !== row.expectedAdoptedVersion)
+        ) {
+          issues.push({
+            code: 'row_cas_conflict',
+            rowId: row.rowId,
+            message: `子目标 ${row.rowId}（${existing.id}）已在原目标页发生并发变更（当前 v${existing.currentVersion} / 采用 v${existing.adoptedVersion ?? '无'}），请先核对差异，不能静默覆盖。`,
+            details: {
+              goalId: existing.id,
+              expectedGoalVersion: row.expectedGoalVersion,
+              actualGoalVersion: existing.currentVersion,
+              expectedAdoptedVersion: row.expectedAdoptedVersion,
+              actualAdoptedVersion: existing.adoptedVersion,
+            },
+          });
+        }
       }
     }
   }

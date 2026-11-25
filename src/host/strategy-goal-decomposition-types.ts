@@ -296,6 +296,12 @@ export interface DecompositionAlignmentInput {
 export interface DecompositionValidationIssue {
   code:
     | 'gsa_plan_required'
+    | 'incomparable_estimate_caliber'
+    | 'incomparable_row_caliber'
+    | 'incomparable_reserve_caliber'
+    | 'incomparable_gap_caliber'
+    | 'invalid_self_relation'
+    | 'duplicate_linked_goal'
     | 'gsa_plan_mismatch'
     | 'invalid_reserve'
     | 'allocation_total_mismatch'
@@ -653,9 +659,9 @@ export interface DecompositionCycleReview {
   period: string;
   initialFormalTarget: { goalRef: GoalRef; gsaPlanVersion?: number; value: number; unit: string; memoOnly: true };
   lastEffectiveFormalTarget: { goalRef: GoalRef; gsaPlanVersion?: number; value: number; unit: string };
-  actualFinalValue: number;
+  actualFinalValue: number | null;
   actualSourceRef: string;
-  varianceValue: number;
+  varianceValue: number | null;
   outcomeSummary: string;
   preservedCheckIds: string[];
   conclusions: CycleReviewConclusion[];
@@ -665,7 +671,7 @@ export interface DecompositionCycleReview {
 export interface DecompositionCycleReviewInput {
   operationId: string;
   period: string;
-  actualFinalValue: number;
+  actualFinalValue: number | null;
   actualSourceRef: string;
   conclusions: {
     id: string;

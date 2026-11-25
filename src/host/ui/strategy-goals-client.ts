@@ -131,7 +131,27 @@ export const getPreConfirmEstimate = (draftId: string) =>
 export const savePreConfirmEstimate = (draftId: string, scope: GoalScope, estimate: ReachabilityEstimate) =>
   request<{ estimateRecord: unknown; estimate: ReachabilityEstimate }>(`goals/draft-estimates/${encodeURIComponent(draftId)}`, 'POST', { scope, estimate });
 
-export const getWorkspace = (goalId: string) => request<GoalWorkspaceView>(`${goalPath(goalId)}/workspace`);
+export const getWorkspace = (goalId: string, goalVersion?: number) => {
+  const qs = goalVersion !== undefined ? `?goalVersion=${encodeURIComponent(String(goalVersion))}` : '';
+  return request<GoalWorkspaceView>(`${goalPath(goalId)}/workspace${qs}`);
+};
+export const listStrategyReturns = (scope?: { kind: GoalScope['kind']; id: string; enterpriseId?: string }) => {
+  const params = new URLSearchParams();
+  if (scope) {
+    params.set('scopeKind', scope.kind);
+    params.set('scopeId', scope.id);
+    if (scope.enterpriseId) params.set('enterpriseId', scope.enterpriseId);
+  }
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  return request<{
+    strategyReturns: {
+      strategyReturn: StrategyReturnRecord;
+      goal: GoalVersion;
+      review: DecompositionCycleReview | null;
+      selectedConclusions: import('../strategy-goal-decomposition-types.ts').CycleReviewConclusion[];
+    }[];
+  }>(`goals/strategy-returns${qs}`);
+};
 export const reconcileFormal = (goalId: string, input: { operationId: string; expectedVersion: number }) =>
   request<{ goal: GoalVersion; comparison: { manualValue: number | null; publishedValue: number; unit: string; publicationId: string } }>(`${goalPath(goalId)}/reconcile-formal`, 'POST', input);
 export const saveGsaPlanDraft = (goalId: string, input: Partial<GsaPlanDraft>) =>

@@ -125,10 +125,10 @@ function buildInitialDraft(goal: GoalVersion, workspace: GoalWorkspaceView): Dec
     period,
     scopeDescription: goal.scope.name,
     formalTargetValue: formalVal,
-    estimatedValue: formalVal,
-    gapValue: 0,
-    basis: '待结合历史可比数据或 Agent 测算工具细化',
-    evidence: [{ category: 'internal' as const, summary: '初始沿用总目标正式值，待测算校准' }],
+    estimatedValue: null,
+    gapValue: null,
+    basis: '',
+    evidence: [],
   };
   return {
     gsaPlanId: plan.planId,
@@ -136,42 +136,11 @@ function buildInitialDraft(goal: GoalVersion, workspace: GoalWorkspaceView): Dec
     gsaPlanSha256: plan.contentSha256,
     expectedDraftRevision: existing?.revision ?? 0,
     estimate: structuredClone(est),
-    rows: existing ? structuredClone(existing.rows) : [
-      {
-        rowId: 'row-1',
-        title: `${goal.scope.name} 主承接项`,
-        outcome: goal.outcome,
-        scope: goal.scope,
-        scopeLabel: goal.scope.name,
-        responsible: goal.responsible,
-        strategy: plan.strategies[0] ?? '主策略',
-        contributionNature: 'allocation',
-        commitAsGoal: true,
-        metricKind: plan.formalTarget.metricKind,
-        targetValue: formalVal,
-        unit,
-        basis: '初始拆解草稿行，可由人或 Agent 细化拆解',
-        checkpoints: [
-          {
-            id: 'cp-mid',
-            label: '阶段核对点',
-            date: goal.dueAt?.slice(0, 10) ?? '2027-01-15',
-            targetValue: Number((formalVal / 2).toFixed(2)),
-            unit,
-            status: 'planned',
-            evidenceSource: '业务台账/POS报表',
-          },
-        ],
-        tracked: true,
-      },
-    ],
+    rows: existing ? structuredClone(existing.rows) : [],
     reserves: existing ? structuredClone(existing.reserves) : [],
     gapStrategies: existing ? structuredClone(existing.gapStrategies) : [],
     views: existing ? structuredClone(existing.views) : [],
-    timePlan: existing?.timePlan?.length ? structuredClone(existing.timePlan) : [
-      { periodId: 'p-1', granularity: 'week', label: '第 1 阶段', startDate: '2027-01-01', endDate: '2027-01-15', targetValue: Number((formalVal / 2).toFixed(2)), unit, status: 'planned', checkpointId: 'cp-p1' },
-      { periodId: 'p-2', granularity: 'week', label: '第 2 阶段', startDate: '2027-01-16', endDate: '2027-01-31', targetValue: Number((formalVal - Number((formalVal / 2).toFixed(2))).toFixed(2)), unit, status: 'planned', checkpointId: 'cp-p2' },
-    ],
+    timePlan: existing ? structuredClone(existing.timePlan) : [],
     notes: existing?.notes ?? '',
   };
 }
@@ -249,6 +218,8 @@ export function GoalDecompositionWorkspace({
   const [checkCheckpointId, setCheckCheckpointId] = useState('');
   const [checkPeriodId, setCheckPeriodId] = useState('');
   const [checkActualVal, setCheckActualVal] = useState('');
+  const [checkSourceRef, setCheckSourceRef] = useState('');
+  const [checkCutoffAt, setCheckCutoffAt] = useState('');
   const [checkSourceLabel, setCheckSourceLabel] = useState('POS / 财务阶段实绩');
   const [checkComparability, setCheckComparability] = useState<ProgressComparability>('comparable');
   const [checkMissingNote, setCheckMissingNote] = useState('');
@@ -264,14 +235,19 @@ export function GoalDecompositionWorkspace({
   const [reviewMature, setReviewMature] = useState(true);
   const [reviewCausal, setReviewCausal] = useState(false);
   const [reviewSameScope, setReviewSameScope] = useState(true);
+  const [selectedReviewConclusions, setSelectedReviewConclusions] = useState<Record<string, string[]>>({});
   const [nextPeriod, setNextPeriod] = useState('下一周期');
   const [returnReason, setReturnReason] = useState('原战略假设与本期实绩存在差异，带原证据回战略重审');
 
   const draftDirtyRef = useRef(draftDirty);
   draftDirtyRef.current = draftDirty;
+  const loadSeqRef = useRef(0);
 
   const effectiveVersion = record.adoptedVersion ?? record.currentVersion;
-  const isHistoricalVersion = goal.version !== effectiveVersion;
+  // Item 1: Latest candidate v2 (when v1 is adopted) is NOT historical; only superseded versions are read-only!
+  const isHistoricalVersion =
+    (record.adoptedVersion !== null && goal.version < record.adoptedVersion) ||
+    (goal.status === 'candidate' && goal.version < record.currentVersion);
   const pendingLocked = Boolean(pendingIntent || pendingStorageError);
   const mutationsLocked = pendingLocked || isHistoricalVersion;
   const openCases = useMemo(() => cases.filter(c => c.status !== 'closed'), [cases]);
@@ -295,10 +271,12 @@ export function GoalDecompositionWorkspace({
   }, []);
 
   const loadWorkspace = useCallback(async (forceResetDraft = false) => {
+    const seq = ++loadSeqRef.current;
     setLoadingWs(true);
     setWsError('');
     try {
-      const ws = await api.getWorkspace(record.id);
+      const ws = await api.getWorkspace(record.id, goal.version);
+      if (seq !== loadSeqRef.current) return;
       setWorkspace(ws);
       setThreshMagnitude(ws.threshold.magnitudePct !== undefined ? String(ws.threshold.magnitudePct) : '10');
       setThreshConsecutive(ws.threshold.consecutivePeriods !== undefined ? String(ws.threshold.consecutivePeriods) : '2');
@@ -324,13 +302,17 @@ export function GoalDecompositionWorkspace({
         syncCheckSelectors(null);
       }
     } catch (fault) {
+      if (seq !== loadSeqRef.current) return;
       setWsError(api.goalError(fault));
     } finally {
-      setLoadingWs(false);
+      if (seq === loadSeqRef.current) setLoadingWs(false);
     }
   }, [record.id, goal, syncCheckSelectors]);
 
   useEffect(() => {
+    loadSeqRef.current += 1;
+    setWorkspace(null);
+    setDraftForm(null);
     setNotice('');
     setWsError('');
     setPreview(null);
@@ -431,7 +413,7 @@ export function GoalDecompositionWorkspace({
     try {
       const res = await api.reconcileFormal(record.id, {
         operationId: crypto.randomUUID(),
-        expectedVersion: record.currentVersion,
+        expectedVersion: goal.version,
       });
       setNotice(`已按正式战略发布核对并生成新版本 v${res.goal.version}（原手动版本完整保留：${res.comparison.manualValue ?? '—'} → 正式发布 ${res.comparison.publishedValue}${res.comparison.unit}）。`);
       await onGoalsReload();
@@ -455,7 +437,7 @@ export function GoalDecompositionWorkspace({
     try {
       const res = await api.confirmGsaPlan(record.id, {
         operationId: crypto.randomUUID(),
-        expectedGoalVersion: record.currentVersion,
+        expectedGoalVersion: goal.version,
         expectedAdoptedVersion: record.adoptedVersion ?? null,
         expectedPlanVersion: activeGsaPlan?.planVersion ?? 0,
         plannedActions: validActions.map((a, idx) => ({
@@ -477,7 +459,7 @@ export function GoalDecompositionWorkspace({
         ...(preEstimate ? { preConfirmEstimate: preEstimate } : {}),
       });
       setEditingGsa(false);
-      setNotice(`已确认总目标 GSA 计划 v${res.gsaPlan.planVersion}（计划 A 仅代表管理计划，不代表已授权经营行动）。`);
+      setNotice(`已确认总目标 GSA 计划 v${res.gsaPlan.planVersion}（绑定目标 v${res.goal.version}；计划 A 仅代表管理计划，不代表已授权经营行动）。`);
       await onGoalsReload();
       await loadWorkspace(true);
     } catch (fault) {
@@ -546,17 +528,17 @@ export function GoalDecompositionWorkspace({
     }
   };
 
+  // Item 2: Publish preview MUST be strictly read-only (ZERO writes, never auto-save dirty/missing draft!)
   const handleOpenPublishPreview = async () => {
     if (mutationsLocked) return;
     setWsError('');
     setNotice('');
-    let targetDraft = workspace?.draft ?? null;
-    if (draftDirty || !targetDraft) {
-      const saved = await handleSaveDraft();
-      if (!saved) return;
-      targetDraft = saved.draft;
+    const targetDraft = workspace?.draft ?? null;
+    if (!targetDraft || draftDirty) {
+      setWsError('当前拆解草稿尚未保存或有未保存改动，请先点击「保存草稿」，再进入只读发布预览（预览不产生任何写入）。');
+      return;
     }
-    if (!activeGsaPlan || !targetDraft) return;
+    if (!activeGsaPlan) return;
     setBusy(true);
     try {
       const res = await api.previewDecompositionPublish(record.id, {
@@ -782,14 +764,20 @@ export function GoalDecompositionWorkspace({
   const handleRecordCheck = async () => {
     const targetPub = selectedCheckPub ?? activePub;
     if (!targetPub) return;
-    const periodObj = targetPub.snapshot.timePlan.find(p => p.periodId === checkPeriodId) ?? targetPub.snapshot.timePlan[0];
     const resolvedRowId = checkRowId || targetPub.snapshot.rows[0]?.rowId || 'G-TOTAL';
+    const periodObj = targetPub.snapshot.timePlan.find(p => p.periodId === checkPeriodId) ?? targetPub.snapshot.timePlan[0];
     const matchingCps = resolvedRowId === 'G-TOTAL'
       ? targetPub.snapshot.frozenCheckpoints
       : targetPub.snapshot.frozenCheckpoints.filter(c => c.rowId === resolvedRowId);
-    const cpObj = matchingCps.find(c => c.checkpointId === checkCheckpointId) ?? matchingCps[0] ?? targetPub.snapshot.frozenCheckpoints[0];
-    if (!periodObj || !cpObj) {
-      setWsError('所选拆解正式版缺少时间计划或冻结检查点，无法记录检查。');
+    const cpObj = resolvedRowId === 'G-TOTAL'
+      ? (periodObj ? { checkpointId: periodObj.checkpointId ?? periodObj.periodId, label: periodObj.label } : matchingCps[0])
+      : (matchingCps.find(c => c.checkpointId === checkCheckpointId) ?? matchingCps[0]);
+    if (!cpObj || (resolvedRowId === 'G-TOTAL' && !periodObj)) {
+      setWsError('所选拆解正式版缺少对应责任行冻结检查点或总表时间计划，无法记录检查。');
+      return;
+    }
+    if (!checkSourceRef.trim() || !checkCutoffAt.trim()) {
+      setWsError('请填写实绩来源凭证引用（如报表编号/文件路径）与真实数据截至日期/时间，Host 不自动伪造凭证或截至日。');
       return;
     }
     const actualNum = checkActualVal.trim() === '' ? null : Number(checkActualVal);
@@ -801,21 +789,27 @@ export function GoalDecompositionWorkspace({
     setWsError('');
     setNotice('');
     try {
+      const effectivePeriodId = resolvedRowId === 'G-TOTAL'
+        ? periodObj!.periodId
+        : (periodObj?.periodId ?? cpObj.checkpointId);
+      const effectivePeriodLabel = resolvedRowId === 'G-TOTAL'
+        ? periodObj!.label
+        : cpObj.label;
       const res = await api.recordProgressCheck(record.id, {
         operationId: crypto.randomUUID(),
         publicationVersion: targetPub.version,
         rowId: resolvedRowId,
         checkpointId: cpObj.checkpointId,
-        periodGranularity: periodObj.granularity,
-        periodSequenceKey: `${periodObj.periodId}-${(workspace?.checks.length ?? 0) + 1}`,
+        periodGranularity: periodObj?.granularity ?? 'week',
+        periodSequenceKey: `${effectivePeriodId}-${(workspace?.checks.length ?? 0) + 1}`,
         actualSource: {
-          ref: `actual-${Date.now()}`,
+          ref: checkSourceRef.trim(),
           label: checkSourceLabel.trim() || '阶段实绩录入',
-          cutoffAt: new Date().toISOString(),
+          cutoffAt: checkCutoffAt.trim(),
         },
         comparability: checkComparability,
         ...(checkComparability === 'partial-missing' ? { missingCoverageNote: checkMissingNote.trim() || '部分门店数据尚未齐全' } : {}),
-        actualPeriods: [{ periodId: periodObj.periodId, label: periodObj.label, actualValue: actualNum }],
+        actualPeriods: [{ periodId: effectivePeriodId, label: effectivePeriodLabel, actualValue: actualNum }],
       });
       setCheckActualVal('');
       setNotice(`已记录阶段检查 ${res.check.checkId}（绑定冻结拆解版 v${res.check.publicationVersion} · ${resolvedRowId} / ${cpObj.label}）。`);
@@ -899,9 +893,10 @@ export function GoalDecompositionWorkspace({
 
   // --- Stage 3: Cycle Review ---
   const handleRecordReview = async () => {
-    const val = Number(reviewActual);
-    if (!Number.isFinite(val)) {
-      setWsError('请填写有效的到期最终实际值。');
+    const trimmed = reviewActual.trim();
+    const val = trimmed === '' ? null : Number(trimmed);
+    if (val !== null && !Number.isFinite(val)) {
+      setWsError('请填写有效的到期最终实际值，或留空保持待补。');
       return;
     }
     setBusy(true);
@@ -927,7 +922,11 @@ export function GoalDecompositionWorkspace({
         ],
       });
       setReviewActual('');
-      setNotice(`已完成到期复盘（按末版有效正式目标 ${res.review.lastEffectiveFormalTarget.value}${res.review.lastEffectiveFormalTarget.unit} 评估；期初 ${res.review.initialFormalTarget.value}${res.review.initialFormalTarget.unit} 仅作备忘）。`);
+      setNotice(
+        res.review.actualFinalValue === null
+          ? `已记录到期复盘（期末实绩待补，按末版已确认总 GSA ${res.review.lastEffectiveFormalTarget.value}${res.review.lastEffectiveFormalTarget.unit} 备查）。`
+          : `已完成到期复盘（按末版已确认总 GSA ${res.review.lastEffectiveFormalTarget.value}${res.review.lastEffectiveFormalTarget.unit} 评估；期初 ${res.review.initialFormalTarget.value}${res.review.initialFormalTarget.unit} 仅作备忘）。`,
+      );
       await loadWorkspace();
     } catch (fault) {
       setWsError(api.goalError(fault));
@@ -937,6 +936,10 @@ export function GoalDecompositionWorkspace({
   };
 
   const handleNextCycleDraft = async (reviewId: string, conclusionIds: string[]) => {
+    if (!conclusionIds.length) {
+      setWsError('请先勾选至少一条复盘结论再起草下一期草案。');
+      return;
+    }
     setBusy(true);
     setWsError('');
     setNotice('');
@@ -947,7 +950,7 @@ export function GoalDecompositionWorkspace({
         nextPeriod: nextPeriod.trim() || '下一周期',
         selectedConclusionIds: conclusionIds,
       });
-      setNotice(`已起草下期目标草案 ${res.nextCycleDraft.draftId.slice(0, 8)}（状态：未采纳草稿，未验证/跨范围结论已标为待验证假设）。`);
+      setNotice(`已起草下期目标草案 ${res.nextCycleDraft.draftId.slice(0, 8)}（带入所选 ${conclusionIds.length} 条结论，状态：未采纳草稿，未验证/跨范围结论已标为待验证假设）。`);
       await loadWorkspace();
     } catch (fault) {
       setWsError(api.goalError(fault));
@@ -957,6 +960,10 @@ export function GoalDecompositionWorkspace({
   };
 
   const handleReturnToStrategy = async (reviewId: string, conclusionIds: string[]) => {
+    if (!conclusionIds.length) {
+      setWsError('请先勾选至少一条复盘结论再回送战略重审。');
+      return;
+    }
     setBusy(true);
     setWsError('');
     setNotice('');
@@ -968,7 +975,7 @@ export function GoalDecompositionWorkspace({
         selectedConclusionIds: conclusionIds,
         evidenceRefs: [reviewId, ...(workspace?.checks.slice(-3).map(c => c.checkId) ?? [])],
       });
-      setNotice(`已记录回送战略讨论凭证 ${res.strategyReturn.returnId.slice(0, 8)}（携带原证据，不覆写原战略发布）。`);
+      setNotice(`已记录回送战略讨论凭证 ${res.strategyReturn.returnId.slice(0, 8)}（带入所选 ${conclusionIds.length} 条结论与原证据，已同步至战略选择页，不覆写原战略发布）。`);
       await loadWorkspace();
     } catch (fault) {
       setWsError(api.goalError(fault));
@@ -1006,13 +1013,13 @@ export function GoalDecompositionWorkspace({
           responsible: goal.responsible || '待明确',
           strategy: activeGsaPlan?.strategies[0] ?? '主策略',
           contributionNature: 'allocation',
-          commitAsGoal: true,
+          commitAsGoal: false,
           metricKind: prev.estimate.metricKind,
-          targetValue: 0,
+          targetValue: null,
           unit: prev.estimate.unit,
           basis: '人工新增拆解行',
           checkpoints: [
-            { id: `cp-r${n}-1`, label: '阶段检查', date: goal.dueAt?.slice(0, 10) ?? '2027-01-15', targetValue: 0, unit: prev.estimate.unit, status: 'planned', evidenceSource: '台账' },
+            { id: `cp-r${n}-1`, label: '阶段检查', date: goal.dueAt?.slice(0, 10) ?? '', targetValue: null, unit: prev.estimate.unit, status: 'planned', evidenceSource: '' },
           ],
           tracked: true,
         },
@@ -1860,7 +1867,27 @@ export function GoalDecompositionWorkspace({
                   </select>
                 </label>
                 <label className="case-field">
-                  <span>实绩数据来源</span>
+                  <span>实绩来源凭证引用（必填）</span>
+                  <input
+                    className="gm-input"
+                    aria-label="实绩来源凭证引用"
+                    placeholder="例如：pos-2027-w02.csv 或 财务日结单号"
+                    value={checkSourceRef}
+                    onChange={e => setCheckSourceRef(e.target.value)}
+                  />
+                </label>
+                <label className="case-field">
+                  <span>实绩数据截至日期/时间（必填）</span>
+                  <input
+                    className="gm-input"
+                    aria-label="实绩数据截至时间"
+                    placeholder="例如：2027-01-14T23:59:59Z"
+                    value={checkCutoffAt}
+                    onChange={e => setCheckCutoffAt(e.target.value)}
+                  />
+                </label>
+                <label className="case-field">
+                  <span>实绩数据来源说明</span>
                   <input className="gm-input" value={checkSourceLabel} onChange={e => setCheckSourceLabel(e.target.value)} />
                 </label>
               </div>
@@ -1900,6 +1927,7 @@ export function GoalDecompositionWorkspace({
                       <span className="sg-muted">{caseDate(chk.recordedAt)}</span>
                     </div>
                     <p className="sg-muted">
+                      实绩凭证：{chk.actualSource.ref}（截至 {chk.actualSource.cutoffAt}）·{' '}
                       {chk.overallPending
                         ? `整体偏差：待补（${chk.missingCoverageNote || '部分门店未出数，不自动折算整体百分比'}）`
                         : `整体绝对差额：${chk.overallAbsoluteDiff ?? '—'} · 整体偏差百分比：${chk.overallVariancePct === null ? '无法计算（计划为 0 或未定）' : `${chk.overallVariancePct}%`}`}
@@ -1969,15 +1997,15 @@ export function GoalDecompositionWorkspace({
         <section className="sg-panel gm-stage-panel" aria-label="到期复盘与下期起草">
           <h3>步骤 3 · 到期复盘</h3>
           <p className="sg-muted">
-            严格以最后生效的正式目标 G 评估完成情况（期初目标仅作备忘），完整保留历史阶段检查；跨范围或未验证因果的策略一律标为「待验证假设」，不自动采纳为下期正式目标。
+            严格以本周期最后生效的已确认总目标 GSA 评估完成情况（期初目标仅作备忘），完整保留历史阶段检查；空白实绩保持待补，不自动记为 0；由负责人勾选结论子集起草下期或回送战略。
           </p>
 
           <div className="gm-card">
             <strong>记录本周期到期复盘</strong>
             <div className="gm-form-grid">
               <label className="case-field">
-                <span>最终实绩值 ({formalUnit})</span>
-                <input type="number" step="any" className="gm-input" value={reviewActual} onChange={e => setReviewActual(e.target.value)} placeholder="输入周期结账最终实绩" />
+                <span>最终实绩值 ({formalUnit}，留空则记为待补)</span>
+                <input type="number" step="any" className="gm-input" value={reviewActual} onChange={e => setReviewActual(e.target.value)} placeholder="输入周期结账最终实绩（留空保持待补）" />
               </label>
               <label className="case-field">
                 <span>最终实绩来源凭证</span>
@@ -2006,11 +2034,22 @@ export function GoalDecompositionWorkspace({
             <h4>已保存复盘记录 ({workspace.reviews.length})</h4>
             {workspace.reviews.length ? (
               <ul className="sg-history">
-                {workspace.reviews.slice().reverse().map(rev => (
+                {workspace.reviews.slice().reverse().map(rev => {
+                  const chosenIds = selectedReviewConclusions[rev.reviewId] ?? rev.conclusions.map(c => c.id);
+                  const toggleConclusion = (cid: string, checked: boolean) => {
+                    setSelectedReviewConclusions(old => {
+                      const prev = old[rev.reviewId] ?? rev.conclusions.map(c => c.id);
+                      const next = checked ? [...new Set([...prev, cid])] : prev.filter(x => x !== cid);
+                      return { ...old, [rev.reviewId]: next };
+                    });
+                  };
+                  return (
                   <li key={rev.reviewId}>
                     <div className="sg-row-between">
                       <strong>
-                        {rev.period} 复盘 · 末版有效目标 {rev.lastEffectiveFormalTarget.value}{rev.lastEffectiveFormalTarget.unit} vs 实绩 {rev.actualFinalValue}{rev.lastEffectiveFormalTarget.unit}（差额 {rev.varianceValue >= 0 ? '+' : ''}{rev.varianceValue}）
+                        {rev.period} 复盘 · 末版已确认 GSA 目标 {rev.lastEffectiveFormalTarget.value}{rev.lastEffectiveFormalTarget.unit} vs 实绩{' '}
+                        {rev.actualFinalValue === null ? '待补' : `${rev.actualFinalValue}${rev.lastEffectiveFormalTarget.unit}`}
+                        （差额 {rev.varianceValue === null ? '待补' : `${rev.varianceValue >= 0 ? '+' : ''}${rev.varianceValue}`}）
                       </strong>
                       <span className="sg-muted">期初备忘：{rev.initialFormalTarget.value}{rev.initialFormalTarget.unit}</span>
                     </div>
@@ -2018,24 +2057,34 @@ export function GoalDecompositionWorkspace({
                     <ul>
                       {rev.conclusions.map(c => (
                         <li key={c.id}>
-                          <strong>{c.title}</strong> — <span className={`sg-badge ${c.classification === 'confirmed-evidence' ? '' : 'pending'}`}>
-                            {c.classification === 'confirmed-evidence' ? '已核验结论' : '待验证假设'}
-                          </span> · {c.summary}
+                          <label className="gm-checkbox">
+                            <input
+                              type="checkbox"
+                              checked={chosenIds.includes(c.id)}
+                              onChange={e => toggleConclusion(c.id, e.target.checked)}
+                            />
+                            <span>
+                              <strong>{c.title}</strong> — <span className={`sg-badge ${c.classification === 'confirmed-evidence' ? '' : 'pending'}`}>
+                                {c.classification === 'confirmed-evidence' ? '已核验结论' : '待验证假设'}
+                              </span> · {c.summary}
+                            </span>
+                          </label>
                         </li>
                       ))}
                     </ul>
                     <div className="gm-inline-row">
                       <input className="gm-input gm-input-sm" value={nextPeriod} onChange={e => setNextPeriod(e.target.value)} placeholder="下期周期名称" />
-                      <button type="button" className="secondary-button" disabled={busy} onClick={() => void handleNextCycleDraft(rev.reviewId, rev.conclusions.map(c => c.id))}>
-                        起草下一期（草稿不自动采用）
+                      <button type="button" className="secondary-button" disabled={busy || !chosenIds.length} onClick={() => void handleNextCycleDraft(rev.reviewId, chosenIds)}>
+                        按所选结论起草下一期（{chosenIds.length}/{rev.conclusions.length}）
                       </button>
                       <input className="gm-input" value={returnReason} onChange={e => setReturnReason(e.target.value)} placeholder="回送战略重审说明" />
-                      <button type="button" className="text-button" disabled={busy} onClick={() => void handleReturnToStrategy(rev.reviewId, rev.conclusions.map(c => c.id))}>
-                        回送原证据重审战略
+                      <button type="button" className="text-button" disabled={busy || !chosenIds.length} onClick={() => void handleReturnToStrategy(rev.reviewId, chosenIds)}>
+                        回送所选原证据重审战略
                       </button>
                     </div>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             ) : (
               <p className="sg-muted">尚无到期复盘记录。</p>

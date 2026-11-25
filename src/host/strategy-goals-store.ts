@@ -15,6 +15,7 @@ import type {
   DecompositionCaseDraftIntentInput,
   DecompositionCommittedGoal,
   DecompositionCommittedRelation,
+  CycleReviewConclusion,
   DecompositionCycleReview,
   DecompositionCycleReviewInput,
   DecompositionDraft,
@@ -260,7 +261,7 @@ export class StrategyGoalsStore {
     this.blobsDir = path.join(this.root, 'blobs');
     this.disableDecomposition = options?.disableDecomposition === true;
   }
-  private assertDecompositionWritable(): void {
+  assertDecompositionWritable(): void {
     if (this.disableDecomposition) fail('goal_decomposition_disabled', 403);
   }
   private directory(name: string, create: boolean): boolean {
@@ -715,7 +716,7 @@ export class StrategyGoalsStore {
     index.arrangements ??= [];
   }
 
-  private resolveFormalTarget(version: GoalVersion, preConfirmEstimate?: ReachabilityEstimate): GsaPlanVersion['formalTarget'] {
+  private resolveFormalTarget(version: GoalVersion): GsaPlanVersion['formalTarget'] {
     if (version.formalOrigin) {
       return {
         value: version.formalOrigin.targetValue,
@@ -724,20 +725,7 @@ export class StrategyGoalsStore {
         period: version.formalOrigin.period,
       };
     }
-    if (preConfirmEstimate) {
-      return {
-        value: preConfirmEstimate.formalTargetValue,
-        unit: preConfirmEstimate.unit,
-        metricKind: preConfirmEstimate.metricKind,
-        period: preConfirmEstimate.period,
-      };
-    }
-    return {
-      value: 0,
-      unit: version.measurement.kind === 'quantitative' ? (version.measurement.sapMetric.metricName ?? '项') : '项',
-      metricKind: 'milestone',
-      period: version.dueAt?.slice(0, 7) ?? '当期',
-    };
+    return fail('gsa_formal_target_required', 400);
   }
 
   getPreConfirmEstimate(draftId: string): PreConfirmEstimateRecord | null {
@@ -848,7 +836,17 @@ export class StrategyGoalsStore {
       }
       const record = index.goals.find(g => g.id === id);
       if (!record) fail('strategy_goal_not_found', 404);
-      if (record.currentVersion !== input.expectedGoalVersion) fail('strategy_goal_conflict', 409);
+      const requestedVersion = record.versions.find(v => v.version === input.expectedGoalVersion);
+      if (!requestedVersion) fail('strategy_goal_conflict', 409);
+      if (revisedBody && record.currentVersion !== input.expectedGoalVersion) fail('strategy_goal_conflict', 409);
+      if (!revisedBody) {
+        if (record.adoptedVersion !== null && requestedVersion.version < record.adoptedVersion) {
+          fail('strategy_goal_historical_version', 409);
+        }
+        if (requestedVersion.status === 'candidate' && requestedVersion.version !== record.currentVersion) {
+          fail('strategy_goal_conflict', 409);
+        }
+      }
       if (input.expectedAdoptedVersion !== undefined && record.adoptedVersion !== input.expectedAdoptedVersion) {
         fail('strategy_goal_adoption_changed', 409);
       }
@@ -856,7 +854,7 @@ export class StrategyGoalsStore {
       if (existingPlans.length !== input.expectedPlanVersion) fail('gsa_plan_conflict', 409);
 
       const now = new Date().toISOString();
-      let targetVersion = record.versions.find(v => v.version === record.currentVersion)!;
+      let targetVersion = requestedVersion;
       if (revisedBody) {
         if (targetVersion.structured && groupScopeKey(revisedBody.scope) !== groupScopeKey(targetVersion.scope)) {
           fail('strategy_goal_table_origin_mismatch', 409);
@@ -881,12 +879,12 @@ export class StrategyGoalsStore {
         targetVersion.adoptionDecision = decision;
         record.adoptedVersion = targetVersion.version;
       }
-      // Note: if targetVersion is ALREADY 'adopted' (e.g. legacy adopted goal or A-only update),
-      // we preserve its original adoptedAt and adoptionDecision untouched!
+      // Note: if targetVersion is ALREADY 'adopted' (e.g. A-only update while viewing adopted v1),
+      // we preserve its original adoptedAt and adoptionDecision untouched and do NOT adopt an unseen v2!
 
       const planId = existingPlans[0]?.planId ?? randomUUID();
       const planVersion = existingPlans.length + 1;
-      const formalTarget = this.resolveFormalTarget(targetVersion, preConfirmEstimate);
+      const formalTarget = this.resolveFormalTarget(targetVersion);
       const goalHash = goalContentSha256(targetVersion);
       const origin: GsaPlanVersion['origin'] = targetVersion.formalOrigin ?? { kind: 'legacy-adopted-goal' };
       const corePlan = {
@@ -934,10 +932,14 @@ export class StrategyGoalsStore {
     const id = uuid(goalId);
     const input = parseDecompositionDraftInput(raw);
     return this.withLock(index => {
-      if (!index.goals.some(g => g.id === id)) fail('strategy_goal_not_found', 404);
+      const record = index.goals.find(g => g.id === id);
+      if (!record) fail('strategy_goal_not_found', 404);
       const plans = index.gsaPlans?.[id] ?? [];
       const activePlan = plans.at(-1) ?? null;
       if (!activePlan) fail('gsa_plan_required', 409);
+      if (record.adoptedVersion === null || activePlan.goal.version !== record.adoptedVersion) {
+        fail('gsa_plan_stale_for_adopted_goal', 409);
+      }
       if (activePlan.planId !== input.gsaPlanId || activePlan.planVersion !== input.gsaPlanVersion || activePlan.contentSha256 !== input.gsaPlanSha256) {
         fail('gsa_plan_changed', 409);
       }
@@ -1004,8 +1006,13 @@ export class StrategyGoalsStore {
     }
 
     return this.withLock(index => {
+      const record = index.goals.find(g => g.id === id);
+      if (!record) fail('strategy_goal_not_found', 404);
       const activePlan = index.gsaPlans?.[id]?.at(-1) ?? null;
       if (!activePlan) fail('gsa_plan_required', 409);
+      if (record.adoptedVersion === null || activePlan.goal.version !== record.adoptedVersion) {
+        fail('gsa_plan_stale_for_adopted_goal', 409);
+      }
       if (activePlan.planId !== raw.gsaPlanId || activePlan.planVersion !== raw.gsaPlanVersion || activePlan.contentSha256 !== raw.gsaPlanSha256) {
         fail('gsa_plan_changed', 409);
       }
@@ -1075,9 +1082,13 @@ export class StrategyGoalsStore {
   ): DecompositionPublishPreview {
     const id = uuid(goalId);
     const index = this.load();
-    if (!index.goals.some(g => g.id === id)) fail('strategy_goal_not_found', 404);
+    const record = index.goals.find(g => g.id === id);
+    if (!record) fail('strategy_goal_not_found', 404);
     const activePlan = index.gsaPlans?.[id]?.at(-1) ?? null;
     if (!activePlan) fail('gsa_plan_required', 409);
+    if (record.adoptedVersion === null || activePlan.goal.version !== record.adoptedVersion) {
+      fail('gsa_plan_stale_for_adopted_goal', 409);
+    }
     if (activePlan.planId !== input.gsaPlanId || activePlan.planVersion !== input.gsaPlanVersion || activePlan.contentSha256 !== input.gsaPlanSha256) {
       fail('gsa_plan_changed', 409);
     }
@@ -1104,7 +1115,10 @@ export class StrategyGoalsStore {
             adoptedVer.title === row.title &&
             adoptedVer.outcome === row.outcome &&
             adoptedVer.responsible === row.responsible &&
-            JSON.stringify(adoptedVer.strategies ?? []) === JSON.stringify([row.strategy])
+            canonical(adoptedVer.scope) === canonical(row.scope) &&
+            (adoptedVer.formalOrigin?.targetValue ?? null) === row.targetValue &&
+            (adoptedVer.formalOrigin?.unit ?? row.unit) === row.unit &&
+            canonical(adoptedVer.strategies ?? []) === canonical([row.strategy])
           ) {
             action = 'reuse-adopted';
           } else {
@@ -1201,6 +1215,9 @@ export class StrategyGoalsStore {
         if (!parentGoalRecord) fail('strategy_goal_not_found', 404);
         const activePlan = index.gsaPlans?.[id]?.at(-1) ?? null;
         if (!activePlan) fail('gsa_plan_required', 409);
+        if (parentGoalRecord.adoptedVersion === null || activePlan.goal.version !== parentGoalRecord.adoptedVersion) {
+          fail('gsa_plan_stale_for_adopted_goal', 409);
+        }
         if (activePlan.planId !== input.gsaPlanId || activePlan.planVersion !== input.gsaPlanVersion || activePlan.contentSha256 !== input.gsaPlanSha256) {
           fail('gsa_plan_changed', 409);
         }
@@ -1232,6 +1249,7 @@ export class StrategyGoalsStore {
         const parentGoalVersion = parentGoalRecord.versions.find(v => v.version === activePlan.goal.version)!;
         const updatedDraftRows = currentDraft.rows.map(row => {
           if (!row.commitAsGoal) return structuredClone(row);
+          if (row.linkedGoalId === activePlan.goal.goalId) fail('invalid_self_relation', 400);
           let childRecord = row.linkedGoalId ? stagedGoals.find(g => g.id === row.linkedGoalId) : undefined;
           let adoptedChild: GoalVersion;
           const childDraftInput: GoalDraftInput = draft({
@@ -1312,7 +1330,8 @@ export class StrategyGoalsStore {
             unit: row.unit,
           });
 
-          // Create or reuse contribution relation from child -> parent exact adopted GoalRef
+          // Create or reuse contribution relation from child -> parent exact adopted GoalRef (enforcing same invariant as assertGoalIndex)
+          if (adoptedChild.goalId === activePlan.goal.goalId) fail('invalid_self_relation', 400);
           const relBody = {
             from: { goalId: adoptedChild.goalId, version: adoptedChild.version },
             to: { goalId: activePlan.goal.goalId, version: activePlan.goal.version },
@@ -1618,17 +1637,28 @@ export class StrategyGoalsStore {
       const snapshot = this.readSnapshotBlob(pubSummary.snapshotSha256);
 
       // Freeze planned values strictly from this exact immutable publication snapshot (NEVER from current draft!)
-      const plannedPeriods = input.actualPeriods.map(ap => {
-        const tp = snapshot.timePlan.find(t => t.periodId === ap.periodId);
-        if (tp) {
+      // Item 4: Distinguish G-TOTAL summary timePlan vs responsibility row frozen checkpoint!
+      let plannedPeriods: { periodId: string; label: string; plannedValue: number | null; status?: string }[];
+      if (rowId === 'G-TOTAL') {
+        plannedPeriods = input.actualPeriods.map(ap => {
+          const tp = snapshot.timePlan.find(t => t.periodId === ap.periodId);
+          if (!tp) return fail('decomposition_checkpoint_not_found', 404);
+          if (tp.checkpointId && checkpointId !== tp.checkpointId && checkpointId !== tp.periodId) {
+            return fail('decomposition_checkpoint_mismatch', 409);
+          }
           return { periodId: tp.periodId, label: tp.label, plannedValue: tp.targetValue, status: tp.status };
-        }
-        const cp = snapshot.frozenCheckpoints.find(c => c.checkpointId === checkpointId && (rowId === 'G-TOTAL' || c.rowId === rowId));
-        if (cp) {
-          return { periodId: ap.periodId, label: ap.label || cp.label, plannedValue: cp.targetValue, status: cp.status };
-        }
-        return fail('decomposition_checkpoint_not_found', 404);
-      });
+        });
+      } else {
+        if (!snapshot.rows.some(r => r.rowId === rowId)) fail('decomposition_row_not_found', 404);
+        const cp = snapshot.frozenCheckpoints.find(c => c.checkpointId === checkpointId && c.rowId === rowId);
+        if (!cp) fail('decomposition_checkpoint_not_found', 404);
+        plannedPeriods = input.actualPeriods.map(ap => ({
+          periodId: ap.periodId,
+          label: ap.label || cp.label,
+          plannedValue: cp.targetValue,
+          status: cp.status,
+        }));
+      }
 
       const thresholdSnapshot = structuredClone(index.thresholds?.[id] ?? defaultThreshold());
       const scopeKey = rowId === 'G-TOTAL'
@@ -1887,6 +1917,16 @@ export class StrategyGoalsStore {
     });
   }
 
+  readProjectHandoff(goalId: string, handoffId: string): DecompositionProjectHandoff {
+    const id = uuid(goalId);
+    const hid = reqUuid(handoffId);
+    const index = this.load();
+    if (!index.goals.some(g => g.id === id)) fail('strategy_goal_not_found', 404);
+    const found = index.projectHandoffs?.[id]?.find(h => h.handoffId === hid);
+    if (!found) fail('project_handoff_not_found', 404);
+    return structuredClone(found);
+  }
+
   // ---- GM12: Cycle Review, Next-Cycle Draft & Return to Strategy Choice ----
 
   recordCycleReview(goalId: string, input: DecompositionCycleReviewInput): { review: DecompositionCycleReview; replayed: boolean } {
@@ -1894,8 +1934,14 @@ export class StrategyGoalsStore {
     const id = uuid(goalId);
     const operationId = reqUuid(input.operationId);
     const period = reqText(input.period, 100);
-    if (typeof input.actualFinalValue !== 'number' || !Number.isFinite(input.actualFinalValue)) fail('invalid_cycle_review', 400);
-    const actualSourceRef = reqText(input.actualSourceRef, 500);
+    const actualFinalValue = input.actualFinalValue === null || input.actualFinalValue === undefined
+      ? null
+      : (typeof input.actualFinalValue === 'number' && Number.isFinite(input.actualFinalValue)
+        ? input.actualFinalValue
+        : fail('invalid_cycle_review', 400));
+    const actualSourceRef = actualFinalValue === null
+      ? (input.actualSourceRef?.trim() ? reqText(input.actualSourceRef, 500) : '待补实绩凭证')
+      : reqText(input.actualSourceRef, 500);
     const conclusions = (input.conclusions ?? []).map(classifyReviewConclusion);
 
     return this.withLock(index => {
@@ -1905,20 +1951,24 @@ export class StrategyGoalsStore {
       const prior = existingReviews.find(r => r.operationId === operationId);
       if (prior) return { result: { review: prior, replayed: true as boolean }, dirty: false };
 
-      const adoptedList = record.versions.filter(v => v.status === 'adopted');
-      if (!adoptedList.length) fail('strategy_goal_not_adopted', 409);
-      const initialAdopted = adoptedList[0]!;
-      const lastEffective = adoptedList.find(v => v.version === record.adoptedVersion) ?? adoptedList.at(-1)!;
-      const plans = index.gsaPlans?.[id] ?? [];
-      const firstPlan = plans.find(p => p.goal.version === initialAdopted.version);
-      const lastPlan = plans.filter(p => p.goal.version === lastEffective.version).at(-1);
+      // GM12 (Item 6): Strictly evaluate against CONFIRMED GSA plans for this EXACT reviewed period
+      // whose bound goal version is adopted — ignore unconfirmed goal revisions or other periods!
+      const periodPlans = (index.gsaPlans?.[id] ?? []).filter(p => {
+        const gv = record.versions.find(v => v.version === p.goal.version);
+        return p.formalTarget.period === period && gv?.status === 'adopted';
+      });
+      if (!periodPlans.length) fail('gsa_plan_required_for_review_period', 409);
+      const firstPlan = periodPlans[0]!;
+      const lastPlan = periodPlans.at(-1)!;
+      const initialTarget = firstPlan.formalTarget;
+      const lastTarget = lastPlan.formalTarget;
 
-      const initialTarget = firstPlan?.formalTarget ?? this.resolveFormalTarget(initialAdopted);
-      const lastTarget = lastPlan?.formalTarget ?? this.resolveFormalTarget(lastEffective);
-      const varianceValue = Number((input.actualFinalValue - lastTarget.value).toFixed(6));
-      const outcomeSummary = varianceValue >= 0
-        ? `依据最后生效的正式目标 (${lastTarget.value}${lastTarget.unit})，实际完成 ${input.actualFinalValue}${lastTarget.unit}，超出目标 ${varianceValue}${lastTarget.unit}（期初承诺 ${initialTarget.value}${initialTarget.unit} 仅作备忘；总量达成不直接证明单条策略因果成立）。`
-        : `依据最后生效的正式目标 (${lastTarget.value}${lastTarget.unit})，实际完成 ${input.actualFinalValue}${lastTarget.unit}，低于目标 ${Math.abs(varianceValue)}${lastTarget.unit}（期初承诺 ${initialTarget.value}${initialTarget.unit} 仅作备忘）。`;
+      const varianceValue = actualFinalValue === null ? null : Number((actualFinalValue - lastTarget.value).toFixed(6));
+      const outcomeSummary = actualFinalValue === null
+        ? `依据本周期最后生效的已确认总 GSA（v${lastPlan.planVersion} · ${lastTarget.value}${lastTarget.unit}），期末最终实绩待补，暂不计算完成差额（期初承诺 ${initialTarget.value}${initialTarget.unit} 仅作备忘）。`
+        : varianceValue! >= 0
+          ? `依据本周期最后生效的已确认总 GSA（v${lastPlan.planVersion} · ${lastTarget.value}${lastTarget.unit}），实际完成 ${actualFinalValue}${lastTarget.unit}，超出目标 ${varianceValue}${lastTarget.unit}（期初承诺 ${initialTarget.value}${initialTarget.unit} 仅作备忘；总量达成不直接证明单条策略因果成立）。`
+          : `依据本周期最后生效的已确认总 GSA（v${lastPlan.planVersion} · ${lastTarget.value}${lastTarget.unit}），实际完成 ${actualFinalValue}${lastTarget.unit}，低于目标 ${Math.abs(varianceValue!)}${lastTarget.unit}（期初承诺 ${initialTarget.value}${initialTarget.unit} 仅作备忘）。`;
 
       const review: DecompositionCycleReview = {
         reviewId: randomUUID(),
@@ -1926,19 +1976,19 @@ export class StrategyGoalsStore {
         goalId: id,
         period,
         initialFormalTarget: {
-          goalRef: { goalId: id, version: initialAdopted.version },
-          ...(firstPlan ? { gsaPlanVersion: firstPlan.planVersion } : {}),
+          goalRef: { goalId: id, version: firstPlan.goal.version },
+          gsaPlanVersion: firstPlan.planVersion,
           value: initialTarget.value,
           unit: initialTarget.unit,
           memoOnly: true,
         },
         lastEffectiveFormalTarget: {
-          goalRef: { goalId: id, version: lastEffective.version },
-          ...(lastPlan ? { gsaPlanVersion: lastPlan.planVersion } : {}),
+          goalRef: { goalId: id, version: lastPlan.goal.version },
+          gsaPlanVersion: lastPlan.planVersion,
           value: lastTarget.value,
           unit: lastTarget.unit,
         },
-        actualFinalValue: input.actualFinalValue,
+        actualFinalValue,
         actualSourceRef,
         varianceValue,
         outcomeSummary,
@@ -2044,19 +2094,66 @@ export class StrategyGoalsStore {
     });
   }
 
-  /** Unified read-only workspace projection for a single goalId. Never modifies disk or leaks across goals. */
-  getGoalWorkspace(goalId: string): GoalWorkspaceView {
+  /** Read-only list of returned goal review evidence for Strategy selection (GM12). */
+  listStrategyReturns(): {
+    strategyReturn: StrategyReturnRecord;
+    goal: GoalVersion;
+    review: DecompositionCycleReview | null;
+    selectedConclusions: CycleReviewConclusion[];
+  }[] {
+    const index = this.load();
+    const out: {
+      strategyReturn: StrategyReturnRecord;
+      goal: GoalVersion;
+      review: DecompositionCycleReview | null;
+      selectedConclusions: CycleReviewConclusion[];
+    }[] = [];
+    for (const [gid, returns] of Object.entries(index.strategyReturns ?? {})) {
+      const rec = index.goals.find(g => g.id === gid);
+      if (!rec) continue;
+      for (const ret of returns) {
+        const review = index.cycleReviews?.[gid]?.find(r => r.reviewId === ret.reviewId) ?? null;
+        const verNum = review?.lastEffectiveFormalTarget.goalRef.version ?? rec.adoptedVersion ?? rec.currentVersion;
+        const gv = rec.versions.find(v => v.version === verNum) ?? rec.versions.at(-1);
+        if (!gv) continue;
+        const selectedConclusions = review
+          ? review.conclusions.filter(c => ret.selectedConclusionIds.includes(c.id))
+          : [];
+        out.push(structuredClone({ strategyReturn: ret, goal: gv, review, selectedConclusions }));
+      }
+    }
+    return out;
+  }
+
+  /** Unified read-only workspace projection for a single goalId (optionally scoped to exact goalVersion). */
+  getGoalWorkspace(goalId: string, goalVersion?: number): GoalWorkspaceView {
     const id = uuid(goalId);
     const index = this.load();
     const goal = index.goals.find(g => g.id === id);
     if (!goal) fail('strategy_goal_not_found', 404);
-    const gsaPlans = index.gsaPlans?.[id] ?? [];
+    const allGsaPlans = index.gsaPlans?.[id] ?? [];
+    const scopedToHistorical = goalVersion !== undefined && goalVersion !== (goal.adoptedVersion ?? goal.currentVersion);
+    if (goalVersion !== undefined && !goal.versions.some(v => v.version === goalVersion)) {
+      fail('strategy_goal_not_found', 404);
+    }
+    const gsaPlans = scopedToHistorical
+      ? allGsaPlans.filter(p => p.goal.version === goalVersion)
+      : allGsaPlans;
     const activeGsaPlan = gsaPlans.at(-1) ?? null;
-    const gsaDraft = index.gsaDrafts?.[id] ?? null;
-    const currentDraft = index.decompositionDrafts?.[id] ?? null;
+    const gsaDraft = scopedToHistorical ? null : (index.gsaDrafts?.[id] ?? null);
+    const rawDraft = index.decompositionDrafts?.[id] ?? null;
+    const currentDraft = scopedToHistorical
+      ? (rawDraft && activeGsaPlan && rawDraft.gsaPlanVersion === activeGsaPlan.planVersion ? rawDraft : null)
+      : rawDraft;
     const validation = currentDraft ? validateDecompositionForPublish(activeGsaPlan, currentDraft, index.goals) : null;
-    const publications = index.decompositionPublications?.[id] ?? [];
-    const activePublicationVersion = index.activeDecompositionVersions?.[id] ?? null;
+    const allPublications = index.decompositionPublications?.[id] ?? [];
+    const allowedPlanVersions = new Set(gsaPlans.map(p => p.planVersion));
+    const publications = scopedToHistorical
+      ? allPublications.filter(p => allowedPlanVersions.has(p.gsaPlanVersion))
+      : allPublications;
+    const activePublicationVersion = scopedToHistorical
+      ? (publications.at(-1)?.version ?? null)
+      : (index.activeDecompositionVersions?.[id] ?? null);
     let activePublication: DecompositionPublication | null = null;
     if (activePublicationVersion !== null) {
       const summary = publications.find(p => p.version === activePublicationVersion);
@@ -2064,6 +2161,10 @@ export class StrategyGoalsStore {
         activePublication = { ...summary, snapshot: this.readSnapshotBlob(summary.snapshotSha256) };
       }
     }
+    const allChecks = index.progressChecks?.[id] ?? [];
+    const checks = scopedToHistorical
+      ? allChecks.filter(c => allowedPlanVersions.has(c.gsaPlanVersion))
+      : allChecks;
     return structuredClone({
       goal,
       gsaPlans,
@@ -2074,7 +2175,7 @@ export class StrategyGoalsStore {
       publications,
       activePublicationVersion,
       activePublication,
-      checks: index.progressChecks?.[id] ?? [],
+      checks,
       threshold: index.thresholds?.[id] ?? defaultThreshold(),
       caseDraftIntents: index.caseDraftIntents?.[id] ?? [],
       handoffs: index.projectHandoffs?.[id] ?? [],

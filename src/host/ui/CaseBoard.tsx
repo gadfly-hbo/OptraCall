@@ -21,7 +21,7 @@ import type { CaseRelationRevision } from '../case-relation-types.ts';
 
 export type CaseBoardProps = {
   onTeachReview?(owner:import('../business-role-types.ts').TeachReviewOwner):void;
-  initialGoal?: GoalRef; initialSource?: import('../case-types.ts').CaseCreationSource; onReviewGoals?: (source?: import('../case-types.ts').CaseCreationSource) => void; onInitialGoalConsumed?: () => void;
+  initialGoal?: GoalRef & { strategy?: string; title?: string; description?: string }; initialSource?: import('../case-types.ts').CaseCreationSource; onReviewGoals?: (source?: import('../case-types.ts').CaseCreationSource) => void; onInitialGoalConsumed?: () => void;
   decisionUi: Record<string, CaseDecisionUiState>; onDecisionUiChange: (ownerKey: string, update: CaseDecisionUiUpdate) => void;
   currentWork?: { projectId: string; taskId: string }; reportReturn?: { caseId: string; projectId: string; taskId: string }; onOpenDecisionBoard?: (target?: import('./FeedbackContextPanel.tsx').FeedbackReviewStart) => void;
   projects: ClientProject[]; configurations: PublicModelConfiguration[]; initialCaseId?: string | null; initialIssueId?: string; mode?: 'cards' | 'list'; onModeChange?: (mode: 'cards' | 'list') => void;
@@ -47,7 +47,7 @@ export function CaseBoard({ initialGoal, initialSource, onReviewGoals, onTeachRe
   const [storage, setStorage] = useState<CaseStorageStatus | null>(null), [data, setData] = useState<CaseList>({ cases: [], projectLinks: [] }), [loading, setLoading] = useState(true), [dataReady, setDataReady] = useState(false), [initializing, setInitializing] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [localMode, setLocalMode] = useState<'cards' | 'list'>('cards'), [creating, setCreating] = useState(false), [selectedId, setSelectedId] = useState<string | null>(null), [detail, setDetail] = useState<CaseDetail | null>(null), [detailLoading, setDetailLoading] = useState(false), [detailError, setDetailError] = useState(''), [tab, setTab] = useState<'overview' | 'projects' | 'artifacts' | 'history'>('overview'), [editing, setEditing] = useState<Editing | null>(null);
   const [goalWriting, setGoalWriting] = useState(false);
-  const [creationGoal, setCreationGoal] = useState<GoalRef | undefined>(initialGoal);
+  const [creationGoal, setCreationGoal] = useState<(GoalRef & { strategy?: string; title?: string; description?: string }) | undefined>(initialGoal);
   const [creationSource, setCreationSource] = useState<typeof initialSource>();
   const prepareCase = () => { if (onReviewGoals) onReviewGoals(); else setCreating(true); };
   useEffect(() => { if (initialGoal) { setCreationSource(initialSource); setCreationGoal(initialGoal); setCreating(true); onInitialGoalConsumed?.(); } }, [initialGoal, onInitialGoalConsumed]);

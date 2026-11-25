@@ -703,8 +703,8 @@ test('GM10/GM11/GM12 & 原型缺口 #1/#2: 阶段跟进（含缺2店不给整体
   const checkNoThresh = await json(await host.request(`/api/strategy/goals/${goal.goalId}/decomposition/checks`, 'POST', {
     operationId: randomUUID(),
     publicationVersion: 1,
-    rowId: 'row-online',
-    checkpointId: 'cp-online-w2',
+    rowId: 'G-TOTAL',
+    checkpointId: 'm1-w0',
     periodGranularity: 'week',
     periodSequenceKey: '2026-W53',
     actualSource: { ref: 'pos-trial-0', label: 'POS 试运行', cutoffAt: '2026-12-31T23:59:59Z' },
@@ -729,8 +729,8 @@ test('GM10/GM11/GM12 & 原型缺口 #1/#2: 阶段跟进（含缺2店不给整体
   const checkPartial = await json(await host.request(`/api/strategy/goals/${goal.goalId}/decomposition/checks`, 'POST', {
     operationId: randomUUID(),
     publicationVersion: 1,
-    rowId: 'row-online',
-    checkpointId: 'cp-online-w2',
+    rowId: 'G-TOTAL',
+    checkpointId: 'm1-w1',
     periodGranularity: 'week',
     periodSequenceKey: '2027-W01-partial',
     actualSource: { ref: 'pos-w1-partial', label: 'POS 日结（缺华东2店）', cutoffAt: '2027-01-07T23:59:59Z' },
@@ -746,8 +746,8 @@ test('GM10/GM11/GM12 & 原型缺口 #1/#2: 阶段跟进（含缺2店不给整体
   const checkW1 = await json(await host.request(`/api/strategy/goals/${goal.goalId}/decomposition/checks`, 'POST', {
     operationId: randomUUID(),
     publicationVersion: 1,
-    rowId: 'row-online',
-    checkpointId: 'cp-online-w2',
+    rowId: 'G-TOTAL',
+    checkpointId: 'm1-w1',
     periodGranularity: 'week',
     periodSequenceKey: '2027-W01',
     actualSource: { ref: 'pos-w1-full', label: 'POS 全量 W1', cutoffAt: '2027-01-08T10:00:00Z' },
@@ -760,8 +760,8 @@ test('GM10/GM11/GM12 & 原型缺口 #1/#2: 阶段跟进（含缺2店不给整体
   const checkW2 = await json(await host.request(`/api/strategy/goals/${goal.goalId}/decomposition/checks`, 'POST', {
     operationId: randomUUID(),
     publicationVersion: 1,
-    rowId: 'row-online',
-    checkpointId: 'cp-online-w2',
+    rowId: 'G-TOTAL',
+    checkpointId: 'm1-w2',
     periodGranularity: 'week',
     periodSequenceKey: '2027-W02',
     actualSource: { ref: 'pos-w2-full', label: 'POS 全量 W2', cutoffAt: '2027-01-15T10:00:00Z' },
@@ -841,6 +841,39 @@ test('GM10/GM11/GM12 & 原型缺口 #1/#2: 阶段跟进（含缺2店不给整体
     decision: '正式修订总目标为 110 万元',
   }));
 
+  // Item 6: plain adoption of v2 (110) WITHOUT a confirmed GSA plan must NOT change the review baseline,
+  // and another period's confirmed GSA must not satisfy the 2027-01 review.
+  const noGsaForOtherPeriod = await host.request(`/api/strategy/goals/${goal.goalId}/cycle-reviews`, 'POST', {
+    operationId: randomUUID(),
+    period: '2027-02',
+    actualFinalValue: 1,
+    actualSourceRef: 'x',
+    conclusions: [],
+  });
+  assert.equal(noGsaForOtherPeriod.status, 409);
+  assert.equal((await noGsaForOtherPeriod.json()).code, 'gsa_plan_required_for_review_period');
+  const unconfirmedReview = await json(await host.request(`/api/strategy/goals/${goal.goalId}/cycle-reviews`, 'POST', {
+    operationId: randomUUID(),
+    period: '2027-01',
+    actualFinalValue: null,
+    actualSourceRef: 'pending-close',
+    conclusions: [],
+  }), 201);
+  assert.equal(unconfirmedReview.review.lastEffectiveFormalTarget.value, 120, 'unconfirmed v2 (110) must not replace confirmed v1 (120) baseline');
+  assert.equal(unconfirmedReview.review.actualFinalValue, null);
+  assert.equal(unconfirmedReview.review.varianceValue, null, 'blank actual stays pending, never coerced to 0');
+
+  // Confirm GSA for v2 (110, period 2027-01) -> now baseline becomes 110
+  await json(await host.request(`/api/strategy/goals/${goal.goalId}/gsa-plan/confirm`, 'POST', {
+    operationId: randomUUID(),
+    expectedGoalVersion: v2Num,
+    expectedPlanVersion: 1,
+    decision: '确认 v2 总 GSA',
+    confirmedBy: '林负责人',
+    plannedActions: [{ id: 'act-1', summary: '上线礼盒和复购券', checkpoint: '第2周核对' }],
+    stageCheckpoints: [{ id: 'stg-1', label: '月中核对', targetDate: '2027-01-15', observationBasis: 'POS净销' }],
+  }), 201);
+
   const reviewRes = await json(await host.request(`/api/strategy/goals/${goal.goalId}/cycle-reviews`, 'POST', {
     operationId: randomUUID(),
     period: '2027-01',
@@ -897,6 +930,8 @@ test('GM10/GM11/GM12 & 原型缺口 #1/#2: 阶段跟进（含缺2店不给整体
   }), 201);
   assert.equal(returned.strategyReturn.status, 'returned-for-review');
   assert.equal(returned.strategyReturn.evidenceRefs.length, 2);
+  const strategyReturns = await json(await host.request('/api/strategy/goals/strategy-returns'));
+  assert.ok(strategyReturns.strategyReturns.some((r: any) => r.strategyReturn.goalId === goal.goalId && r.selectedConclusions.length === 1));
 });
 
 test('E1 & 原型缺口 #3: 存储外置与分页预算、--disable-goal-decomposition 安全回退（schema 4 只读/写拦截）、权限撤回阻断回读与导出', { timeout: 60_000 }, async t => {
@@ -1170,8 +1205,8 @@ test('Review regressions: child enterprise scope auth, scope-checked formal-sour
   const ppW1 = await json(await host.request(`/api/strategy/goals/${goal.goalId}/decomposition/checks`, 'POST', {
     operationId: randomUUID(),
     publicationVersion: 2,
-    rowId: 'row-online',
-    checkpointId: 'cp-online-w2',
+    rowId: 'G-TOTAL',
+    checkpointId: 'm1-w1',
     periodGranularity: 'week',
     periodSequenceKey: '2027-W01',
     actualSource: { ref: 'pp-w1', label: 'W1 实绩', cutoffAt: '2027-01-07T23:59:59Z' },
@@ -1184,8 +1219,8 @@ test('Review regressions: child enterprise scope auth, scope-checked formal-sour
   const ppW3 = await json(await host.request(`/api/strategy/goals/${goal.goalId}/decomposition/checks`, 'POST', {
     operationId: randomUUID(),
     publicationVersion: 2,
-    rowId: 'row-online',
-    checkpointId: 'cp-online-w2',
+    rowId: 'G-TOTAL',
+    checkpointId: 'm1-w1',
     periodGranularity: 'week',
     periodSequenceKey: '2027-W03',
     actualSource: { ref: 'pp-w3', label: 'W3 实绩（跳过W2）', cutoffAt: '2027-01-21T23:59:59Z' },
@@ -1198,8 +1233,8 @@ test('Review regressions: child enterprise scope auth, scope-checked formal-sour
   const ppW4 = await json(await host.request(`/api/strategy/goals/${goal.goalId}/decomposition/checks`, 'POST', {
     operationId: randomUUID(),
     publicationVersion: 2,
-    rowId: 'row-online',
-    checkpointId: 'cp-online-w2',
+    rowId: 'G-TOTAL',
+    checkpointId: 'm1-w1',
     periodGranularity: 'week',
     periodSequenceKey: '2027-W04',
     actualSource: { ref: 'pp-w4', label: 'W4 实绩（紧邻W3）', cutoffAt: '2027-01-28T23:59:59Z' },
@@ -1214,8 +1249,8 @@ test('Review regressions: child enterprise scope auth, scope-checked formal-sour
   const ppMag = await json(await host.request(`/api/strategy/goals/${goal.goalId}/decomposition/checks`, 'POST', {
     operationId: randomUUID(),
     publicationVersion: 2,
-    rowId: 'row-online',
-    checkpointId: 'cp-online-w2',
+    rowId: 'G-TOTAL',
+    checkpointId: 'm1-w1',
     periodGranularity: 'week',
     periodSequenceKey: '2027-W05',
     actualSource: { ref: 'pp-w5', label: 'W5 实绩（达5百分点）', cutoffAt: '2027-02-04T23:59:59Z' },
@@ -1226,3 +1261,65 @@ test('Review regressions: child enterprise scope auth, scope-checked formal-sour
   assert.equal(ppMag.check.trigger.type, 'magnitude');
 });
 
+test('PM首审#4 回归：责任行冻结检查点用该行计划值 35，不回落到总表 30；检查点错配被拒', { timeout: 60_000 }, async t => {
+  const host = await startTestHost();
+  t.after(() => host.close());
+  const { goal, gsaPlan } = await createAndConfirmGoal(host, 120);
+  const { draft } = await json(await host.request(`/api/strategy/goals/${goal.goalId}/decomposition/draft`, 'POST', validDraftInput(gsaPlan, 0)), 201);
+  const preview = await json(await host.request(`/api/strategy/goals/${goal.goalId}/decomposition/publish-preview`, 'POST', {
+    gsaPlanId: gsaPlan.planId, gsaPlanVersion: gsaPlan.planVersion, gsaPlanSha256: gsaPlan.contentSha256,
+    draftRevision: draft.revision, draftSha256: draft.contentSha256, expectedActiveVersion: null,
+  }));
+  await json(await host.request(`/api/strategy/goals/${goal.goalId}/decomposition/publish`, 'POST', {
+    operationId: randomUUID(), gsaPlanId: gsaPlan.planId, gsaPlanVersion: gsaPlan.planVersion, gsaPlanSha256: gsaPlan.contentSha256,
+    draftRevision: draft.revision, draftSha256: draft.contentSha256, expectedActiveVersion: null, previewSha256: preview.previewSha256, reason: 'v1',
+  }), 201);
+  const check = (rowId: string, checkpointId: string, periodId: string) => host.request(`/api/strategy/goals/${goal.goalId}/decomposition/checks`, 'POST', {
+    operationId: randomUUID(), publicationVersion: 1, rowId, checkpointId,
+    actualSource: { ref: 'pos', label: 'POS', cutoffAt: '2027-01-15T00:00:00Z' },
+    comparability: 'comparable', actualPeriods: [{ periodId, label: '第 2 周', actualValue: 27 }],
+  });
+  const rowCheck = await json(await check('row-online', 'cp-online-w2', 'm1-w2'), 201);
+  assert.equal(rowCheck.check.periods[0].plannedValue, 35);
+  const totalCheck = await json(await check('G-TOTAL', 'cp-w2', 'm1-w2'), 201);
+  assert.equal(totalCheck.check.periods[0].plannedValue, 30);
+  const mismatch = await check('row-online', 'cp-store-w2', 'm1-w2');
+  assert.equal(mismatch.status, 404);
+  const totalMismatch = await check('G-TOTAL', 'cp-w1', 'm1-w2');
+  assert.equal(totalMismatch.status, 409);
+});
+
+test('PM首审#1 回归：缺 formalOrigin 不伪造 0；伪造战略来源被拒；采用新版本后旧总 GSA 过期', { timeout: 60_000 }, async t => {
+  const host = await startTestHost();
+  t.after(() => host.close());
+  const mk = (formalOrigin?: unknown) => host.request('/api/strategy/goals', 'POST', {
+    operationId: randomUUID(), title: '2027-01 净销售额达到 120 万元', outcome: '2027-01 净销售额达到 120 万元', perspective: 'profit', scope: deptScope,
+    measurement: { kind: 'deliverable', criterion: '净销售额达到 120 万元' }, baseline: { state: 'known', description: '可比期 108 万元' },
+    responsible: '林负责人', dueAt: '2027-01-31', strategies: ['老客复购与新品放量'], ...(formalOrigin ? { formalOrigin } : {}),
+  });
+  const forged = await mk({ kind: 'strategy-publication', publicationId: randomUUID(), contentSha256: 'f'.repeat(64), formalGoalId: 'G-x', period: '2027-01', targetValue: 120, unit: '万元', metricKind: 'amount' });
+  assert.equal(forged.status, 409);
+  assert.equal((await forged.json()).code, 'formal_strategy_origin_mismatch');
+  const noOrigin = await json(await mk(), 201);
+  const confirmBody = (goalVersion: number, planVersion: number) => ({
+    operationId: randomUUID(), expectedGoalVersion: goalVersion, expectedPlanVersion: planVersion, decision: '确认', confirmedBy: '林负责人',
+    plannedActions: [{ id: 'a1', summary: '动作', checkpoint: '核对' }], stageCheckpoints: [{ id: 's1', label: '月中', targetDate: '2027-01-15', observationBasis: 'POS' }],
+  });
+  const noFormal = await host.request(`/api/strategy/goals/${noOrigin.goal.goalId}/gsa-plan/confirm`, 'POST', confirmBody(1, 0));
+  assert.equal(noFormal.status, 400);
+  assert.equal((await noFormal.json()).code, 'gsa_formal_target_required');
+
+  // stale: confirm v1 plan, adopt a revised v2 -> old parent GSA cannot be used for draft
+  const { goal, gsaPlan } = await createAndConfirmGoal(host, 120);
+  const rev = await json(await host.request(`/api/strategy/goals/${goal.goalId}/revisions`, 'POST', {
+    operationId: randomUUID(), expectedVersion: 1, title: '2027-01 净销售额 110 万元', outcome: '2027-01 净销售额 110 万元', perspective: 'profit', scope: deptScope,
+    measurement: { kind: 'deliverable', criterion: '净销售额 110 万元' }, baseline: { state: 'known', description: '可比期 108 万元' },
+    responsible: '林负责人', dueAt: '2027-01-31', strategies: ['老客复购与新品放量'],
+    formalOrigin: { kind: 'manual-exception', reason: '修订', period: '2027-01', targetValue: 110, unit: '万元', metricKind: 'amount' },
+  }), 201);
+  const v2 = rev.goal.version ?? rev.goal.currentVersion;
+  await json(await host.request(`/api/strategy/goals/${goal.goalId}/adopt`, 'POST', { operationId: randomUUID(), version: v2, expectedVersion: v2, decision: '采用 v2' }));
+  const stale = await host.request(`/api/strategy/goals/${goal.goalId}/decomposition/draft`, 'POST', validDraftInput(gsaPlan, 0));
+  assert.equal(stale.status, 409);
+  assert.equal((await stale.json()).code, 'gsa_plan_stale_for_adopted_goal');
+});

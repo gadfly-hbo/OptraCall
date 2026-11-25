@@ -89,3 +89,26 @@
   - 全仓共 470 个测试文件，在本 2 vCPU 云端 VM 上直接串行运行 `npm run check` 超出单命令 10 分钟限制而被截断（前 10 分钟内未见任何失败）；上述 39 个覆盖全部受影响模块及上下游消费者的测试文件均在最终候选上 100% 通过（229/229），完整全仓 CI 待 PM 审阅并建 PR 后由 GitHub Actions 执行。
   - 本次验证全部使用合成业务数据与本地合成 Provider，未触碰任何真实经营数据、真实模型凭据或外部商业 API；未执行 MacBook / Mac mini 运行服务切换，亦未越权开 PR、合并 `main` 或关闭 Issue #136。
   - 工程交付验证与设备运行采用、用户产品验收分别核定。
+
+## 返工候选（PM 首审 issuecomment-7164347353 之后）
+
+原候选 `fcbdd702ff8383b0e0391f8259a7ca6e9b1a0d3b`、原交接回执 issuecomment-7163963498 及 PM 首审意见保留为历史记录，不覆盖。
+
+### 首审阻断项处理
+1. GSA 绑定精确可见版本；缺 `formalOrigin` 失败关闭（`gsa_formal_target_required`），伪造战略来源被拒（`formal_strategy_origin_mismatch`），采用新版本后旧总 GSA 过期（`gsa_plan_stale_for_adopted_goal`）。
+2. 拆解草稿不再伪造默认值；发布预览零写入；口径校验先于金额与缺口计算。
+3. 自引用／重复关联拒绝；冻结发布按行范围鉴权；历史版本工作区不泄漏新版本数据；reconcile-formal 受功能开关约束。
+4. 责任行检查点使用该行冻结计划值（线上第 2 周 35 万），不再回落到总表 30 万；实绩来源与截止时间由用户提供。
+5. `continue-existing` 校验开放 Case 及目标／策略；承接可带入真实 Case 编辑器和项目创建（`goalOrigin.decompositionHandoff`）。
+6. 到期复盘只认该期已确认且绑定已采用版本的总 GSA；空实绩保持待补；结论可子集选择；战略回送可在战略视图查看。
+7. 引入讨论稿 `docs/optracall-goal-management-discussion-v0.1.md`；清除 EOF 空行。
+
+### 本轮验证（worktree，节点测试均 `--test-concurrency=1`）
+- `npm run typecheck`、`npm run check:agent-sessions`、`npm run build`、`git diff --check d4b60b5…`：通过。
+- 12 个相关测试文件共 93 项：93 通过、0 失败。新增回归：责任行 35 vs 总表 30 及检查点错配、缺／伪造 formalOrigin、旧 GSA 过期、复盘基线与空实绩、战略回送列表。
+- 失败→修复：原测试把责任行检查按总表周期 30 断言，已改为总表行使用 `G-TOTAL`。
+
+### 未覆盖（如实说明）
+- 真实 Chromium 浏览器 E2E 未在本轮重跑；原 E2E 脚本需按去除默认值后的界面更新。
+- 未运行截断的全仓 `npm run check`；独立非作者复核尚未对本返工候选执行。
+- 首审第 2、3、5 项中口径不可比、重复关联、关闭 Case 拒绝、项目承接持久化等仅有代码实现，缺少专门的新增 Host 回归。

@@ -15,7 +15,22 @@ export interface UploadedFile { id: string; originalName: string; path: string; 
 export interface FeedbackTaskOrigin { handoffId: string; operationId: string; requestHash: string }
 export interface PlanTaskOrigin { confirmationId: string; taskKey: string; requestHash: string }
 export interface TaskRecord { createRequestFingerprint?: string; createFingerprint?: string; assignment?: TaskAssignment; id: string; name: string; createdAt: string; updatedAt: string; draft: string; configuration: ProjectConfiguration; sessionStorage: 'legacy' | 'task'; sessionFile?: string; lastRun?: ProjectRun; sessionDirectory: string; simulationTools?: boolean; tradeAreaTools?: boolean; weatherTools?: boolean; modelTools?: boolean; feedbackOrigin?: FeedbackTaskOrigin; reviewDraftIds?: string[]; archivedAt?: string | null; planOrigin?: PlanTaskOrigin }
-export interface ProjectRecord { goalOrigin?: {goal: import('./strategy-goals-types.ts').GoalRef}; stages?: ProjectStage[]; agreements?: ProjectAgreement[]; schemaVersion: 2; id: string; name: string; createdAt: string; updatedAt: string; configuration: ProjectConfiguration; uploads: UploadedFile[]; archivedAt: string | null; tasks: TaskRecord[]; rootPath: string }
+export interface ProjectDecompositionHandoffOrigin {
+  handoffId: string;
+  gsaPlanId: string;
+  gsaPlanVersion: number;
+  publicationId: string;
+  publicationVersion: number;
+  rowId: string;
+  checkpointId: string;
+  checkpointLabel: string;
+  checkpointDate: string;
+  checkpointTargetValue: number | null;
+  unit: string;
+  responsible: string;
+  strategy: string;
+}
+export interface ProjectRecord { goalOrigin?: { goal: import('./strategy-goals-types.ts').GoalRef; decompositionHandoff?: ProjectDecompositionHandoffOrigin }; stages?: ProjectStage[]; agreements?: ProjectAgreement[]; schemaVersion: 2; id: string; name: string; createdAt: string; updatedAt: string; configuration: ProjectConfiguration; uploads: UploadedFile[]; archivedAt: string | null; tasks: TaskRecord[]; rootPath: string }
 export interface FileNode { name: string; path: string; kind: 'file' | 'directory'; bytes?: number; children?: FileNode[] }
 export class ProjectStoreFault extends Error { code: string; constructor(code: string) { super(code); this.code = code; } }
 
@@ -216,7 +231,42 @@ export class ProjectStore {
     if (value.goalOrigin !== undefined) {
       const origin=value.goalOrigin;
       if (!object(origin) || !object(origin.goal) || typeof origin.goal.goalId !== 'string' || !uuid.test(origin.goal.goalId) || !Number.isSafeInteger(origin.goal.version) || Number(origin.goal.version)<1) return fail('invalid_project_metadata');
-      goalOrigin={goal:{goalId:origin.goal.goalId,version:Number(origin.goal.version)}};
+      let decompositionHandoff: ProjectDecompositionHandoffOrigin | undefined;
+      if (origin.decompositionHandoff !== undefined) {
+        const h = origin.decompositionHandoff;
+        if (
+          !object(h) ||
+          typeof h.handoffId !== 'string' || !uuid.test(h.handoffId) ||
+          typeof h.gsaPlanId !== 'string' || !uuid.test(h.gsaPlanId) ||
+          !Number.isSafeInteger(h.gsaPlanVersion) || Number(h.gsaPlanVersion) < 1 ||
+          typeof h.publicationId !== 'string' || !uuid.test(h.publicationId) ||
+          !Number.isSafeInteger(h.publicationVersion) || Number(h.publicationVersion) < 1 ||
+          typeof h.rowId !== 'string' || !h.rowId.trim() ||
+          typeof h.checkpointId !== 'string' || !h.checkpointId.trim() ||
+          typeof h.checkpointLabel !== 'string' ||
+          typeof h.checkpointDate !== 'string' ||
+          (h.checkpointTargetValue !== null && (typeof h.checkpointTargetValue !== 'number' || !Number.isFinite(h.checkpointTargetValue))) ||
+          typeof h.unit !== 'string' ||
+          typeof h.responsible !== 'string' ||
+          typeof h.strategy !== 'string'
+        ) return fail('invalid_project_metadata');
+        decompositionHandoff = {
+          handoffId: h.handoffId,
+          gsaPlanId: h.gsaPlanId,
+          gsaPlanVersion: Number(h.gsaPlanVersion),
+          publicationId: h.publicationId,
+          publicationVersion: Number(h.publicationVersion),
+          rowId: h.rowId,
+          checkpointId: h.checkpointId,
+          checkpointLabel: h.checkpointLabel,
+          checkpointDate: h.checkpointDate,
+          checkpointTargetValue: h.checkpointTargetValue,
+          unit: h.unit,
+          responsible: h.responsible,
+          strategy: h.strategy,
+        };
+      }
+      goalOrigin={goal:{goalId:origin.goal.goalId,version:Number(origin.goal.version)},...(decompositionHandoff?{decompositionHandoff}:{})};
     }
     return { ...(goalOrigin ? {goalOrigin} : {}), ...(stages ? { stages } : {}), ...(agreements ? { agreements } : {}), schemaVersion: 2, id, name, createdAt: value.createdAt, updatedAt: value.updatedAt, configuration, uploads, archivedAt: value.archivedAt as string | null, tasks };
   }

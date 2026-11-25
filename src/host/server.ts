@@ -53,6 +53,7 @@ import { createStrategyCandidateHost } from './strategy-candidate-host.ts';
 import { createStrategyVerificationHost } from './strategy-verification-host.ts';
 import { createStrategyInitiativePublications } from './strategy-initiative-publications.ts';
 import { createStrategyGoalRoutes } from './strategy-goals-routes.ts';
+import { normalizeGoalText } from './strategy-goals-types.ts';
 import { createAutomaticActionSettingsStore, AutomaticActionSettingsFault } from './automatic-action-settings-store.ts';
 import type { AutomaticActionSettingsUpdate } from './automatic-action-settings-types.ts';
 import { StudioError } from '../../extensions/business-plugins/studio/store.ts';
@@ -1596,6 +1597,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   async function exportDecompositionPublication(goalId:string,version:number) {
     const publication = strategyGoals.readDecompositionPublication(goalId, version);
     const {goal} = await readGoalVersionPage(goalId, publication.snapshot.gsaPlan.goal.version);
+    for (const row of publication.snapshot.rows) validateStrategyGoalScope(row.scope, studio.enterpriseScopes);
+    for (const cg of publication.committedGoals) validateStrategyGoalScope(cg.scope, studio.enterpriseScopes);
     const workspace = strategyGoals.getGoalWorkspace(goalId);
     const isCurrent = workspace.activePublication?.version === publication.version;
     return downloadable(decompositionPublicationDocument(goal, publication, isCurrent));
@@ -1608,6 +1611,19 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     validateScope: scope => validateStrategyGoalScope(scope, studio.enterpriseScopes),
     validateFeedbackSource: strategySources.validate,
     listFormalStrategyPublications: scopeKey => strategyInitiativePublications.listActiveForScope(scopeKey),
+    validateContinueExistingCase: async ({ goalId, goalVersion, strategy, scope, caseId }) => {
+      let existingCase;
+      try { existingCase = cases.getCase(caseId); } catch { throw new GoalDecompositionError('case_continue_mismatch', 404, { caseId }); }
+      if (existingCase.status === 'closed') throw new GoalDecompositionError('case_closed_cannot_continue', 409, { caseId });
+      const binding = cases.getGoalBinding(caseId);
+      if (!binding || binding.primary.goalId !== goalId || binding.primary.version !== goalVersion) {
+        throw new GoalDecompositionError('case_continue_mismatch', 409, { caseId, expectedGoalId: goalId, expectedGoalVersion: goalVersion });
+      }
+      if (strategy && binding.strategy && normalizeGoalText(binding.strategy) !== normalizeGoalText(strategy)) {
+        throw new GoalDecompositionError('case_continue_mismatch', 409, { caseId, expectedStrategy: strategy, actualStrategy: binding.strategy });
+      }
+      validateStrategyGoalScope(scope, studio.enterpriseScopes);
+    },
     ...(options.goalDecompositionPreCommitFault ? { preCommitPublishFault: options.goalDecompositionPreCommitFault } : {}),
   });
   async function qualifyGoalSource(
@@ -3115,11 +3131,38 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
               if (goal.status!=='adopted') throw new RequestFault(409,'goal_not_adopted');
               await validateStrategyGoal(goal);
             }
+            let verifiedHandoff: import('./project-store.ts').ProjectDecompositionHandoffOrigin | undefined;
+            if (goal && origin?.decompositionHandoff !== undefined) {
+              const rawHandoffId = typeof origin.decompositionHandoff?.handoffId === 'string' ? origin.decompositionHandoff.handoffId.trim() : '';
+              if (!rawHandoffId) throw new RequestFault(400, 'invalid_project_goal_origin');
+              const handoff = strategyGoals.readProjectHandoff(goal.goalId, rawHandoffId);
+              if (handoff.goalRef.goalId !== goal.goalId || handoff.goalRef.version !== goal.version) {
+                throw new RequestFault(409, 'project_handoff_goal_mismatch');
+              }
+              const pub = strategyGoals.readDecompositionPublication(goal.goalId, handoff.publicationVersion);
+              for (const row of pub.snapshot.rows) validateStrategyGoalScope(row.scope, studio.enterpriseScopes);
+              validateStrategyGoalScope(handoff.scope, studio.enterpriseScopes);
+              verifiedHandoff = {
+                handoffId: handoff.handoffId,
+                gsaPlanId: handoff.gsaPlanRef.planId,
+                gsaPlanVersion: handoff.gsaPlanRef.planVersion,
+                publicationId: handoff.publicationId,
+                publicationVersion: handoff.publicationVersion,
+                rowId: handoff.rowId,
+                checkpointId: handoff.checkpoint.checkpointId,
+                checkpointLabel: handoff.checkpoint.label,
+                checkpointDate: handoff.checkpoint.date,
+                checkpointTargetValue: handoff.checkpoint.targetValue,
+                unit: handoff.unit,
+                responsible: handoff.responsible,
+                strategy: handoff.strategy,
+              };
+            }
             const goalEnterprise=goal?.scope.kind==='enterprise' ? goal.scope.id : goal?.scope.enterpriseId;
             const enterpriseId = input.enterpriseId === undefined ? (goal ? goalEnterprise : enterprises.length === 1 ? enterprises[0]!.id : undefined) : String(input.enterpriseId);
             if (goal && enterpriseId!==goalEnterprise) throw new RequestFault(403,'project_goal_scope_unavailable');
             if (enterpriseId) studio.enterpriseScopes.get(enterpriseId);
-            const created = await projects.create({ name: String(input.name ?? ''), configuration: selected, ...(goal ? {goalOrigin:{goal:{goalId:goal.goalId,version:goal.version}}} : {}) });
+            const created = await projects.create({ name: String(input.name ?? ''), configuration: selected, ...(goal ? {goalOrigin:{goal:{goalId:goal.goalId,version:goal.version},...(verifiedHandoff?{decompositionHandoff:verifiedHandoff}:{})}} : {}) });
             if (enterpriseId) studio.enterpriseScopes.associateProject(created.id, enterpriseId);
             for (const task of created.tasks) if (!task.sessionFile && !task.lastRun) projectSessions.registerFresh(projectSessions.ref({ project: created, task }));
             return created;
@@ -3664,6 +3707,15 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           decomposition_frozen_checkpoint_unavailable: '所选检查点未在目标拆解正式版本中冻结，不能作为执行承接依据。',
           decomposition_publication_corrupt: '拆解正式版快照完整性校验未通过；未静默修复或替换，请核对原存储。',
           gsa_planned_actions_required: '总目标 GSA 至少需要填写一条明确的计划 A 才能确认并进入拆解。',
+          gsa_formal_target_required: '当前目标缺少正式目标值来源（正式战略发布或明确手填例外），Host 不自动补零或用测算值替代正式 G。',
+          strategy_goal_historical_version: '当前查看的是历史目标版本，不能直接确认或覆盖更新，请切回当前有效版本或最新候选。',
+          gsa_plan_stale_for_adopted_goal: '总目标已采用新版本，旧版 GSA 计划已失效，请先重新确认总 GSA 计划后再拆解或发布。',
+          formal_strategy_origin_mismatch: '正式战略目标来源与当前有效战略发布记录不匹配，请重新选择或核对正式战略发布。',
+          invalid_self_relation: '拆解子目标不能关联父目标自身，禁止产生自关联关系。',
+          decomposition_checkpoint_mismatch: '所选检查点与该责任行或总表冻结计划不匹配，请重新核对。',
+          case_closed_cannot_continue: '该 Case 已关闭，不能直接续接；请另建独立 Case 草稿。',
+          case_continue_mismatch: '所选 Case 未绑定当前准确目标与具体策略，不能续接为同问题事项。',
+          gsa_plan_required_for_review_period: '所复盘周期尚无已确认的总目标 GSA 计划，不能以未确认目标或其他周期替代复盘。',
         };
         json(response, error.status, {
           code: error.code,
