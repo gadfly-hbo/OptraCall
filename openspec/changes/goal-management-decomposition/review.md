@@ -122,9 +122,9 @@ A 的原文件备份保持 `435064da…` 完整字节，对照副本仅隔离暂
 
 ## 确认身份
 
-本轮按已确认的 A 集成稿完成文稿对标。A5／A6 原型准备、A7 用户 UI 确认及 A8 文稿对标／复核已分别完成。A／B／对照身份作为历史保留，后续 Spec／清单发单版、Git 发单及产品工程实施尚未完成。
+本轮按已确认的 A 集成稿完成文稿对标。A5／A6 原型准备、A7 用户 UI 确认及 A8 文稿对标／复核已分别完成。A／B／对照身份作为历史保留。下表为固定确认包 `ea59d7c44a73d21e6bad8287a3612529010bb9d6` 的内容身份，后续任务完成勾选另记执行状态。
 
-| 文件 | SHA-256 |
+| 文件 | 确认包 SHA-256 |
 | --- | --- |
 | spec.md | `5ce8ffcf8c34bd19f6b968a09af37a15d850fb8d50c5407f4c8cb6f07e3c7fc4` |
 | tasks.md | `d189021b9dd74c5e8da11c8576e38368eb00a48aa6a90621881cde9d33dfad16` |
@@ -132,3 +132,7 @@ A 的原文件备份保持 `435064da…` 完整字节，对照副本仅隔离暂
 | ui-demo-original.html（A 对照副本） | `b13608986d1331cd49f0d46ca7f4e5c28c86a2946dff8a889df71aefeeeffaa5` |
 | ui-demo.html（B） | `7d0fbb563fb042d9df8eca263105163d50de5747815a801741a37021ede3f25a` |
 | ui-demo-compare.html | `0a1563e25748d20dea041c0e990070aabaf8228fbdd2b472386dfc7e11a59dc9` |
+
+## 后续确认与发单
+
+2026-11-25 用户已进一步确认本 Spec／任务清单，并明确要求保存远端和发布开发 Issue。确认包已推送并回读，正式 [Issue #136](https://github.com/gadfly-hbo/OptraCall/issues/136) 已发布且正文完整核对。本轮 A9 完成，B–E 保持未实施。前文为准备阶段的验证与授权记录，当前发单状态及准确回执见 [dispatch.md](dispatch.md)。本次仅回填三份文档的状态，Spec、所有 HTML、原讨论稿及原静态回执字节不变，未启动产品开发或设备更新。
