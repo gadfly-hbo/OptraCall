@@ -7,9 +7,9 @@ import * as api from './project-data-context-client.ts';
 const flatten = (nodes: FileNode[]): FileNode[] => nodes.flatMap(node => node.kind === 'directory' ? flatten(node.children ?? []) : [node]);
 
 /** An optional view over existing files and explicit citations; it infers no engine adoption. */
-export function ProjectCalculationEvidence({ projectId, file, files, summary, busy, onCitation, onText, initiallyOpen = false }: {
+export function ProjectCalculationEvidence({ projectId, file, files, summary, busy, onCitation, onText, initiallyOpen = false, expectedSha256 }: {
   projectId: string; file: { path: string; name: string }; files: FileNode[]; summary: DataContextSummary | null; busy: boolean;
-  onCitation: (citationId: string) => void; onText: (title: string, operation: () => Promise<string>) => void; initiallyOpen?: boolean;
+  onCitation: (citationId: string) => void; onText: (title: string, operation: () => Promise<string>) => void; initiallyOpen?: boolean; expectedSha256?: string;
 }) {
   const [current, setCurrent] = useState<api.DataContextPreview>(), [checking, setChecking] = useState(false), [error, setError] = useState(''), [selectedFile, setSelectedFile] = useState('');
   const epoch = useRef(0), owner = `${projectId}/${file.path}`;
@@ -20,7 +20,7 @@ export function ProjectCalculationEvidence({ projectId, file, files, summary, bu
     catch (reason) { if (ticket === epoch.current) { setCurrent(undefined); setError(api.projectDataError(reason)); } }
     finally { if (ticket === epoch.current) setChecking(false); }
   };
-  const citations = summary?.citations.filter(record => record.report.originalPath === file.path) ?? [];
+  const citations = summary?.citations.filter(record => record.report.originalPath === file.path && (!expectedSha256 || record.report.sha256 === expectedSha256)) ?? [];
   const materials = flatten(files).filter(item => /^(020_clean|060_reports)\//.test(item.path) && EVIDENCE_EXTENSIONS.some(extension => item.path.toLowerCase().endsWith(extension)) && item.path !== file.path);
   const downloadInput = async (selection: ProjectDataContextSelection, version: InputVersionRecord) => {
     const ticket = epoch.current; setError('');
@@ -35,7 +35,7 @@ export function ProjectCalculationEvidence({ projectId, file, files, summary, bu
     <button type="button" className="text-button" disabled={checking || busy} onClick={() => { void checkCurrent(); }}>核对当前文件版本</button>
     {checking && <p role="status">正在核对当前普通文件…</p>}{error && <p className="pdc-error" role="alert">{error}</p>}
     {current && <p className="pdc-help">本次核对 {new Date(current.observedAt).toLocaleString('zh-CN')} · {current.bytes.toLocaleString()} 字节<code>SHA-256 {current.sha256}</code></p>}
-    {!citations.length && <p className="pdc-help">这份路径尚无固定来源记录。可直接查看已有普通材料；原“记录此稿来源”仍是可选动作。</p>}
+    {!citations.length && <p className="pdc-help">{expectedSha256 ? '这份报告版本尚无可读取的固定来源记录。' : '这份路径尚无固定来源记录。可直接查看已有普通材料；原“记录此稿来源”仍是可选动作。'}</p>}
     {citations.map(record => <article className="pdc-history" key={record.citationId}>
       <strong>固定来源 · {record.citationId.slice(0, 8)}</strong>
       <p>{record.report.originalPath} · {record.report.bytes.toLocaleString()} 字节</p><code>SHA-256 {record.report.sha256}</code>

@@ -11,6 +11,7 @@ import { DownloadVersion,type ChoiceHandoff } from './StrategyChoicePanel.tsx';
 import { managementTitle, ManagementTabs, type ManagementRoute,type ManagementStage } from './ManagementTabs.tsx';
 import { resolveNewUsageContext, type UsageContext } from '../usage-context-types.ts';
 import { StrategyInitiativeWorkbench } from './StrategyInitiativeWorkbench.tsx';
+import type { InitiativeHandoffReceipt, InitiativePublication } from './strategy-initiative-client.ts';
 import * as discussionApi from './strategy-discussion-client.ts';
 import type { ClientProject, PublicModelConfiguration } from './project-types.ts';
 import { useEffect, useId, useRef, useState } from 'react';
@@ -174,9 +175,9 @@ function GoalAdoptionComparison({ candidate, adopted }: { candidate: GoalVersion
     else if (changedS) summary = '仅 S 变化';
     else summary = 'G 和 S 均沿用';
   }
-  function details(goal: GoalVersion, label: string) {
+  function details(goal: GoalVersion, label: string, kind: 'current' | 'candidate') {
     const measure = goal.measurement;
-    return <fieldset><legend>{label} v{goal.version}</legend><dl className="sg-details">
+    return <fieldset className={`sg-comparison-card sg-comparison-${kind}`}><legend>{label} v{goal.version}</legend><dl className="sg-details">
       <dt>目标 G</dt><dd>{goal.outcome}</dd>
       <dt>衡量要求</dt><dd>{measure.kind === 'deliverable' ? measure.criterion :
         <>{measure.sapMetric.metricName} · {measure.sapMetric.id} @ {measure.sapMetric.version}{measure.target && <p>{measure.target}</p>}</>}</dd>
@@ -184,10 +185,14 @@ function GoalAdoptionComparison({ candidate, adopted }: { candidate: GoalVersion
       <dt>策略 S</dt><dd>{goal.strategies?.length ? <ul>{goal.strategies.map((text,i) => <li key={i}>{text}</li>)}</ul> : '尚未记录'}</dd>
     </dl></fieldset>;
   }
-  return <section aria-label="G 与 S 采用对照"><p><strong>{summary}</strong></p>
-    {adopted && changedS && <dl className="sg-details">{removed.map((text,i) => <div key={'r'+i}><dt>移出策略</dt><dd>{text}</dd></div>)}
+  return <section className="sg-goal-comparison" aria-label="G 与 S 采用对照">
+    <div className="sg-row-between"><strong>G 与 S 采用对照</strong><span className="sg-badge">{summary}</span></div>
+    {adopted && changedS && <dl className="sg-details sg-comparison-change">{removed.map((text,i) => <div key={'r'+i}><dt>移出策略</dt><dd>{text}</dd></div>)}
       {added.map((text,i) => <div key={'a'+i}><dt>加入策略</dt><dd>{text}</dd></div>)}</dl>}
-    <div className="sg-grid">{adopted && details(adopted,'当前采用')}{details(candidate,'本次候选')}</div>
+    <div className="sg-comparison-grid">
+      {adopted ? details(adopted,'当前采用','current') : <fieldset className="sg-comparison-card sg-comparison-current"><legend>当前采用</legend><p className="sg-muted">尚无已采用版本。</p></fieldset>}
+      {details(candidate,'本次候选','candidate')}
+    </div>
   </section>;
 }
 
@@ -341,13 +346,31 @@ export function StrategyGoalsPage({ teachReview,onReturnReview,clearTeachReview,
   const [editorSources, setEditorSources] = useState<GoalFeedbackSource[]>([]);
   const [discussionCandidate, setDiscussionCandidate] = useState<{ goal: GoalVersion; discussionId: string; reload: () => Promise<void> }>();
   const [discussionFocus, setDiscussionFocus] = useState<{ source: GoalDiscussionSourceRef; id: string }>();
+  const [publicationHandoff, setPublicationHandoff] = useState<{ receipt: InitiativeHandoffReceipt; publicationId: string; candidateId: string; candidateVersion: number }>();
+  const [goalIndexUnavailable, setGoalIndexUnavailable] = useState(false);
+  const pinnedHandoffGoal = useRef<GoalRef | null>(null);
+  const clearPublicationHandoff = () => { pinnedHandoffGoal.current = null; setPublicationHandoff(undefined); };
   const alive = useRef(true), requestId = useRef(0), id = useId();
+  const heading = useRef<HTMLHeadingElement>(null), focusHandoffHeading = useRef(false);
+  useEffect(() => {
+    if (area === 'gsa' && stage === 'adopt' && focusHandoffHeading.current) {
+      focusHandoffHeading.current = false;
+      heading.current?.focus();
+    }
+  }, [area, stage, publicationHandoff]);
   const refresh = async () => {
     const request = ++requestId.current; setLoading(true); setError('');
     const [goals, caseResult, enterpriseResult, sourceResult, metricResult, boardResult] = await Promise.allSettled([api.list(), listCases(), listStudioEnterprises(), api.feedbackSources(), api.publishedMetrics(), readBoard()]);
     if (!alive.current || request !== requestId.current) return;
-    if (goals.status === 'fulfilled') { setGoalsLoaded(true); setIndex(goals.value); setSelectedId(old => goals.value.goals.some(x => x.id === old) ? old : goals.value.goals[0]?.id ?? ''); }
-    else setError(api.goalError(goals.reason));
+    if (goals.status === 'fulfilled') {
+      setGoalsLoaded(true);
+      setGoalIndexUnavailable(false);
+      setIndex(goals.value);
+      setSelectedId(old => old === pinnedHandoffGoal.current?.goalId || goals.value.goals.some(x => x.id === old) ? old : goals.value.goals[0]?.id ?? '');
+    } else {
+      setGoalIndexUnavailable(true);
+      setError(api.goalError(goals.reason));
+    }
     if (caseResult.status === 'fulfilled') setCases(caseResult.value.cases); else setCases([]);
     if (enterpriseResult.status === 'fulfilled') {setEnterprises(enterpriseResult.value.enterprises);setEnterpriseDirectory(enterpriseResult.value);} else {setEnterprises([]);setEnterpriseDirectory(undefined);}
     if (metricResult.status === 'fulfilled') { setMetrics(metricResult.value); setMetricsKnown(true); } else { setMetrics([]); setMetricsKnown(false); }
@@ -360,14 +383,30 @@ export function StrategyGoalsPage({ teachReview,onReturnReview,clearTeachReview,
   };
   useEffect(() => { alive.current = true; return () => { alive.current = false; requestId.current++; }; }, []);
   useEffect(() => { if (active) void refresh(); }, [active]);
-  const saved = async () => { setEditor(null); setRelationEditor(undefined); setSelectedVersion(null); setNotice('已保存本次管理记录；原Case、项目和报告的准确引用保留。'); await refresh(); };
-  const record = index.goals.find(x => x.id === selectedId), value = record?.versions.find(x => x.version === (selectedVersion ?? record.adoptedVersion ?? record.currentVersion));
+  const saved = async () => { setEditor(null); setRelationEditor(undefined); setSelectedVersion(pinnedHandoffGoal.current?.version ?? null); setNotice('已保存本次管理记录；原Case、项目和报告的准确引用保留。'); await refresh(); };
+  const exactPublicationHandoff = publicationHandoff?.receipt.goals.some(goal => goal.goalId === selectedId && goal.version === selectedVersion) ? publicationHandoff : undefined;
+  const record = index.goals.find(x => x.id === selectedId);
+  const value = exactPublicationHandoff && goalIndexUnavailable ? undefined : record?.versions.find(x => x.version === (selectedVersion ?? record.adoptedVersion ?? record.currentVersion));
   const visible = index.goals.filter(x => perspective === 'all' || current(x).perspective === perspective);
   const options = adoptedVersions(index), sources = [...new Map([...originalSources, ...feedbackSources, ...cases.map(x => ({ label: `Case：${x.title}`, ref: { authority: 'case' as const, id: x.id, version: x.revision } }))].map(x => [sourceKey(x.ref), x])).values()];
-  const select = (id: string) => { setDraftScopeKey('');setHandoff(undefined); setSelectedId(id); setSelectedVersion(index.goals.find(record => record.id === id)?.currentVersion ?? null); };
+  const select = (id: string) => { clearPublicationHandoff(); setDraftScopeKey('');setHandoff(undefined); setSelectedId(id); setSelectedVersion(index.goals.find(record => record.id === id)?.currentVersion ?? null); };
   const relations = value ? index.relations.filter(x => sameRef(x.from, value) || sameRef(x.to, value)) : [];
   const feedback = value ? index.feedback.filter(x => sameRef(x.goal, value)) : [];
   const [handoff,setHandoff]=useState<ChoiceHandoff>();
+  const reviewHandoff = (receipt: InitiativeHandoffReceipt, publication: InitiativePublication) => {
+    const goal = receipt.goals[0];
+    if (!goal) return;
+    clearCaseSource?.();
+    setHandoff(undefined);
+    setDraftScopeKey('');
+    setPerspective('all');
+    pinnedHandoffGoal.current = goal;
+    setSelectedId(goal.goalId);
+    setSelectedVersion(goal.version);
+    focusHandoffHeading.current = true;
+    setPublicationHandoff({ receipt, publicationId: publication.publicationId, candidateId: publication.candidateId, candidateVersion: publication.no });
+    onStage('adopt');
+  };
   const [draftScopeKey,setDraftScopeKey]=useState('');
   const scopeKey=(scope:GoalScope)=>JSON.stringify([scope.kind,scope.id,scope.enterpriseId??null]);
   const personalScope:GoalScope={kind:'personal',id:'self',name:'个人工作'};
@@ -388,6 +427,7 @@ export function StrategyGoalsPage({ teachReview,onReturnReview,clearTeachReview,
       const originEnterprise=source.kind==='case'?enterpriseDirectory!.caseAssignments.find(a=>a.caseId===source.caseId):enterpriseDirectory!.projectAssignments.find(a=>a.projectId===source.projectId);
       const entity=enterpriseDirectory!.enterprises.find(e=>e.id===originEnterprise?.enterpriseId);
       if(!current)return;
+      clearPublicationHandoff();
       setHandoff(undefined);
       if(binding){setPerspective('all');setSelectedId(binding.primary.goalId);setSelectedVersion(binding.primary.version);setDraftScopeKey('');}
       else setDraftScopeKey(scopeKey(entity?{kind:'enterprise',id:entity.id,name:entity.name}:personalScope));
@@ -405,7 +445,7 @@ export function StrategyGoalsPage({ teachReview,onReturnReview,clearTeachReview,
     if(previous)return previous;
     const id=crypto.randomUUID();localStorage.setItem(key,id);return id;
   };
-  const goalOwner:BusinessRoleOwner|undefined=goalsLoaded&&resolvedOrigin===originKey&&active&&area==='gsa'?{...(
+  const goalOwner:BusinessRoleOwner|undefined=goalsLoaded&&resolvedOrigin===originKey&&active&&area==='gsa'&&(!exactPublicationHandoff||Boolean(value))?{...(
     handoff?{role:'goal-draft' as const,draftId:handoff.destination.draftId,scope:handoff.destination.scope,strategyChoice:{discussionId:handoff.discussionId,version:handoff.version}}:
     roleGoal?{role:'goal' as const,goalId:roleGoal.goalId,version:roleGoal.version}:{role:'goal-draft' as const,draftId:stableDraftId(draftScope),scope:draftScope}
   ),...(caseSource?{caseSource}:{})}:undefined;
@@ -415,20 +455,34 @@ export function StrategyGoalsPage({ teachReview,onReturnReview,clearTeachReview,
   const openRelation = (initial?: GoalRelation) => { setRelationEditor(initial); openEditor('relation'); };
   const relationTable = <div className="sg-table-scroll"><table className="sg-table"><thead><tr><th>目标关系</th><th>职责与协同</th><th>依据／必要条件</th><th>版本</th></tr></thead><tbody>{relations.map(x => <tr key={x.id}><td>{goalName(index, x.from)}<br /><strong>{relationLabels[x.kind]}</strong> → {goalName(index, x.to)}</td><td>{x.responsibility}</td><td>{x.rationale}</td><td>关系 v{x.revision}<br /><button type="button" className="text-button" onClick={() => openRelation(x)}>修订关系</button>{x.history.length > 0 && <details><summary>历史</summary>{x.history.map(v => <p key={v.revision}>v{v.revision} · {goalName(index, v.from)} → {goalName(index, v.to)}<br />{v.responsibility}<br />{v.rationale}</p>)}</details>}</td></tr>)}</tbody></table>{!relations.length && <p className="sg-muted">此准确目标版本尚无已记录关系，不据此推断业务上没有贡献或必要条件。</p>}</div>;
   if(teachReview&&onReturnReview)return <TeachReviewPanel key={JSON.stringify(teachReview)} owner={teachReview} onReturn={onReturnReview}
-    onGoal={()=>{setSelectedId(teachReview.goalId);setSelectedVersion(teachReview.version);setHandoff(undefined);setDraftScopeKey('');setPerspective('all');clearTeachReview?.();onStage('history');}}
+    onGoal={()=>{clearPublicationHandoff();setSelectedId(teachReview.goalId);setSelectedVersion(teachReview.version);setHandoff(undefined);setDraftScopeKey('');setPerspective('all');clearTeachReview?.();onStage('history');}}
     onStrategy={source=>{setDiscussionFocus({source,id:crypto.randomUUID()});clearTeachReview?.();onStage('strategy-versions');}}/>;
-  return <section className="case-board strategy-goals-page workspace-management-page" aria-labelledby={id+'-heading'}><header className="case-board-heading"><div><h1 id={id+'-heading'}>{managementTitle(management)}</h1><p>{area === 'strategy' ? '围绕战略事项完成开题、候选比较、两道检验与正式发布；在「战略发布」确认准确版本后，才可带入目标管理。' : '核对目标和策略，再承接年度决策事项。'}</p></div>{area==='gsa' && <StrategyWorkbookImport target="goals" scopes={scopes} onSaved={result=>{void refresh().then(()=>{if(result.goals?.[0]){setSelectedId(result.goals[0].goalId);setSelectedVersion(result.goals[0].version);}onStage('goals');setNotice('已保存目标候选，可逐项核对并采用。');});}}/>}{area==='gsa' && <button type="button" className="primary-button" disabled={loading} onClick={() => openEditor('create')}>＋ 新建候选目标</button>}</header>
+  return <section className="case-board strategy-goals-page workspace-management-page" aria-labelledby={id+'-heading'}><header className="case-board-heading"><div><h1 id={id+'-heading'} ref={heading} tabIndex={-1}>{managementTitle(management)}</h1><p>{area === 'strategy' ? '围绕战略事项完成开题、候选比较、两道检验与正式发布；在「战略发布」确认准确版本后，才可带入目标管理。' : '核对目标和策略，再承接年度决策事项。'}</p></div>{area==='gsa' && <StrategyWorkbookImport target="goals" scopes={scopes} onSaved={result=>{void refresh().then(()=>{if(result.goals?.[0]){setSelectedId(result.goals[0].goalId);setSelectedVersion(result.goals[0].version);}onStage('goals');setNotice('已保存目标候选，可逐项核对并采用。');});}}/>}{area==='gsa' && <button type="button" className="primary-button" disabled={loading} onClick={() => openEditor('create')}>＋ 新建候选目标</button>}</header>
     <CaseFormError error={error} />{index.unavailableGoalSources?.length ? <p role="status">部分目标的准确来源暂不可读取，请核对原版本与权限。{index.unavailableGoalSources.join('、')}</p> : null}{notice && <p className="case-notice" role="status">{notice}</p>}{sourceNotice && <p className="case-notice" role="status">{sourceNotice}</p>}
     {area==='gsa' && caseSource && <aside className="sg-panel"><strong>新增 Case 的原来源</strong>{goalOwner&&<GoalOrigin key={JSON.stringify(goalOwner)} owner={goalOwner}/>}{stage!=='goals'&&<button className="text-button" onClick={()=>onStage('goals')}>与目标管理 Agent 核对</button>}<p>{caseSource.kind==='task'?'项目 '+caseSource.projectId+' · Task '+caseSource.taskId:'Case '+caseSource.caseId+' · v'+caseSource.caseRevision}</p><button className="text-button" onClick={clearCaseSource}>移除本次来源</button></aside>}
-    <ManagementTabs route={management} onStage={onStage} />
-    <div hidden={area!=="strategy" || stage==="bsc"}><StrategyInitiativeWorkbench stage={area === 'strategy' ? stage : 'co-create'} onStage={onStage} active={active && area==='strategy'} legacyFocus={discussionFocus} configurations={configurations} selectedConfigurationId={selectedConfigurationId} onSettings={onSettings} access={{ active: active && area==='strategy', scopes, projects, configurations, selectedConfigurationId, onSettings, getGoalScope: ref => versionFor(index, ref)?.scope, selectedGoal: value, onStage, onGoalsChanged: async goals=>{await refresh();const first=goals?.[0];if(first){clearCaseSource?.();setHandoff(undefined);setPerspective('all');setSelectedId(first.goalId);setSelectedVersion(first.version);}}, onReviewCandidate: (goal, discussionId, reload) => { void refresh().then(() => setDiscussionCandidate({ goal: structuredClone(goal), discussionId, reload })); } }} /></div>
+    {area === 'gsa' && exactPublicationHandoff && <aside className="sg-goal-source-banner" aria-label="战略发布承接来源">
+      <div>
+        <strong>来自战略发布的目标承接</strong>
+        <p>候选 v{exactPublicationHandoff.candidateVersion} · {scopeLabels[exactPublicationHandoff.receipt.scope.kind]} / {exactPublicationHandoff.receipt.scope.name} · 本批 {exactPublicationHandoff.receipt.goals.length} 个目标</p>
+        <details><summary>核对准确来源</summary><p>发布 {exactPublicationHandoff.publicationId} · 候选 {exactPublicationHandoff.candidateId} · 范围 {exactPublicationHandoff.receipt.scope.id}{exactPublicationHandoff.receipt.scope.enterpriseId ? ' / 企业 ' + exactPublicationHandoff.receipt.scope.enterpriseId : ''} · 回执 {exactPublicationHandoff.receipt.operationId}</p></details>
+      </div>
+      {exactPublicationHandoff.receipt.goals.length > 1 && <label>本批目标<select className="sg-select" value={selectedId} onChange={event => {
+        const goal = exactPublicationHandoff.receipt.goals.find(ref => ref.goalId === event.target.value);
+        if (goal) { pinnedHandoffGoal.current = goal; setSelectedId(goal.goalId); setSelectedVersion(goal.version); }
+      }}>
+        {exactPublicationHandoff.receipt.goals.map(goal => <option key={goal.goalId} value={goal.goalId}>{versionFor(index, goal)?.title ?? goal.goalId} · v{goal.version}</option>)}
+      </select></label>}
+      {!value && !loading && <p className="sg-muted" role="status">回执对应的准确目标版本暂不可读取。可刷新目标与来源后再核对。</p>}
+    </aside>}
+    {(area !== 'strategy' || stage === 'bsc') && <ManagementTabs route={management} onStage={onStage} />}
+    <div hidden={area !== 'strategy' || stage === 'bsc'}><StrategyInitiativeWorkbench stage={area === 'strategy' ? stage : 'co-create'} onStage={onStage} active={active && area==='strategy'} navigation={area === 'strategy' && stage !== 'bsc' ? <ManagementTabs route={management} onStage={onStage} /> : null} legacyFocus={discussionFocus} configurations={configurations} selectedConfigurationId={selectedConfigurationId} onSettings={onSettings} access={{ active: active && area==='strategy', scopes, projects, configurations, selectedConfigurationId, onSettings, getGoalScope: ref => versionFor(index, ref)?.scope, selectedGoal: value, onStage, onGoalsChanged: async goals=>{await refresh();const first=goals?.[0];if(first){clearPublicationHandoff();clearCaseSource?.();setHandoff(undefined);setPerspective('all');setSelectedId(first.goalId);setSelectedVersion(first.version);}}, onReviewHandoff: reviewHandoff, onReviewCandidate: (goal, discussionId, reload) => { void refresh().then(() => setDiscussionCandidate({ goal: structuredClone(goal), discussionId, reload })); } }} /></div>
     {stage === 'strategy-versions' && <button className="text-button" onClick={() => onStage('bsc')}>BSC／战略目标关系（按需）</button>}
     {stage === 'bsc' && <button className="text-button" onClick={() => onStage('strategy-versions')}>← 返回版本管理</button>}
     {area==='gsa' && handoff && <aside className="sg-panel"><strong>已交接的战略选择表 · v{handoff.version}</strong><p>{handoff.summary}</p><button type="button" className="secondary-button" onClick={()=>openEditor('create')}>沿此版建立目标候选</button> <button className="text-button" onClick={()=>setHandoff(undefined)}>返回现有目标</button></aside>}
     {(area==='gsa' || stage==='bsc') && <>
     <div className="case-board-toolbar"><div className="case-board-filters"><label htmlFor={`${id}-perspective`}>适用视角</label><select id={`${id}-perspective`} value={perspective} onChange={e => setPerspective(e.target.value as typeof perspective)}><option value="all">全部视角</option>{Object.entries(perspectiveLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select><button type="button" className="text-button" disabled={loading} onClick={() => { void refresh(); }}>刷新目标与来源</button></div><span className="sg-muted">{index.goals.length}个目标 · 候选与已采纳版本分别保留</span></div>
-    {loading && !index.goals.length ? <p className="case-message" role="status">正在读取目标记录…</p> : !visible.length ? <div className="sg-empty"><h2>{index.goals.length ? '此视角尚无已记录目标' : '从一个适用目标开始'}</h2><p>可以复用已有目标，也可先保存候选。无需先编完整组织层级或填满全部BSC维度。</p><button type="button" className="secondary-button" onClick={() => openEditor('create')}>新建候选目标</button></div> : <GoalItemsTable records={visible} selected={selectedId} onSelect={select}/>}
-    {value && record && <section className="sg-panel"><div className="sg-row-between"><div><h2>{value.title}</h2><p className="sg-muted">{perspectiveLabels[value.perspective]} · {scopeLabels[value.scope.kind]}：{value.scope.name}</p></div><label>查看准确版本 <select className="sg-select" value={value.version} onChange={e => setSelectedVersion(Number(e.target.value))}>{record.versions.map(x => <option key={x.version} value={x.version}>v{x.version} · {x.status === 'candidate' ? '候选' : '已采纳'}{x.version === record.adoptedVersion ? ' · 当前采用' : ''}</option>)}</select></label></div>{stage==='history'&&<DownloadVersion key={refKey(value)} route={'/api/strategy/goals/'+value.goalId+'/versions/'+value.version+'/export'} disabled={loading||Boolean(error)}/>}<details><summary>目标说明</summary><p>{value.outcome}</p></details><GoalTableOrigin goal={value}/>{stage==='cases'&&onInspectCase&&<AnnualCases records={cases} goal={value} onOpen={onInspectCase}/ >}{(value.strategyContext || value.usageContext || value.source) && <details className="sg-origin"><summary>战略背景与准确来源</summary>{value.usageContext && <p>本目标用途：{value.usageContext.kind === 'organization' ? '组织' : value.usageContext.kind === 'department' ? '部门／业务模块' : '个人'} · {value.usageContext.background || '未补充背景'}</p>}{value.strategyContext && <><p>{value.strategyContext.summary}</p>{value.strategyContext.methods?.length ? <p>参考方法：{value.strategyContext.methods.map(method => method.name).join(' ＋ ')}</p> : null}</>}{value.source && <><p>原来源：{authorityLabels[value.source.authority]} · 准确版 {value.source.version}</p>{value.source.authority === 'strategy-discussion' && <button type="button" className="text-button" onClick={() => {onStage('strategy-versions');setDiscussionFocus({ source: value.source as GoalDiscussionSourceRef, id: crypto.randomUUID() });}}>查看原战略讨论</button>}<details><summary>准确引用身份</summary><pre>{JSON.stringify(value.source, null, 2)}</pre></details></>}</details>}<dl className="sg-details"><dt>衡量依据</dt><dd>{value.measurement.kind === 'quantitative' ? <>SAP指标 {value.measurement.sapMetric.metricName || '旧版未明确具体指标'} · {value.measurement.sapMetric.id} · 准确发布版 {value.measurement.sapMetric.version}<br />{value.measurement.target}<br /><button type="button" className="text-button" onClick={onManageMetrics}>查看原SAP指标</button></> : value.measurement.criterion}</dd><dt>基线</dt><dd>{value.baseline.state === 'pending' ? '待补：' : ''}{value.baseline.description}</dd><dt>责任与期限</dt><dd>{value.responsible} · {value.dueAt ? value.dueAt.slice(0, 10) : '期限未记录'}</dd></dl><div className="sg-row">{!ready && <button type="button" className="primary-button" disabled={loading} onClick={() => openEditor('adopt')}>核对并采纳此版本</button>}{value.structured?<GoalCaseAction key={refKey(value)} goal={value} disabled={!ready||loading} onOpen={async strategy=>{
+    {loading && !index.goals.length ? <p className="case-message" role="status">正在读取目标记录…</p> : !visible.length ? <div className="sg-empty"><h2>{index.goals.length ? '此视角尚无已记录目标' : '从一个适用目标开始'}</h2><p>可以复用已有目标，也可先保存候选。无需先编完整组织层级或填满全部BSC维度。</p><button type="button" className="secondary-button" onClick={() => openEditor('create')}>新建候选目标</button></div> : <GoalItemsTable records={visible} selected={exactPublicationHandoff && !value ? '' : selectedId} onSelect={select}/>}
+    {value && record && <section className="sg-panel sg-goal-summary"><div className="sg-row-between"><div><h2>{value.title}</h2><p className="sg-muted">{perspectiveLabels[value.perspective]} · {scopeLabels[value.scope.kind]}：{value.scope.name}</p></div><label>查看准确版本 <select className="sg-select" value={value.version} onChange={e => { clearPublicationHandoff(); setSelectedVersion(Number(e.target.value)); }}>{record.versions.map(x => <option key={x.version} value={x.version}>v{x.version} · {x.status === 'candidate' ? '候选' : '已采纳'}{x.version === record.adoptedVersion ? ' · 当前采用' : ''}</option>)}</select></label></div>{stage==='history'&&<DownloadVersion key={refKey(value)} route={'/api/strategy/goals/'+value.goalId+'/versions/'+value.version+'/export'} disabled={loading||Boolean(error)}/>}<details><summary>目标说明</summary><p>{value.outcome}</p></details><GoalTableOrigin goal={value}/>{stage==='cases'&&onInspectCase&&<AnnualCases records={cases} goal={value} onOpen={onInspectCase}/ >}{(value.strategyContext || value.usageContext || value.source) && <details className="sg-origin"><summary>战略背景与准确来源</summary>{value.usageContext && <p>本目标用途：{value.usageContext.kind === 'organization' ? '组织' : value.usageContext.kind === 'department' ? '部门／业务模块' : '个人'} · {value.usageContext.background || '未补充背景'}</p>}{value.strategyContext && <><p>{value.strategyContext.summary}</p>{value.strategyContext.methods?.length ? <p>参考方法：{value.strategyContext.methods.map(method => method.name).join(' ＋ ')}</p> : null}</>}{value.source && <><p>原来源：{authorityLabels[value.source.authority]} · 准确版 {value.source.version}</p>{value.source.authority === 'strategy-discussion' && <button type="button" className="text-button" onClick={() => {onStage('strategy-versions');setDiscussionFocus({ source: value.source as GoalDiscussionSourceRef, id: crypto.randomUUID() });}}>查看原战略讨论</button>}<details><summary>准确引用身份</summary><pre>{JSON.stringify(value.source, null, 2)}</pre></details></>}</details>}<dl className="sg-goal-facts"><div><dt>衡量依据</dt><dd>{value.measurement.kind === 'quantitative' ? <>SAP指标 {value.measurement.sapMetric.metricName || '旧版未明确具体指标'} · {value.measurement.sapMetric.id} · 准确发布版 {value.measurement.sapMetric.version}<br />{value.measurement.target}<br /><button type="button" className="text-button" onClick={onManageMetrics}>查看原SAP指标</button></> : value.measurement.criterion}</dd></div><div><dt>基线</dt><dd>{value.baseline.state === 'pending' ? '待补：' : ''}{value.baseline.description}</dd></div><div><dt>责任与期限</dt><dd>{value.responsible} · {value.dueAt ? value.dueAt.slice(0, 10) : '期限未记录'}</dd></div></dl>{stage === 'adopt' && !ready && <GoalAdoptionComparison candidate={value} adopted={record.versions.find(version => version.version === record.adoptedVersion)} />}<div className="sg-row">{!ready && <button type="button" className="primary-button" disabled={loading} onClick={() => openEditor('adopt')}>核对并采纳此版本</button>}{value.structured?<GoalCaseAction key={refKey(value)} goal={value} disabled={!ready||loading} onOpen={async strategy=>{
       if(onInspectCase){const {caseId}=await goalCaseMatch(refOf(value),strategy);
         if(caseId){onInspectCase(caseId);return;}}
       onOpenCase({...refOf(value),strategy});
@@ -445,11 +499,11 @@ export function StrategyGoalsPage({ teachReview,onReturnReview,clearTeachReview,
     </details>}
     {value && record && <>
       {view === 'bsc' && <><div className="sg-grid">{[...new Set([...bscLabels(perspective), ...visible.map(x => current(x).bscPerspective).filter((x): x is string => Boolean(x))])].map(label => <section className="sg-panel" key={label}><h3>{label}</h3>{visible.filter(x => current(x).bscPerspective === label).map(x => <p key={x.id}><button type="button" className="text-button" onClick={() => select(x.id)}>{current(x).title} · v{current(x).version}</button></p>)}{!visible.some(x => current(x).bscPerspective === label) && <p className="sg-muted">尚未记录此类目标；不要求平均配置或凑齐维度。</p>}</section>)}</div><section className="sg-panel"><div className="sg-row-between"><h2>当前准确版本的目标关系</h2><button type="button" className="secondary-button" disabled={!ready || options.length < 2 || loading} onClick={() => openRelation()}>增加目标关系</button></div>{relationTable}</section></>}
-      {stage === 'goals' && <><section className="sg-panel"><div className="sg-row-between"><h2>同一目标，按职责承接</h2><button type="button" className="secondary-button" disabled={!ready || options.length < 2 || loading} onClick={() => openRelation()}>记录贡献关系</button></div><p className="sg-muted">企业BSC与GSA直接引用同一目标版本；部门和个人按职责贡献，不复制一份企业指标或机械分摊比例。</p>{relationTable}</section><section className="sg-panel"><h2>策略、资源与必要条件</h2><div className="sg-grid">{([['策略安排', value.strategies], ['资源与约束', value.resources], ['必要条件／待核前提', value.necessaryConditions]] as const).map(([label, items]) => <div key={label}><h3>{label}</h3>{items?.length ? <ul>{items.map((item, i) => <li key={i}>{item}</li>)}</ul> : <p className="sg-muted">尚未记录，不据此推定前提成立。</p>}</div>)}</div></section><ReadGoalArrangements key={refKey(value)} goal={value} board={board} onOpenBoard={onOpenBoard}/></>}
-      {view === 'history' && <><ReadGoalArrangements key={refKey(value)} goal={value} board={board} onOpenBoard={onOpenBoard}/><section className="sg-panel"><h2>目标版本</h2><ul className="sg-history">{record.versions.slice().reverse().map(x => <li key={x.version}><div className="sg-row-between"><strong>{x.title} · v{x.version}</strong><span className={`sg-badge ${x.status === 'candidate' ? 'pending' : ''}`}>{x.status === 'candidate' ? '候选待采纳' : '已采纳'}</span></div><p className="sg-muted">保存于{caseDate(x.createdAt)}{x.adoptedAt ? ` · 采纳于${caseDate(x.adoptedAt)}` : ''}</p>{x.adoptionDecision && <p>明确决定：{x.adoptionDecision}</p>}<button type="button" className="text-button" onClick={() => setSelectedVersion(x.version)}>查看这一版</button></li>)}</ul><p className="sg-muted">目标更新不会静默改写已确认方案、Case、报告或人的旧选择。受影响工作按原引用核对。</p></section><section className="sg-panel"><div className="sg-row-between"><h2>三层反馈及原记录</h2><button type="button" className="secondary-button" disabled={!ready || loading} onClick={() => openEditor('feedback')}>记录目标层反馈</button></div>{feedback.length ? <ul className="sg-history">{feedback.map(x => <li key={x.id}><strong>{feedbackLabels[x.level]}</strong><p>{x.note}</p><p className="sg-muted">来源：{sources.find(s => s.ref.authority === x.source.authority && s.ref.id === x.source.id)?.label ?? '原记录'} · 准确版{x.source.version} · {caseDate(x.createdAt)}</p></li>)}</ul> : <p className="sg-muted">此准确目标版本尚无反馈引用。选择、实际执行、效果成熟度分别以原记录核对。</p>}</section></>}
+      {stage === 'goals' && <><section className="sg-panel"><div className="sg-row-between"><h2>同一目标，按职责承接</h2><button type="button" className="secondary-button" disabled={!ready || options.length < 2 || loading} onClick={() => openRelation()}>记录贡献关系</button></div><p className="sg-muted">企业BSC与GSA直接引用同一目标版本；部门和个人按职责贡献，不复制一份企业指标或机械分摊比例。</p>{relationTable}</section><section className="sg-panel"><h2>策略、资源与必要条件</h2><div className="sg-goal-conditions">{([['策略安排', value.strategies], ['资源与约束', value.resources], ['必要条件／待核前提', value.necessaryConditions]] as const).map(([label, items]) => <div key={label}><h3>{label}</h3>{items?.length ? <ul>{items.map((item, i) => <li key={i}>{item}</li>)}</ul> : <p className="sg-muted">尚未记录，不据此推定前提成立。</p>}</div>)}</div></section><ReadGoalArrangements key={refKey(value)} goal={value} board={board} onOpenBoard={onOpenBoard}/></>}
+      {view === 'history' && <><ReadGoalArrangements key={refKey(value)} goal={value} board={board} onOpenBoard={onOpenBoard}/><section className="sg-panel"><h2>目标版本</h2><ul className="sg-history">{record.versions.slice().reverse().map(x => <li key={x.version}><div className="sg-row-between"><strong>{x.title} · v{x.version}</strong><span className={`sg-badge ${x.status === 'candidate' ? 'pending' : ''}`}>{x.status === 'candidate' ? '候选待采纳' : '已采纳'}</span></div><p className="sg-muted">保存于{caseDate(x.createdAt)}{x.adoptedAt ? ` · 采纳于${caseDate(x.adoptedAt)}` : ''}</p>{x.adoptionDecision && <p>明确决定：{x.adoptionDecision}</p>}<button type="button" className="text-button" onClick={() => { clearPublicationHandoff(); setSelectedVersion(x.version); }}>查看这一版</button></li>)}</ul><p className="sg-muted">目标更新不会静默改写已确认方案、Case、报告或人的旧选择。受影响工作按原引用核对。</p></section><section className="sg-panel"><div className="sg-row-between"><h2>三层反馈及原记录</h2><button type="button" className="secondary-button" disabled={!ready || loading} onClick={() => openEditor('feedback')}>记录目标层反馈</button></div>{feedback.length ? <ul className="sg-history">{feedback.map(x => <li key={x.id}><strong>{feedbackLabels[x.level]}</strong><p>{x.note}</p><p className="sg-muted">来源：{sources.find(s => s.ref.authority === x.source.authority && s.ref.id === x.source.id)?.label ?? '原记录'} · 准确版{x.source.version} · {caseDate(x.createdAt)}</p></li>)}</ul> : <p className="sg-muted">此准确目标版本尚无反馈引用。选择、实际执行、效果成熟度分别以原记录核对。</p>}</section></>}
     </>}
     </>}
-    {discussionCandidate && <DiscussionCandidateAdoption active={active} candidate={discussionCandidate.goal} discussionId={discussionCandidate.discussionId} index={index} enterprises={enterprises} metrics={metrics} metricsKnown={metricsKnown} onManageMetrics={onManageMetrics} onClose={() => setDiscussionCandidate(undefined)} onAdopted={async ref => { await discussionCandidate.reload(); setSelectedId(ref.goalId); setSelectedVersion(ref.version); onStage('goals'); setDiscussionCandidate(undefined); setNotice('已采用准确目标版本；原GSA与Case／项目入口沿同一记录承接，未授权经营执行。'); }} />}
+    {discussionCandidate && <DiscussionCandidateAdoption active={active} candidate={discussionCandidate.goal} discussionId={discussionCandidate.discussionId} index={index} enterprises={enterprises} metrics={metrics} metricsKnown={metricsKnown} onManageMetrics={onManageMetrics} onClose={() => setDiscussionCandidate(undefined)} onAdopted={async ref => { await discussionCandidate.reload(); clearPublicationHandoff(); setSelectedId(ref.goalId); setSelectedVersion(ref.version); onStage('goals'); setDiscussionCandidate(undefined); setNotice('已采用准确目标版本；原GSA与Case／项目入口沿同一记录承接，未授权经营执行。'); }} />}
     {(editor === 'create' || editor === 'revise') && <GoalEditor active={active} suggestion={suggestion} handoff={editor==='create'?handoff:undefined} key={editor === 'create' ? 'new' : editorGoal ? refKey(editorGoal.value) : 'revise'} initial={editor === 'revise' ? editorGoal?.value : undefined} record={editor === 'revise' ? editorGoal?.record : undefined} index={index} enterprises={enterprises} metrics={metrics} metricsKnown={metricsKnown} onSaved={saved} onClose={() => setEditor(null)} onManageMetrics={onManageMetrics} />}
     {editor === 'adopt' && editorGoal && <GoalAdoptionDialog active={active} value={editorGoal.value} record={editorGoal.record} onSaved={saved} onClose={() => setEditor(null)} />}
     {editor === 'relation' && editorGoal && <RelationEditor active={active} index={index} selected={editorGoal.value} initial={relationEditor} onSaved={saved} onClose={() => { setEditor(null); setRelationEditor(undefined); }} />}

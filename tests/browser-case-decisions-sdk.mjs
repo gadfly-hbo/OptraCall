@@ -17,7 +17,7 @@ const errors=[],writes=[],checks=[];page.on('pageerror',e=>errors.push(e.stack))
 async function until(fn,ms=30000){const end=Date.now()+ms;while(Date.now()<end){const v=await fn();if(v)return v;await new Promise(r=>setTimeout(r,80));}throw Error('Actual UI/Host did not settle');}
 async function openCase(){await page.goto(ui);await page.getByRole('button',{name:record.title,exact:true}).click();const dialog=page.getByRole('dialog',{name:record.title,exact:true});await dialog.getByRole('region',{name:'Case 决策记录',exact:true}).waitFor();return dialog;}
 async function send(marker,steps){
-  await writeFile(base+'/plan.json',JSON.stringify({marker,steps},null,2));const d=await openCase();await d.getByRole('button',{name:'继续提问',exact:true}).click();
+  await writeFile(base+'/plan.json',JSON.stringify({marker,steps},null,2));const d=await openCase();await d.getByRole('button',{name:'按此 Case 继续',exact:true}).click();
   const box=page.getByRole('textbox',{name:'消息',exact:true});await box.fill(marker);await until(async()=>(await api(route)).task.draft===marker);
   const accepted=page.waitForResponse(r=>new URL(r.url()).pathname===route+'/messages'&&r.request().method()==='POST');await page.getByRole('button',{name:'发送消息',exact:true}).click();const response=await accepted;assert.equal(response.status(),202,await response.text());const input=response.request().postDataJSON();assert.equal(input.caseContext.caseId,record.id);assert.equal(input.text,marker);
   const state=await until(async()=>{const s=await api(route);return s.task.lastRun?.id===input.requestId&&s.task.lastRun.status!=='running'?s:false;});assert.equal(state.task.lastRun.status,'completed');return{input,state};

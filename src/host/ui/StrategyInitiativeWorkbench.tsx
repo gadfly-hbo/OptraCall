@@ -45,10 +45,11 @@ type SourcePreview =
 
 export interface StrategyInitiativeWorkbenchProps {
   stage: StrategyStage; onStage: (stage: ManagementStage) => void; active: boolean;
+  navigation?: ReactNode;
   access: LegacyDiscussionAccess; legacyFocus?: { source: import('../strategy-goals-types.ts').GoalDiscussionSourceRef; id: string };
   configurations: PublicModelConfiguration[]; selectedConfigurationId?: string | null; onSettings: () => void;
 }
-export function StrategyInitiativeWorkbench({ stage, onStage, active, access, legacyFocus, configurations, selectedConfigurationId, onSettings }: StrategyInitiativeWorkbenchProps) {
+export function StrategyInitiativeWorkbench({ stage, onStage, active, navigation, access, legacyFocus, configurations, selectedConfigurationId, onSettings }: StrategyInitiativeWorkbenchProps) {
   const [initiatives, setInitiatives] = useState<InitiativeRecord[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [scopeKeys, setScopeKeys] = useState<Record<string, string>>({});
@@ -67,21 +68,26 @@ export function StrategyInitiativeWorkbench({ stage, onStage, active, access, le
   const scopeKey = initiative ? scopeKeys[initiative.id] ?? (initiative.scopes[0] ? initiativeScopeKey(initiative.scopes[0]) : '') : '';
   const scope = initiative?.scopes.find(item => initiativeScopeKey(item) === scopeKey);
   return <div className="si-workbench">
-    <div className="si-topbar">
-      <label className="si-inline-picker">战略事项<select aria-label="战略事项" disabled={loading} value={selectedId} onChange={event => setSelectedId(event.target.value)}>
-        {!initiatives.length && <option value="">尚无事项</option>}
-        {initiatives.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}
-      </select></label>
-      <button type="button" className="secondary-button" onClick={() => setEditor('create')}>＋ 新建事项</button>
-      {initiative && <button type="button" className="text-button" onClick={() => setEditor('edit')}>编辑事项与范围</button>}
-      {initiative && initiative.scopes.length > 0 && <label className="si-inline-picker">适用范围<select aria-label="适用范围" value={scopeKey} onChange={event => setScopeKeys(old => ({ ...old, [initiative.id]: event.target.value }))}>
-        {initiative.scopes.map(item => <option key={initiativeScopeKey(item)} value={initiativeScopeKey(item)}>{item.name}</option>)}
-      </select></label>}
-      <span className="si-lifecycle-placeholders">
+    <div className="si-topbar" role="group" aria-label="战略事项与范围">
+      <div className="si-context-controls">
+        <label className="si-inline-picker">战略事项<select aria-label="战略事项" disabled={loading} value={selectedId} onChange={event => setSelectedId(event.target.value)}>
+          {!initiatives.length && <option value="">尚无事项</option>}
+          {initiatives.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}
+        </select></label>
+        {initiative && initiative.scopes.length > 0 && <label className="si-inline-picker">适用范围<select aria-label="适用范围" value={scopeKey} onChange={event => setScopeKeys(old => ({ ...old, [initiative.id]: event.target.value }))}>
+          {initiative.scopes.map(item => <option key={initiativeScopeKey(item)} value={initiativeScopeKey(item)}>{item.name}</option>)}
+        </select></label>}
+      </div>
+      <div className="si-context-actions">
+        <button type="button" className="secondary-button" onClick={() => setEditor('create')}>＋ 新建事项</button>
+        {initiative && <button type="button" className="text-button" onClick={() => setEditor('edit')}>编辑事项与范围</button>}
+      </div>
+      <div className="si-lifecycle-placeholders">
         <button type="button" className="text-button" onClick={() => setPlaceholder('战略复盘')}>战略复盘 · 占位</button>
         <button type="button" className="text-button" onClick={() => setPlaceholder('战略重构')}>战略重构 · 占位</button>
-      </span>
+      </div>
     </div>
+    {navigation}
     <CaseFormError error={error} />
     {loading ? <p className="si-muted" role="status">正在读取战略事项…</p> : !initiative || !scope ? <>
       <div className="sg-panel si-empty">
@@ -665,7 +671,7 @@ export function InitiativeScopeWorkspace({ initiative, scope, stage, active, onS
         {phase === 'kickoff' ? <>{kickoff}{conversation('访谈与研究', '围绕战略命题继续追问，或补充依据。', '补充一个事实，或继续追问一个战略命题…')}</> : plans}
       </>}
       {stage === 'strategy-check' && <StrategyCheckPanel initiativeId={id} candidates={candidates} batches={history?.verifications ?? []} selected={selectedCandidate} onSelect={setSelectedCandidate} onStage={onStage} onRevise={candidate => { setSelectedCandidate({ candidateId: candidate.candidateId, no: candidate.no }); setDialog('revise-candidate'); }} onRefresh={refresh} onOpenSource={source => { void openSource(source); }} />}
-      {stage === 'strategy-release' && <StrategyReleaseReview initiativeId={id} scope={scope} scopes={access.scopes} candidates={candidates} batches={history?.verifications ?? []} publications={publications} selected={selectedCandidate} onSelect={setSelectedCandidate} onStage={onStage} onRefresh={refresh} onGoalsChanged={async () => { await access.onGoalsChanged(); }} />}
+      {stage === 'strategy-release' && <StrategyReleaseReview initiativeId={id} scope={scope} scopes={access.scopes} candidates={candidates} batches={history?.verifications ?? []} publications={publications} selected={selectedCandidate} onSelect={setSelectedCandidate} onStage={onStage} onRefresh={refresh} onGoalsChanged={async () => { await access.onGoalsChanged(); }} onReviewHandoff={access.onReviewHandoff} />}
       {stage === 'strategy-versions' && <StrategyVersionsPanel initiativeId={id} scopeKey={scopeKey} history={history} access={access} legacyId={legacyId} onLegacySelect={setLegacyId} legacyFocus={legacyFocus} onOpenSession={ref => { setSelectedCandidate(ref); setDialog('candidate-session'); }} />}
     </div>
     <div className="si-side">

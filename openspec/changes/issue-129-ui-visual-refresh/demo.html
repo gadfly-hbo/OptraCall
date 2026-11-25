@@ -1,0 +1,3315 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f6f5fa" />
+  <title>OptraCall · 前端视觉改版可点击 Demo（Antigravity 主稿整合 v0.4）</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='11' fill='%23f4f1ff'/%3E%3Ccircle cx='23' cy='23' r='15' fill='none' stroke='%236550c9' stroke-width='4'/%3E%3Ccircle cx='35' cy='35' r='7' fill='%23f4f1ff' stroke='%236550c9' stroke-width='4'/%3E%3C/svg%3E" />
+  <style>
+    :root {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", "Microsoft YaHei", sans-serif;
+      --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      color-scheme: light;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    button, input, select, textarea { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    button:disabled { cursor: not-allowed; opacity: 0.55; }
+    :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+    /* ===== OptraCall Design Tokens (Layered Workspace · Preserving #6550c9 Brand Purple) ===== */
+    .app {
+      --bg-canvas: #f6f5fa;
+      --bg-sidebar: #f0eff6;
+      --bg-surface: #ffffff;
+      --bg-subtle: #f3f2f8;
+      --bg-hover: #eae8f3;
+      --ink-primary: #1f1e28;
+      --ink-secondary: #585668;
+      --ink-muted: #696679;
+      --border-subtle: rgba(31, 30, 40, 0.08);
+      --border-default: #e2e0ec;
+      --border-strong: #cecbe0;
+      /* Original OptraCall Brand Purple */
+      --accent: #6550c9;
+      --accent-hover: #523db3;
+      --accent-soft: #eeebfb;
+      --accent-wash: #f6f4fe;
+      --focus: #795ac6;
+      /* Semantic Status Tokens (Decoupled from Brand Purple) */
+      --success: #1d6f49;
+      --success-bg: #eaf7f0;
+      --success-border: #bfe4d1;
+      --warning: #8f560a;
+      --warning-bg: #fff6e5;
+      --warning-border: #f1d8a3;
+      --error: #b32436;
+      --error-bg: #fff1f2;
+      --error-border: #f5c6cc;
+      --info: #2254a8;
+      --info-bg: #edf4ff;
+      --info-border: #c5dafc;
+      /* Elevation & Radii */
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --radius-pill: 999px;
+      --shadow-xs: 0 1px 2px rgba(24, 18, 46, 0.04);
+      --shadow-sm: 0 2px 8px rgba(24, 18, 46, 0.05), 0 1px 2px rgba(24, 18, 46, 0.03);
+      --shadow-md: 0 12px 32px rgba(24, 18, 46, 0.10), 0 2px 6px rgba(24, 18, 46, 0.04);
+      --shadow-drawer: -12px 0 36px rgba(24, 18, 46, 0.12);
+
+      display: flex;
+      height: 100dvh;
+      width: 100vw;
+      overflow: hidden;
+      background: var(--bg-canvas);
+      color: var(--ink-primary);
+      font-size: 14px;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .app[data-theme="dark"] {
+      color-scheme: dark;
+      --bg-canvas: #17161e;
+      --bg-sidebar: #131219;
+      --bg-surface: #201f2a;
+      --bg-subtle: #272533;
+      --bg-hover: #302e3f;
+      --ink-primary: #efeff5;
+      --ink-secondary: #b7b5c6;
+      --ink-muted: #9390a6;
+      --border-subtle: rgba(255, 255, 255, 0.07);
+      --border-default: #333143;
+      --border-strong: #46435b;
+      --accent: #b7a7ff;
+      --accent-hover: #c9bdff;
+      --accent-soft: #2e274b;
+      --accent-wash: #25203b;
+      --focus: #c4b7ff;
+      --success: #7bdba8;
+      --success-bg: #183024;
+      --success-border: #28523d;
+      --warning: #f1c77d;
+      --warning-bg: #332714;
+      --warning-border: #594320;
+      --error: #ff9fa9;
+      --error-bg: #381e24;
+      --error-border: #5f313b;
+      --info: #8bb8ff;
+      --info-bg: #1a2942;
+      --info-border: #2c4670;
+      --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.28);
+      --shadow-sm: 0 4px 14px rgba(0, 0, 0, 0.32);
+      --shadow-md: 0 16px 40px rgba(0, 0, 0, 0.48);
+      --shadow-drawer: -12px 0 40px rgba(0, 0, 0, 0.5);
+    }
+
+    /* ===== Original OptraCall Logo ===== */
+    .brand { display: flex; align-items: center; gap: 10px; padding: 2px 8px 18px; }
+    .brand strong { display: block; font-size: 17px; font-weight: 650; letter-spacing: -0.025em; line-height: 1.2; }
+    .brand span.brand-sub { display: block; margin-top: 2px; font-size: 11px; color: var(--ink-muted); }
+    .brand-mark { width: 29px; height: 29px; display: inline-flex; position: relative; color: var(--accent); flex-shrink: 0; }
+    .brand-mark .bm-outer { position: absolute; inset: 3px; border: 2px solid currentColor; border-radius: 50%; }
+    .brand-mark .bm-inner { position: absolute; width: 11px; height: 11px; right: 0; bottom: 0; border: 2px solid currentColor; border-radius: 50%; background: #fff; }
+    .app[data-theme="dark"] .brand-mark .bm-inner { background: #1b1b20; }
+    .sidebar .mobile-nav-close { display: none; }
+    .demo-build { color: var(--ink-muted); font-size: 11px; white-space: nowrap; }
+    @media (max-width: 1100px) { .demo-build { display: none; } }
+    @media (max-width: 760px) { .sidebar .mobile-nav-close { display: inline-grid; margin-inline-start: auto; } }
+
+    /* ===== Shell: Sidebar + Topbar + Main ===== */
+    .sidebar-backdrop { display: none; }
+    .sidebar {
+      width: 252px;
+      flex: 0 0 252px;
+      display: flex;
+      flex-direction: column;
+      padding: 18px 12px 12px;
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border-default);
+      min-height: 0;
+      z-index: 30;
+    }
+    .sidebar.collapsed { display: none; }
+    .new-project-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      height: 38px;
+      padding: 0 12px;
+      margin-bottom: 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-default);
+      background: var(--bg-surface);
+      color: var(--ink-primary);
+      font-size: 13px;
+      font-weight: 550;
+      box-shadow: var(--shadow-xs);
+      transition: border-color 140ms, background 140ms;
+    }
+    .new-project-btn:hover { border-color: var(--focus); background: var(--accent-wash); color: var(--accent); }
+    .new-project-btn .plus-ic { color: var(--accent); font-size: 16px; line-height: 1; }
+
+    .sidebar-section-btn {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding: 6px 10px;
+      margin-top: 8px;
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--ink-muted);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      text-align: left;
+    }
+    .sidebar-section-btn:hover { background: var(--bg-hover); color: var(--ink-secondary); }
+    .primary-nav { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
+    .nav-item {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      width: 100%;
+      height: 35px;
+      padding: 0 10px;
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--ink-secondary);
+      font-size: 13px;
+      font-weight: 450;
+      text-align: left;
+      transition: background 120ms, color 120ms;
+    }
+    .nav-item svg { flex-shrink: 0; opacity: 0.82; }
+    .nav-item:hover { background: var(--bg-hover); color: var(--ink-primary); }
+    .nav-item.selected {
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .nav-item.selected::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 7px;
+      bottom: 7px;
+      width: 3px;
+      border-radius: 0 3px 3px 0;
+      background: var(--accent);
+    }
+    .nav-item.selected svg { opacity: 1; }
+
+    .sidebar-scroll { flex: 1; min-height: 60px; overflow-y: auto; padding-bottom: 8px; scrollbar-width: thin; }
+    .proj-tree { list-style: none; margin: 2px 0 0; padding: 0; }
+    .proj-row {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      border-radius: var(--radius-sm);
+      padding: 2px 4px;
+    }
+    .proj-row:hover { background: var(--bg-hover); }
+    .proj-row.active-proj { background: var(--bg-hover); }
+    .proj-chevron {
+      width: 20px; height: 26px; border: 0; background: transparent; color: var(--ink-muted);
+      display: grid; place-items: center; border-radius: 4px; flex-shrink: 0; font-size: 12px;
+    }
+    .proj-name-btn {
+      flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;
+      border: 0; background: transparent; padding: 5px 4px; text-align: left;
+      font-size: 13px; font-weight: 500; color: var(--ink-primary);
+    }
+    .proj-name-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .proj-quick-add {
+      width: 24px; height: 24px; border: 0; background: transparent; color: var(--ink-muted);
+      border-radius: 4px; display: grid; place-items: center; opacity: 0.65; flex-shrink: 0;
+    }
+    .proj-row:hover .proj-quick-add { opacity: 1; }
+    .proj-quick-add:hover { background: var(--bg-surface); color: var(--accent); }
+    .task-sublist { list-style: none; margin: 1px 0 6px; padding: 0 0 0 22px; }
+    .task-sublist button {
+      display: flex; align-items: center; gap: 7px; width: 100%;
+      padding: 5px 9px; border: 0; border-radius: var(--radius-sm);
+      background: transparent; color: var(--ink-secondary); font-size: 12.5px; text-align: left;
+    }
+    .task-sublist button:hover { background: var(--bg-hover); color: var(--ink-primary); }
+    .task-sublist button.active { background: var(--bg-surface); color: var(--accent); font-weight: 550; box-shadow: var(--shadow-xs); }
+    .task-sublist .t-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dot-pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; box-shadow: 0 0 0 3px var(--accent-soft); }
+    .mini-tag { font-size: 10px; padding: 1px 5px; border-radius: 4px; background: var(--bg-subtle); color: var(--ink-muted); flex-shrink: 0; }
+
+    .sidebar-bottom {
+      display: flex; align-items: center; gap: 6px;
+      padding-top: 10px; margin-top: 6px;
+      border-top: 1px solid var(--border-default);
+    }
+    .sidebar-bottom .nav-item { flex: 1; height: 34px; }
+    .configured-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); margin-left: auto; }
+    .locale-pill {
+      height: 28px; padding: 0 8px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border-default); background: transparent;
+      color: var(--ink-muted); font-size: 11px; font-weight: 500;
+    }
+
+    /* Main Column */
+    .main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+    .topbar {
+      height: 54px;
+      flex: 0 0 54px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 20px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-default);
+    }
+    .topbar-left, .topbar-right { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .topbar-left { flex: 1; }
+    .topbar-crumb {
+      font-size: 13px;
+      color: var(--ink-secondary);
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .topbar-crumb strong { color: var(--ink-primary); font-weight: 600; }
+
+    .workspace-switch {
+      display: inline-flex;
+      padding: 3px;
+      border-radius: 8px;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border-default);
+      flex-shrink: 0;
+    }
+    .workspace-switch button {
+      border: 0;
+      background: transparent;
+      color: var(--ink-secondary);
+      padding: 4px 20px;
+      border-radius: 6px;
+      font-size: 12.5px;
+      font-weight: 500;
+      transition: background 140ms, color 140ms;
+    }
+    .workspace-switch button[aria-pressed="true"] {
+      background: var(--bg-surface);
+      color: var(--accent);
+      font-weight: 600;
+      box-shadow: var(--shadow-xs);
+    }
+
+    .icon-btn {
+      width: 32px; height: 32px; border: 1px solid transparent; border-radius: var(--radius-sm);
+      background: transparent; color: var(--ink-secondary);
+      display: inline-grid; place-items: center; flex-shrink: 0;
+      transition: background 120ms, color 120ms, border-color 120ms;
+    }
+    .icon-btn:hover { background: var(--bg-subtle); color: var(--ink-primary); }
+    .icon-btn[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
+    .help-btn {
+      display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px;
+      border: 1px solid transparent; border-radius: var(--radius-sm);
+      background: transparent; color: var(--ink-secondary); font-size: 12.5px; font-weight: 500;
+      white-space: nowrap;
+    }
+    .help-btn:hover { background: var(--bg-subtle); color: var(--ink-primary); }
+    .help-btn[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
+
+    /* ===== Shared Components ===== */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      height: 34px; padding: 0 13px; border-radius: var(--radius-sm);
+      font-size: 12.5px; font-weight: 550; white-space: nowrap;
+      border: 1px solid transparent; transition: all 130ms;
+    }
+    .btn-sm { height: 29px; padding: 0 10px; font-size: 12px; }
+    .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: var(--shadow-xs); }
+    .app[data-theme="dark"] .btn-primary { color: #161422; }
+    .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .btn-secondary { background: var(--bg-surface); color: var(--ink-primary); border-color: var(--border-default); box-shadow: var(--shadow-xs); }
+    .btn-secondary:hover { background: var(--bg-subtle); border-color: var(--border-strong); }
+    .btn-danger { background: var(--error-bg); color: var(--error); border-color: var(--error-border); }
+    .btn-danger:hover { filter: brightness(0.96); }
+    .btn-ghost { background: transparent; color: var(--accent); padding: 0 6px; height: 28px; font-size: 12px; font-weight: 550; }
+    .btn-ghost:hover { background: var(--accent-soft); }
+    .btn-ghost-muted { background: transparent; color: var(--ink-secondary); padding: 0 8px; height: 28px; font-size: 12px; }
+    .btn-ghost-muted:hover { background: var(--bg-hover); color: var(--ink-primary); }
+
+    .badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 2px 8px; border-radius: var(--radius-pill);
+      font-size: 11px; font-weight: 550; line-height: 1.5; white-space: nowrap;
+      background: var(--bg-subtle); color: var(--ink-secondary); border: 1px solid var(--border-default);
+    }
+    .badge .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+    .badge.accent { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+    .badge.success { background: var(--success-bg); color: var(--success); border-color: var(--success-border); }
+    .badge.warning { background: var(--warning-bg); color: var(--warning); border-color: var(--warning-border); }
+    .badge.error { background: var(--error-bg); color: var(--error); border-color: var(--error-border); }
+    .badge.info { background: var(--info-bg); color: var(--info); border-color: var(--info-border); }
+
+    .mono { font-family: var(--font-mono); font-size: 11.5px; }
+    .mono-pill {
+      font-family: var(--font-mono); font-size: 11px; padding: 1px 6px;
+      border-radius: 4px; background: var(--bg-subtle); color: var(--ink-secondary);
+      border: 1px solid var(--border-subtle);
+    }
+    .num { font-variant-numeric: tabular-nums; }
+
+    /* Page Container */
+    .workspace-body { flex: 1; min-height: 0; display: flex; overflow: hidden; position: relative; }
+    .page-scroll { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; padding: 24px 28px 40px; }
+    .page-inner { max-width: 1240px; margin: 0 auto; }
+
+    .page-header {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+      margin-bottom: 18px; flex-wrap: wrap;
+    }
+    .page-header .eyebrow {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+      color: var(--accent); margin: 0 0 4px;
+    }
+    .page-header h1 {
+      margin: 0 0 4px; font-size: 22px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.3;
+    }
+    .page-header p.sub { margin: 0; font-size: 13px; color: var(--ink-secondary); max-width: 680px; }
+    .header-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+
+    /* Unified Underline Tabs */
+    .underline-tabs {
+      display: flex; gap: 6px; border-bottom: 1px solid var(--border-default);
+      margin-bottom: 20px; overflow-x: auto; scrollbar-width: none;
+    }
+    .underline-tabs button {
+      position: relative; border: 0; background: transparent; color: var(--ink-secondary);
+      padding: 9px 12px 11px; font-size: 13px; font-weight: 500; white-space: nowrap;
+      border-radius: var(--radius-sm) var(--radius-sm) 0 0; transition: color 120ms, background 120ms;
+    }
+    .underline-tabs button:hover { color: var(--ink-primary); background: var(--bg-subtle); }
+    .underline-tabs button[aria-current="page"] { color: var(--accent); font-weight: 600; }
+    .underline-tabs button[aria-current="page"]::after {
+      content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px;
+      border-radius: 2px 2px 0 0; background: var(--accent);
+    }
+    .tab-count {
+      margin-left: 5px; font-size: 11px; padding: 0 6px; border-radius: 99px;
+      background: var(--bg-subtle); color: var(--ink-muted); font-variant-numeric: tabular-nums;
+    }
+    .underline-tabs button[aria-current="page"] .tab-count { background: var(--accent-soft); color: var(--accent); }
+
+    /* Cards & Surfaces */
+    .card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-xs);
+      padding: 18px 20px;
+    }
+    .card + .card { margin-top: 14px; }
+    .card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+    .card-head h2 { margin: 0; font-size: 15px; font-weight: 620; line-height: 1.4; }
+    .card-head h3 { margin: 0; font-size: 14px; font-weight: 600; }
+    .card-meta { font-size: 12px; color: var(--ink-muted); margin: 3px 0 0; }
+
+    .banner {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+      padding: 11px 14px; border-radius: var(--radius-md); font-size: 12.5px; margin-bottom: 16px;
+      background: var(--accent-wash); border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border-default));
+      color: var(--ink-primary);
+    }
+    .banner.success { background: var(--success-bg); border-color: var(--success-border); color: var(--success); }
+    .banner.warning { background: var(--warning-bg); border-color: var(--warning-border); color: var(--warning); }
+
+    /* Filter Toolbar */
+    .toolbar {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      flex-wrap: wrap; margin-bottom: 16px;
+    }
+    .toolbar-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .input, .select {
+      height: 34px; padding: 0 10px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border-default); background: var(--bg-surface); color: var(--ink-primary);
+      font-size: 12.5px;
+    }
+    .input { min-width: 210px; }
+    .seg-switch {
+      display: inline-flex; padding: 2px; border-radius: var(--radius-sm);
+      background: var(--bg-subtle); border: 1px solid var(--border-default);
+    }
+    .seg-switch button {
+      border: 0; background: transparent; color: var(--ink-secondary);
+      padding: 4px 11px; border-radius: 4px; font-size: 12px; font-weight: 500;
+    }
+    .seg-switch button[aria-pressed="true"] {
+      background: var(--bg-surface); color: var(--accent); font-weight: 600; box-shadow: var(--shadow-xs);
+    }
+
+    /* Data Tables */
+    .table-card {
+      background: var(--bg-surface); border: 1px solid var(--border-default);
+      border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-xs);
+    }
+    .table-scroll { overflow-x: auto; }
+    table.ui-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    table.ui-table th {
+      text-align: left; font-weight: 600; font-size: 11.5px; color: var(--ink-muted);
+      background: var(--bg-subtle); padding: 10px 14px; border-bottom: 1px solid var(--border-default);
+      white-space: nowrap;
+    }
+    table.ui-table td {
+      padding: 12px 14px; border-bottom: 1px solid var(--border-subtle); vertical-align: top;
+      color: var(--ink-primary);
+    }
+    table.ui-table tbody tr:last-child td { border-bottom: 0; }
+    table.ui-table tbody tr:hover td { background: var(--accent-wash); }
+    table.ui-table tbody tr.selected td { background: var(--accent-soft); }
+
+    /* ===== Page Specific: Project Map & Case Board ===== */
+    .card-grid-3 { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 16px; }
+    .proj-card {
+      background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md);
+      padding: 16px 18px; display: flex; flex-direction: column; gap: 11px; box-shadow: var(--shadow-xs);
+      transition: border-color 140ms, box-shadow 140ms;
+    }
+    .proj-card:hover { border-color: var(--focus); box-shadow: var(--shadow-sm); }
+    .proj-card h2 { margin: 0; font-size: 15px; font-weight: 620; }
+    .proj-card h2 button { border: 0; background: transparent; padding: 0; text-align: left; font: inherit; color: inherit; }
+    .proj-card h2 button:hover { color: var(--accent); }
+    .slot-box { background: var(--bg-subtle); border-radius: var(--radius-sm); padding: 9px 11px; font-size: 12px; color: var(--ink-secondary); }
+    .slot-label { display: block; font-size: 10.5px; font-weight: 600; color: var(--ink-muted); margin-bottom: 3px; }
+    .task-pill-list { display: flex; flex-direction: column; gap: 6px; }
+    .task-link-btn {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      width: 100%; padding: 8px 10px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border-default); background: var(--bg-surface);
+      font-size: 12.5px; font-weight: 500; text-align: left; transition: all 120ms;
+    }
+    .task-link-btn:hover { border-color: var(--accent); background: var(--accent-wash); color: var(--accent); }
+    .card-foot {
+      margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border-subtle);
+      display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+      font-size: 12px; color: var(--ink-muted);
+    }
+
+    /* Star Map Canvas */
+    .starmap-shell {
+      background: var(--bg-surface); border: 1px solid var(--border-default);
+      border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-xs);
+    }
+    .starmap-stats {
+      display: flex; flex-wrap: wrap; gap: 18px; padding: 11px 16px;
+      border-bottom: 1px solid var(--border-default); background: var(--bg-subtle);
+      font-size: 12px; color: var(--ink-secondary);
+    }
+    .starmap-stats strong { color: var(--ink-primary); font-size: 14px; margin-right: 4px; font-variant-numeric: tabular-nums; }
+    .starmap-viewport {
+      position: relative; height: 420px; overflow: hidden;
+      background-color: var(--bg-canvas);
+      background-image: radial-gradient(var(--border-strong) 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+    .starmap-canvas { position: relative; width: 1040px; height: 420px; transform-origin: 0 0; transition: transform 180ms ease; }
+    .starmap-svg { position: absolute; inset: 0; pointer-events: none; }
+    .sm-node {
+      position: absolute; background: var(--bg-surface); border: 1px solid var(--border-default);
+      border-radius: var(--radius-md); box-shadow: var(--shadow-sm); width: 228px;
+      overflow: hidden; transition: border-color 140ms, opacity 160ms, box-shadow 140ms;
+    }
+    .sm-node:hover { border-color: var(--accent); box-shadow: var(--shadow-md); }
+    .sm-node.dim { opacity: 0.34; }
+    .sm-node-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 10px; font-size: 10.5px; font-weight: 650; letter-spacing: 0.04em;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .sm-node.case .sm-node-head { background: var(--accent-soft); color: var(--accent); }
+    .sm-node.project .sm-node-head { background: var(--info-bg); color: var(--info); }
+    .sm-node.task .sm-node-head { background: var(--success-bg); color: var(--success); }
+    .sm-node-body { display: block; width: 100%; border: 0; background: transparent; padding: 9px 11px; text-align: left; }
+    .sm-node-body strong { display: block; font-size: 13px; font-weight: 600; color: var(--ink-primary); margin-bottom: 3px; }
+    .sm-node-body span { display: block; font-size: 11.5px; color: var(--ink-secondary); line-height: 1.45; }
+    .sm-node-foot {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 5px 10px; border-top: 1px solid var(--border-subtle); background: var(--bg-subtle);
+      font-size: 11px; color: var(--ink-muted);
+    }
+    .sm-node-foot button { border: 0; background: transparent; color: var(--accent); font-size: 11px; font-weight: 550; padding: 2px 4px; border-radius: 4px; }
+    .sm-node-foot button:hover { background: var(--accent-soft); }
+    .sm-controls {
+      position: absolute; right: 14px; bottom: 14px; display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px; border-radius: var(--radius-sm); background: var(--bg-surface);
+      border: 1px solid var(--border-default); box-shadow: var(--shadow-sm); font-size: 12px;
+    }
+    .sm-controls button { border: 0; background: transparent; padding: 4px 8px; border-radius: 4px; color: var(--ink-secondary); }
+    .sm-controls button:hover { background: var(--bg-subtle); color: var(--ink-primary); }
+    .sm-legend {
+      display: flex; flex-wrap: wrap; gap: 14px; padding: 9px 16px;
+      border-top: 1px solid var(--border-default); font-size: 11.5px; color: var(--ink-muted);
+    }
+    .case-lanes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; align-items: start; }
+    .case-lane { background: var(--bg-subtle); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 12px; }
+    .case-lane-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 12px; font-weight: 600; }
+
+    /* ===== Page Specific: Analysis Task ===== */
+    .task-shell { flex: 1; min-width: 0; min-height: 0; display: flex; overflow: hidden; }
+    .task-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+    .task-header-band {
+      padding: 14px 24px 12px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-default);
+      flex-shrink: 0;
+    }
+    .task-header-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+    .task-header-top h1 { margin: 0; font-size: 17px; font-weight: 650; }
+    .task-step-rail {
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; list-style: none; padding: 0; margin: 0;
+    }
+    .task-step-rail button {
+      display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 10px;
+      border-radius: var(--radius-sm); border: 1px solid var(--border-default); background: var(--bg-canvas);
+      text-align: left; transition: all 120ms;
+    }
+    .task-step-rail button:hover { border-color: var(--focus); background: var(--bg-surface); }
+    .task-step-rail button[aria-current="step"] { border-color: var(--accent); background: var(--accent-wash); }
+    .step-num {
+      width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0;
+      font-size: 11px; font-weight: 650; border: 1px solid var(--border-strong); color: var(--ink-secondary);
+    }
+    .task-step-rail button[aria-current="step"] .step-num { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .app[data-theme="dark"] .task-step-rail button[aria-current="step"] .step-num { color: #17161e; }
+    .task-step-rail strong { display: block; font-size: 12.5px; font-weight: 600; line-height: 1.25; }
+    .task-step-rail small { display: block; font-size: 11px; color: var(--ink-muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .chat-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 24px 12px; }
+    .chat-column { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+    .msg-card {
+      background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md);
+      padding: 15px 18px; box-shadow: var(--shadow-xs);
+    }
+    .msg-card.user-msg { background: var(--accent-wash); border-color: color-mix(in srgb, var(--accent) 20%, var(--border-default)); }
+    .msg-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12.5px; }
+    .user-avatar {
+      width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+      background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 650;
+    }
+    .msg-body { font-size: 13.5px; line-height: 1.72; color: var(--ink-primary); }
+    .msg-body p { margin: 0 0 8px; }
+    .msg-body p:last-child { margin-bottom: 0; }
+    .process-fold {
+      background: var(--bg-subtle); border: 1px solid var(--border-default); border-radius: var(--radius-sm);
+      padding: 8px 12px; font-size: 12px; color: var(--ink-secondary);
+    }
+    .process-fold summary { cursor: pointer; font-weight: 550; }
+    .report-link-strip {
+      margin-top: 12px; padding: 10px 12px; border-radius: var(--radius-sm);
+      background: var(--bg-subtle); border: 1px solid var(--border-default);
+      display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+    }
+    .msg-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-subtle); }
+
+    .composer-dock {
+      flex-shrink: 0; padding: 10px 24px 14px;
+      background: var(--bg-canvas); border-top: 1px solid var(--border-default);
+    }
+    .composer-inner { max-width: 820px; margin: 0 auto; }
+    .context-chip-bar {
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; font-size: 12px;
+    }
+    .composer-box {
+      background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-lg);
+      padding: 11px 14px 9px; box-shadow: var(--shadow-sm);
+    }
+    .composer-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
+    .composer-box textarea {
+      width: 100%; border: 0; background: transparent; resize: none; min-height: 46px; font-size: 13.5px; line-height: 1.55; outline: 0;
+    }
+    .composer-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 8px; }
+    .composer-bar .toolbar-group { flex-wrap: nowrap; flex-shrink: 0; }
+    .send-circle {
+      width: 32px; height: 32px; border-radius: 50%; border: 0;
+      background: var(--accent); color: #fff; display: grid; place-items: center; flex-shrink: 0;
+    }
+    .app[data-theme="dark"] .send-circle { color: #17161e; }
+    .tray-fold {
+      margin-top: 8px; background: var(--bg-surface); border: 1px solid var(--border-default);
+      border-radius: var(--radius-sm); padding: 7px 12px; font-size: 12px; color: var(--ink-secondary);
+    }
+    .tray-fold summary { cursor: pointer; font-weight: 550; display: flex; justify-content: space-between; align-items: center; }
+    .tray-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border-subtle); }
+
+    /* Right Inspector Drawer (Project Files / Report Evidence / Conclusion Review) */
+    .right-drawer {
+      width: 356px; flex: 0 0 356px; background: var(--bg-surface);
+      border-left: 1px solid var(--border-default); display: flex; flex-direction: column;
+      min-height: 0; overflow: hidden;
+    }
+    .right-drawer.hidden { display: none; }
+    .drawer-head {
+      padding: 13px 16px; border-bottom: 1px solid var(--border-default);
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    .drawer-head h2 { margin: 0; font-size: 14px; font-weight: 620; }
+    .drawer-tabs {
+      display: flex; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--border-default);
+      background: var(--bg-subtle);
+    }
+    .drawer-tabs button {
+      flex: 1; border: 0; border-radius: var(--radius-sm); padding: 6px 8px;
+      background: transparent; color: var(--ink-secondary); font-size: 12px; font-weight: 550;
+    }
+    .drawer-tabs button[aria-selected="true"] { background: var(--bg-surface); color: var(--accent); box-shadow: var(--shadow-xs); }
+    .drawer-body { flex: 1; overflow-y: auto; padding: 14px 16px 20px; }
+    .folder-block { border: 1px solid var(--border-default); border-radius: var(--radius-sm); margin-bottom: 10px; overflow: hidden; }
+    .folder-block summary {
+      padding: 8px 11px; background: var(--bg-subtle); cursor: pointer;
+      display: flex; align-items: center; justify-content: space-between; font-size: 12.5px; font-weight: 600;
+    }
+    .folder-file {
+      padding: 9px 11px; border-top: 1px solid var(--border-subtle); font-size: 12px;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .folder-file-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .evidence-block {
+      border: 1px solid var(--border-default); border-radius: var(--radius-sm);
+      padding: 12px; background: var(--bg-canvas); margin-bottom: 12px; font-size: 12.5px;
+    }
+    .evidence-block h3 { margin: 0 0 6px; font-size: 13px; font-weight: 620; }
+    .evidence-quote {
+      margin: 8px 0; padding: 8px 10px; border-left: 3px solid var(--accent);
+      background: var(--bg-surface); border-radius: 0 6px 6px 0; font-size: 12px; color: var(--ink-secondary);
+    }
+
+    /* ===== Page Specific: Strategy & Goals ===== */
+    .split-2col { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 18px; align-items: start; }
+    .strategy-bar {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      padding: 12px 14px; background: var(--bg-surface); border: 1px solid var(--border-default);
+      border-radius: var(--radius-md); margin-bottom: 16px;
+    }
+    .gate-card {
+      display: flex; gap: 14px; padding: 16px; border: 1px solid var(--border-default);
+      border-radius: var(--radius-md); background: var(--bg-surface); margin-bottom: 12px;
+    }
+    .gate-num {
+      width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+      display: grid; place-items: center; background: var(--accent-soft); color: var(--accent);
+      font-weight: 700; font-size: 13px;
+    }
+    .release-tree {
+      display: grid; gap: 12px; justify-items: center; padding: 18px;
+      background: var(--bg-canvas); border: 1px solid var(--border-default); border-radius: var(--radius-md); margin: 14px 0;
+    }
+    .release-node {
+      background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-sm);
+      padding: 10px 16px; text-align: center; min-width: 220px; box-shadow: var(--shadow-xs);
+    }
+    .release-node.root { border-color: var(--accent); background: var(--accent-wash); }
+    .release-children { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; width: 100%; }
+    .diff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+    .diff-box { padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-default); background: var(--bg-subtle); font-size: 12.5px; }
+    .diff-box.after { background: var(--accent-wash); border-color: color-mix(in srgb, var(--accent) 30%, var(--border-default)); }
+
+    /* ===== Page Specific: Settings (9 Categories Rail) ===== */
+    .settings-layout { display: grid; grid-template-columns: 216px minmax(0, 1fr); gap: 22px; align-items: start; }
+    .settings-rail {
+      background: var(--bg-surface); border: 1px solid var(--border-default);
+      border-radius: var(--radius-md); padding: 10px; position: sticky; top: 0;
+    }
+    .rail-group-title {
+      font-size: 10.5px; font-weight: 650; color: var(--ink-muted); letter-spacing: 0.05em;
+      padding: 8px 10px 4px; text-transform: uppercase;
+    }
+    .settings-rail button {
+      display: flex; align-items: center; gap: 8px; width: 100%;
+      padding: 8px 10px; border: 0; border-radius: var(--radius-sm);
+      background: transparent; color: var(--ink-secondary); font-size: 13px; text-align: left;
+    }
+    .settings-rail button:hover { background: var(--bg-subtle); color: var(--ink-primary); }
+    .settings-rail button[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+    .settings-content { max-width: 780px; }
+    .field-group { margin-bottom: 16px; }
+    .field-group label { display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 6px; }
+    .field-group input, .field-group select, .field-group textarea {
+      width: 100%; padding: 8px 11px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border-default); background: var(--bg-canvas); color: var(--ink-primary); font-size: 13px;
+    }
+    .field-help { margin: 5px 0 0; font-size: 12px; color: var(--ink-muted); }
+
+    /* #127 Studio member-pack grant sample */
+    .v04-member-grants { margin-top: 14px; }
+    .v04-member-grants summary { gap: 8px; flex-wrap: wrap; }
+    .v04-member-grants .v04-grant-table { table-layout: fixed; min-width: 0; }
+    .v04-grant-table th:nth-child(4) { width: 37%; }
+    table.v04-grant-table th { overflow-wrap: anywhere; white-space: normal; }
+    table.v04-grant-table td { vertical-align: top; overflow-wrap: anywhere; }
+    .v04-grant-scope { margin: 0; padding: 0; list-style: none; }
+    .v04-grant-scope li + li { margin-top: 4px; }
+    .v04-grant-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+    .v04-grant-fields .field-group { min-width: 0; margin: 0; }
+    .v04-grant-fields input { min-width: 0; }
+    .v04-grant-fields .v04-grant-purpose { grid-column: 1 / -1; }
+    @media (max-width: 760px) {
+      .v04-grant-table, .v04-grant-table tbody, .v04-grant-table tr { display: block; }
+      .v04-grant-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+      .v04-grant-table tbody tr + tr { border-top: 1px solid var(--border-default); }
+      table.v04-grant-table td { display: grid; grid-template-columns: minmax(5.4rem, 38%) minmax(0, 1fr); gap: 6px; padding: 7px 10px; }
+      .v04-grant-table td::before { content: attr(data-caption); color: var(--ink-muted); font-size: 11px; }
+      .v04-grant-table td > .badge { justify-self: start; }
+      .v04-grant-fields { grid-template-columns: minmax(0, 1fr); }
+    }
+
+    /* ===== Page Specific: Decision Board ===== */
+    .kpi-grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+    .kpi-card {
+      background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md);
+      padding: 16px 18px; box-shadow: var(--shadow-xs);
+    }
+    .kpi-card .kpi-top { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--ink-secondary); }
+    .kpi-card strong { display: block; font-size: 28px; font-weight: 650; margin: 6px 0 2px; font-variant-numeric: tabular-nums; }
+    .kpi-card p { margin: 0; font-size: 12px; color: var(--ink-muted); }
+    .board-lanes-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: start; }
+    .board-lane { background: var(--bg-subtle); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 12px; }
+    .board-card {
+      background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-sm);
+      padding: 14px; margin-bottom: 10px; box-shadow: var(--shadow-xs);
+    }
+    .board-card:last-child { margin-bottom: 0; }
+    .board-card h4 { margin: 8px 0 6px; font-size: 13.5px; font-weight: 620; line-height: 1.45; }
+    .board-card p { margin: 0 0 8px; font-size: 12.5px; color: var(--ink-secondary); }
+
+    /* ===== Page Specific: Help ===== */
+    .help-layout { display: grid; grid-template-columns: 224px minmax(0, 1fr); gap: 28px; align-items: start; }
+    .help-toc {
+      position: sticky; top: 0; background: var(--bg-surface);
+      border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 10px;
+    }
+    .help-toc ol { list-style: none; padding: 0; margin: 0; }
+    .help-toc button {
+      display: flex; align-items: baseline; gap: 8px; width: 100%; padding: 8px 10px;
+      border: 0; border-radius: var(--radius-sm); background: transparent;
+      color: var(--ink-secondary); font-size: 12.5px; text-align: left;
+    }
+    .help-toc button:hover { background: var(--bg-subtle); color: var(--ink-primary); }
+    .help-toc button[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+    .help-select-mobile { display: none; width: 100%; margin-bottom: 14px; }
+    .help-article { max-width: 760px; background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 24px 28px; }
+    .help-note { border-left: 3px solid var(--accent); background: var(--accent-wash); padding: 12px 14px; border-radius: 0 8px 8px 0; margin: 16px 0; font-size: 13px; }
+
+    /* ===== Modal / Slide-over Dialog ===== */
+    .modal-backdrop {
+      position: fixed; inset: 0; z-index: 60; background: rgba(18, 15, 32, 0.48);
+      display: flex; justify-content: flex-end; align-items: stretch;
+    }
+    .modal-backdrop.centered { justify-content: center; align-items: center; padding: 16px; }
+    .modal-sheet {
+      width: min(820px, 96vw); background: var(--bg-surface); color: var(--ink-primary);
+      box-shadow: var(--shadow-drawer); display: flex; flex-direction: column; overflow: hidden;
+    }
+    .modal-backdrop.centered .modal-sheet {
+      width: min(560px, 96vw); max-height: 88dvh; border-radius: var(--radius-lg); border: 1px solid var(--border-default);
+    }
+    .modal-head {
+      padding: 16px 22px; border-bottom: 1px solid var(--border-default);
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+    }
+    .modal-head h2 { margin: 0; font-size: 17px; font-weight: 650; }
+    .modal-head p { margin: 4px 0 0; font-size: 12px; color: var(--ink-muted); }
+    .modal-body { flex: 1; overflow-y: auto; padding: 18px 22px; }
+    .modal-foot {
+      padding: 13px 22px; border-top: 1px solid var(--border-default); background: var(--bg-subtle);
+      display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed; right: 20px; bottom: 20px; z-index: 80;
+      padding: 10px 14px; border-radius: var(--radius-md);
+      background: var(--ink-primary); color: var(--bg-surface);
+      font-size: 12.5px; box-shadow: var(--shadow-md); max-width: 380px;
+    }
+
+    /* ===== Responsive Breakpoints: 1100px / 960px / 760px ===== */
+    @media (max-width: 1100px) {
+      .split-2col { grid-template-columns: minmax(0, 1fr); }
+      .case-lanes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .board-lanes-3 { grid-template-columns: minmax(0, 1fr); }
+      .right-drawer {
+        position: absolute; top: 0; right: 0; bottom: 0; z-index: 25;
+        width: min(380px, 92vw); box-shadow: var(--shadow-drawer);
+      }
+    }
+    @media (max-width: 960px) {
+      .settings-layout { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+      .settings-rail {
+        position: static; display: flex; gap: 4px; overflow-x: auto; padding: 6px;
+        scrollbar-width: none;
+      }
+      .rail-group-title { display: none; }
+      .settings-rail button { width: auto; white-space: nowrap; flex-shrink: 0; padding: 7px 11px; }
+      .help-layout { grid-template-columns: minmax(0, 1fr); }
+      .help-toc { display: none; }
+      .help-select-mobile { display: block; }
+    }
+    @media (max-width: 760px) {
+      .sidebar {
+        position: fixed; top: 0; left: 0; bottom: 0; width: min(286px, 84vw);
+        box-shadow: var(--shadow-md); z-index: 50;
+      }
+      .sidebar-backdrop.open {
+        display: block; position: fixed; inset: 0; background: rgba(18, 15, 32, 0.42); z-index: 45;
+      }
+      .topbar { padding: 0 12px; gap: 6px; }
+      .topbar-crumb { max-width: 34vw; font-size: 12px; }
+      .workspace-switch button { padding: 4px 11px; font-size: 12px; }
+      .help-btn span.help-lbl { display: none; }
+      .page-scroll { padding: 16px 14px 28px; }
+      .page-header h1 { font-size: 19px; }
+      .task-header-band { padding: 12px 14px; }
+      .task-step-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .chat-scroll { padding: 14px 14px 10px; }
+      .composer-dock { padding: 8px 12px 12px; }
+      .tray-fold summary .card-meta { display: none; }
+      .kpi-grid-3 { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+      .case-lanes { grid-template-columns: minmax(0, 1fr); }
+      .diff-grid { grid-template-columns: minmax(0, 1fr); }
+      .input { min-width: 0; width: 100%; }
+      .help-article { padding: 18px 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app" class="app" data-theme="light"></div>
+
+  <script>
+    // =========================================================================
+    // Fictional Demo Data (Zero Real Business Data / Zero Real Credentials)
+    // Baseline: gadfly-hbo/OptraCall main @ 7ef6ebb81b735ffecdad3753217a96f02cb95c76
+    // =========================================================================
+    const DATA = {
+      enterprises: [
+        { id: "ent-starlane", name: "星岚零售（虚构）" },
+        { id: "ent-spruce", name: "云杉餐饮（虚构）" }
+      ],
+      projects: [
+        {
+          id: "proj-east-repurchase",
+          name: "华东秋季会员复购诊断",
+          archived: false,
+          workStatus: "进行中",
+          assignee: "林若溪",
+          workScope: "核查华东 18 个二线城市 142 家门店 Q3 会员 90 日复购下滑原因，形成分层复购改进报告。",
+          nextStep: "核对《华东Q3会员复购归因报告_v2.md》计算依据，并在 Case C-01 确认四季度试行范围。",
+          updatedAt: "今天 14:20",
+          linkedCases: ["case-01"],
+          files: {
+            "010_draw": [
+              { name: "pos_raw_2026q3.xlsx", size: "12.4 MB", note: "原始 POS 交易导出（原件归档，分析不直读）" }
+            ],
+            "020_clean": [
+              { name: "east_member_q3_clean.csv", size: "4.8 MB", sha: "9c41e8b7a2f1", note: "脱敏清洗后会员复购宽表 · 218,430 行" },
+              { name: "store_tier_mapping.csv", size: "64 KB", sha: "4e02d119c8a3", note: "华东门店分级与商圈口径表" }
+            ],
+            "060_reports": [
+              {
+                name: "华东Q3会员复购归因报告_v2.md",
+                size: "38.2 KB",
+                sha: "f7a3c90821be44d9",
+                savedAt: "今天 13:55",
+                taskId: "task-churn-q3",
+                linkedCaseId: "case-01",
+                summary: "二线新客首单后 31–60 天流失贡献了整体复购下降的 62.4%；高频刚需品类（乳品/烘焙）断货门店的复购率较对照店低 6.8 个百分点。",
+                evidenceInputs: [
+                  { path: "020_clean/east_member_q3_clean.csv", sha: "9c41e8b7a2f1", rows: "218,430 行（剔除异常测试卡 412 张）" },
+                  { path: "020_clean/store_tier_mapping.csv", sha: "4e02d119c8a3", rows: "142 家门店 · 按 SAP 口径 v1.4 对齐" }
+                ],
+                review: {
+                  supported: "二线门店 31–60 天首单后流失占比 62.4%，与 east_member_q3_clean.csv 队列聚合完全一致。",
+                  conditioned: "缺货相关的 6.8pp 差异需注明苏北 4 店 8 月 2 天流水缺失条件。"
+                },
+                calcSteps: [
+                  "复用指标口径 `member_repurchase_90d @ v1.4`：首单后 90 日内二次核销人数 / 当期首单活跃人数",
+                  "Python 脚本 `calc_cohort_q3.py` 分层对比一线 vs 二线门店，二线复购由 39.2% 降至 33.1%（-6.1pp）",
+                  "独立核验摘要：关键聚合口径与 020_clean 源表逐项对齐，样本缺口（苏北 4 店 8 月缺 2 天流水）已单列说明"
+                ]
+              },
+              { name: "华东Q3复购诊断_候选版.pptx", size: "2.1 MB", sha: "a81c45e0d932", savedAt: "今天 14:08" }
+            ]
+          },
+          tasks: [
+            {
+              id: "task-churn-q3",
+              name: "Q3 会员分层与流失归因分析",
+              status: "completed",
+              model: "Claude Sonnet 4.5 (演示配置)",
+              updatedAt: "今天 14:15",
+              draft: "",
+              linkedCaseId: "case-01",
+              requirementTitle: "RAP-2026-Q3 · 会员复购归因框架 v1.2",
+              messages: [
+                {
+                  role: "user",
+                  text: "请基于 020_clean/east_member_q3_clean.csv 与门店分级表，按 SAP 指标 member_repurchase_90d v1.4 口径拆解华东二线城市 Q3 复购下滑的主要归因，并将正式报告保存到 060_reports。"
+                },
+                {
+                  role: "process",
+                  summary: "已完成 3 步自主分析 · 读取 020_clean 宽表、执行 Python 队列归因、写入 060_reports 报告",
+                  steps: [
+                    "1. read_file · 核对 020_clean/east_member_q3_clean.csv 字段与缺失值（218,430 行）",
+                    "2. bash (python3) · 运行队列留存与缺货相关性检验（发现 31–60 天流失占比 62.4%）",
+                    "3. write_file · 生成正式报告 060_reports/华东Q3会员复购归因报告_v2.md（SHA f7a3c908...）"
+                  ]
+                },
+                {
+                  role: "assistant",
+                  text: "已完成华东 Q3 会员 90 日复购分层归因，并将定稿保存至 `060_reports/华东Q3会员复购归因报告_v2.md`。\n\n**核心结论**：\n1. 华东二线城市 Q3 复购率为 **33.1%**（较 Q2 下降 6.1pp），其中首单后 31–60 天流失贡献 **62.4%**。\n2. 高频刚需品类（低温乳品、现烤烘焙）缺货率 > 8% 的 29 家门店，会员 90 日复购率比同类门店低 **6.8pp**。\n3. **局限说明**：苏北 4 家门店 8 月 12–13 日流水缺失，已在报告第 4 节单列，不影响主结论方向。",
+                  reportRef: "华东Q3会员复购归因报告_v2.md",
+                  semanticRef: "SAP 指标 member_repurchase_90d @ v1.4 · 业务语义「90日活跃复购」@ r3"
+                }
+              ]
+            },
+            {
+              id: "task-coupon-sim",
+              name: "高流失门店券包策略推演",
+              status: "draft",
+              model: "Claude Sonnet 4.5 (演示配置)",
+              updatedAt: "昨天 18:10",
+              draft: "基于 Q3 归因报告中的 29 家高缺货/高流失门店，测算满 39 减 8 乳品复购券的毛利回收周期。",
+              linkedCaseId: "case-01",
+              messages: []
+            }
+          ]
+        },
+        {
+          id: "proj-coldchain",
+          name: "苏南冷链损耗排查",
+          archived: false,
+          workStatus: "待确认",
+          assignee: "陈致远",
+          workScope: "排查苏南 36 家社区店冷链温控告警与果蔬报损率上升关系。",
+          nextStep: "等待温控日志补齐后完成最终归因与止损建议。",
+          updatedAt: "昨天 16:40",
+          linkedCases: ["case-02"],
+          files: {
+            "010_draw": [{ name: "coldchain_iot_aug.csv", size: "8.2 MB", note: "IoT 温控原始日志" }],
+            "020_clean": [{ name: "sunan_spoilage_clean.csv", size: "1.9 MB", sha: "3d19aa0210bc", note: "门店日级报损与温控对齐表" }],
+            "060_reports": [{ name: "苏南冷链异常初诊报告.md", size: "19.4 KB", sha: "7c20be9912fa", savedAt: "昨天 16:30", taskId: "task-temp-alert", linkedCaseId: "case-02" }]
+          },
+          tasks: [
+            {
+              id: "task-temp-alert",
+              name: "温控告警与报损关联分析",
+              status: "running",
+              model: "GPT-5.1 (演示配置)",
+              updatedAt: "刚刚",
+              draft: "",
+              linkedCaseId: "case-02",
+              messages: [
+                { role: "user", text: "对比苏南冷链车夜间卸货时段温控波动与次日叶菜报损率的相关性。" },
+                { role: "assistant", text: "初步核对显示 04:00–05:30 卸货等待超 25 分钟的门店，次日叶菜报损率高出均值 1.9pp。正在补全 9 月第 2 周样本。" }
+              ]
+            }
+          ]
+        },
+        {
+          id: "proj-2025-winter",
+          name: "2025 冬季大促复盘",
+          archived: true,
+          workStatus: "已完成",
+          assignee: "林若溪",
+          workScope: "复盘 2025 冬季大促档期毛利结构与跨品类连带表现。",
+          nextStep: "已归档，仅保留只读查阅。",
+          updatedAt: "2026-02-18",
+          linkedCases: ["case-04"],
+          files: { "010_draw": [], "020_clean": [], "060_reports": [{ name: "2025冬季大促复盘终稿.md", size: "44.0 KB", sha: "1108fa22cc91", savedAt: "2026-02-18" }] },
+          tasks: [
+            { id: "task-winter-rev", name: "大促毛利结构复核", status: "completed", model: "Claude Sonnet 4.5", updatedAt: "2026-02-18", draft: "", messages: [] }
+          ]
+        }
+      ],
+      cases: [
+        {
+          id: "case-01",
+          title: "华东二线城市会员复购下滑应对",
+          status: "analyzing",
+          statusLabel: "分析中",
+          revision: 4,
+          goalTitle: "提升华东高潜力门店 90 日会员复购率至 38% (v2)",
+          description: "2026 Q3 华东二线城市 142 家门店 90 日会员复购率由 39.2% 降至 33.1%，需查明关键流失窗口与补货/券包应对方案。",
+          judgement: "31–60 天首单后流失占比 62.4%，且高频刚需缺货门店复购低 6.8pp；优先在 29 家高缺货店试行补货预警 + 乳品复购券。",
+          nextStep: "核对《华东Q3会员复购归因报告_v2.md》并确认 Q4 试点门店名单。",
+          updatedAt: "今天 14:20",
+          linkedProjects: ["proj-east-repurchase"],
+          primaryTask: { projectId: "proj-east-repurchase", taskId: "task-churn-q3", taskName: "Q3 会员分层与流失归因分析" },
+          artifacts: [
+            { name: "华东Q3会员复购归因报告_v2.md", path: "060_reports/华东Q3会员复购归因报告_v2.md", role: "已保存采用版本", sha: "f7a3c90821be44d9", availability: "可用 · 内容一致" }
+          ],
+          relations: [
+            { id: "rel-1", from: "case-02", to: "case-01", kind: "supports", kindLabel: "支持", note: "降低生鲜冷链损耗可直接改善高频刚需品类的货架可得率。" },
+            { id: "rel-2", from: "case-01", to: "case-03", kind: "follows_up", kindLabel: "前后续", note: "二线门店复购企稳后再评估夜间即时配送扩店范围。" }
+          ],
+          history: [
+            { time: "今天 14:18", title: "关联报告采用版本", detail: "已保存 060_reports/华东Q3会员复购归因报告_v2.md（SHA f7a3c908...）" },
+            { time: "昨天 10:05", title: "更新当前判断与下一步", detail: "明确聚焦 31–60 天流失窗口与高频刚需缺货门店。" }
+          ]
+        },
+        {
+          id: "case-02",
+          title: "生鲜冷链损耗异常止损方案",
+          status: "awaiting_confirmation",
+          statusLabel: "待确认",
+          revision: 2,
+          goalTitle: "优化生鲜冷链损耗率控制在 3.2% 以内 (v1)",
+          description: "苏南片区 8 月起果蔬报损率由 3.1% 升至 4.6%，需排查冷链卸货与陈列补货环节。",
+          judgement: "夜间卸货等待 > 25 分钟与次日叶菜报损显著相关，建议先试行 6 店错峰卸货。",
+          nextStep: "等待运营负责人确认错峰卸货排班试点。",
+          updatedAt: "昨天 16:50",
+          linkedProjects: ["proj-coldchain"],
+          primaryTask: { projectId: "proj-coldchain", taskId: "task-temp-alert", taskName: "温控告警与报损关联分析" },
+          artifacts: [
+            { name: "苏南冷链异常初诊报告.md", path: "060_reports/苏南冷链异常初诊报告.md", role: "报告引用", sha: "7c20be9912fa", availability: "可用" }
+          ],
+          relations: [],
+          history: [
+            { time: "昨天 16:50", title: "状态调整为待确认", detail: "初诊报告已产出，待确认错峰排班试点。" }
+          ]
+        },
+        {
+          id: "case-03",
+          title: "华东夜间即时配送试点评估",
+          status: "observing",
+          statusLabel: "观察中",
+          revision: 1,
+          goalTitle: "提升华东高潜力门店 90 日会员复购率至 38% (v2)",
+          description: "评估 21:00–23:30 夜间即时达在华东核心商圈的履约成本与客单提升。",
+          judgement: "待基础复购与缺货治理见效后再推进，避免低毛利履约放大损耗。",
+          nextStep: "观察 C-01 四周试点后的高频复购数据。",
+          updatedAt: "3 天前",
+          linkedProjects: [],
+          artifacts: [],
+          relations: [],
+          history: [{ time: "3 天前", title: "创建 Case", detail: "挂接年度目标 G-01，进入观察队列。" }]
+        },
+        {
+          id: "case-04",
+          title: "Q1 会员积分清零规则调整",
+          status: "closed",
+          statusLabel: "已结束",
+          revision: 3,
+          closeReason: "已按新积分有效期上线并完成首轮复盘，无异常客诉。",
+          description: "将年度集中清零调整为滚动 12 个月到期提醒。",
+          judgement: "滚动提醒有效平滑年末兑礼峰值，客服咨询量下降 34%。",
+          nextStep: "已归档结案。",
+          updatedAt: "2026-04-12",
+          linkedProjects: ["proj-2025-winter"],
+          artifacts: [],
+          relations: [],
+          history: [{ time: "2026-04-12", title: "关闭 Case", detail: "规则切换平稳，归档结案。" }]
+        }
+      ],
+      strategy: {
+        initiative: "2026 华东门店质量增长战略",
+        scope: "华东零售事业部",
+        kickoffVersion: "v2（已锁定）",
+        activePubId: "pub-2026q4",
+        candidate: {
+          id: "cand-A",
+          no: 2,
+          title: "方案 A · 会员复购与高频刚需组合",
+          sha: "d48e1a904f7c",
+          summary: "聚焦存量 142 家华东二线门店，以「高频刚需不断货 + 31–60 天会员精准召回」替代粗放新店扩张，确保单店毛利额与现金流双稳。",
+          tradeoffs: "暂缓三线空白城市新开店预算 1,800 万，将资源转向冷链与高频刚需补货中台。",
+          goals: [
+            { id: "sg-g1", title: "核心商圈单店毛利额同比 +12%", strategy: "优化乳品/烘焙高频刚需陈列与动态补货", metric: "store_gross_profit_yoy @ v1.2" },
+            { id: "sg-g2", title: "华东二线门店 90 日会员复购率恢复至 38%", strategy: "针对 31–60 天沉默新客实施分层触达", metric: "member_repurchase_90d @ v1.4" }
+          ],
+          gates: [
+            {
+              name: "因果检验",
+              status: "pass",
+              label: "已通过",
+              ref: "gate-causal-8812",
+              finishedAt: "今天 10:12",
+              evidence: "经 2025–2026 华东门店队列对照核验：高频刚需断货率每降 3pp，90 日复购提升 2.1–2.6pp，因果方向与时序一致，不存在反向选择偏差。"
+            },
+            {
+              name: "逻辑检验",
+              status: "pass",
+              label: "已通过",
+              ref: "gate-logic-8819",
+              finishedAt: "今天 10:28",
+              evidence: "方案目标、资源约束（暂缓新开店预算）与 2026 华东冷链承载上限内部自洽，无指标口径冲突或隐含前提矛盾。"
+            }
+          ]
+        }
+      },
+      goals: [
+        {
+          id: "goal-01",
+          title: "提升华东高潜力门店 90 日会员复购率至 38%",
+          version: 2,
+          status: "adopted",
+          perspective: "营利组织",
+          scope: "华东零售事业部",
+          metric: "SAP 指标 member_repurchase_90d @ v1.4（目标 ≥ 38.0%）",
+          baseline: "2026 Q3 实测基线 33.1%（来源：华东Q3会员复购归因报告_v2.md）",
+          responsible: "林若溪 · 华东会员运营",
+          dueAt: "2026-12-31",
+          origin: "战略发布 pub-2026q4 · 方案 A v2",
+          outcome: "在不增加全域普发折扣的前提下，将华东二线门店 90 日会员复购率由 33.1% 提升至 38.0% 以上。",
+          strategies: ["聚焦 29 家高缺货店优化乳品/烘焙补货节奏", "针对首单后 31–60 天流失高风险新客推送精准复购券"],
+          resources: ["复用现有会员 CRM 与门店补货看板", "试点券包预算上限 45 万元"],
+          conditions: ["苏南冷链卸货错峰试点稳定运行，保障高频品类不断货"],
+          linkedCaseId: "case-01"
+        },
+        {
+          id: "goal-02",
+          title: "优化生鲜冷链损耗率控制在 3.2% 以内",
+          version: 1,
+          status: "candidate",
+          perspective: "营利组织",
+          scope: "华东零售事业部",
+          metric: "SAP 指标 fresh_spoilage_rate @ v1.1（目标 ≤ 3.2%）",
+          baseline: "2026 Q3 苏南片区基线 4.6%（待补全 9 月完整样本）",
+          responsible: "陈致远 · 供应链与冷链",
+          dueAt: "2026-12-15",
+          origin: "战略发布 pub-2026q4 · 方案 A v2",
+          outcome: "通过夜间错峰卸货与温控告警响应闭环，将生鲜冷链损耗率压降至 3.2% 以内。",
+          strategies: ["苏南 6 家高报损门店先行试点错峰卸货", "建立 25 分钟卸货超时自动提醒机制"],
+          resources: ["冷链车队调度调整，无新增硬件采购"],
+          conditions: ["片区仓配排班协议在 11 月底前确认"],
+          linkedCaseId: "case-02",
+          priorOutcome: "旧版目标（v0）：生鲜损耗率维持在 4.0% 以下，未区分冷链卸货与门店陈列责任。"
+        }
+      ],
+      studioAssets: {
+        semantic: {
+          semantic: [
+            { id: "sem-repurchase", title: "90日活跃复购定义", version: "r3", status: "正式生效", owner: "会员域", updatedAt: "2026-11-10", body: "首单核销后 90 个自然日内发生至少 1 次实付 > 0 的二次核销；剔除内部员工测试卡与整单全额退货记录。" },
+            { id: "sem-highfreq", title: "高频刚需品类边界", version: "r2", status: "正式生效", owner: "商品域", updatedAt: "2026-11-04", body: "包含低温鲜奶、酸奶、现烤烘焙、鸡蛋及日配叶菜 5 个三级类目；促销礼盒装不计入日常刚需口径。" },
+            { id: "sem-oos", title: "有效缺货率判定规则", version: "r1-cand", status: "候选待核", owner: "门店运营", updatedAt: "今天 09:40", body: "营业时段（07:00–21:00）内 SKU 库存为 0 且过去 14 日日均销量 ≥ 3 件的时段占比。" }
+          ],
+          binding: [
+            { id: "bind-pos-member", title: "POS 交易表 → 会员复购宽表字段映射", version: "r4", status: "正式生效", owner: "数据基础层", updatedAt: "2026-11-12", body: "pos_orders.member_uid → member_id；过滤 order_status IN ('PAID','SETTLED') AND is_test_card = 0。" },
+            { id: "bind-iot-temp", title: "IoT 温控日志 → 门店冷链告警映射", version: "r2", status: "正式生效", owner: "供应链域", updatedAt: "2026-11-02", body: "sensor_temp_c > 8.0 持续 ≥ 15 分钟记为一次卸货温控越界事件。" }
+          ],
+          materials: [
+            { id: "mat-2026-ops", title: "2026 华东门店运营口径手册（修订版）", version: "rev-08", status: "正式生效", owner: "华东运营部", updatedAt: "2026-10-28", body: "规定华东一/二/三线城市划分标准、门店可比同店口径及大促期间异常流量剔除原则。" },
+            { id: "mat-coldchain-sop", title: "生鲜冷链收货与报损登记 SOP", version: "rev-03", status: "正式生效", owner: "供应链部", updatedAt: "2026-10-15", body: "明确夜间到店卸货 25 分钟红线、温度计抽检记录及次日晨检报损分类编码。" }
+          ]
+        },
+        analytics: {
+          metrics: [
+            { id: "member_repurchase_90d", title: "90日会员复购率", version: "v1.4", status: "正式发布", owner: "SAP 指标库", updatedAt: "2026-11-11", body: "公式：COUNT(DISTINCT 90日内二次核销会员) / COUNT(DISTINCT 首单会员)。依赖语义：sem-repurchase@r3。" },
+            { id: "fresh_spoilage_rate", title: "生鲜冷链损耗率", version: "v1.1", status: "正式发布", owner: "SAP 指标库", updatedAt: "2026-11-01", body: "公式：生鲜报损成本额 / 生鲜期初及入库总成本额。仅涵盖冷链温控类目。" },
+            { id: "store_gross_profit_yoy", title: "可比单店毛利额同比", version: "v1.2", status: "正式发布", owner: "SAP 指标库", updatedAt: "2026-10-29", body: "开业满 12 个月的可比门店毛利额同比增长率，剔除一次性供应商返利。" }
+          ],
+          methods: [
+            { id: "meth-cohort-diff", title: "会员队列分层与流失窗口归因法", version: "v2", status: "正式发布", owner: "分析方法库", updatedAt: "2026-11-09", body: "按首单月份与城市层级构建 30/60/90 日留存矩阵，结合门店缺货率做分组差异检验。" },
+            { id: "meth-did-pilot", title: "试点门店双重差分（DID）效果评估", version: "v1", status: "正式发布", owner: "分析方法库", updatedAt: "2026-10-20", body: "选取同商圈、同店龄对照门店，评估券包或错峰卸货上线前后的净增量效应。" }
+          ]
+        }
+      },
+      board: {
+        reports: [
+          { id: "rep-1", name: "华东Q3会员复购归因报告_v2.md", projectId: "proj-east-repurchase", projectName: "华东秋季会员复购诊断", bytes: "38.2 KB", status: "已抽取 2 条", sha: "f7a3c90821be44d9" },
+          { id: "rep-2", name: "苏南冷链异常初诊报告.md", projectId: "proj-coldchain", projectName: "苏南冷链损耗排查", bytes: "19.4 KB", status: "已抽取 1 条", sha: "7c20be9912fa" }
+        ],
+        items: [
+          {
+            id: "bi-1", status: "suggested", priority: "high", evidence: "数据支撑", source: "报告确认交接",
+            projectId: "proj-east-repurchase", projectName: "华东秋季会员复购诊断", reportName: "华东Q3会员复购归因报告_v2.md",
+            title: "对 29 家高缺货二线门店启动高频刚需（乳品/烘焙）补货预警",
+            impact: "预计可挽回二线门店 2.2–2.8pp 会员 90 日复购率，避免首单后 31–60 天集中流失。",
+            quote: "高频刚需品类缺货率 > 8% 的 29 家门店，会员 90 日复购率较对照门店低 6.8 个百分点。"
+          },
+          {
+            id: "bi-2", status: "suggested", priority: "medium", evidence: "多源佐证", source: "模型抽取",
+            projectId: "proj-coldchain", projectName: "苏南冷链损耗排查", reportName: "苏南冷链异常初诊报告.md",
+            title: "在苏南 6 家高报损门店试点 04:00–05:30 错峰卸货排班",
+            impact: "预期压降叶菜次日报损率约 1.2–1.5pp，无额外硬件投入。",
+            quote: "卸货等待超 25 分钟的门店次日叶菜报损率高出均值 1.9pp。"
+          },
+          {
+            id: "bi-3", status: "adopted", priority: "high", evidence: "数据支撑", source: "报告确认交接",
+            projectId: "proj-east-repurchase", projectName: "华东秋季会员复购诊断", reportName: "华东Q3会员复购归因报告_v2.md",
+            title: "针对首单后 31–60 天沉默会员配置乳品复购券小范围 A/B 测试",
+            owner: "林若溪", dueDate: "2026-12-05", taskStatus: "进行中",
+            impact: "验证精准召回 ROI，控制券包核销成本在 45 万预算内。"
+          },
+          {
+            id: "bi-4", status: "done", priority: "medium", evidence: "逻辑推断", source: "人工补充",
+            projectId: "proj-east-repurchase", projectName: "华东秋季会员复购诊断", reportName: "华东Q3会员复购归因报告_v2.md",
+            title: "完成苏北 4 店 8 月缺失流水补录与口径对齐",
+            owner: "数据运营组", dueDate: "2026-11-20", feedback: "按建议执行 · 4 店补录后二线复购率仍为 33.2%，主结论稳健（主观评分 5/5，未经独立验证）。"
+          }
+        ]
+      },
+      settingsCategories: [
+        { id: "usage-context-settings", label: "使用用途", group: "基础与模型" },
+        { id: "settings", label: "模型设置", group: "基础与模型" },
+        { id: "web-search-settings", label: "网络检索", group: "基础与模型" },
+        { id: "automatic-action-settings", label: "自动模式", group: "能力与连接" },
+        { id: "skill-settings", label: "Skill 资料与依赖", group: "能力与连接" },
+        { id: "connection-settings", label: "连接配置", group: "能力与连接" },
+        { id: "personal-materials", label: "个人资料", group: "资料与资产包" },
+        { id: "model-pack-settings", label: "业务模型包", group: "资料与资产包" },
+        { id: "capability-plans", label: "领域资产包", group: "资料与资产包" }
+      ],
+      helpChapters: [
+        {
+          id: "ch-1", title: "快速开始：从项目到决策闭环", summary: "了解 OptraCall 的核心分工：Host 管环境与留痕，Agent 自主分析，人负责目标、取舍与授权。",
+          paragraphs: [
+            "OptraCall 将战略选择、目标管理、决策星图、项目地图、资产体系与分析任务整合在同一工作台。所有项目文件、任务会话与报告均保存在本机。",
+            "典型闭环路径：在「战略选择」发布准确战略版本 → 带入「目标管理」核对并采纳 → 在「决策星图」建立业务 Case → 进入「项目地图」与「分析任务」使用 020_clean 资料完成分析并保存 060_reports 报告 → 在「决策看板」沉淀行动与复盘反馈。"
+          ],
+          note: "项目共享 010_draw（原件归档）、020_clean（分析资料与过程）与 060_reports（最终报告）三个目录；目录用途为整理约定，不提供敏感数据隔离，请勿上传敏感数据。"
+        },
+        {
+          id: "ch-2", title: "项目文件、报告保存与计算依据", summary: "明确原件保护、020_clean 分析输入与 060_reports 正式报告的证据追溯方式。",
+          paragraphs: [
+            "上传文件时可先归档到 010_draw，需要 Agent 分析时再显式复制到 020_clean。分析完成后，Agent 可将正式报告写入 060_reports，用户也可点击「将最新回复保存为最终报告」。",
+            "在右侧「项目文件」抽屉点击 060_reports 报告旁的「查看计算依据」，即可核对报告 SHA-256 指纹、固定输入来源与关联 Case。"
+          ],
+          note: "保存报告与审查结论记录的是当时准确版本；后续修改源文件不会静默改写已固定的历史证据。"
+        },
+        {
+          id: "ch-3", title: "战略发布与目标管理核对", summary: "两道串行检验通过后才可正式发布；发布版本可显式带入目标管理，等待单独核对与采纳。",
+          paragraphs: [
+            "战略共创支持多轮开题与候选方案比较。锁定候选后，在「战略检验」串行执行因果检验与逻辑检验，均通过后进入「战略发布」复核并正式发布。",
+            "点击「带入目标管理」仅在目标管理创建候选目标，不自动覆盖既有已采纳版本，也不自动启动执行。"
+          ],
+          note: "已采纳目标变更不会静默重写历史 Case 或旧报告引用，受影响工作按原版本显式核对。"
+        },
+        {
+          id: "ch-4", title: "语义资产、分析资产与设置边界", summary: "统一维护企业级业务语义、数据映射、分析指标与分析方法，并在设置中管理模型与连接。",
+          paragraphs: [
+            "「语义资产」集中管理业务语义、数据映射与企业资料；「分析资产」管理 SAP 分析指标与分析方法；两者共享「体系工作台」用于覆盖缺口盘点与正式发布。",
+            "「设置」覆盖使用用途、个人资料、模型设置、网络检索、自动模式、Skill 资料与依赖、连接配置、业务模型包与领域资产包 9 个分类。"
+          ],
+          note: "查看连接配置或 Skill 资料不会主动访问业务数据库或调用付费模型。"
+        }
+      ]
+    };
+
+    // =========================================================================
+    // Application State (In-Memory Interactive State)
+    // =========================================================================
+    const handoffScopes = {
+      "strategy-scope": DATA.strategy.scope,
+      "ent-starlane": "星岚零售（企业级）"
+    };
+
+    const state = {
+      theme: "light",
+      sidebarOpen: window.innerWidth > 760,
+      primaryNavOpen: true,
+      projectSpaceOpen: true,
+      archivedOpen: false,
+      expandedProjects: { "proj-east-repurchase": true, "proj-coldchain": true },
+      view: "projects", // strategy | goals | cases | projects | semantic | analytics | settings | chat | decision
+      helpOpen: false,
+      helpChapter: 0,
+      lastNonSettingsView: "projects",
+      // Strategy & Goals
+      strategyStage: "strategy-release", // co-create | strategy-check | strategy-release | strategy-versions
+      releaseTemplate: "树形地图",
+      goalStage: "goals", // goals | adopt | cases | history
+      selectedGoalId: "goal-01",
+      handoffBanner: null,
+      // Cases
+      caseDisplay: "map", // map | regular
+      caseRegularMode: "cards", // cards | list
+      caseRelationFilter: "all",
+      caseFocusNodeId: null,
+      starZoom: 1,
+      openCaseId: null,
+      caseDetailTab: "overview", // overview | projects | artifacts | history
+      // Projects
+      projectMode: "cards", // cards | list
+      projectFilter: "active",
+      openProjectId: null,
+      // Chat / Task
+      activeProjectId: "proj-east-repurchase",
+      activeTaskId: "task-churn-q3",
+      rightDrawerOpen: window.innerWidth > 1100,
+      rightDrawerTab: "files", // files | evidence | review
+      activeReportName: null,
+      activeReportSha: null,
+      attachedCaseId: null,
+      // Studio Assets
+      enterpriseId: "ent-starlane",
+      semanticTab: "semantic", // semantic | binding | materials | workbench
+      analyticsTab: "metrics", // metrics | methods | workbench
+      workbenchPane: "coverage", // coverage | evolution | publication
+      inspectAsset: null,
+      // Settings
+      settingsCategory: "settings",
+      // Decision Board
+      boardFilterProject: "all",
+      boardFilterEvidence: "all",
+      // Modals
+      handoffModalOpen: false,
+      handoffSelected: [0, 1],
+      handoffScopeKey: "strategy-scope",
+      toast: null
+    };
+
+    let toastTimer = null;
+    function showToast(msg) {
+      state.toast = msg;
+      render();
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { state.toast = null; render(); }, 3400);
+    }
+
+    function icon(name, size = 16) {
+      const p = {
+        panel: '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/>',
+        strategy: '<path d="M12 3 4 7l8 4 8-4-8-4Z"/><path d="M4 12l8 4 8-4"/><path d="M4 17l8 4 8-4"/>',
+        goal: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',
+        cases: '<circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.3 10.9 15.6 7.2M8.3 13.1l7.3 3.7"/>',
+        folder: '<path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/>',
+        semantic: '<path d="M4 6h16M4 12h10M4 18h14"/><circle cx="18" cy="12" r="2"/>',
+        analytics: '<path d="M4 19V5M4 19h16"/><path d="M8 15v-4M13 15V8M18 15v-6"/>',
+        settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3h.1a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8v.1a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z"/>',
+        help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 .5c0 2-2.5 2-2.5 4m0 3v.1"/>',
+        moon: '<path d="M20 15A9 9 0 0 1 9 4a9 9 0 1 0 11 11Z"/>',
+        sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+        files: '<path d="M14 3v5h5"/><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/>',
+        send: '<path d="M12 19V5m-6 6 6-6 6 6"/>'
+      };
+      return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p[name] || ''}</svg>`;
+    }
+
+    function esc(s) {
+      return String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+    }
+    function fmtInline(s) {
+      return esc(s)
+        .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+        .replace(/`([^`]+)`/g, '<span class="mono-pill">$1</span>')
+        .replace(/\n/g, "<br/>");
+    }
+
+    function getProject(id) { return DATA.projects.find(p => p.id === id); }
+    function getTask(project, taskId) { return project?.tasks.find(t => t.id === taskId); }
+    function getCase(id) { return DATA.cases.find(c => c.id === id); }
+
+    function exactReport(reports, name, sha) {
+      if (!name) return reports.length === 1 ? reports[0] : undefined;
+      const matches = reports.filter(r => r.name === name && (!sha || r.sha === sha));
+      return matches.length === 1 ? matches[0] : undefined;
+    }
+
+    function caseContext(caseId, project) {
+      const record = getCase(caseId);
+      return project && !project.archived && record?.status !== "closed" &&
+        record?.linkedProjects.includes(project.id) ? record : undefined;
+    }
+
+    function navigate(nextView, opts = {}) {
+      if (state.view !== "settings" && nextView === "settings") {
+        state.lastNonSettingsView = state.view;
+      }
+      state.toast = null;
+      state.helpOpen = false;
+      state.view = nextView;
+      if (opts.strategyStage) state.strategyStage = opts.strategyStage;
+      if (opts.goalStage) state.goalStage = opts.goalStage;
+      if (opts.projectId) state.activeProjectId = opts.projectId;
+      if (opts.taskId) state.activeTaskId = opts.taskId;
+      if (opts.openCaseId !== undefined) state.openCaseId = opts.openCaseId;
+      if (opts.rightDrawerTab) { state.rightDrawerTab = opts.rightDrawerTab; state.rightDrawerOpen = true; }
+      if (opts.settingsCategory) state.settingsCategory = opts.settingsCategory;
+      if (window.innerWidth <= 760) state.sidebarOpen = false;
+      render();
+    }
+
+    function openTaskFromAnywhere(projectId, taskId, { caseId, reportName, reportSha } = {}) {
+      const project = getProject(projectId);
+      const task = getTask(project, taskId);
+      state.toast = null;
+      state.activeProjectId = projectId;
+      state.activeTaskId = taskId;
+      state.attachedCaseId = task ? caseContext(caseId, project)?.id ?? null : null;
+      state.activeReportName = reportName ?? null;
+      state.activeReportSha = reportSha ?? null;
+      state.openProjectId = null;
+      state.openCaseId = null;
+      state.helpOpen = false;
+      state.view = "chat";
+      state.rightDrawerOpen = Boolean(reportName) || window.innerWidth > 1100;
+      state.rightDrawerTab = reportName ? "evidence" : "files";
+      if (window.innerWidth <= 760) state.sidebarOpen = false;
+      if (caseId && task && !state.attachedCaseId) {
+        showToast("此 Case 背景暂不可附带。");
+        return;
+      }
+      render();
+    }
+
+    function openReportEvidence(reportName, reportSha = null) {
+      state.activeReportName = reportName;
+      state.activeReportSha = reportSha;
+      state.rightDrawerOpen = true;
+      state.rightDrawerTab = "evidence";
+      render();
+    }
+
+    function openProjectReport(projectId, name, sha) {
+      const project = getProject(projectId);
+      const report = name && exactReport(project?.files["060_reports"] ?? [], name, sha);
+      const task = getTask(project, report?.taskId);
+      if (!project || !report || !task) {
+        showToast(`原报告或所属分析任务暂不可读取：${name || projectId}。`);
+        return;
+      }
+      if (state.view === "chat" && state.activeProjectId === project.id && state.activeTaskId === task.id) {
+        openReportEvidence(report.name, report.sha);
+        return;
+      }
+      openTaskFromAnywhere(project.id, task.id, { reportName: report.name, reportSha: report.sha });
+    }
+
+    function openCaseFromEvidence(caseId) {
+      state.view = "cases";
+      state.helpOpen = false;
+      state.openCaseId = getCase(caseId) ? caseId : null;
+      state.caseDetailTab = "overview";
+      if (window.innerWidth <= 760) state.sidebarOpen = false;
+      if (!state.openCaseId) {
+        showToast(`原 Case 暂不可读取：${caseId}。`);
+        return;
+      }
+      render();
+    }
+
+    // URL Hash Deep-Linking for Direct Verification & Screenshots
+    function applyHashRoute() {
+      const raw = (location.hash || "").replace(/^#/, "");
+      if (!raw) return;
+      let parts;
+      try {
+        parts = raw.split("/").map(decodeURIComponent);
+      } catch {
+        showToast("链接包含无法识别的定位。");
+        return;
+      }
+      const [route, sub, target, section, report] = parts;
+      if (route === "help") { state.helpOpen = true; render(); return; }
+      const map = {
+        strategy: "strategy", goals: "goals", cases: "cases", projects: "projects",
+        semantic: "semantic", analytics: "analytics", settings: "settings",
+        task: "chat", chat: "chat", decision: "decision"
+      };
+      if (map[route]) {
+        state.helpOpen = false;
+        state.view = map[route];
+        if (route === "strategy" && sub) state.strategyStage = sub;
+        if (route === "goals" && sub) state.goalStage = sub;
+        if (route === "semantic" && sub) state.semanticTab = sub;
+        if (route === "analytics" && sub) state.analyticsTab = sub;
+        if (route === "settings" && sub) state.settingsCategory = sub;
+        if (route === "task" || route === "chat") {
+          if (sub === "evidence" && !target) {
+            state.rightDrawerOpen = true;
+            state.rightDrawerTab = "evidence";
+          } else if (sub) {
+            openTaskFromAnywhere(sub, target ?? "", { reportName: section === "evidence" ? report : undefined });
+            if (section === "evidence" && !report) openReportEvidence(null);
+            return;
+          }
+        }
+        if (route === "cases" && sub === "detail") {
+          openCaseFromEvidence(target ?? "case-01");
+          return;
+        }
+        render();
+      }
+    }
+    window.addEventListener("hashchange", applyHashRoute);
+    let wasMobile = window.innerWidth <= 760;
+    let wasDrawer = window.innerWidth <= 1100;
+    window.addEventListener("resize", () => {
+      const mobile = window.innerWidth <= 760;
+      const drawer = window.innerWidth <= 1100;
+      if (mobile === wasMobile && drawer === wasDrawer) return;
+      if (mobile && !wasMobile) state.sidebarOpen = false;
+      if (drawer && !wasDrawer) state.rightDrawerOpen = false;
+      wasMobile = mobile;
+      wasDrawer = drawer;
+      render();
+    });
+
+    // =========================================================================
+    // View Renderers
+    // =========================================================================
+    function getPageTitle() {
+      if (state.helpOpen) return "帮助 · 操作手册";
+      const proj = getProject(state.activeProjectId);
+      const task = getTask(proj, state.activeTaskId);
+      const titles = {
+        strategy: "战略选择",
+        goals: "目标管理",
+        cases: "决策星图",
+        projects: "项目地图",
+        semantic: "语义资产",
+        analytics: "分析资产",
+        settings: "设置",
+        decision: "决策看板",
+        chat: proj && task ? `${proj.name} / ${task.name}` : "分析任务暂不可读取"
+      };
+      return titles[state.view] || "OptraCall";
+    }
+
+    function renderSidebar() {
+      const activeProjects = DATA.projects.filter(p => !p.archived);
+      const archivedProjects = DATA.projects.filter(p => p.archived);
+      const navItems = [
+        ["strategy", "strategy", "战略选择"],
+        ["goals", "goal", "目标管理"],
+        ["cases", "cases", "决策星图"],
+        ["projects", "folder", "项目地图"],
+        ["semantic", "semantic", "语义资产"],
+        ["analytics", "analytics", "分析资产"]
+      ];
+      const renderProjTree = (list) => list.map(p => {
+        const exp = !!state.expandedProjects[p.id];
+        const isCurrentProj = state.view === "chat" && state.activeProjectId === p.id;
+        return `
+          <li>
+            <div class="proj-row ${isCurrentProj ? "active-proj" : ""}">
+              <button type="button" class="proj-chevron" data-action="toggle-proj" data-id="${p.id}" aria-expanded="${exp}" aria-label="${exp ? "收起" : "展开"}项目 ${esc(p.name)}">${exp ? "⌄" : "›"}</button>
+              <button type="button" class="proj-name-btn" data-action="open-proj-first-task" data-id="${p.id}" title="${esc(p.name)}">
+                ${icon("folder", 14)}<span>${esc(p.name)}</span>
+              </button>
+              ${!p.archived ? `<button type="button" class="proj-quick-add" data-action="mock-new-task" data-id="${p.id}" title="新建任务" aria-label="在 ${esc(p.name)} 中新建任务">＋</button>` : ""}
+            </div>
+            ${exp ? `<ul class="task-sublist">${p.tasks.map(t => {
+              const isAct = state.view === "chat" && state.activeProjectId === p.id && state.activeTaskId === t.id;
+              return `<li><button type="button" class="${isAct ? "active" : ""}" data-action="open-task" data-proj="${p.id}" data-task="${t.id}" aria-current="${isAct ? "page" : "false"}">
+                <span class="t-name">${esc(t.name)}</span>
+                ${t.status === "running" ? '<span class="dot-pulse" title="运行中"></span>' : t.draft ? '<span class="mini-tag">草稿</span>' : ""}
+              </button></li>`;
+            }).join("")}</ul>` : ""}
+          </li>
+        `;
+      }).join("");
+
+      return `
+        <div class="sidebar-backdrop ${state.sidebarOpen ? "open" : ""}" data-action="close-sidebar"></div>
+        <aside id="sidebar" class="sidebar ${state.sidebarOpen ? "" : "collapsed"}" aria-label="工作台导航">
+          <div class="brand">
+            <span class="brand-mark" aria-hidden="true"><span class="bm-outer"></span><span class="bm-inner"></span></span>
+            <div><strong>OptraCall</strong><span class="brand-sub">持续做出更好的决策</span></div>
+            <button type="button" class="icon-btn mobile-nav-close" data-action="close-sidebar" aria-label="关闭侧栏">✕</button>
+          </div>
+          <button type="button" class="new-project-btn" data-action="mock-new-project">
+            <span class="plus-ic" aria-hidden="true">＋</span>新建项目
+          </button>
+
+          <button type="button" class="sidebar-section-btn" data-action="toggle-primary-nav" aria-expanded="${state.primaryNavOpen}">
+            <span>主导航</span><span>${state.primaryNavOpen ? "⌄" : "›"}</span>
+          </button>
+          ${state.primaryNavOpen ? `<nav class="primary-nav" aria-label="主导航">
+            ${navItems.map(([id, ic, label]) => `
+              <button type="button" class="nav-item ${!state.helpOpen && state.view === id ? "selected" : ""}"
+                data-action="nav" data-view="${id}" aria-current="${!state.helpOpen && state.view === id ? "page" : "false"}">
+                ${icon(ic, 16)}<span>${label}</span>
+              </button>
+            `).join("")}
+          </nav>` : ""}
+
+          <div class="sidebar-scroll">
+            <button type="button" class="sidebar-section-btn" data-action="toggle-project-space" aria-expanded="${state.projectSpaceOpen}">
+              <span>项目空间 (${activeProjects.length})</span><span>${state.projectSpaceOpen ? "⌄" : "›"}</span>
+            </button>
+            ${state.projectSpaceOpen ? `<ul class="proj-tree">${renderProjTree(activeProjects)}</ul>` : ""}
+
+            <button type="button" class="sidebar-section-btn" data-action="toggle-archived" aria-expanded="${state.archivedOpen}">
+              <span>已归档项目 (${archivedProjects.length})</span><span>${state.archivedOpen ? "⌄" : "›"}</span>
+            </button>
+            ${state.archivedOpen ? `<ul class="proj-tree">${renderProjTree(archivedProjects)}</ul>` : ""}
+          </div>
+
+          <div class="sidebar-bottom">
+            <button type="button" class="nav-item ${!state.helpOpen && state.view === "settings" ? "selected" : ""}" data-action="nav" data-view="settings">
+              ${icon("settings", 16)}<span>设置</span><span class="configured-dot" title="已保存本机配置"></span>
+            </button>
+            <button type="button" class="locale-pill" disabled title="界面语言切换后续支持">中/EN</button>
+          </div>
+        </aside>
+      `;
+    }
+
+    function renderTopbar() {
+      const inTask = !state.helpOpen && state.view === "chat";
+      return `
+        <header class="topbar">
+          <div class="topbar-left">
+            <button type="button" class="icon-btn" data-action="toggle-sidebar" aria-label="${state.sidebarOpen ? "收起侧栏" : "展开侧栏"}" aria-expanded="${state.sidebarOpen}">
+              ${icon("panel", 17)}
+            </button>
+            <div class="topbar-crumb"><strong>${esc(getPageTitle())}</strong></div>
+          </div>
+          <div class="workspace-switch" role="group" aria-label="工作区切换">
+            <button type="button" aria-pressed="${!state.helpOpen && state.view === "chat"}" data-action="nav" data-view="chat">分析</button>
+            <button type="button" aria-pressed="${!state.helpOpen && state.view === "decision"}" data-action="nav" data-view="decision">决策</button>
+          </div>
+          <div class="topbar-right"><span class="demo-build">原型 v0.4</span>
+            ${inTask ? `<button type="button" class="icon-btn" data-action="toggle-right-drawer" aria-label="切换项目文件与依据面板" aria-expanded="${state.rightDrawerOpen}" title="项目文件与计算依据">${icon("files", 17)}</button>` : ""}
+            <button type="button" class="help-btn" data-action="toggle-help" aria-expanded="${state.helpOpen}">
+              ${icon("help", 16)}<span class="help-lbl">帮助</span>
+            </button>
+            <button type="button" class="icon-btn" data-action="toggle-theme" aria-label="${state.theme === "light" ? "切换深色模式" : "切换浅色模式"}" title="切换浅色/深色主题">
+              ${icon(state.theme === "light" ? "moon" : "sun", 16)}
+            </button>
+          </div>
+        </header>
+      `;
+    }
+
+    // ===== 1. Strategy Choice (战略选择) =====
+    function renderStrategyPage() {
+      const s = DATA.strategy;
+      const c = s.candidate;
+      const tabs = [
+        ["co-create", "战略共创"],
+        ["strategy-check", "战略检验"],
+        ["strategy-release", "战略发布"],
+        ["strategy-versions", "版本管理"]
+      ];
+      let body = "";
+      if (state.strategyStage === "co-create") {
+        body = `
+          <div class="split-2col">
+            <div class="card">
+              <div class="card-head">
+                <div><span class="badge accent">已锁定候选 · v${c.no}</span><h2 style="margin-top:6px;">${esc(c.title)}</h2><p class="card-meta">开题报告 ${esc(s.kickoffVersion)} · 内容指纹 <span class="mono-pill">${c.sha}</span></p></div>
+                <div class="toolbar-group">
+                  <button type="button" class="btn btn-primary btn-sm" data-action="set-strategy-stage" data-stage="strategy-check">进入战略检验 →</button>
+                </div>
+              </div>
+              <p style="font-size:13.5px;margin:0 0 12px;">${esc(c.summary)}</p>
+              <div class="slot-box"><span class="slot-label">核心取舍与边界</span>${esc(c.tradeoffs)}</div>
+              <div style="margin-top:14px;">
+                <strong style="font-size:12.5px;">候选方案比较</strong>
+                <div class="diff-grid">
+                  <div class="diff-box after"><strong>方案 A · 会员复购与高频刚需组合 v2</strong><p style="margin:6px 0 0;color:var(--ink-secondary);">状态：已锁定 · 现金流稳健，优先盘活 142 家存量门店。</p></div>
+                  <div class="diff-box"><strong>方案 B · 三线新城扩张优先 v1</strong><p style="margin:6px 0 0;color:var(--ink-secondary);">状态：草稿 · 需新增资本开支 1,800 万，暂未锁定。</p></div>
+                </div>
+              </div>
+            </div>
+            <aside class="card" style="position:sticky;top:0;">
+              <div class="card-head"><h3>战略资料与范围文件</h3><span class="badge">3 份</span></div>
+              <p class="card-meta" style="margin-bottom:12px;">范围「${esc(s.scope)}」独立持有应用指针、访谈与参考资料。</p>
+              <div class="folder-block"><summary>01_访谈纪要 <span class="badge">1</span></summary><div class="folder-file"><strong>华东区域总访谈纪要_1102.md</strong><span class="card-meta">已绑定开题 v2</span></div></div>
+              <div class="folder-block"><summary>02_参考资料 <span class="badge">2</span></summary><div class="folder-file"><strong>2026华东零售市场白皮书摘录.pdf</strong><span class="card-meta">只读参考</span></div></div>
+            </aside>
+          </div>
+        `;
+      } else if (state.strategyStage === "strategy-check") {
+        body = `
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <p class="card-meta" style="margin:0 0 4px;">锁定版本 · 串行双检验</p>
+                <h2>${esc(c.title)} · v${c.no}</h2>
+              </div>
+              <span class="badge success"><span class="dot"></span>两道检验已通过</span>
+            </div>
+            ${c.gates.map((g, idx) => `
+              <div class="gate-card">
+                <div class="gate-num">${idx + 1}</div>
+                <div style="flex:1;min-width:0;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+                    <strong style="font-size:14px;">${esc(g.name)}</strong>
+                    <span class="badge success"><span class="dot"></span>${esc(g.label)} · ${esc(g.finishedAt)}</span>
+                  </div>
+                  <p style="margin:0 0 6px;font-size:13px;color:var(--ink-secondary);">${esc(g.evidence)}</p>
+                  <span class="mono-pill">${esc(g.ref)}</span> <span class="card-meta" style="display:inline;margin-left:6px;">绑定锁定版指纹 ${c.sha}</span>
+                </div>
+              </div>
+            `).join("")}
+            <div class="banner success" style="margin-top:12px;margin-bottom:0;">
+              <span>两份检验结论已绑定同一锁定版，可进入决策者复核与正式发布。</span>
+              <button type="button" class="btn btn-primary btn-sm" data-action="set-strategy-stage" data-stage="strategy-release">前往战略发布 →</button>
+            </div>
+          </div>
+        `;
+      } else if (state.strategyStage === "strategy-release") {
+        body = `
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                  <span class="badge success"><span class="dot"></span>当前有效发布</span>
+                  <span class="mono-pill">${s.activePubId}</span>
+                  <span class="card-meta" style="margin:0;">范围：${esc(s.scope)}</span>
+                </div>
+                <h2 style="margin-top:8px;">${esc(c.title)} · v${c.no}</h2>
+                <p class="card-meta">锁定指纹 <span class="mono-pill">${c.sha}</span> · 开题 ${esc(s.kickoffVersion)} · 两道检验均已通过</p>
+              </div>
+              <div class="toolbar-group">
+                <div class="seg-switch" role="group" aria-label="展示模板">
+                  <button type="button" aria-pressed="${state.releaseTemplate === "树形地图"}" data-action="set-release-tpl" data-tpl="树形地图">树形地图</button>
+                  <button type="button" aria-pressed="${state.releaseTemplate === "条目表"}" data-action="set-release-tpl" data-tpl="条目表">条目表</button>
+                </div>
+                <button type="button" class="btn btn-primary" data-action="open-handoff-modal">带入目标管理 →</button>
+                <button type="button" class="btn btn-danger btn-sm" data-action="mock-toast" data-msg="演示行为：撤销发布需二次确认，保留原稿、检验结论与下游引用。">撤销发布</button>
+              </div>
+            </div>
+
+            ${state.releaseTemplate === "树形地图" ? `
+              <div class="release-tree">
+                <div class="release-node root">
+                  <span class="slot-label">正式发布战略主题</span>
+                  <strong>${esc(c.title)}</strong>
+                </div>
+                <div style="color:var(--ink-muted);font-size:12px;">↓ 可承接目标与策略（${c.goals.length} 项）</div>
+                <div class="release-children">
+                  ${c.goals.map((g, i) => `
+                    <div class="release-node" style="text-align:left;">
+                      <span class="badge accent" style="margin-bottom:6px;">G${i + 1}</span>
+                      <strong style="display:block;font-size:13px;margin-bottom:4px;">${esc(g.title)}</strong>
+                      <div class="card-meta">策略：${esc(g.strategy)}</div>
+                      <div style="margin-top:6px;"><span class="mono-pill">${esc(g.metric)}</span></div>
+                    </div>
+                  `).join("")}
+                </div>
+              </div>
+            ` : `
+              <div class="table-card" style="margin:14px 0;"><div class="table-scroll"><table class="ui-table">
+                <thead><tr><th>编号</th><th>可承接目标</th><th>核心策略</th><th>参考 SAP 指标</th></tr></thead>
+                <tbody>${c.goals.map((g, i) => `<tr><td><span class="badge accent">G${i+1}</span></td><td><strong>${esc(g.title)}</strong></td><td>${esc(g.strategy)}</td><td><span class="mono-pill">${esc(g.metric)}</span></td></tr>`).join("")}</tbody>
+              </table></div></div>
+            `}
+
+            <details class="tray-fold"><summary><span>查看完整方案与取舍边界</span><span class="card-meta" style="margin:0;">按需展开</span></summary><p style="margin:10px 0 4px;">${esc(c.summary)}</p><p style="margin:0;color:var(--ink-muted);">取舍：${esc(c.tradeoffs)}</p></details>
+            <details class="tray-fold"><summary><span>查看两道检验结论回执（因果 + 逻辑）</span><span class="badge success">2/2 通过</span></summary>
+              ${c.gates.map(g => `<p style="margin:10px 0 4px;"><strong>${esc(g.name)}</strong>（${esc(g.ref)}）：${esc(g.evidence)}</p>`).join("")}
+            </details>
+          </div>
+        `;
+      } else {
+        body = `
+          <div class="card">
+            <div class="card-head">
+              <div><h2>版本与发布台账</h2><p class="card-meta">集中保留开题、候选、检验与发布准确版本；旧讨论可按原引用只读回读。</p></div>
+              <button type="button" class="btn btn-secondary btn-sm" data-action="mock-toast" data-msg="BSC / 战略目标关系视图按需展开（演示模式保留原入口）。">BSC／战略目标关系（按需）</button>
+            </div>
+            <div class="table-card"><div class="table-scroll"><table class="ui-table">
+              <thead><tr><th>对象</th><th>准确版本</th><th>内容指纹</th><th>状态</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td><strong>开题报告</strong></td><td>v2</td><td><span class="mono-pill">8a22f09c11d0</span></td><td><span class="badge success">已应用为方案输入</span></td><td><button type="button" class="btn btn-ghost" data-action="set-strategy-stage" data-stage="co-create">查看</button></td></tr>
+                <tr><td><strong>${esc(c.title)}</strong></td><td>v2</td><td><span class="mono-pill">${c.sha}</span></td><td><span class="badge success">当前有效发布</span></td><td><button type="button" class="btn btn-ghost" data-action="set-strategy-stage" data-stage="strategy-release">前往发布页</button></td></tr>
+                <tr><td><strong>方案 B · 三线新城扩张优先</strong></td><td>v1</td><td><span class="mono-pill">5b01e7a4c201</span></td><td><span class="badge">草稿</span></td><td><button type="button" class="btn btn-ghost" data-action="set-strategy-stage" data-stage="co-create">查看</button></td></tr>
+              </tbody>
+            </table></div></div>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="page-scroll"><div class="page-inner">
+          <header class="page-header">
+            <div>
+              <p class="eyebrow">STRATEGY CHOICE · 战略治理</p>
+              <h1>战略选择</h1>
+              <p class="sub">围绕战略事项完成开题、候选比较、两道检验与正式发布；在「战略发布」确认准确版本后，才可带入目标管理。</p>
+            </div>
+            <div class="header-actions">
+              <button type="button" class="btn btn-secondary btn-sm" data-action="mock-toast" data-msg="战略复盘（现有产品占位入口）">战略复盘 · 占位</button>
+              <button type="button" class="btn btn-secondary btn-sm" data-action="mock-toast" data-msg="战略重构（现有产品占位入口）">战略重构 · 占位</button>
+            </div>
+          </header>
+
+          <div class="strategy-bar">
+            <label style="font-size:12px;color:var(--ink-muted);">战略事项
+              <select class="select" style="margin-left:6px;"><option>${esc(s.initiative)}</option></select>
+            </label>
+            <label style="font-size:12px;color:var(--ink-muted);">适用范围
+              <select class="select" style="margin-left:6px;"><option>${esc(s.scope)}</option></select>
+            </label>
+            <button type="button" class="btn btn-secondary btn-sm" data-action="mock-toast" data-msg="演示模式：新建战略事项弹窗保留原表单结构。">＋ 新建事项</button>
+          </div>
+
+          <nav class="underline-tabs" aria-label="战略选择工作视图">
+            ${tabs.map(([id, label]) => `<button type="button" aria-current="${state.strategyStage === id ? "page" : "false"}" data-action="set-strategy-stage" data-stage="${id}">${label}</button>`).join("")}
+          </nav>
+          ${body}
+        </div></div>
+      `;
+    }
+
+    // ===== 2. Goal Management (目标管理) =====
+    function renderGoalsPage() {
+      const tabs = [
+        ["goals", "目标与策略"],
+        ["adopt", "核对与采用"],
+        ["cases", "年度决策事项"],
+        ["history", "版本与反馈"]
+      ];
+      const goal = DATA.goals.find(g => g.id === state.selectedGoalId) || DATA.goals[0];
+      const adoptedCount = DATA.goals.filter(g => g.status === "adopted").length;
+      const candCount = DATA.goals.filter(g => g.status === "candidate").length;
+
+      let stagePanel = "";
+      if (state.goalStage === "adopt") {
+        stagePanel = `
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                  <span class="badge ${goal.status === "adopted" ? "success" : "warning"}"><span class="dot"></span>${goal.status === "adopted" ? "已采纳 · 当前采用" : "候选待采纳"}</span>
+                  <span class="mono-pill">v${goal.version}</span>
+                  <span class="card-meta" style="margin:0;">来源：${esc(goal.origin)} · 范围：${esc(goal.scope)}</span>
+                </div>
+                <h2 style="margin-top:8px;">${esc(goal.title)}</h2>
+              </div>
+              ${goal.status === "candidate" ? `<button type="button" class="btn btn-primary" data-action="adopt-goal" data-id="${goal.id}">核对并采纳此版本</button>` : `<span class="badge success">本版本已正式采用</span>`}
+            </div>
+            <div class="diff-grid">
+              <div class="diff-box">
+                <span class="slot-label">原已采纳版本（对照参考）</span>
+                <p style="margin:4px 0 0;">${esc(goal.priorOutcome || "首次引入，尚无历史已采纳版本。采用后旧 Case 与历史报告引用保持不变。")}</p>
+              </div>
+              <div class="diff-box after">
+                <span class="slot-label">${goal.status === "adopted" ? "当前采用版" : "本次待核对候选"} · v${goal.version}</span>
+                <p style="margin:4px 0 6px;"><strong>目标 G：</strong>${esc(goal.outcome)}</p>
+                <p style="margin:0;"><strong>策略 S：</strong>${esc(goal.strategies.join("；"))}</p>
+              </div>
+            </div>
+            <p class="card-meta" style="margin-top:10px;">采纳仅确认当前目标与 GSA 版本，不静默覆盖旧引用，也不会自动创建 Case 或启动经营执行。</p>
+          </div>
+        `;
+      } else if (state.goalStage === "cases") {
+        const linked = goal.handoffKey ? [] : DATA.cases.filter(c => c.id === goal.linkedCaseId || c.goalTitle?.includes(goal.title.slice(0, 8)));
+        stagePanel = `
+          <div class="card">
+            <div class="card-head">
+              <div><h2>年度决策事项承接</h2><p class="card-meta">展示挂接当前准确目标版本的 Decision Case。</p></div>
+              <button type="button" class="btn btn-secondary btn-sm" data-action="nav" data-view="cases">前往决策星图 →</button>
+            </div>
+            ${linked.length ? linked.map(c => `
+              <div class="task-link-btn" style="margin-bottom:8px;">
+                <div><strong>${esc(c.title)}</strong><div class="card-meta">${esc(c.nextStep)}</div></div>
+                <div class="toolbar-group">
+                  <span class="badge accent">${esc(c.statusLabel)}</span>
+                  <button type="button" class="btn btn-ghost" data-action="open-case-from-anywhere" data-id="${c.id}">查看 Case →</button>
+                </div>
+              </div>
+            `).join("") : `<p class="card-meta">当前目标版本尚无已挂接的年度决策事项，可在采纳后「从此目标创建 Case」。</p>`}
+          </div>
+        `;
+      } else if (state.goalStage === "history") {
+        stagePanel = `
+          <div class="card">
+            <div class="card-head"><div><h2>版本与三层反馈记录</h2><p class="card-meta">目标版本、执行反馈、策略反馈与战略假设反馈分别保留来源引用。</p></div></div>
+            <div class="slot-box" style="margin-bottom:10px;"><strong>v${goal.version} · ${goal.status === "adopted" ? "已采纳" : "候选待采纳"}</strong><div class="card-meta">来源：${esc(goal.origin)} · 责任：${esc(goal.responsible || "未记录")}</div></div>
+            ${goal.handoffKey ? '<p class="card-meta">此目标版本尚无已关联的反馈记录。</p>' : '<div class="slot-box"><strong>执行反馈引用 · 决策看板</strong><div class="card-meta">苏北 4 店流水补录完成，二线复购主结论稳健；效果尚未经独立验证。</div></div>'}
+          </div>
+        `;
+      } else {
+        stagePanel = `
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                  <span class="badge ${goal.status === "adopted" ? "success" : "warning"}"><span class="dot"></span>${goal.status === "adopted" ? "已采纳" : "候选待采纳"}</span>
+                  <span class="mono-pill">v${goal.version}</span>
+                  <span class="card-meta" style="margin:0;">${esc(goal.perspective)} · ${esc(goal.scope)}</span>
+                </div>
+                <h2 style="margin-top:8px;">${esc(goal.title)}</h2>
+              </div>
+              <div class="toolbar-group">
+                ${goal.status === "candidate" ? `<button type="button" class="btn btn-primary btn-sm" data-action="set-goal-stage" data-stage="adopt">核对并采纳</button>` : ""}
+                ${goal.linkedCaseId ? `<button type="button" class="btn btn-secondary btn-sm" data-action="open-case-from-anywhere" data-id="${goal.linkedCaseId}">查看关联 Case</button>` : ""}
+                <button type="button" class="btn btn-secondary btn-sm" data-action="nav" data-view="projects">从此目标查看项目</button>
+              </div>
+            </div>
+            <p style="font-size:13.5px;margin:0 0 14px;">${esc(goal.outcome)}</p>
+            <div class="card-grid-3" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));margin-bottom:14px;">
+              <div class="slot-box"><span class="slot-label">衡量依据</span>${esc(goal.metric)}</div>
+              <div class="slot-box"><span class="slot-label">基线与来源</span>${esc(goal.baseline)}</div>
+              <div class="slot-box"><span class="slot-label">责任与期限</span>${esc(goal.responsible || "责任未记录")} · ${esc(goal.dueAt ? "截止 " + goal.dueAt : "期限未记录")}</div>
+            </div>
+            <div class="card-grid-3" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));">
+              <div class="slot-box"><span class="slot-label">策略安排 (S)</span>${goal.strategies.map(x => `<div>• ${esc(x)}</div>`).join("")}</div>
+              <div class="slot-box"><span class="slot-label">资源与约束</span>${goal.resources.map(x => `<div>• ${esc(x)}</div>`).join("") || "未记录"}</div>
+              <div class="slot-box"><span class="slot-label">必要条件／待核前提</span>${goal.conditions.map(x => `<div>• ${esc(x)}</div>`).join("") || "未记录"}</div>
+            </div>
+            <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+              <span class="card-meta" style="margin:0;">战略来源：${esc(goal.origin)}</span>
+              <button type="button" class="btn btn-ghost" data-action="nav" data-view="strategy">回溯原战略发布版本 →</button>
+            </div>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="page-scroll"><div class="page-inner">
+          <header class="page-header">
+            <div>
+              <p class="eyebrow">GOAL MANAGEMENT · GSA</p>
+              <h1>目标管理</h1>
+              <p class="sub">核对战略带入或新建的目标与策略，明确采纳后再承接年度决策事项与项目。</p>
+            </div>
+            <div class="header-actions">
+              <button type="button" class="btn btn-secondary btn-sm" data-action="nav" data-view="strategy">查看战略发布版本</button>
+              <button type="button" class="btn btn-primary btn-sm" data-action="mock-toast" data-msg="演示模式：新建候选目标表单保留原有字段与 SAP 指标选择器。">＋ 新建候选目标</button>
+            </div>
+          </header>
+
+          ${state.handoffBanner ? `<div class="banner"><span><strong>战略发布版本已带入：</strong>${esc(state.handoffBanner)}</span><button type="button" class="btn btn-ghost" data-action="clear-handoff-banner">知道了</button></div>` : ""}
+
+          <nav class="underline-tabs" aria-label="目标管理工作视图">
+            ${tabs.map(([id, label]) => `<button type="button" aria-current="${state.goalStage === id ? "page" : "false"}" data-action="set-goal-stage" data-stage="${id}">${label}${id === "adopt" && candCount ? `<span class="tab-count">${candCount}</span>` : ""}</button>`).join("")}
+          </nav>
+
+          <div class="table-card" style="margin-bottom:16px;">
+            <div class="table-scroll">
+              <table class="ui-table">
+                <thead><tr><th>目标名称</th><th>版本 / 状态</th><th>职责范围</th><th>衡量依据</th><th>来源</th></tr></thead>
+                <tbody>
+                  ${DATA.goals.map(g => `
+                    <tr class="${g.id === goal.id ? "selected" : ""}" style="cursor:pointer;" data-action="select-goal" data-id="${g.id}">
+                      <td><strong>${esc(g.title)}</strong></td>
+                      <td><span class="badge ${g.status === "adopted" ? "success" : "warning"}"><span class="dot"></span>v${g.version} · ${g.status === "adopted" ? "已采纳" : "候选待核"}</span></td>
+                      <td>${esc(g.scope)}</td>
+                      <td><span class="mono-pill">${esc(g.metric.split("（")[0])}</span></td>
+                      <td class="card-meta">${esc(g.origin)}</td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          ${stagePanel}
+        </div></div>
+      `;
+    }
+
+    // ===== 3. Decision Star Map (决策星图) =====
+    function renderCasesPage() {
+      const nodes = [
+        { id: "n-case-02", kind: "case", refId: "case-02", x: 36, y: 34, title: "生鲜冷链损耗异常止损方案", meta: "待确认", desc: "支持 → 会员复购下滑应对" },
+        { id: "n-case-01", kind: "case", refId: "case-01", x: 360, y: 34, title: "华东二线城市会员复购下滑应对", meta: "分析中", desc: "1 个关联项目 · 已保存归因报告 v2" },
+        { id: "n-case-03", kind: "case", refId: "case-03", x: 700, y: 34, title: "华东夜间即时配送试点评估", meta: "观察中", desc: "前后续 ← 会员复购下滑应对" },
+        { id: "n-proj-02", kind: "project", refId: "proj-coldchain", x: 36, y: 230, title: "苏南冷链损耗排查", meta: "待确认", desc: "1 个分析任务 · 承接人 陈致远" },
+        { id: "n-proj-01", kind: "project", refId: "proj-east-repurchase", x: 360, y: 230, title: "华东秋季会员复购诊断", meta: "进行中", desc: "2 个分析任务 · 承接人 林若溪" },
+        { id: "n-task-01", kind: "task", refId: "task-churn-q3", projId: "proj-east-repurchase", x: 700, y: 230, title: "Q3 会员分层与流失归因分析", meta: "分析已完成", desc: "060_reports 含已保存归因报告与依据" }
+      ];
+      const edges = [
+        { from: "n-case-02", to: "n-case-01", kind: "supports", label: "支持 →", d: "M 264 90 C 306 90, 316 90, 356 90", lx: 292, ly: 76 },
+        { from: "n-case-01", to: "n-case-03", kind: "follows_up", label: "前后续 →", d: "M 588 90 C 636 90, 650 90, 696 90", lx: 618, ly: 76 },
+        { from: "n-case-02", to: "n-proj-02", kind: "shared", d: "M 150 156 L 150 228" },
+        { from: "n-case-01", to: "n-proj-01", kind: "shared", d: "M 474 156 L 474 228" },
+        { from: "n-proj-01", to: "n-task-01", kind: "shared", d: "M 588 286 L 696 286" }
+      ];
+      const focusId = state.caseFocusNodeId;
+      const connected = new Set(focusId ? [focusId] : []);
+      if (focusId) edges.forEach(e => { if (e.from === focusId || e.to === focusId) { connected.add(e.from); connected.add(e.to); } });
+
+      let content = "";
+      if (state.caseDisplay === "map") {
+        content = `
+          <div class="starmap-shell">
+            <div class="starmap-stats">
+              <span><strong>${DATA.cases.length}</strong>Case</span>
+              <span><strong>${DATA.projects.length}</strong>项目</span>
+              <span><strong>${DATA.projects.reduce((n, p) => n + p.tasks.length, 0)}</strong>分析任务</span>
+              <span><strong>2</strong>已载入业务关系</span>
+            </div>
+            <div class="starmap-viewport" aria-label="Case、项目与分析任务关系图">
+              <div class="starmap-canvas" style="transform:scale(${state.starZoom});">
+                <svg class="starmap-svg" width="1040" height="420">
+                  <defs><marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M1 1 L7 4 L1 7" fill="none" stroke="currentColor" stroke-width="1.5"/></marker></defs>
+                  ${edges.filter(e => state.caseRelationFilter === "all" || e.kind === state.caseRelationFilter).map(e => {
+                    const dim = focusId && (!connected.has(e.from) || !connected.has(e.to));
+                    const stroke = e.kind === "supports" ? "var(--info)" : e.kind === "follows_up" ? "var(--accent)" : "var(--border-strong)";
+                    const dash = e.kind === "supports" ? "5 4" : "";
+                    return `<path d="${e.d}" fill="none" stroke="${stroke}" stroke-width="${e.kind === "shared" ? 1.8 : 2}" stroke-dasharray="${dash}" opacity="${dim ? 0.2 : 0.9}" ${e.label ? 'marker-end="url(#arr)"' : ""}/>`;
+                  }).join("")}
+                </svg>
+                ${edges.filter(e => e.label && (state.caseRelationFilter === "all" || e.kind === state.caseRelationFilter)).map(e => `
+                  <span class="badge ${e.kind === "supports" ? "info" : "accent"}" style="position:absolute;left:${e.lx}px;top:${e.ly}px;font-size:10.5px;">${e.label}</span>
+                `).join("")}
+                ${nodes.map(n => `
+                  <article class="sm-node ${n.kind} ${focusId && !connected.has(n.id) ? "dim" : ""}" style="left:${n.x}px;top:${n.y}px;">
+                    <div class="sm-node-head"><span>${n.kind === "case" ? "CASE" : n.kind === "project" ? "项目" : "分析任务"}</span><span>${esc(n.meta)}</span></div>
+                    <button type="button" class="sm-node-body" data-action="star-open" data-kind="${n.kind}" data-id="${n.refId}" data-proj="${n.projId || ""}">
+                      <strong>${esc(n.title)}</strong><span>${esc(n.desc)}</span>
+                    </button>
+                    <div class="sm-node-foot">
+                      <span>${n.kind === "task" ? "点击进入原任务" : "点击打开详情"}</span>
+                      <button type="button" data-action="star-focus" data-id="${n.id}">${focusId === n.id ? "取消聚焦" : "◎ 聚焦"}</button>
+                    </div>
+                  </article>
+                `).join("")}
+              </div>
+              <div class="sm-controls" role="group" aria-label="图谱缩放">
+                <button type="button" data-action="star-zoom" data-delta="-0.15" aria-label="缩小">−</button>
+                <span class="num" style="padding:0 6px;color:var(--ink-secondary);">${Math.round(state.starZoom * 100)}%</span>
+                <button type="button" data-action="star-zoom" data-delta="0.15" aria-label="放大">＋</button>
+                <button type="button" data-action="star-zoom" data-delta="reset">重置</button>
+              </div>
+            </div>
+            <div class="sm-legend">
+              <span>─ 关联项目 / 包含任务</span>
+              <span style="color:var(--accent);">→ 前后续关系</span>
+              <span style="color:var(--info);">⇢ 支持关系</span>
+              <span>点击任意节点即可进入 Case 详情、项目或原分析任务</span>
+            </div>
+          </div>
+          <details class="tray-fold" style="margin-top:12px;" ${window.innerWidth <= 760 ? "open" : ""}>
+            <summary><span>关系列表与节点导航（键盘及窄屏同等可用）</span><span class="badge">${DATA.cases.length} 项 Case</span></summary>
+            <div style="display:grid;gap:8px;margin-top:10px;">
+              ${DATA.cases.map(c => `<div class="task-link-btn"><div><strong>${esc(c.title)}</strong><div class="card-meta">${esc(c.statusLabel)} · ${c.linkedProjects.length} 个关联项目</div></div><button type="button" class="btn btn-ghost" data-action="open-case-from-anywhere" data-id="${c.id}">打开 Case →</button></div>`).join("")}
+            </div>
+          </details>
+        `;
+      } else if (state.caseRegularMode === "cards") {
+        const lanes = [["analyzing", "分析中"], ["awaiting_confirmation", "待确认"], ["observing", "观察中"], ["closed", "已结束"]];
+        content = `<div class="case-lanes">${lanes.map(([st, lbl]) => {
+          const items = DATA.cases.filter(c => c.status === st);
+          return `<section class="case-lane"><div class="case-lane-head"><span>${lbl}</span><span class="badge">${items.length}</span></div>
+            ${items.map(c => `<article class="board-card">
+              <div style="display:flex;justify-content:space-between;align-items:center;"><span class="badge ${st === "analyzing" ? "accent" : st === "awaiting_confirmation" ? "warning" : ""}">${lbl}</span><button type="button" class="btn btn-ghost" data-action="open-case-from-anywhere" data-id="${c.id}">详情 ↗</button></div>
+              <h4>${esc(c.title)}</h4>
+              <p>${esc(c.judgement)}</p>
+              <div class="slot-box"><span class="slot-label">下一步</span>${esc(c.nextStep)}</div>
+            </article>`).join("")}
+          </section>`;
+        }).join("")}</div>`;
+      } else {
+        content = `<div class="table-card"><div class="table-scroll"><table class="ui-table">
+          <thead><tr><th>Case</th><th>状态</th><th>当前判断</th><th>下一步</th><th>关联项目</th><th>更新</th></tr></thead>
+          <tbody>${DATA.cases.map(c => `<tr>
+            <td><button type="button" class="btn btn-ghost" style="padding:0;height:auto;text-align:left;" data-action="open-case-from-anywhere" data-id="${c.id}">${esc(c.title)}</button></td>
+            <td><span class="badge ${c.status === "analyzing" ? "accent" : c.status === "awaiting_confirmation" ? "warning" : ""}">${esc(c.statusLabel)}</span></td>
+            <td>${esc(c.judgement)}</td><td>${esc(c.nextStep)}</td><td>${c.linkedProjects.length} 个</td><td>${esc(c.updatedAt)}</td>
+          </tr>`).join("")}</tbody>
+        </table></div></div>`;
+      }
+
+      return `
+        <div class="page-scroll"><div class="page-inner">
+          <header class="page-header">
+            <div>
+              <p class="eyebrow">DECISION STAR MAP · 持续推进业务事项</p>
+              <h1>决策星图</h1>
+              <p class="sub">从问题到分析、决策、执行与复盘，让项目与分析任务围绕同一件业务事项持续工作。</p>
+            </div>
+            <div class="header-actions">
+              <button type="button" class="btn btn-secondary btn-sm" data-action="mock-toast" data-msg="演示模式：补充 Case 间业务关系面板保持原有规则。">补充关系</button>
+              <button type="button" class="btn btn-primary btn-sm" data-action="nav" data-view="goals">＋ 核对目标后新建 Case</button>
+            </div>
+          </header>
+
+          <div class="toolbar">
+            <div class="toolbar-group">
+              <input class="input" type="search" placeholder="搜索 Case、项目或分析任务" aria-label="搜索 Case" />
+              ${state.caseDisplay === "map" ? `<select class="select" data-action="case-rel-filter" aria-label="关系类型">
+                <option value="all" ${state.caseRelationFilter === "all" ? "selected" : ""}>全部关系</option>
+                <option value="shared" ${state.caseRelationFilter === "shared" ? "selected" : ""}>关联项目</option>
+                <option value="follows_up" ${state.caseRelationFilter === "follows_up" ? "selected" : ""}>前后续</option>
+                <option value="supports" ${state.caseRelationFilter === "supports" ? "selected" : ""}>支持</option>
+              </select>` : ""}
+            </div>
+            <div class="toolbar-group">
+              <div class="seg-switch" role="group" aria-label="决策星图显示模式">
+                <button type="button" aria-pressed="${state.caseDisplay === "map"}" data-action="set-case-display" data-val="map">星图</button>
+                <button type="button" aria-pressed="${state.caseDisplay === "regular"}" data-action="set-case-display" data-val="regular">常规</button>
+              </div>
+              ${state.caseDisplay === "regular" ? `<div class="seg-switch" role="group" aria-label="常规显示方式">
+                <button type="button" aria-pressed="${state.caseRegularMode === "cards"}" data-action="set-case-reg" data-val="cards">▦ 方块</button>
+                <button type="button" aria-pressed="${state.caseRegularMode === "list"}" data-action="set-case-reg" data-val="list">☰ 列表</button>
+              </div>` : ""}
+            </div>
+          </div>
+          ${content}
+        </div></div>
+      `;
+    }
+
+    // ===== 4. Project Map (项目地图) =====
+    function renderProjectsPage() {
+      const filtered = DATA.projects.filter(p => state.projectFilter === "all" ? true : state.projectFilter === "archived" ? p.archived : !p.archived);
+      return `
+        <div class="page-scroll"><div class="page-inner">
+          <header class="page-header">
+            <div>
+              <p class="eyebrow">PROJECT MAP · 共享文件 · 独立任务会话</p>
+              <h1>项目地图</h1>
+              <p class="sub">现有项目保留原有任务、会话与三类共享目录，并可按需关联多个 Decision Case。</p>
+            </div>
+            <div class="header-actions">
+              <button type="button" class="btn btn-primary" data-action="mock-new-project">＋ 新建项目</button>
+            </div>
+          </header>
+
+          <div class="toolbar">
+            <div class="toolbar-group">
+              <input class="input" type="search" placeholder="搜索项目 / 承接人" aria-label="搜索项目" />
+              <select class="select" data-action="proj-filter" aria-label="项目归档筛选">
+                <option value="active" ${state.projectFilter === "active" ? "selected" : ""}>进行中的项目</option>
+                <option value="archived" ${state.projectFilter === "archived" ? "selected" : ""}>已归档项目</option>
+                <option value="all" ${state.projectFilter === "all" ? "selected" : ""}>全部项目</option>
+              </select>
+            </div>
+            <div class="seg-switch" role="group" aria-label="项目地图视图">
+              <button type="button" aria-pressed="${state.projectMode === "cards"}" data-action="set-proj-mode" data-val="cards">▦ 方块</button>
+              <button type="button" aria-pressed="${state.projectMode === "list"}" data-action="set-proj-mode" data-val="list">☰ 列表</button>
+            </div>
+          </div>
+
+          ${state.projectMode === "cards" ? `<div class="card-grid-3">${filtered.map(p => `
+            <article class="proj-card">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                <span class="badge ${p.archived ? "" : p.workStatus === "进行中" ? "accent" : "warning"}"><span class="dot"></span>${esc(p.workStatus)}</span>
+                <div class="toolbar-group">
+                  ${p.archived ? '<span class="badge">已归档</span>' : ""}
+                  <button type="button" class="btn btn-ghost" data-action="open-proj-detail" data-id="${p.id}">详情 ↗</button>
+                </div>
+              </div>
+              <div>
+                <h2><button type="button" data-action="open-proj-detail" data-id="${p.id}">${esc(p.name)}</button></h2>
+                <p class="card-meta">承接人：${esc(p.assignee)} · ${p.linkedCases.length} 个关联 Case · ${p.files["060_reports"].length} 份已保存报告</p>
+              </div>
+              <div class="slot-box"><span class="slot-label">工作范围</span>${esc(p.workScope)}</div>
+              <div class="slot-box"><span class="slot-label">下一步</span>${esc(p.nextStep)}</div>
+              <div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:11.5px;color:var(--ink-muted);">
+                  <span>分析任务（${p.tasks.length}）</span>
+                  ${p.linkedCases[0] ? `<button type="button" class="btn btn-ghost" style="height:22px;" data-action="open-case-from-anywhere" data-id="${p.linkedCases[0]}">关联 Case ↗</button>` : ""}
+                </div>
+                <div class="task-pill-list">
+                  ${p.tasks.map(t => `<button type="button" class="task-link-btn" data-action="open-task" data-proj="${p.id}" data-task="${t.id}">
+                    <span>${esc(t.name)}</span>
+                    <span style="font-size:11.5px;color:var(--accent);">${t.status === "running" ? "运行中 ↗" : "打开原任务 ↗"}</span>
+                  </button>`).join("")}
+                </div>
+              </div>
+              <div class="card-foot">
+                <span>更新于 ${esc(p.updatedAt)}</span>
+                <div class="toolbar-group">
+                  <button type="button" class="btn btn-ghost-muted" data-action="open-proj-detail" data-id="${p.id}">项目方案与记录</button>
+                </div>
+              </div>
+            </article>
+          `).join("")}</div>` : `
+            <div class="table-card"><div class="table-scroll"><table class="ui-table">
+              <thead><tr><th>项目</th><th>状态 / 承接人</th><th>下一步</th><th>原分析任务</th><th>关联 Case</th></tr></thead>
+              <tbody>${filtered.map(p => `<tr>
+                <td><strong>${esc(p.name)}</strong></td>
+                <td><span class="badge ${p.archived ? "" : "accent"}">${esc(p.workStatus)}</span><div class="card-meta">${esc(p.assignee)}</div></td>
+                <td>${esc(p.nextStep)}</td>
+                <td>${p.tasks.map(t => `<button type="button" class="btn btn-ghost" style="display:block;padding:2px 0;" data-action="open-task" data-proj="${p.id}" data-task="${t.id}">${esc(t.name)} ↗</button>`).join("")}</td>
+                <td>${p.linkedCases.length ? `<button type="button" class="btn btn-ghost" data-action="open-case-from-anywhere" data-id="${p.linkedCases[0]}">查看 Case</button>` : "未关联"}</td>
+              </tr>`).join("")}</tbody>
+            </table></div></div>
+          `}
+        </div></div>
+      `;
+    }
+
+    // ===== 5 & 6. Semantic Assets & Analytics Assets (语义资产 / 分析资产) =====
+    function renderStudioPage(area) {
+      const isSemantic = area === "semantic";
+      const tabs = isSemantic
+        ? [["semantic", "业务语义"], ["binding", "数据映射"], ["materials", "企业资料"], ["workbench", "体系工作台"]]
+        : [["metrics", "分析指标"], ["methods", "分析方法"], ["workbench", "体系工作台"]];
+      const activeTab = isSemantic ? state.semanticTab : state.analyticsTab;
+      const ent = DATA.enterprises.find(e => e.id === state.enterpriseId) || DATA.enterprises[0];
+
+      let content = "";
+      if (activeTab === "workbench") {
+        content = `
+          <div class="card">
+            <div class="card-head">
+              <div><h2>体系工作台 · ${esc(ent.name)}</h2><p class="card-meta">同一企业的语义、指标与方法在此统一盘点缺口、建设演进与正式发布。</p></div>
+              <div class="seg-switch" role="group" aria-label="体系工作台视图">
+                ${[["coverage","覆盖与缺口"],["evolution","建设与演进"],["publication","发布与使用"]].map(([k,l]) => `<button type="button" aria-pressed="${state.workbenchPane === k}" data-action="set-wb-pane" data-val="${k}">${l}</button>`).join("")}
+              </div>
+            </div>
+            <div class="kpi-grid-3" style="margin-bottom:14px;">
+              <div class="kpi-card"><div class="kpi-top"><span>已正式发布资产</span><span class="badge success">可发现</span></div><strong>8</strong><p>语义 2 · 映射 2 · 资料 2 · 指标/方法 5</p></div>
+              <div class="kpi-card"><div class="kpi-top"><span>待核候选资产</span><span class="badge warning">待发布</span></div><strong>1</strong><p>sem-oos · 有效缺货率判定规则</p></div>
+              <div class="kpi-card"><div class="kpi-top"><span>本企业关联项目</span><span class="badge accent">复用中</span></div><strong>2</strong><p>华东秋季会员复购诊断等</p></div>
+            </div>
+            <div class="slot-box">
+              <span class="slot-label">${state.workbenchPane === "coverage" ? "覆盖与缺口摘要" : state.workbenchPane === "evolution" ? "建设与演进任务" : "发布与使用回执"}</span>
+              ${state.workbenchPane === "coverage" ? "会员复购域与冷链损耗域核心指标已覆盖；「有效缺货率判定规则」尚处候选待核，未自动生效。" : state.workbenchPane === "evolution" ? "普通分析任务《Q3 会员分层与流失归因分析》贡献了 1 条缺货口径修订候选，等待复核关联。" : "最近发布批次 rel-20261111 包含 3 项正式指标，已被 2 个分析任务引用。"}
+            </div>
+          </div>
+
+          ${ent.id === "ent-starlane" ? `
+            <section class="card v04-member-grants" aria-label="企业会员运营资产包">
+              <div class="card-head"><div><h2>企业会员运营资产包</h2><p class="card-meta">项目资源授权按用途、期间与范围核对。</p></div><span class="badge">只读样例</span></div>
+              <details class="tray-fold">
+                <summary><span>三层资源授权 (2)</span><span class="badge">示例记录</span></summary>
+                <div class="table-card" style="margin-top:10px;"><div class="table-scroll"><table class="ui-table v04-grant-table" role="table" aria-label="项目资源授权样例">
+                  <thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">授权项目／主体</th><th scope="col" role="columnheader">授予方（Host 核定）</th><th scope="col" role="columnheader">允许操作</th><th scope="col" role="columnheader">范围与粒度</th><th scope="col" role="columnheader">状态</th></tr></thead>
+                  <tbody role="rowgroup">
+                    <tr role="row"><td role="cell" data-caption="授权项目／主体">华东秋季会员复购诊断</td><td role="cell" data-caption="授予方（Host 核定）">星岚会员经营体系（样例）</td><td role="cell" data-caption="允许操作">查阅正式定义、读取获准门店明细并重算</td><td role="cell" data-caption="范围与粒度"><ul class="v04-grant-scope"><li><strong>门店</strong> 星桥直营店、柳岸直营店</li><li><strong>路径</strong> <code>020_clean/east_member_q3_clean.csv</code></li><li><strong>用途</strong> <code>member_repurchase、store_comparison</code></li><li><strong>期间</strong> 2026-07-01 至 2026-09-30</li></ul></td><td role="cell" data-caption="状态"><span class="badge success">有效</span></td></tr>
+                    <tr role="row"><td role="cell" data-caption="授权项目／主体">华东秋季会员复购诊断</td><td role="cell" data-caption="授予方（Host 核定）">星岚会员经营体系（样例）</td><td role="cell" data-caption="允许操作">仅查阅正式定义</td><td role="cell" data-caption="范围与粒度"><ul class="v04-grant-scope"><li>无门店明细范围</li><li><strong>用途</strong> <code>*</code></li><li><strong>期间</strong> 2026-07-01 至 不限</li></ul></td><td role="cell" data-caption="状态"><span class="badge success">有效</span></td></tr>
+                  </tbody>
+                </table></div></div>
+                <div class="slot-box" style="margin-top:10px;">
+                  <strong>新增项目资源授权 · 字段示例</strong>
+                  <p class="card-meta">用途必填，起止日期可分别留空。此处展示原表单的只读样例。</p>
+                  <form class="v04-grant-fields" aria-label="项目资源授权字段示例">
+                    <div class="field-group v04-grant-purpose"><label for="v04-grant-purpose">授权用途 purposeKeys（逗号分隔，* 表示全部）</label><input id="v04-grant-purpose" name="purposeKeys" type="text" value="*" required readonly></div>
+                    <div class="field-group"><label for="v04-grant-period-from">数据期间起（YYYY-MM-DD）</label><input id="v04-grant-period-from" type="date" name="periodFrom" value="2026-07-01" readonly></div>
+                    <div class="field-group"><label for="v04-grant-period-to">数据期间止（YYYY-MM-DD）</label><input id="v04-grant-period-to" type="date" name="periodTo" readonly aria-describedby="v04-grant-period-hint"><p class="field-help" id="v04-grant-period-hint">留空时显示不限。</p></div>
+                  </form>
+                </div>
+              </details>
+            </section>
+          ` : ""}
+        `;
+      } else {
+        const list = (DATA.studioAssets[area] && DATA.studioAssets[area][activeTab]) || [];
+        content = `
+          <div class="toolbar">
+            <div class="toolbar-group">
+              <input class="input" type="search" placeholder="搜索当前分类资产…" aria-label="搜索资产" />
+              <span class="card-meta" style="margin:0;">共 ${list.length} 项准确资产 · 当前企业：${esc(ent.name)}</span>
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm" data-action="set-studio-tab" data-area="${area}" data-tab="workbench">前往体系工作台</button>
+          </div>
+          <div class="table-card"><div class="table-scroll"><table class="ui-table">
+            <thead><tr><th>资产名称</th><th>准确版本</th><th>当前资格</th><th>归属域 / 更新</th><th>查看</th></tr></thead>
+            <tbody>${list.map(item => `<tr>
+              <td><strong>${esc(item.title)}</strong><div class="card-meta mono">${esc(item.id)}</div></td>
+              <td><span class="mono-pill">${esc(item.version)}</span></td>
+              <td><span class="badge ${item.status.includes("正式") ? "success" : "warning"}"><span class="dot"></span>${esc(item.status)}</span></td>
+              <td>${esc(item.owner)}<div class="card-meta">${esc(item.updatedAt)}</div></td>
+              <td><button type="button" class="btn btn-ghost" data-action="inspect-asset" data-area="${area}" data-tab="${activeTab}" data-id="${item.id}">查看准确资产</button></td>
+            </tr>`).join("")}</tbody>
+          </table></div></div>
+          <details class="tray-fold" style="margin-top:14px;"><summary><span>待核归属 · 1 项旧资料（按需展开，不自动归入当前企业）</span><span class="badge">只读</span></summary><p style="margin:10px 0 0;">历史草稿《2025 区域分类旧表》尚未明确企业归属，查看不授予普通分析供给资格。</p></details>
+        `;
+      }
+
+      return `
+        <div class="page-scroll"><div class="page-inner">
+          <header class="page-header">
+            <div>
+              <p class="eyebrow">${isSemantic ? "SEMANTIC ASSETS · 语义层" : "ANALYTICS ASSETS · 分析层"}</p>
+              <h1>${isSemantic ? "语义资产" : "分析资产"}</h1>
+              <p class="sub">${isSemantic ? "查业务口径、数据字段映射与企业原资料；与分析资产共用企业基础层。" : "查 SAP 分析指标怎么算，以及分析方法怎么用；版本与口径严格溯源。"}</p>
+            </div>
+            <div class="header-actions">
+              <label style="font-size:12px;color:var(--ink-muted);">当前企业
+                <select class="select" style="margin-left:6px;" data-action="switch-enterprise" aria-label="当前企业">
+                  ${DATA.enterprises.map(e => `<option value="${e.id}" ${e.id === state.enterpriseId ? "selected" : ""}>${esc(e.name)}</option>`).join("")}
+                </select>
+              </label>
+              <button type="button" class="btn btn-secondary btn-sm" data-action="nav" data-view="${isSemantic ? "analytics" : "semantic"}">切至${isSemantic ? "分析资产" : "语义资产"}</button>
+            </div>
+          </header>
+
+          <nav class="underline-tabs" aria-label="${isSemantic ? "语义资产" : "分析资产"}工作视图">
+            ${tabs.map(([id, label]) => `<button type="button" aria-current="${activeTab === id ? "page" : "false"}" data-action="set-studio-tab" data-area="${area}" data-tab="${id}">${label}</button>`).join("")}
+          </nav>
+          ${content}
+        </div></div>
+      `;
+    }
+
+    // ===== 7. Settings (设置 · 全部 9 个现有分类) =====
+    function renderSettingsPage() {
+      const groups = ["基础与模型", "能力与连接", "资料与资产包"];
+      const cat = state.settingsCategory;
+      const panels = {
+        "usage-context-settings": `
+          <div class="card">
+            <div class="card-head"><div><h2>使用用途</h2><p class="card-meta">保存默认讨论对象与背景，当前工作可按需覆盖，不改写历史记录。</p></div></div>
+            <div class="field-group"><label>默认使用用途</label><select><option selected>部门／业务模块</option><option>组织</option><option>个人</option><option>暂不设置 · 仍可直接工作</option></select></div>
+            <div class="field-group"><label>背景说明（可选）</label><textarea rows="3">华东零售事业部日常经营诊断、会员复购分析与冷链损耗治理（虚构演示背景）。</textarea><p class="field-help">用途不代表权限或职级，未设置不阻断工作。</p></div>
+            <button type="button" class="btn btn-primary" data-action="mock-toast" data-msg="演示状态：已保存默认使用用途（仅内存模拟）。">保存默认用途</button>
+          </div>
+        `,
+        "settings": `
+          <div class="card">
+            <div class="card-head">
+              <div><h2>模型设置</h2><p class="card-meta">选择默认模型配置，或导入已有 Pi auth.json 凭据；密钥仅留在本机。</p></div>
+              <span class="badge success"><span class="dot"></span>单次测试已响应（模拟）</span>
+            </div>
+            <div class="toolbar" style="margin-bottom:14px;">
+              <select class="select" style="flex:1;max-width:340px;"><option>Claude Sonnet 4.5（演示配置 · 已配置）</option><option>GPT-5.1（演示配置 · 已配置）</option><option>添加自定义模型</option></select>
+              <button type="button" class="btn btn-secondary btn-sm" data-action="mock-toast" data-msg="演示模式：导入 Pi 凭据入口保留原文件校验逻辑。">导入 Pi 凭据</button>
+            </div>
+            <div class="field-group"><label>配置名称</label><input value="Claude Sonnet 4.5（演示配置）" /></div>
+            <div class="field-group"><label>供应商协议</label><input value="Anthropic Messages" readonly /></div>
+            <div class="field-group"><label>服务地址</label><input value="https://api.example.invalid/v1" /></div>
+            <div class="field-group"><label>API Key <span class="badge" style="margin-left:6px;">已保存于本机</span></label><input type="password" placeholder="留空保留当前密钥；演示不包含真实凭据" /></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding-top:12px;border-top:1px solid var(--border-subtle);flex-wrap:wrap;gap:8px;">
+              <button type="button" class="btn btn-secondary btn-sm" data-action="mock-toast" data-msg="连接测试为演示模拟，未发起外部网络请求。">测试连接</button>
+              <button type="button" class="btn btn-primary" data-action="mock-toast" data-msg="配置已保存（演示内存态，未写入磁盘）。">保存配置</button>
+            </div>
+          </div>
+        `,
+        "web-search-settings": `
+          <div class="card">
+            <div class="card-head"><div><h2>网络检索</h2><p class="card-meta">管理联网检索线路顺序与可用状态，按需启用。</p></div></div>
+            <div class="slot-box" style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;"><span><strong>1.</strong> 模型原生检索线路</span><span class="badge accent">已配置</span></div>
+            <div class="slot-box" style="display:flex;justify-content:space-between;align-items:center;"><span><strong>2.</strong> 外部 Search Provider（可选）</span><span class="badge warning">未配置密钥</span></div>
+          </div>
+        `,
+        "automatic-action-settings": `
+          <div class="card">
+            <div class="card-head"><div><h2>自动模式</h2><p class="card-meta">配置保存、审查、IR、Case 与资产等节点的默认自动行为；任务内仍可显式开关。</p></div></div>
+            ${[["保存正式报告提醒","在回复形成定稿时提示保存至 060_reports"],["自动独立核算","受信新任务开启后托管计算核算"],["决策看板抽取","支持从已保存报告手动抽取行动建议"]].map(([t,d],i) => `
+              <label style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border-subtle);gap:12px;">
+                <div><strong style="font-size:13px;">${t}</strong><div class="card-meta">${d}</div></div>
+                <input type="checkbox" ${i===0?"checked":""} style="width:16px;height:16px;accent-color:var(--accent);" />
+              </label>
+            `).join("")}
+          </div>
+        `,
+        "skill-settings": `
+          <div class="card">
+            <div class="card-head"><div><h2>Skill 资料与依赖</h2><p class="card-meta">Pi 资源目录只读元信息；来源可见不代表已采用或已执行。</p></div></div>
+            ${[["data-analysis","v1.3.0","python3 标准库","已确认通过"],["deep-research","v1.1.0","依赖当前模型与网络配置","历史回执绑定旧版"],["ppt-report","v1.2.0","Python + PPTX 工具链","待环境核对"]].map(([n,v,dep,st]) => `
+              <div class="slot-box" style="margin-bottom:10px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;"><strong>${n} <span class="mono-pill">${v}</span></strong><span class="badge">${st}</span></div>
+                <div class="card-meta" style="margin-top:4px;">声明依赖：${dep} · 本页不自动安装或升级</div>
+              </div>
+            `).join("")}
+          </div>
+        `,
+        "connection-settings": `
+          <div class="card">
+            <div class="card-head"><div><h2>连接配置</h2><p class="card-meta">共享环境配置与项目授权、任务显式启用分别管理；查看本页不查询业务数据。</p></div></div>
+            <div class="slot-box" style="margin-bottom:10px;"><strong>数据库与数据仓库（PostgreSQL / MySQL）</strong><p class="card-meta">测试连接不等于项目已授权；项目资料区继续核对范围与预算。</p></div>
+            <div class="slot-box" style="margin-bottom:10px;"><strong>商圈数据（MCP 本机快照）</strong><p class="card-meta">快照版本：demo-trade-area-2026q3 · 任务空闲时显式启用。</p></div>
+            <div class="slot-box"><strong>历史天气（Open-Meteo 日级连接）</strong><p class="card-meta">无密钥配置；本页不发天气请求。</p></div>
+          </div>
+        `,
+        "personal-materials": `
+          <div class="card">
+            <div class="card-head"><div><h2>个人资料</h2><p class="card-meta">集中管理从分析回复与复盘反馈整理出的个人知识与经验，可在分析任务中按需引用。</p></div></div>
+            <div class="slot-box" style="margin-bottom:10px;"><strong>经验 · 华东二线门店新客 31–60 天流失排查清单</strong><div class="card-meta">来源：华东秋季会员复购诊断 / Q3 会员分层与流失归因分析 · 可带入任务</div></div>
+            <div class="slot-box"><strong>知识 · 生鲜冷链卸货 25 分钟温控红线</strong><div class="card-meta">来源：苏南冷链损耗排查 · 只读留存</div></div>
+          </div>
+        `,
+        "model-pack-settings": `
+          <div class="card">
+            <div class="card-head"><div><h2>业务模型包</h2><p class="card-meta">只读查看已导入的 v1 纯计算模型包快照，任务内显式开启消费，损坏不静默修复。</p></div></div>
+            <div class="slot-box"><strong>retail-repurchase-uplift-v1</strong> <span class="mono-pill">sha256: 6f22...91b0</span><div class="card-meta">状态：已验证快照 · 仅纯计算消费，受管资源排除</div></div>
+          </div>
+        `,
+        "capability-plans": `
+          <div class="card">
+            <div class="card-head"><div><h2>领域资产包</h2><p class="card-meta">按需查看已安装的零售领域资产包清单，与语义资产／分析资产保持同一来源权威。</p></div></div>
+            <div class="slot-box" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+              <div><strong>零售经营分析基础包（演示）</strong><div class="card-meta">含常用复购、毛利与损耗模板 · 需在 Studio 确认后发布</div></div>
+              <button type="button" class="btn btn-secondary btn-sm" data-action="nav" data-view="semantic">前往语义资产 →</button>
+            </div>
+          </div>
+        `
+      };
+
+      return `
+        <div class="page-scroll"><div class="page-inner">
+          <header class="page-header">
+            <div>
+              <p class="eyebrow">SETTINGS · 9 项系统与资料配置</p>
+              <h1>设置</h1>
+              <p class="sub">管理使用用途、模型凭据、网络检索、自动模式、Skill、连接与资产包。</p>
+            </div>
+            <div class="header-actions">
+              <button type="button" class="btn btn-secondary btn-sm" data-action="back-from-settings">← 返回原页面</button>
+            </div>
+          </header>
+
+          <div class="settings-layout">
+            <nav class="settings-rail" aria-label="设置分类">
+              ${groups.map(g => `
+                <div class="rail-group-title">${g}</div>
+                ${DATA.settingsCategories.filter(c => c.group === g).map(c => `
+                  <button type="button" aria-current="${cat === c.id ? "page" : "false"}" data-action="set-settings-cat" data-cat="${c.id}">${c.label}</button>
+                `).join("")}
+              `).join("")}
+            </nav>
+            <div class="settings-content">${panels[cat] || panels["settings"]}</div>
+          </div>
+        </div></div>
+      `;
+    }
+
+    // ===== 8. Analysis Task (分析任务 + 右侧项目文件 / 已保存报告与依据 / 审查结论) =====
+    function renderChatPage() {
+      const proj = getProject(state.activeProjectId);
+      const task = getTask(proj, state.activeTaskId);
+      if (!proj || !task) {
+        return `<div class="page-scroll"><div class="page"><section class="card" role="status">
+          <h1>${proj ? "原分析任务暂不可读取" : "原项目暂不可读取"}</h1>
+          <p class="card-meta">${esc(proj?.name ?? state.activeProjectId)}${state.activeTaskId ? ` · ${esc(state.activeTaskId)}` : ""}</p>
+          <button type="button" class="btn btn-secondary" data-action="nav" data-view="projects">返回项目地图</button>
+        </section></div></div>`;
+      }
+      const linkedCase = getCase(task.linkedCaseId);
+      const attachedCase = caseContext(state.attachedCaseId, proj);
+      const availableCase = caseContext(task.linkedCaseId, proj);
+      const reports = (proj.files["060_reports"] ?? []).filter(r => r.taskId === task.id);
+      const activeReport = exactReport(reports, state.activeReportName, state.activeReportSha);
+      const reportCase = activeReport && getCase(activeReport.linkedCaseId);
+      const reportUnavailable = state.activeReportName
+        ? `原报告暂不可读取或版本未能核对：${state.activeReportName}。`
+        : reports.length > 1
+          ? "本任务有多份报告，请从项目文件选定原报告。"
+          : "本任务尚无可定位的已保存报告。";
+
+      const steps = [
+        ["materials", "资料准备", `${proj.files["020_clean"].length} 份分析资料`, "open-drawer-files"],
+        ["requirements", "需求梳理", task.requirementTitle ? "已附带 RAP 框架" : "可选 · 整理目标", "mock-toast"],
+        ["analysis", "分析对话", task.messages.length ? "继续对话" : "可直接开始", "focus-composer"],
+        ["results", "结果与审查", `${reports.length} 份已保存报告`, "open-drawer-evidence"]
+      ];
+      const currentStep = state.rightDrawerOpen && state.rightDrawerTab !== "files" ? "results" : "analysis";
+
+      let drawerContent = "";
+      if (state.rightDrawerTab === "files") {
+        drawerContent = `
+          <div style="margin-bottom:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <strong style="font-size:13px;">${esc(proj.name)}</strong>
+              <span class="badge">3 个共享目录</span>
+            </div>
+            <div style="display:flex;gap:6px;">
+              <select class="select" style="flex:1;height:30px;font-size:12px;"><option>010_draw · 原件归档</option><option selected>020_clean · 分析区</option></select>
+              <button type="button" class="btn btn-secondary btn-sm" data-action="mock-toast" data-msg="演示模式：本地文件上传仅作静态交互演示。">上传</button>
+            </div>
+            <p class="card-meta" style="margin-top:6px;">目录用途不提供敏感数据隔离，请勿上传敏感数据。</p>
+          </div>
+          ${["010_draw", "020_clean", "060_reports"].map(dir => `
+            <details class="folder-block" ${dir !== "010_draw" ? "open" : ""}>
+              <summary><span class="mono">${dir}</span><span class="badge">${(proj.files[dir] || []).length}</span></summary>
+              ${(proj.files[dir] || []).length ? proj.files[dir].map(f => `
+                <div class="folder-file">
+                  <div><strong>${esc(f.name)}</strong> <span class="card-meta" style="display:inline;">· ${esc(f.size)}</span></div>
+                  ${f.note ? `<div class="card-meta" style="margin:0;">${esc(f.note)}</div>` : ""}
+                  <div class="folder-file-actions">
+                    ${dir === "060_reports" && f.name.endsWith(".md") ? `<button type="button" class="btn btn-primary btn-sm" data-action="open-task-evidence" data-proj="${esc(proj.id)}" data-name="${esc(f.name)}" data-sha="${esc(f.sha)}">查看报告与依据</button>` : ""}
+                    ${dir === "010_draw" ? `<button type="button" class="btn btn-ghost" data-action="mock-toast" data-msg="已显式复制副本至 020_clean（演示模拟）。">放入分析区</button>` : ""}
+                    <button type="button" class="btn btn-ghost-muted" data-action="mock-toast" data-msg="演示模式：准备下载 ${esc(f.name)}。">下载</button>
+                  </div>
+                </div>
+              `).join("") : `<div class="folder-file card-meta">空文件夹</div>`}
+            </details>
+          `).join("")}
+        `;
+      } else if (state.rightDrawerTab === "evidence") {
+        drawerContent = activeReport ? `
+          <div class="evidence-block">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:6px;">
+              <span class="badge success"><span class="dot"></span>060_reports 已保存报告</span>
+              <span class="mono-pill">${activeReport.sha ? `SHA ${esc(activeReport.sha.slice(0, 10))}` : "指纹暂不可读取"}</span>
+            </div>
+            <h3>${esc(activeReport.name)}</h3>
+            <p class="card-meta">保存于 ${esc(activeReport.savedAt)} · 来源任务：${esc(task.name)}</p>
+            ${activeReport.summary ? `<div class="evidence-quote">${esc(activeReport.summary)}</div>` : ""}
+          </div>
+
+          ${activeReport.evidenceInputs?.length ? `<div class="evidence-block">
+            <h3>固定输入依据（020_clean）</h3>
+            ${activeReport.evidenceInputs.map(inp => `
+              <div style="padding:7px 0;border-bottom:1px solid var(--border-subtle);">
+                <div class="mono" style="font-weight:600;">${esc(inp.path)}</div>
+                <div class="card-meta">${esc(inp.rows)} · SHA <span class="mono">${esc(inp.sha)}</span></div>
+              </div>
+            `).join("")}
+          </div>` : `<p class="card-meta">这份报告的固定输入依据暂不可读取。</p>`}
+
+          ${activeReport.calcSteps?.length ? `<div class="evidence-block">
+            <h3>计算链路与核验记录</h3>
+            <ul style="margin:6px 0 0;padding-left:18px;font-size:12px;color:var(--ink-secondary);line-height:1.65;">
+              ${activeReport.calcSteps.map(st => `<li style="margin-bottom:4px;">${fmtInline(st)}</li>`).join("")}
+            </ul>
+          </div>` : `<p class="card-meta">这份报告暂无可读取的计算或核验记录。</p>`}
+
+          ${reportCase ? `
+            <div class="banner" style="margin-bottom:0;">
+              <div>
+                <div style="font-size:11px;color:var(--accent);font-weight:650;">关联 DECISION CASE</div>
+                <strong style="font-size:13px;">${esc(reportCase.title)}</strong>
+                <div class="card-meta">Case v${reportCase.revision} · 状态：${esc(reportCase.statusLabel)}</div>
+              </div>
+              <button type="button" class="btn btn-primary btn-sm" data-action="open-case-from-anywhere" data-id="${reportCase.id}">查看关联 Case →</button>
+            </div>
+          ` : ""}
+        ` : `<p class="card-meta" role="status">${esc(reportUnavailable)}</p>`;
+      } else {
+        drawerContent = activeReport?.review ? `
+          <div class="evidence-block">
+            <span class="badge success">审查意见已返回 · 演示</span>
+            <h3 style="margin-top:8px;">结论与证据一致性核查</h3>
+            <p class="card-meta">固定报告：${esc(activeReport.name)}</p>
+            <div class="evidence-quote"><strong>证据支持</strong>：${esc(activeReport.review.supported)}</div>
+            <div class="evidence-quote" style="border-left-color:var(--warning);"><strong>有条件支持</strong>：${esc(activeReport.review.conditioned)}</div>
+            <div class="toolbar-group" style="margin-top:10px;">
+              <button type="button" class="btn btn-primary btn-sm" data-action="nav" data-view="decision">交接至决策看板 →</button>
+              ${reportCase ? `<button type="button" class="btn btn-secondary btn-sm" data-action="open-case-from-anywhere" data-id="${reportCase.id}">前往关联 Case</button>` : ""}
+            </div>
+          </div>
+        ` : `<p class="card-meta" role="status">${activeReport ? `尚未读取到《${esc(activeReport.name)}》的结论审查记录。` : esc(reportUnavailable)}</p>`;
+      }
+
+      return `
+        <div class="task-shell">
+          <div class="task-main">
+            <div class="task-header-band">
+              <div class="task-header-top">
+                <div>
+                  <span class="card-meta" style="margin:0;">${esc(proj.name)}${proj.archived ? " · 已归档只读" : ""}</span>
+                  <h1>${esc(task.name)}</h1>
+                </div>
+                <div class="toolbar-group">
+                  ${linkedCase ? `<button type="button" class="badge accent" style="border:1px solid color-mix(in srgb, var(--accent) 25%, transparent);cursor:pointer;" data-action="open-case-from-anywhere" data-id="${linkedCase.id}">关联 Case：${esc(linkedCase.title)} ↗</button>` : ""}
+                  <span class="badge"><span class="dot"></span>本机持久会话</span>
+                </div>
+              </div>
+              <ol class="task-step-rail" aria-label="分析任务步骤">
+                ${steps.map(([id, title, note, act], idx) => `<li>
+                  <button type="button" aria-current="${currentStep === id ? "step" : "false"}" data-action="${act}" data-msg="需求梳理页面在产品中按需进入（本轮 Demo 聚焦 10 个核心正式页）。">
+                    <span class="step-num">${idx + 1}</span>
+                    <span style="min-width:0;"><strong>${title}</strong><small>${esc(note)}</small></span>
+                  </button>
+                </li>`).join("")}
+              </ol>
+            </div>
+
+            <div class="chat-scroll">
+              <div class="chat-column">
+                ${task.messages.length ? task.messages.map(m => {
+                  if (m.role === "process") {
+                    return `<details class="process-fold"><summary>${esc(m.summary)}</summary><ul style="margin:8px 0 2px;padding-left:18px;">${m.steps.map(st => `<li style="margin-bottom:4px;">${esc(st)}</li>`).join("")}</ul></details>`;
+                  }
+                  if (m.role === "user") {
+                    return `<article class="msg-card user-msg"><div class="msg-head"><span class="user-avatar">你</span><strong>你</strong></div><div class="msg-body">${esc(m.text)}</div></article>`;
+                  }
+                  const messageReport = m.reportRef && exactReport(reports, m.reportRef);
+                  const messageCase = messageReport && getCase(messageReport.linkedCaseId);
+                  return `
+                    <article class="msg-card">
+                      <div class="msg-head">
+                        <span class="brand-mark" aria-hidden="true"><span class="bm-outer"></span><span class="bm-inner"></span></span>
+                        <strong>OptraCall</strong>
+                        <span class="card-meta" style="margin:0;">${esc(task.model)}</span>
+                      </div>
+                      <div class="msg-body">${fmtInline(m.text)}</div>
+                      ${m.semanticRef ? `<div style="margin-top:10px;"><span class="badge info">语义与指标引用：${esc(m.semanticRef)}</span></div>` : ""}
+                      ${messageReport ? `
+                        <div class="report-link-strip">
+                          <div>
+                            <strong style="font-size:12.5px;">已保存报告 · ${esc(m.reportRef)}</strong>
+                            <div class="card-meta" style="margin:2px 0 0;">位于 060_reports · 可核对固定输入与计算依据</div>
+                          </div>
+                          <div class="toolbar-group">
+                            <button type="button" class="btn btn-primary btn-sm" data-action="open-report-evidence" data-name="${esc(messageReport.name)}" data-sha="${esc(messageReport.sha)}">查看报告与依据 →</button>
+                            ${messageCase ? `<button type="button" class="btn btn-secondary btn-sm" data-action="open-case-from-anywhere" data-id="${messageCase.id}">查看关联 Case</button>` : ""}
+                          </div>
+                        </div>
+                      ` : m.reportRef ? `<p class="card-meta">原消息引用的报告暂不可读取：${esc(m.reportRef)}。</p>` : ""}
+                      <div class="msg-actions">
+                        <button type="button" class="btn btn-ghost-muted" data-action="mock-toast" data-msg="已将本回复标记为整理为个人知识草稿（演示模拟）。">整理为知识</button>
+                        <button type="button" class="btn btn-ghost-muted" data-action="nav" data-view="semantic">反馈到资产体系</button>
+                        <button type="button" class="btn btn-ghost-muted" data-action="nav" data-view="goals">带原回复核对目标</button>
+                      </div>
+                    </article>
+                  `;
+                }).join("") : `<div class="card" style="text-align:center;padding:34px 20px;"><p class="card-meta">此任务尚无对话记录。可直接输入分析问题，或从右侧项目文件选择 020_clean 资料。</p></div>`}
+              </div>
+            </div>
+
+            <div class="composer-dock">
+              <div class="composer-inner">
+                <div class="context-chip-bar">
+                  <span class="card-meta" style="margin:0;">本次背景：</span>
+                  ${attachedCase ? `<span class="badge accent">Case v${attachedCase.revision} · ${esc(attachedCase.title)} <button type="button" style="border:0;background:transparent;padding:0 0 0 4px;color:inherit;" data-action="toggle-case-ctx" aria-label="移除 Case 背景">✕</button></span>` : availableCase ? `<button type="button" class="badge" style="cursor:pointer;" data-action="toggle-case-ctx">＋ 附带关联 Case 背景</button>` : ""}
+                  ${task.requirementTitle ? `<span class="badge">${esc(task.requirementTitle)}</span>` : ""}
+                  <button type="button" class="btn btn-ghost" style="margin-left:auto;height:24px;" data-action="open-drawer-review">审查结论与建议</button>
+                </div>
+                <form class="composer-box" data-action="send-demo-msg">
+                  <textarea id="demo-composer" rows="2" ${proj.archived ? "disabled" : ""} placeholder="${proj.archived ? "已归档，只读" : "输入你想分析的问题（演示模式将返回模拟回复）…"}">${esc(task.draft)}</textarea>
+                  <div class="composer-bar">
+                    <button type="button" class="btn btn-ghost-muted" data-action="nav" data-view="settings"><span class="dot-pulse" style="margin-right:4px;"></span>${esc(task.model)} ⌄</button>
+                    <div class="toolbar-group">
+                      <button type="button" class="btn btn-ghost" data-action="open-drawer-files">＋ 项目文件</button>
+                      <button type="submit" class="send-circle" aria-label="发送消息" ${proj.archived ? "disabled" : ""}>${icon("send", 16)}</button>
+                    </div>
+                  </div>
+                </form>
+                <details class="tray-fold">
+                  <summary><span>Pi 能力、命令与结果工具栏（按需展开）</span><span class="card-meta" style="margin:0;">020_clean 分析 · 060_reports 报告</span></summary>
+                  <div class="tray-grid">
+                    <span class="mono-pill">/tools</span><span class="mono-pill">/skills</span><span class="mono-pill">/session</span><span class="mono-pill">/compact</span>
+                    <button type="button" class="btn btn-secondary btn-sm" data-action="open-drawer-evidence">查看计算依据</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-action="nav" data-view="goals">带着本任务核对新增 Case</button>
+                  </div>
+                </details>
+              </div>
+            </div>
+          </div>
+
+          <aside class="right-drawer ${state.rightDrawerOpen ? "" : "hidden"}" aria-label="项目文件与报告依据">
+            <div class="drawer-head">
+              <h2>${state.rightDrawerTab === "files" ? "项目文件" : state.rightDrawerTab === "evidence" ? "已保存报告与依据" : "审查结论与建议"}</h2>
+              <button type="button" class="icon-btn" data-action="toggle-right-drawer" aria-label="关闭右侧面板">✕</button>
+            </div>
+            <div class="drawer-tabs" role="tablist">
+              <button type="button" role="tab" aria-selected="${state.rightDrawerTab === "files"}" data-action="set-drawer-tab" data-tab="files">项目文件</button>
+              <button type="button" role="tab" aria-selected="${state.rightDrawerTab === "evidence"}" data-action="set-drawer-tab" data-tab="evidence">报告与依据</button>
+              <button type="button" role="tab" aria-selected="${state.rightDrawerTab === "review"}" data-action="set-drawer-tab" data-tab="review">审查结论</button>
+            </div>
+            <div class="drawer-body">${drawerContent}</div>
+          </aside>
+        </div>
+      `;
+    }
+
+    // ===== 9. Decision Board (决策看板) =====
+    function renderDecisionPage() {
+      const items = DATA.board.items.filter(it =>
+        (state.boardFilterProject === "all" || it.projectId === state.boardFilterProject) &&
+        (state.boardFilterEvidence === "all" || it.evidence === state.boardFilterEvidence)
+      );
+      const suggested = items.filter(i => i.status === "suggested");
+      const adopted = items.filter(i => i.status === "adopted");
+      const done = items.filter(i => i.status === "done");
+      const evClass = (ev) => ev === "数据支撑" ? "success" : ev === "多源佐证" ? "info" : ev === "逻辑推断" ? "warning" : "";
+
+      return `
+        <div class="page-scroll"><div class="page-inner">
+          <header class="page-header">
+            <div>
+              <p class="eyebrow">DECISION BOARD · 从建议到结果</p>
+              <h1>决策看板</h1>
+              <p class="sub">跨项目汇总 060_reports 分析报告，把判断建议、行动跟进与结果复盘放在同一处。</p>
+            </div>
+            <div class="header-actions">
+              <button type="button" class="btn btn-secondary btn-sm" data-action="mock-toast" data-msg="演示模式：人工补充建议对话框保持原字段结构。">＋ 补充建议</button>
+            </div>
+          </header>
+
+          <section class="kpi-grid-3" aria-label="看板统计">
+            <div class="kpi-card"><div class="kpi-top"><span>已保存报告</span><span class="mono-pill">060_reports</span></div><strong>${DATA.board.reports.length}</strong><p>各项目已保存的正式报告文件</p></div>
+            <div class="kpi-card"><div class="kpi-top"><span>待判断建议</span><span class="badge warning">需取舍</span></div><strong>${suggested.length}</strong><p>其中高优 ${suggested.filter(i => i.priority === "high").length} 项</p></div>
+            <div class="kpi-card"><div class="kpi-top"><span>已采纳与复盘</span><span class="badge success">行动中</span></div><strong>${adopted.length + done.length}</strong><p>进行中 ${adopted.length} 项 · 已完成复盘 ${done.length} 项</p></div>
+          </section>
+
+          <div class="toolbar">
+            <div class="toolbar-group">
+              <select class="select" data-action="board-filter-proj" aria-label="按项目过滤">
+                <option value="all">全部项目</option>
+                ${DATA.projects.filter(p => !p.archived).map(p => `<option value="${p.id}" ${state.boardFilterProject === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}
+              </select>
+              <select class="select" data-action="board-filter-ev" aria-label="按证据等级过滤">
+                <option value="all">全部证据等级</option>
+                ${["数据支撑","多源佐证","逻辑推断","经验假设"].map(ev => `<option value="${ev}" ${state.boardFilterEvidence === ev ? "selected" : ""}>${ev}</option>`).join("")}
+              </select>
+            </div>
+            <span class="card-meta" style="margin:0;">采纳由人决定；任务完成与业务效果分别回录。</span>
+          </div>
+
+          <section class="card" style="margin-bottom:18px;">
+            <div class="card-head" style="margin-bottom:10px;"><div><h3>项目报告（${DATA.board.reports.length}）</h3><p class="card-meta">每次抽取仅读取 1 份报告；证据标签不代表独立核验。</p></div></div>
+            <div style="display:grid;gap:8px;">
+              ${DATA.board.reports.map(r => `
+                <div class="slot-box" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+                  <div><strong>${esc(r.name)}</strong> <span class="card-meta" style="display:inline;">· ${esc(r.projectName)} · ${esc(r.bytes)}</span> <span class="badge" style="margin-left:6px;">${esc(r.status)}</span></div>
+                  <div class="toolbar-group">
+                    <button type="button" class="btn btn-secondary btn-sm" data-action="open-task-evidence" data-proj="${esc(r.projectId)}" data-name="${esc(r.name)}" data-sha="${esc(r.sha)}">查看原报告依据</button>
+                    <button type="button" class="btn btn-primary btn-sm" data-action="mock-toast" data-msg="演示行为：重新抽取仅读取单份报告，不自动执行行动。">重新抽取</button>
+                  </div>
+                </div>
+              `).join("")}
+            </div>
+          </section>
+
+          <section class="board-lanes-3" aria-label="决策泳道">
+            <div class="board-lane">
+              <div class="case-lane-head"><span>◇ 判断建议</span><span class="badge">${suggested.length} 项待判断</span></div>
+              ${suggested.map(it => `<article class="board-card">
+                <div style="display:flex;gap:6px;flex-wrap:wrap;"><span class="badge ${evClass(it.evidence)}">${esc(it.evidence)}</span><span class="badge ${it.priority === "high" ? "error" : "accent"}">${it.priority === "high" ? "高优" : "中优"}</span><span class="badge">${esc(it.source)}</span></div>
+                <h4>${esc(it.title)}</h4>
+                <p>${esc(it.impact)}</p>
+                <details style="font-size:12px;color:var(--ink-muted);margin-bottom:10px;"><summary style="cursor:pointer;">查看报告引文</summary><div class="evidence-quote">${esc(it.quote)}</div></details>
+                <div class="card-foot"><span>${esc(it.projectName)}</span><button type="button" class="btn btn-primary btn-sm" data-action="adopt-board-item" data-id="${it.id}">采纳建议</button></div>
+              </article>`).join("") || `<p class="card-meta" style="text-align:center;padding:18px;">暂无待判断建议</p>`}
+            </div>
+
+            <div class="board-lane">
+              <div class="case-lane-head"><span>↗ 行动跟进</span><span class="badge accent">${adopted.length} 项进行中</span></div>
+              ${adopted.map(it => `<article class="board-card">
+                <div style="display:flex;gap:6px;flex-wrap:wrap;"><span class="badge ${evClass(it.evidence)}">${esc(it.evidence)}</span><span class="badge accent">${esc(it.taskStatus || "进行中")}</span></div>
+                <h4>${esc(it.title)}</h4>
+                <p>${esc(it.impact)}</p>
+                <div class="slot-box" style="margin-bottom:8px;">负责人：${esc(it.owner || "待指定")} · 截止：${esc(it.dueDate || "待定")}</div>
+                <div class="card-foot"><span>${esc(it.projectName)}</span><button type="button" class="btn btn-secondary btn-sm" data-action="complete-board-item" data-id="${it.id}">标记完成并复盘</button></div>
+              </article>`).join("")}
+            </div>
+
+            <div class="board-lane">
+              <div class="case-lane-head"><span>↻ 结果复盘</span><span class="badge success">${done.length} 项已完成</span></div>
+              ${done.map(it => `<article class="board-card">
+                <div style="display:flex;gap:6px;flex-wrap:wrap;"><span class="badge success">任务已完成</span><span class="badge">${esc(it.evidence)}</span></div>
+                <h4>${esc(it.title)}</h4>
+                <div class="slot-box" style="margin-bottom:8px;">${esc(it.feedback || "暂无执行反馈，待回录。")}</div>
+                <div class="card-foot"><span>${esc(it.projectName)}</span><button type="button" class="btn btn-ghost" data-action="mock-toast" data-msg="演示行为：可基于此反馈整理为个人知识或发起下一轮分析。">整理为经验</button></div>
+              </article>`).join("")}
+            </div>
+          </section>
+        </div></div>
+      `;
+    }
+
+    // ===== 10. Help (帮助) =====
+    function renderHelpPage() {
+      const ch = DATA.helpChapters[state.helpChapter] || DATA.helpChapters[0];
+      return `
+        <div class="page-scroll"><div class="page-inner">
+          <header class="page-header">
+            <div>
+              <p class="eyebrow">USER MANUAL · 使用指南</p>
+              <h1>OptraCall 操作手册</h1>
+              <p class="sub">按真实工作闭环说明战略、目标、决策星图、项目与分析任务的协作方式。</p>
+            </div>
+            <div class="header-actions">
+              <button type="button" class="btn btn-secondary btn-sm" data-action="toggle-help">← 返回原页面</button>
+              <button type="button" class="btn btn-secondary btn-sm" data-action="mock-toast" data-msg="演示模式：完整操作手册 Markdown 下载入口保留。">下载完整手册</button>
+            </div>
+          </header>
+
+          <select class="select help-select-mobile" data-action="select-help-ch" aria-label="选择手册章节">
+            ${DATA.helpChapters.map((c, i) => `<option value="${i}" ${i === state.helpChapter ? "selected" : ""}>0${i + 1}. ${esc(c.title)}</option>`).join("")}
+          </select>
+
+          <div class="help-layout">
+            <nav class="help-toc" aria-label="手册目录">
+              <div class="rail-group-title">阅读目录</div>
+              <ol>${DATA.helpChapters.map((c, i) => `<li><button type="button" aria-current="${i === state.helpChapter ? "page" : "false"}" data-action="set-help-ch" data-idx="${i}"><span class="mono" style="color:var(--ink-muted);">0${i+1}</span><span>${esc(c.title)}</span></button></li>`).join("")}</ol>
+            </nav>
+            <article class="help-article">
+              <p class="card-meta" style="margin:0 0 6px;">第 ${state.helpChapter + 1} / ${DATA.helpChapters.length} 章</p>
+              <h2 style="margin:0 0 10px;font-size:20px;">${esc(ch.title)}</h2>
+              <p style="margin:0 0 18px;padding-bottom:14px;border-bottom:1px solid var(--border-default);color:var(--ink-secondary);">${esc(ch.summary)}</p>
+              ${ch.paragraphs.map(p => `<p style="margin:0 0 14px;line-height:1.8;">${esc(p)}</p>`).join("")}
+              <aside class="help-note"><strong>关键边界提示</strong><p style="margin:6px 0 0;color:var(--ink-secondary);">${esc(ch.note)}</p></aside>
+              <footer style="display:flex;justify-content:space-between;margin-top:24px;padding-top:16px;border-top:1px solid var(--border-default);">
+                <button type="button" class="btn btn-ghost" ${state.helpChapter === 0 ? "disabled" : ""} data-action="set-help-ch" data-idx="${state.helpChapter - 1}">← 上一章</button>
+                <button type="button" class="btn btn-ghost" ${state.helpChapter === DATA.helpChapters.length - 1 ? "disabled" : ""} data-action="set-help-ch" data-idx="${state.helpChapter + 1}">下一章 →</button>
+              </footer>
+            </article>
+          </div>
+        </div></div>
+      `;
+    }
+
+    // ===== Modals / Drawers (Case Detail, Project Detail, Strategy Handoff, Studio Source) =====
+    function renderModals() {
+      let html = "";
+      // 1. Case Detail Drawer
+      if (state.openCaseId) {
+        const c = getCase(state.openCaseId);
+        if (c) {
+          const linkedProjs = c.linkedProjects.map(id => ({ id, project: getProject(id) }));
+          const originalProject = getProject(c.primaryTask?.projectId);
+          const originalTask = getTask(originalProject, c.primaryTask?.taskId);
+          html += `
+            <div class="modal-backdrop" data-backdrop-close="case">
+              <section class="modal-sheet" role="dialog" aria-modal="true" aria-label="Case 详情">
+                <div class="modal-head">
+                  <div>
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                      <span class="badge accent">${esc(c.statusLabel)}</span>
+                      <span class="mono-pill">Case v${c.revision}</span>
+                      <span class="card-meta" style="margin:0;">更新于 ${esc(c.updatedAt)}</span>
+                    </div>
+                    <h2>${esc(c.title)}</h2>
+                    <p>挂接主目标：${esc(c.goalTitle)}</p>
+                  </div>
+                  <button type="button" class="icon-btn" data-action="close-case-modal" aria-label="关闭 Case 详情">✕</button>
+                </div>
+                <div style="padding:0 22px;border-bottom:1px solid var(--border-default);">
+                  <nav class="underline-tabs" style="margin-bottom:0;border-bottom:0;">
+                    ${[["overview","当前工作与决策记录"],["projects",`关联项目 (${linkedProjs.length})`],["artifacts",`产物 (${c.artifacts.length})`],["history","历史"]].map(([k,l]) => `
+                      <button type="button" aria-current="${state.caseDetailTab === k ? "page" : "false"}" data-action="set-case-tab" data-tab="${k}">${l}</button>
+                    `).join("")}
+                  </nav>
+                </div>
+                <div class="modal-body">
+                  ${state.caseDetailTab === "overview" ? `
+                    <div class="slot-box" style="margin-bottom:12px;"><span class="slot-label">问题背景</span>${esc(c.description)}</div>
+                    <div class="slot-box" style="margin-bottom:12px;"><span class="slot-label">当前判断与未知</span>${esc(c.judgement)}</div>
+                    <div class="slot-box" style="margin-bottom:14px;"><span class="slot-label">下一步 / 等待条件</span>${esc(c.nextStep)}</div>
+                    ${c.primaryTask ? `
+                      <div class="banner" style="margin-bottom:14px;">
+                        <div>
+                          <div style="font-size:11px;font-weight:650;color:var(--accent);">当前关联分析任务</div>
+                          <strong>${esc(c.primaryTask.taskName)}</strong>
+                          <div class="card-meta">所属项目：${esc(originalProject?.name ?? c.primaryTask.projectId)}</div>
+                        </div>
+                        <div class="toolbar-group">
+                          ${originalTask ? `<button type="button" class="btn btn-secondary btn-sm" data-action="open-task" data-proj="${c.primaryTask.projectId}" data-task="${c.primaryTask.taskId}">打开原任务</button>` : `<span class="card-meta">原分析任务暂不可读取</span>`}
+                          ${originalTask && caseContext(c.id, originalProject) ? `<button type="button" class="btn btn-primary btn-sm" data-action="open-task-with-case" data-case="${c.id}" data-proj="${c.primaryTask.projectId}" data-task="${c.primaryTask.taskId}">按此 Case 继续 →</button>` : ""}
+                        </div>
+                      </div>
+                    ` : ""}
+                    ${c.relations.length ? `<div class="card" style="padding:14px;"><h3 style="margin:0 0 8px;font-size:13.5px;">与其他 Case 的业务关系</h3>${c.relations.map(r => `<div class="card-meta" style="margin-bottom:6px;"><strong>${esc(getCase(r.from)?.title)}</strong> — <span class="badge ${r.kind === "supports" ? "info" : "accent"}">${esc(r.kindLabel)}</span> → <strong>${esc(getCase(r.to)?.title)}</strong><div>${esc(r.note)}</div></div>`).join("")}</div>` : ""}
+                  ` : state.caseDetailTab === "projects" ? `
+                    ${linkedProjs.map(({ id, project: p }) => p ? `<div class="card" style="padding:14px;">
+                      <div class="card-head"><div><h3>${esc(p.name)}</h3><p class="card-meta">${esc(p.workStatus)} · 承接人：${esc(p.assignee)}</p></div></div>
+                      <div class="task-pill-list">${p.tasks.map(t => `<div class="task-link-btn"><span>${esc(t.name)}</span><div class="toolbar-group"><button type="button" class="btn btn-ghost" data-action="open-task" data-proj="${p.id}" data-task="${t.id}">打开原任务</button><button type="button" class="btn btn-primary btn-sm" data-action="open-task-with-case" data-case="${c.id}" data-proj="${p.id}" data-task="${t.id}" ${caseContext(c.id, p) ? "" : "disabled"}>按此 Case 继续</button></div></div>`).join("")}</div>
+                    </div>` : `<p class="card-meta">原关联项目暂不可读取：${esc(id)}。</p>`).join("") || `<p class="card-meta">尚未关联项目。</p>`}
+                  ` : state.caseDetailTab === "artifacts" ? `
+                    ${c.artifacts.map(a => `<div class="card" style="padding:14px;">
+                      <div style="display:flex;justify-content:space-between;align-items:center;"><strong>${esc(a.name)}</strong><span class="badge success">${esc(a.availability)}</span></div>
+                      <div class="card-meta mono" style="margin-top:4px;">${esc(a.path)} · SHA ${esc(a.sha)}</div>
+                      <div style="margin-top:8px;"><span class="badge accent">${esc(a.role)}</span></div>
+                    </div>`).join("") || `<p class="card-meta">暂无产物引用。</p>`}
+                  ` : `
+                    ${c.history.map(h => `<div class="slot-box" style="margin-bottom:8px;"><strong>${esc(h.title)}</strong> <span class="card-meta" style="display:inline;">· ${esc(h.time)}</span><div class="card-meta">${esc(h.detail)}</div></div>`).join("")}
+                  `}
+                </div>
+                <div class="modal-foot">
+                  <button type="button" class="btn btn-secondary" data-action="close-case-modal">关闭</button>
+                  ${originalTask ? `<button type="button" class="btn btn-primary" data-action="open-task" data-proj="${c.primaryTask.projectId}" data-task="${c.primaryTask.taskId}">返回原分析任务 →</button>` : ""}
+                </div>
+              </section>
+            </div>
+          `;
+        }
+      }
+
+      // 2. Project Detail Drawer
+      const p = getProject(state.openProjectId);
+      if (p) {
+        html += `
+          <div class="modal-backdrop" data-backdrop-close="proj">
+            <section class="modal-sheet" role="dialog" aria-modal="true" aria-label="项目详情">
+              <div class="modal-head">
+                <div><h2>${esc(p.name)}</h2><p>${p.tasks.length} 个分析任务 · ${p.linkedCases.length} 个关联 Case · 承接人：${esc(p.assignee)}</p></div>
+                <button type="button" class="icon-btn" data-action="close-proj-modal" aria-label="关闭项目详情">✕</button>
+              </div>
+              <div class="modal-body">
+                <div class="slot-box" style="margin-bottom:12px;"><span class="slot-label">项目全局工作范围</span>${esc(p.workScope)}</div>
+                <div class="slot-box" style="margin-bottom:14px;"><span class="slot-label">下一步</span>${esc(p.nextStep)}</div>
+                <h3 style="font-size:13.5px;margin:0 0 8px;">关联 Case</h3>
+                ${p.linkedCases.map(cid => { const cc = getCase(cid); return cc ? `<div class="task-link-btn" style="margin-bottom:12px;"><span>${esc(cc.title)}</span><button type="button" class="btn btn-ghost" data-action="open-case-from-anywhere" data-id="${cc.id}">打开 Case ↗</button></div>` : ""; }).join("") || `<p class="card-meta">独立项目，尚未关联 Case。</p>`}
+                <h3 style="font-size:13.5px;margin:14px 0 8px;">全部任务</h3>
+                <div class="task-pill-list">${p.tasks.map(t => `<button type="button" class="task-link-btn" data-action="open-task" data-proj="${p.id}" data-task="${t.id}"><span>${esc(t.name)}</span><span style="color:var(--accent);font-size:12px;">进入原分析任务 →</span></button>`).join("")}</div>
+              </div>
+              <div class="modal-foot"><button type="button" class="btn btn-secondary" data-action="close-proj-modal">关闭</button></div>
+            </section>
+          </div>
+        `;
+      }
+
+      // 3. Strategy Release -> Goal Management Handoff Modal
+      if (state.handoffModalOpen) {
+        const s = DATA.strategy;
+        const c = s.candidate;
+        html += `
+          <div class="modal-backdrop centered" data-backdrop-close="handoff">
+            <section class="modal-sheet" role="dialog" aria-modal="true" aria-label="核对承接的目标与策略">
+              <div class="modal-head">
+                <div><h2>核对承接的目标与策略</h2><p>${esc(c.title)} · v${c.no} · 发布 ${s.activePubId}</p></div>
+                <button type="button" class="icon-btn" data-action="close-handoff-modal" aria-label="关闭">✕</button>
+              </div>
+              <div class="modal-body">
+                <div class="field-group"><label for="handoff-scope">目标归属范围</label>
+                  <select id="handoff-scope" data-action="set-handoff-scope">
+                    ${Object.entries(handoffScopes).map(([id, label]) => `<option value="${esc(id)}"${id === state.handoffScopeKey ? " selected" : ""}>${esc(label)}</option>`).join("")}
+                  </select>
+                </div>
+                <p class="card-meta" style="margin-bottom:10px;">勾选要带入「目标管理」的目标候选；保存后仅成为候选，需在目标管理单独核对并采纳。</p>
+                ${c.goals.map((g, i) => `
+                  <label class="slot-box" style="display:flex;gap:10px;align-items:flex-start;margin-bottom:8px;cursor:pointer;">
+                    <input type="checkbox" ${state.handoffSelected.includes(i) ? "checked" : ""} data-action="toggle-handoff-item" data-idx="${i}" style="margin-top:3px;accent-color:var(--accent);" />
+                    <span><strong>G${i+1} · ${esc(g.title)}</strong><div class="card-meta">策略：${esc(g.strategy)} · 指标：${esc(g.metric)}</div></span>
+                  </label>
+                `).join("")}
+              </div>
+              <div class="modal-foot">
+                <button type="button" class="btn btn-secondary" data-action="close-handoff-modal">取消</button>
+                <button type="button" class="btn btn-primary" ${state.handoffSelected.length ? "" : "disabled"} data-action="confirm-handoff">保存候选并前往目标管理核对 →</button>
+              </div>
+            </section>
+          </div>
+        `;
+      }
+
+      // 4. Studio Asset Read-only Drawer
+      if (state.inspectAsset) {
+        const a = state.inspectAsset;
+        html += `
+          <div class="modal-backdrop" data-backdrop-close="asset">
+            <section class="modal-sheet" role="dialog" aria-modal="true" aria-label="查看准确资产">
+              <div class="modal-head">
+                <div><span class="badge success">${esc(a.status)}</span><h2 style="margin-top:6px;">${esc(a.title)}</h2><p>准确版本 ${esc(a.version)} · 标识 ${esc(a.id)} · 更新于 ${esc(a.updatedAt)}</p></div>
+                <button type="button" class="icon-btn" data-action="close-asset-modal" aria-label="关闭">✕</button>
+              </div>
+              <div class="modal-body">
+                <div class="evidence-block"><h3>准确定义与口径正文</h3><p style="margin:6px 0 0;line-height:1.75;">${esc(a.body)}</p></div>
+                <p class="card-meta">只读核对准确版本，不会自动改写已关联的旧目标或旧分析报告。</p>
+              </div>
+              <div class="modal-foot"><button type="button" class="btn btn-secondary" data-action="close-asset-modal">关闭来源</button></div>
+            </section>
+          </div>
+        `;
+      }
+
+      return html;
+    }
+
+    function renderMainContent() {
+      if (state.helpOpen) return renderHelpPage();
+      switch (state.view) {
+        case "strategy": return renderStrategyPage();
+        case "goals": return renderGoalsPage();
+        case "cases": return renderCasesPage();
+        case "projects": return renderProjectsPage();
+        case "semantic": return renderStudioPage("semantic");
+        case "analytics": return renderStudioPage("analytics");
+        case "settings": return renderSettingsPage();
+        case "decision": return renderDecisionPage();
+        case "chat": return renderChatPage();
+        default: return renderProjectsPage();
+      }
+    }
+
+    const focusable = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, a[href], [tabindex="0"]';
+    const scrollRegions = [".page-scroll", ".sidebar-scroll", ".chat-scroll", ".drawer-body", ".modal-body"];
+    let renderKey = "";
+    let layerKind = "";
+    let layerReturn;
+    let activationControl;
+
+    function focusKey(element) {
+      if (!element || element === document.body) return "";
+      if (element.id) return "#" + element.id;
+      if (!element.dataset.action) return "";
+      const region = element.closest(".right-drawer, .modal-sheet, .sidebar, .topbar, main");
+      return JSON.stringify([element.tagName, region?.classList[0], element.getAttribute("aria-label"),
+        ...Object.entries(element.dataset).sort(([a], [b]) => a.localeCompare(b))]);
+    }
+
+    function visibleControl(element) {
+      if (element.closest('[inert], [hidden], .collapsed, .hidden')) return false;
+      for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+        if (parent.tagName === "DETAILS" && !parent.open && element !== parent.querySelector("summary")) return false;
+      }
+      return getComputedStyle(element).display !== "none";
+    }
+
+    function controlsIn(container) {
+      return [...container.querySelectorAll(focusable)].filter(visibleControl);
+    }
+
+    function floatingLayer(root) {
+      const modal = [...root.querySelectorAll(".modal-sheet")].at(-1);
+      if (modal) return ["modal:" + modal.getAttribute("aria-label"), modal];
+      if (window.innerWidth <= 760 && state.sidebarOpen) return ["sidebar", root.querySelector(".sidebar")];
+      const drawer = root.querySelector(".right-drawer:not(.hidden)");
+      if (window.innerWidth <= 1100 && drawer) return ["drawer", drawer];
+      return ["", null];
+    }
+
+    function prepareLayer(root, kind, layer) {
+      if (!layer) return;
+      if (kind === "drawer" || kind === "sidebar") {
+        layer.setAttribute("role", "dialog");
+        layer.setAttribute("aria-modal", "true");
+      }
+      if (kind === "drawer") {
+        for (const item of root.querySelectorAll(".task-main, .topbar, .sidebar")) item.setAttribute("inert", "");
+      } else {
+        root.querySelector("main")?.setAttribute("inert", "");
+        if (kind !== "sidebar") root.querySelector(".sidebar")?.setAttribute("inert", "");
+      }
+    }
+
+    function render() {
+      const root = document.getElementById("app");
+      const nextKey = [state.view, state.helpOpen, state.view === "chat" ? state.activeTaskId : "", state.openCaseId, state.openProjectId].join("|");
+      const reading = renderKey === nextKey;
+      const previous = document.activeElement;
+      const previousKey = focusKey(previous);
+      const calledFrom = focusKey(activationControl) || previousKey;
+      activationControl = null;
+      const scrolls = reading ? scrollRegions.map(selector => {
+        const region = root.querySelector(selector);
+        return region ? [selector, region.scrollTop, region.scrollLeft] : null;
+      }).filter(Boolean) : [];
+      root.setAttribute("data-theme", state.theme);
+      root.innerHTML = `
+        ${renderSidebar()}
+        <main class="main" id="main-content">
+          ${renderTopbar()}
+          <div class="workspace-body">${renderMainContent()}</div>
+        </main>
+        ${renderModals()}
+        ${state.toast ? `<div class="toast" role="status">${esc(state.toast)}</div>` : ""}
+      `;
+      const [kind, layer] = floatingLayer(root);
+      prepareLayer(root, kind, layer);
+      if (layer && kind !== layerKind) {
+        layerReturn = calledFrom;
+        controlsIn(layer)[0]?.focus({preventScroll: true});
+      } else if (!layer && layerKind) {
+        const original = controlsIn(root).find(el => focusKey(el) === layerReturn);
+        const fallback = layerKind === "sidebar" ? '[data-action="toggle-sidebar"]'
+          : layerKind === "drawer" ? '.topbar [data-action="toggle-right-drawer"]' : '.page-header h1, .task-header-top h1';
+        const target = original || root.querySelector(fallback) || root.querySelector(".topbar");
+        if (target && !target.matches(focusable)) target.tabIndex = -1;
+        target?.focus({preventScroll: true});
+        layerReturn = "";
+      } else if (reading && previousKey) {
+        const target = controlsIn(layer || root).find(el => focusKey(el) === previousKey);
+        target?.focus({preventScroll: true});
+      }
+      for (const [selector, top, left] of scrolls) {
+        const current = root.querySelector(selector);
+        if (current) { current.scrollTop = top; current.scrollLeft = left; }
+      }
+      layerKind = kind;
+      renderKey = nextKey;
+    }
+
+    // =========================================================================
+    // Event Delegation
+    // =========================================================================
+    document.getElementById("app").addEventListener("click", (e) => {
+      if (e.target.dataset && e.target.dataset.backdropClose) {
+        const k = e.target.dataset.backdropClose;
+        if (k === "case") state.openCaseId = null;
+        else if (k === "proj") state.openProjectId = null;
+        else if (k === "handoff") state.handoffModalOpen = false;
+        else if (k === "asset") state.inspectAsset = null;
+        render();
+        return;
+      }
+      const btn = e.target.closest("[data-action]");
+      if (!btn) return;
+      const act = btn.dataset.action;
+      activationControl = btn;
+
+      if (act === "nav") navigate(btn.dataset.view);
+      else if (act === "toggle-sidebar") { state.sidebarOpen = !state.sidebarOpen; render(); }
+      else if (act === "close-sidebar") { state.sidebarOpen = false; render(); }
+      else if (act === "toggle-primary-nav") { state.primaryNavOpen = !state.primaryNavOpen; render(); }
+      else if (act === "toggle-project-space") { state.projectSpaceOpen = !state.projectSpaceOpen; render(); }
+      else if (act === "toggle-archived") { state.archivedOpen = !state.archivedOpen; render(); }
+      else if (act === "toggle-proj") { const id = btn.dataset.id; state.expandedProjects[id] = !state.expandedProjects[id]; render(); }
+      else if (act === "toggle-theme") { state.theme = state.theme === "light" ? "dark" : "light"; render(); }
+      else if (act === "toggle-help") { state.helpOpen = !state.helpOpen; render(); }
+      else if (act === "toggle-right-drawer") { state.rightDrawerOpen = !state.rightDrawerOpen; render(); }
+      else if (act === "set-drawer-tab") { state.rightDrawerTab = btn.dataset.tab; render(); }
+      else if (act === "open-drawer-files") { state.rightDrawerOpen = true; state.rightDrawerTab = "files"; render(); }
+      else if (act === "open-drawer-evidence") { state.rightDrawerOpen = true; state.rightDrawerTab = "evidence"; render(); }
+      else if (act === "open-drawer-review") { state.rightDrawerOpen = true; state.rightDrawerTab = "review"; render(); }
+      else if (act === "open-report-evidence") { openReportEvidence(btn.dataset.name, btn.dataset.sha); }
+      else if (act === "open-task-evidence") { openProjectReport(btn.dataset.proj, btn.dataset.name, btn.dataset.sha); }
+      else if (act === "open-task") { openTaskFromAnywhere(btn.dataset.proj, btn.dataset.task); }
+      else if (act === "open-task-with-case") { openTaskFromAnywhere(btn.dataset.proj, btn.dataset.task, { caseId: btn.dataset.case }); }
+      else if (act === "open-proj-detail") {
+        if (!getProject(btn.dataset.id)) { showToast(`原项目暂不可读取：${btn.dataset.id}。`); return; }
+        state.openProjectId = btn.dataset.id;
+        render();
+      }
+      else if (act === "close-proj-modal") { state.openProjectId = null; render(); }
+      else if (act === "open-case-from-anywhere") { state.openProjectId = null; openCaseFromEvidence(btn.dataset.id); }
+      else if (act === "close-case-modal") { state.openCaseId = null; render(); }
+      else if (act === "set-case-tab") { state.caseDetailTab = btn.dataset.tab; render(); }
+      else if (act === "set-case-display") { state.caseDisplay = btn.dataset.val; render(); }
+      else if (act === "set-case-reg") { state.caseRegularMode = btn.dataset.val; render(); }
+      else if (act === "set-proj-mode") { state.projectMode = btn.dataset.val; render(); }
+      else if (act === "star-focus") { const id = btn.dataset.id; state.caseFocusNodeId = state.caseFocusNodeId === id ? null : id; render(); }
+      else if (act === "star-zoom") {
+        if (btn.dataset.delta === "reset") state.starZoom = 1;
+        else state.starZoom = Math.min(1.4, Math.max(0.6, +(state.starZoom + parseFloat(btn.dataset.delta)).toFixed(2)));
+        render();
+      }
+      else if (act === "star-open") {
+        if (btn.dataset.kind === "case") openCaseFromEvidence(btn.dataset.id);
+        else if (btn.dataset.kind === "project") { state.view = "projects"; state.openProjectId = btn.dataset.id; render(); }
+        else if (btn.dataset.kind === "task") openTaskFromAnywhere(btn.dataset.proj, btn.dataset.id);
+      }
+      else if (act === "set-strategy-stage") { state.strategyStage = btn.dataset.stage; render(); }
+      else if (act === "set-release-tpl") { state.releaseTemplate = btn.dataset.tpl; render(); }
+      else if (act === "open-handoff-modal") { state.handoffModalOpen = true; render(); }
+      else if (act === "close-handoff-modal") { state.handoffModalOpen = false; render(); }
+      else if (act === "confirm-handoff") {
+        const s = DATA.strategy;
+        const candidate = s.candidate;
+        const scopeKey = state.handoffScopeKey;
+        const scope = handoffScopes[scopeKey];
+        const picked = candidate.goals.filter((_, i) => state.handoffSelected.includes(i));
+        if (!scope || !picked.length) return;
+
+        let created = 0;
+        const newlySaved = [];
+        const receipts = picked.map((target) => {
+          const handoffKey = JSON.stringify([s.activePubId, candidate.id, candidate.no, candidate.sha, scopeKey, target.id]);
+          const existing = DATA.goals.find(goal => goal.handoffKey === handoffKey);
+          if (existing) return existing;
+
+          const goal = {
+            id: "goal-" + String(DATA.goals.length + newlySaved.length + 1).padStart(2, "0"),
+            handoffKey,
+            title: target.title,
+            version: 1,
+            status: "candidate",
+            perspective: "营利组织",
+            scope,
+            metric: `SAP 指标 ${target.metric}`,
+            baseline: "待核对",
+            origin: `战略发布 ${s.activePubId} · ${candidate.title} v${candidate.no}`,
+            outcome: target.title,
+            strategies: [target.strategy],
+            resources: [],
+            conditions: []
+          };
+          newlySaved.push(goal);
+          created += 1;
+          return goal;
+        });
+        DATA.goals.unshift(...newlySaved);
+        state.handoffModalOpen = false;
+        state.selectedGoalId = receipts[0].id;
+        state.handoffBanner = `「${candidate.title} · v${candidate.no}（${s.activePubId}）」→ ${scope} · 核对 ${receipts.length} 项，新增 ${created} 项，沿用原记录 ${receipts.length - created} 项（演示）。`;
+        navigate("goals", { goalStage: "adopt" });
+        showToast(created ? "已保存所选目标候选（演示）。" : "已找到原承接记录（演示）。");
+      }
+      else if (act === "clear-handoff-banner") { state.handoffBanner = null; render(); }
+      else if (act === "set-goal-stage") { state.goalStage = btn.dataset.stage; render(); }
+      else if (act === "select-goal") { state.selectedGoalId = btn.dataset.id; render(); }
+      else if (act === "adopt-goal") {
+        const g = DATA.goals.find(x => x.id === btn.dataset.id);
+        if (g) { g.status = "adopted"; showToast(`已核对并采纳「${g.title} · v${g.version}」（演示内存状态）。`); }
+      }
+      else if (act === "set-studio-tab") {
+        if (btn.dataset.area === "semantic") state.semanticTab = btn.dataset.tab;
+        else state.analyticsTab = btn.dataset.tab;
+        render();
+      }
+      else if (act === "set-wb-pane") { state.workbenchPane = btn.dataset.val; render(); }
+      else if (act === "inspect-asset") {
+        const list = (DATA.studioAssets[btn.dataset.area] && DATA.studioAssets[btn.dataset.area][btn.dataset.tab]) || [];
+        state.inspectAsset = list.find(x => x.id === btn.dataset.id) || null;
+        render();
+      }
+      else if (act === "close-asset-modal") { state.inspectAsset = null; render(); }
+      else if (act === "set-settings-cat") { state.settingsCategory = btn.dataset.cat; render(); }
+      else if (act === "back-from-settings") { navigate(state.lastNonSettingsView || "projects"); }
+      else if (act === "set-help-ch") { state.helpChapter = Math.max(0, Math.min(DATA.helpChapters.length - 1, Number(btn.dataset.idx))); render(); }
+      else if (act === "toggle-case-ctx") {
+        const project = getProject(state.activeProjectId);
+        const task = getTask(project, state.activeTaskId);
+        state.attachedCaseId = state.attachedCaseId ? null : caseContext(task?.linkedCaseId, project)?.id ?? null;
+        render();
+      }
+      else if (act === "focus-composer") { const el = document.getElementById("demo-composer"); if (el) el.focus(); }
+      else if (act === "adopt-board-item") {
+        const it = DATA.board.items.find(x => x.id === btn.dataset.id);
+        if (it) { it.status = "adopted"; it.taskStatus = "待办"; showToast("已采纳建议并移入「行动跟进」泳道。"); }
+      }
+      else if (act === "complete-board-item") {
+        const it = DATA.board.items.find(x => x.id === btn.dataset.id);
+        if (it) { it.status = "done"; showToast("已标记完成并移入「结果复盘」泳道。"); }
+      }
+      else if (act === "mock-new-project") { showToast("演示行为：新建项目将创建 010_draw / 020_clean / 060_reports 三个共享目录。"); }
+      else if (act === "mock-new-task") { showToast("演示行为：在所选项目中新建独立会话任务（不修改其他任务历史）。"); }
+      else if (act === "mock-toast") { showToast(btn.dataset.msg || "演示交互反馈。"); }
+    });
+
+    document.getElementById("app").addEventListener("change", (e) => {
+      const el = e.target;
+      const act = el.dataset.action;
+      if (act === "proj-filter") { state.projectFilter = el.value; render(); }
+      else if (act === "case-rel-filter") { state.caseRelationFilter = el.value; render(); }
+      else if (act === "switch-enterprise") { state.enterpriseId = el.value; showToast(`已切换企业范围（演示内存数据）。`); }
+      else if (act === "board-filter-proj") { state.boardFilterProject = el.value; render(); }
+      else if (act === "board-filter-ev") { state.boardFilterEvidence = el.value; render(); }
+      else if (act === "select-help-ch") { state.helpChapter = Number(el.value); render(); }
+      else if (act === "set-handoff-scope") {
+        if (Object.hasOwn(handoffScopes, el.value)) state.handoffScopeKey = el.value;
+      }
+      else if (act === "toggle-handoff-item") {
+        const idx = Number(el.dataset.idx);
+        if (el.checked) { if (!state.handoffSelected.includes(idx)) state.handoffSelected.push(idx); }
+        else state.handoffSelected = state.handoffSelected.filter(i => i !== idx);
+        el.closest("[role='dialog']").querySelector("[data-action='confirm-handoff']").disabled = !state.handoffSelected.length;
+      }
+    });
+
+    document.getElementById("app").addEventListener("input", (e) => {
+      if (e.target.id !== "demo-composer") return;
+      const project = getProject(state.activeProjectId);
+      const task = getTask(project, state.activeTaskId);
+      if (task && !project.archived) task.draft = e.target.value;
+    });
+
+    document.getElementById("app").addEventListener("submit", (e) => {
+      const form = e.target.closest("[data-action='send-demo-msg']");
+      if (!form) return;
+      e.preventDefault();
+      const input = document.getElementById("demo-composer");
+      const val = (input?.value || "").trim();
+      if (!val) return;
+      const proj = getProject(state.activeProjectId);
+      const task = getTask(proj, state.activeTaskId);
+      if (!task || proj.archived) return;
+      task.messages.push({ role: "user", text: val });
+      task.messages.push({ role: "assistant", text: "（演示模拟回复）已收到这项任务的追问。正式环境中由 Pi Agent 在当前任务自主调用模型和获准工具。" });
+      task.draft = "";
+      render();
+      showToast("已追加演示对话（未调用真实模型）。");
+    });
+
+    document.addEventListener("keydown", (e) => {
+      const [kind, layer] = floatingLayer(document.getElementById("app"));
+      if (e.key === "Tab" && layer) {
+        const controls = controlsIn(layer);
+        const at = controls.indexOf(document.activeElement);
+        if (controls.length && (at < 0 || (e.shiftKey ? at === 0 : at === controls.length - 1))) {
+          e.preventDefault();
+          (e.shiftKey ? controls.at(-1) : controls[0]).focus();
+        }
+      }
+      if (e.key !== "Escape") return;
+      if (state.handoffModalOpen) state.handoffModalOpen = false;
+      else if (state.inspectAsset) state.inspectAsset = null;
+      else if (state.openCaseId) state.openCaseId = null;
+      else if (state.openProjectId) state.openProjectId = null;
+      else if (kind === "sidebar") state.sidebarOpen = false;
+      else if (kind === "drawer") state.rightDrawerOpen = false;
+      else if (state.helpOpen) state.helpOpen = false;
+      else return;
+      e.preventDefault();
+      render();
+    });
+
+    render();
+    applyHashRoute();
+  </script>
+</body>
+</html>

@@ -1,4 +1,7 @@
 import { ConversationDrawer } from "./ConversationDrawer.tsx";
+import { ResponsiveWorkspacePanel, useViewport } from './ResponsiveWorkspacePanel.tsx';
+import { TaskReportEvidence } from './TaskReportEvidence.tsx';
+import type { ConclusionReviewReportCandidate } from '../conclusion-review-materials.ts';
 import { BrandMark } from "./BrandMark.tsx";
 import { AgentAuthor, AssistantOutcome, Foldable, ProcessGroup, groupConversation, isPartialAssistantReply, type ConversationItem } from "./conversation-collapse.tsx";
 import { managementTitle,type ManagementRoute,type ManagementStage } from "./ManagementTabs.tsx";
@@ -196,6 +199,7 @@ export function App() {
   const closeHelp = () => { setHelpOpen(false); requestAnimationFrame(() => helpTrigger.current?.focus()); };
   const [teachReview,setTeachReview]=useState<import('../business-role-types.ts').TeachReviewOwner>();
   const [caseSource,setCaseSource]=useState<CaseCreationSource>(), [caseFocus, setCaseFocus] = useState<string | undefined>(() => new URL(window.location.href).searchParams.get('returnCase') ?? undefined);
+  const [reportCaseReturn, setReportCaseReturn] = useState<{ caseId: string; projectId: string; taskId: string }>();
   const [caseIssueFocus, setCaseIssueFocus] = useState<string | undefined>(() => new URL(window.location.href).searchParams.get('returnIssue') ?? undefined);
   const [projectIssue, setProjectIssue] = useState<{projectId:string;caseId:string;issueId:string} | undefined>(() => {
     const params = new URL(window.location.href).searchParams;
@@ -219,13 +223,16 @@ export function App() {
   const [enterpriseCases, setEnterpriseCases] = useState<Record<string, EnterpriseCaseSelection | undefined>>({});
   const [primaryNavOpen, setPrimaryNavOpen] = useState(true);
   const [projectSpaceOpen, setProjectSpaceOpen] = useState(true);
+  const sidebarModal = useViewport('(max-width: 760px)');
+  const inspectorModal = useViewport('(max-width: 1100px)');
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 760), [filesOpen, setFilesOpen] = useState(() => window.innerWidth > 1100);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false), [taskDialogProject, setTaskDialogProject] = useState<ClientProject>(), [renameTarget, setRenameTarget] = useState<ClientProject>(), [projectActionId, setProjectActionId] = useState<string>();
   const [capabilityUpdating, setCapabilityUpdating] = useState(false);
-  const [conclusionOpenKey, setConclusionOpenKey] = useState<string>();
+  const [taskInspector, setTaskInspector] = useState<{ key: string; section: 'report' | 'conclusion' }>();
+  const [inspectedReport, setInspectedReport] = useState<{ key: string; version: ConclusionReviewReportCandidate }>();
   const [carryingTasks, setCarryingTasks] = useState<Record<string, boolean>>({});
   const visibleTask = useRef<string | undefined>(undefined);
-  const conclusionTrigger = useRef<HTMLButtonElement>(null);
+  const inspectorTrigger = useRef<HTMLButtonElement | null>(null), filesToggle = useRef<HTMLButtonElement>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
   const [configurations, setConfigurations] = useState<PublicModelConfiguration[]>([]), [selectedId, setSelectedId] = useState<string | null>(null);
   const [hostStatus, setHostStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading'), [globalError, setGlobalError] = useState(''), [globalNotice, setGlobalNotice] = useState(''), [filesRevision, setFilesRevision] = useState(0);
@@ -250,7 +257,9 @@ export function App() {
   const eventHandler = useRef<(projectId: string, taskId: string, event: ProjectEvent) => void>(() => {}), mounted = useRef(true);
   const active = projects.find(item => item.id === activeId), activeTask = active?.tasks.find(item => item.id === activeTaskId), activeKey = active && activeTask ? taskKey(active.id, activeTask.id) : undefined;
   const canOpenProjectFiles = Boolean(active) && (view === 'chat' || (view === 'studio' && Boolean(activeKey)));
-  const showConclusion = view === 'chat' && activeKey !== undefined && conclusionOpenKey === activeKey;
+  const visibleTaskInspector = view === 'chat' && taskInspector?.key === activeKey ? taskInspector?.section : undefined;
+  const showConclusion = visibleTaskInspector === 'conclusion', showReport = visibleTaskInspector === 'report';
+  const inspectedVersion = inspectedReport?.key === activeKey ? inspectedReport?.version : undefined;
   const [boundProjectId, setBoundProjectId] = useState<string>();
   const projectBinding = useRef<{ projectId: string; controller: AbortController; ready: Promise<void> } | undefined>(undefined);
   const ensureProjectContext = (projectId: string): Promise<void> => {
@@ -273,7 +282,8 @@ export function App() {
     await ensureProjectContext(projectId);
     return readTask(projectId, taskId);
   };
-  const showProjectFiles = canOpenProjectFiles && filesOpen && !showConclusion && boundProjectId === activeId;
+  const showProjectFiles = canOpenProjectFiles && filesOpen && !showConclusion && !showReport && boundProjectId === activeId;
+  const showInspector = showProjectFiles || showConclusion || showReport;
   const selectedCase = activeKey ? caseContexts[activeKey] : undefined;
   const attachedRequirement = activeKey ? requirementContexts[activeKey] : undefined;
   const attachedEnterprise = activeKey ? enterpriseMaterials[activeKey] ?? [] : [];
@@ -415,8 +425,7 @@ export function App() {
     }
   }, [subscriptionKeys, activeId, boundProjectId]);
   useEffect(() => { if (active?.archivedAt && activeTask && (active.memberPackScoped ? boundProjectId === active.id : true)) { const key = taskKey(active.id, activeTask.id); void refreshTask(active.id, activeTask.id).then(() => changeUI(key, old => ({ ...old, connected: true, observation: undefined }))).catch(error => changeUI(key, old => ({ ...old, error: safeError(error) }))); } }, [active?.archivedAt, active?.id, activeTask?.id, boundProjectId]);
-  useEffect(() => { const media = window.matchMedia('(max-width: 760px)'); const resize = () => setSidebarOpen(!media.matches); media.addEventListener('change', resize); resize(); return () => media.removeEventListener('change', resize); }, []);
-  useEffect(() => { const media = window.matchMedia('(max-width: 1100px)'); const resize = () => setFilesOpen(!media.matches); media.addEventListener('change', resize); return () => media.removeEventListener('change', resize); }, []);
+  useEffect(() => { setSidebarOpen(!sidebarModal); }, [sidebarModal]);
   useEffect(() => { if (view === 'chat' || view === 'studio') end.current?.scrollIntoView({ block: 'end' }); }, [current?.snapshot?.messages, current?.streaming, view]);
   const persistDraft = (projectId: string, taskId: string, text: string): Promise<void> => {
     const key = taskKey(projectId, taskId), epoch = draftEpochs.current.get(key) ?? 0; draftVersions.current.set(key, (draftVersions.current.get(key) ?? 0) + 1);
@@ -431,7 +440,7 @@ export function App() {
     void next.then(() => { if (draftQueues.current.get(key) === next) { draftQueues.current.delete(key); changeUI(key, old => ({ ...old, draftSaving: false })); } }, () => { if (draftQueues.current.get(key) === next) { draftQueues.current.delete(key); changeUI(key, old => ({ ...old, draftSaving: false, error: '草稿尚未保存，请检查本地服务后继续。' })); } }); return next;
   };
   const focusComposerOnEntry = () => { requestAnimationFrame(() => textarea.current?.focus()); };
-  const openWorkspace = (next: 'chat' | 'decision' | 'cases' | 'projects' | 'studio' | 'goals') => { setHelpOpen(false); if (next === 'decision') setBoardReportFocus(undefined); lastWorkspace.current = next; if (next === 'cases') { setCaseFocus(undefined); setCaseIssueFocus(undefined); } setView(next, next === 'chat' ? focusComposerOnEntry : undefined); };
+  const openWorkspace = (next: 'chat' | 'decision' | 'cases' | 'projects' | 'studio' | 'goals') => { setHelpOpen(false); if (next === 'decision') setBoardReportFocus(undefined); lastWorkspace.current = next; if (next === 'cases') { setCaseFocus(undefined); setCaseIssueFocus(undefined); setReportCaseReturn(undefined); } setView(next, () => { if (sidebarModal && sidebarOpen) closeSidebar(); if (next === 'chat') focusComposerOnEntry(); }); };
   const openStudioLibrary = (area: StudioLibraryArea) => {
     const enter = () => setView('studio', () => { setStudioLibraryArea(area); setStudioLibraryRequest({area}); setStudioProfessionalTarget(undefined); setStudioFocus(''); setFilesOpen(false); setHelpOpen(false); lastWorkspace.current = 'studio'; if (window.innerWidth <= 760) setSidebarOpen(false); });
     if (view !== 'studio' || !studioLeave.current) { enter(); return; }
@@ -443,32 +452,38 @@ export function App() {
   const rememberCapabilityReturn = (target: CapabilityView, project?: ClientProject) => { capabilityReturn.current[target] = { view, projectId: project?.id || activeId, taskId: project && project.id !== activeId ? undefined : activeTaskId, url: window.location.href }; };
   const openCapability = (target: CapabilityView, project?: ClientProject) => { rememberCapabilityReturn(target, project); if (target === 'requirement') { setRequirementReturnTask(undefined); setRequirementFocus(undefined); } if (target === 'simlab') setSimlabTarget(undefined); if (target === 'refiner') { setRefinerSource(undefined); setRefinerDeckId(undefined); } setHelpOpen(false); setView(target); if (window.innerWidth <= 760) setSidebarOpen(false); };
   const backFromCapability = (target: CapabilityView) => { const original = capabilityReturn.current[target]; if (!original) { openWorkspace('projects'); return; } if (original.projectId) { const project = projects.find(value => value.id === original.projectId), task = original.taskId && project?.tasks.find(value => value.id === original.taskId); if (!project || original.taskId && !task) { setGlobalError('原工作对象暂不可读取，原记录与请求保留；请在项目中核对，不会替换为其他任务。'); openWorkspace('projects'); return; } selectContext(project.id, task ? task.id : undefined); } window.history.replaceState(null, '', original.url); if (original.view === 'projects') setProjectReturnFocus(original.projectId); setView(original.view); };
-  const taskFileTrigger = useRef<HTMLButtonElement | null>(null);
-  function openTaskFiles(trigger: HTMLButtonElement) {
-    taskFileTrigger.current = trigger;
-    setConclusionOpenKey(undefined);
-    setFilesOpen(true);
-    requestAnimationFrame(() => document.querySelector<HTMLElement>('#project-files h2')?.focus());
+  function closeSidebar() {
+    setSidebarOpen(false);
+    requestAnimationFrame(() => sidebarToggle.current?.focus({ preventScroll: true }));
   }
-  function toggleProjectFiles() {
-    taskFileTrigger.current = null;
-    if (showConclusion) {
-      setConclusionOpenKey(undefined);
-      setFilesOpen(true);
-    } else {
-      setFilesOpen(value => !value);
+  function selectInspector(section: 'files' | 'report' | 'conclusion') {
+    setFilesOpen(section === 'files');
+    setTaskInspector(section !== 'files' && activeKey ? { key: activeKey, section } : undefined);
+  }
+  function openTaskFiles(trigger: HTMLButtonElement) {
+    inspectorTrigger.current = trigger;
+    selectInspector('files');
+    requestAnimationFrame(() => document.querySelector<HTMLElement>('#project-files h2')?.focus({ preventScroll: true }));
+  }
+  function toggleProjectFiles(trigger: HTMLButtonElement) {
+    if (showProjectFiles) closeInspector();
+    else {
+      inspectorTrigger.current = trigger;
+      selectInspector('files');
     }
   }
-  function closeFiles() {
-    const trigger = taskFileTrigger.current;
-    taskFileTrigger.current = null;
+  function closeInspector() {
+    const trigger = inspectorTrigger.current;
+    inspectorTrigger.current = null;
     setFilesOpen(false);
+    setTaskInspector(undefined);
+    setInspectedReport(undefined);
     requestAnimationFrame(() => {
-      const target = trigger?.getClientRects().length ? trigger : document.querySelector<HTMLButtonElement>('.files-toggle');
-      target?.focus();
+      const target = trigger?.getClientRects().length ? trigger : filesToggle.current;
+      target?.focus({ preventScroll: true });
     });
   }
-  const openProjectSources = () => { if (active) { selectContext(active.id, activeTask?.id); setView('chat'); setConclusionOpenKey(undefined); setFilesOpen(true); } else openWorkspace('projects'); };
+  const openProjectSources = () => { if (active) { selectContext(active.id, activeTask?.id); setView('chat'); selectInspector('files'); } else openWorkspace('projects'); };
   const openSettingsView = (next: SettingsView, trigger?: HTMLButtonElement, entry?: PersonalRetentionEntry) => {
     const source = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     setView(next, () => {
@@ -759,10 +774,11 @@ export function App() {
   const refreshProjects = async () => { const saved = await listProjects(); for (const project of saved) mergeProject(project); };
   const boardTask = async (project: ClientProject, task: ClientTask, selection?: CaseContextSelection) => {
     try {
-      if (!selection) { await chooseTask(project, task, false); return; }
+      if (!selection) { await chooseTask(project, task, false); setReportCaseReturn(undefined); return; }
       const detail = await caseClient.detail(selection.caseId);
       if (detail.case.revision !== selection.caseRevision) throw new caseClient.CaseRequestError('revision_conflict', 409);
       await chooseTask(project, task, false, { selection, record: detail.case, work: project.work ?? null });
+      setReportCaseReturn(undefined);
     } catch (error) { setGlobalError(error instanceof Error ? error.message : 'Case背景未能读取，请刷新后核对。'); }
   };
   const openFeedbackTask = async (target: { projectId: string; taskId: string; handoffId: string }) => { const value = await readTaskForNavigation(target.projectId, target.taskId); mergeProject(value.project); await chooseTask(value.project, value.task, false); };
@@ -871,7 +887,7 @@ export function App() {
         <ConversationDrawer key={activeKey} title={view === 'studio' ? '资产建设 Agent' : '任务对话 · ' + activeTask.name} className="workspace-conversation-task">
         {!messages.length && !current?.streaming && !current?.optimistic ? <p className="task-start-hint">{archived ? '此任务尚无对话，恢复原记录后可继续。' : '从一个问题开始，告诉 Pi 你想了解什么。'}</p> : <div className="message-scroll"><div className="messages" role="log" aria-label="对话记录" aria-live="off">{conversationItems.map(renderConversationItem)}{current?.optimistic && <article className="message user"><div className="message-author"><span className="user-mark">你</span><strong>你</strong><span>正在确认发送</span></div><div className="message-content">{current.optimistic}</div></article>}{current?.streaming && <article className="message assistant streaming-message"><AgentAuthor model={activeTask.configuration.model} status="正在回复" /><div className="message-content">{renderAssistantText(current.streaming)}</div></article>}{busy && !current?.streaming && <p className="run-progress" role="status">{current?.toolStatus ?? (current?.opening ? '正在打开任务…' : 'Pi 正在处理…')}</p>}<div ref={end} /></div></div>}
         <div className="composer-area">
-          <details key={`context-${activeKey}`} className="task-context-options"><summary>本次分析背景<span>{[selectedCase && 'Case', attachedRequirement && '需求', attachedEnterprise.length > 0 && '企业资料', attachedFeedback && '反馈'].filter(Boolean).join(' · ') || '按需选择'}</span></summary>
+          <details key={`context-${activeKey}`} className="task-context-options" open={selectedCase ? true : undefined}><summary>本次分析背景<span>{[selectedCase && 'Case', attachedRequirement && '需求', attachedEnterprise.length > 0 && '企业资料', attachedFeedback && '反馈'].filter(Boolean).join(' · ') || '按需选择'}</span></summary>
           {selectedCase && <div className="case-context-banner" role="status"><div><strong>本次背景：{selectedCase.record.title}</strong><span>Case v{selectedCase.selection.caseRevision} · 项目进度 v{selectedCase.selection.projectWorkRevision}</span><details><summary>查看本次背景</summary><p>{selectedCase.record.description || '尚未填写背景'}</p><p>判断与未知：{selectedCase.record.judgement || '尚未填写'}</p><p>下一步：{selectedCase.record.nextStep || '尚未填写'}</p><p>项目范围：{selectedCase.work?.workScope || '尚未填写'}；承接人：{selectedCase.work?.assignee || '尚未填写'}；项目下一步：{selectedCase.work?.nextStep || '尚未填写'}</p><p>已选引用：{selectedCase.selection.selectedReferenceIds.length} 项。此任务原有历史可能含其他 Case 信息；如需独立上下文，请在原项目新建任务。</p></details></div><button type="button" className="text-button" disabled={contextLocked} onClick={() => setCaseContexts(previous => { const next = { ...previous }; delete next[activeKey!]; return next; })}>改为项目独立发送</button></div>}
           {attachedRequirement && <div className="case-context-banner" role="status"><div><strong>{attachedRequirement.frameworkVersion ? '附带分析框架' : '附带需求契约'}：{attachedRequirement.title}</strong><span>实例 {attachedRequirement.instanceId} · {attachedRequirement.frameworkVersion ? `框架版本 ${attachedRequirement.frameworkVersion}` : attachedRequirement.version ? `RAP ${attachedRequirement.version}` : '已确认快照'} · 发送时注入结构化摘要</span></div><button type="button" className="text-button" disabled={contextLocked} onClick={() => setRequirementContexts(previous => { const next = { ...previous }; delete next[activeKey!]; return next; })}>移除附带</button></div>}
           <FeedbackContextPanel key={`feedback-${activeKey}`} project={active} task={activeTask} value={attachedFeedback} onChange={value => setFeedbackContexts(previous => ({ ...previous, [activeKey!]: value }))} disabled={contextLocked} filesRevision={filesRevision} onNextSource={setFeedbackNextSource} onNextAnalysis={startFeedbackAnalysis} onGoCase={caseId => { setCaseFocus(caseId); setView('cases'); lastWorkspace.current = 'cases'; }} onFilesChanged={() => setFilesRevision(previous => previous + 1)} />
@@ -899,7 +915,10 @@ export function App() {
           {view !== 'studio' && <section ref={resultsPanel} tabIndex={-1} className="task-results" aria-label="结果与审查"><h2>结果与审查</h2><AutomaticActionLocalSwitch node="save" /><AutomaticActionLocalSwitch node="review" /><AutomaticActionLocalSwitch node="ir" /><AutomaticActionLocalSwitch node="case" /><AutomaticActionLocalSwitch node="assets" /><button type="button" className="text-button" onClick={() => openProjectPlan(active)}>项目需求与任务方案</button>
           <ReportCalculationReview projectId={active.id} taskId={activeTask.id} value={current?.snapshot?.capabilities?.reportCalculationReview} />
           <SapMethodExtractionPanel key={`sap-method-extraction-${activeKey}`} project={active} task={activeTask} taskBusy={busy} hasHistory={Boolean(lastAssistant)} onOpenMethod={openSapMethod} />
-          <button ref={conclusionTrigger} type="button" className="text-button verification-trigger" aria-expanded={showConclusion} onClick={() => { setFilesOpen(false); setConclusionOpenKey(activeKey); }}>审查结论与建议</button>
+          <div className="task-result-links">
+            <button type="button" className="secondary-button" aria-expanded={showReport} aria-haspopup={inspectorModal ? 'dialog' : undefined} onClick={event => { inspectorTrigger.current = event.currentTarget; selectInspector('report'); }}>查看报告与依据</button>
+            <button type="button" className="text-button verification-trigger" aria-expanded={showConclusion} aria-haspopup={inspectorModal ? 'dialog' : undefined} onClick={event => { inspectorTrigger.current = event.currentTarget; selectInspector('conclusion'); }}>审查结论与建议</button>
+          </div>
           <button type="button" className="text-button task-case-trigger" disabled={archived || busy} onClick={() => { setComparisonContexts(previous => ({ ...previous, [activeKey!]: { project: structuredClone(active), task: structuredClone(activeTask), personal: structuredClone(attachedPersonal) } })); setComparisonKey(activeKey); }}>准备增量验证</button>
           {!archived && <button type="button" className="text-button task-case-trigger" onClick={event => { event.currentTarget.focus({preventScroll:true}); showManagement({area:'gsa',stage:'adopt'},{kind:'task',projectId:active.id,taskId:activeTask.id}); }}>带着本任务去核对新增 Case</button>}
           </section>}
@@ -914,8 +933,11 @@ export function App() {
       setPersonalChoice(undefined); void chooseTask(project, task, false);
     }} />}
     <a className="skip-link" href="#main-content">跳到主内容</a>
-    {sidebarOpen && <aside id="sidebar" className="sidebar" aria-label="工作台导航">
-      <div className="brand"><BrandMark small /><div><strong>OptraCall</strong><span>持续做出更好的决策</span></div></div>
+    {sidebarOpen && <ResponsiveWorkspacePanel label="工作台导航" kind="navigation" modal={sidebarModal} onClose={closeSidebar}>
+    <aside id="sidebar" className="sidebar" aria-label="工作台导航">
+      <div className="brand"><BrandMark small /><div><strong>OptraCall</strong><span>持续做出更好的决策</span></div>
+        {sidebarModal && <button type="button" className="icon-button sidebar-close" data-panel-focus aria-label="关闭侧栏" onClick={closeSidebar}>×</button>}
+      </div>
       <button type="button" className="new-chat" aria-label="新建项目" onClick={() => openProjectCreation()}><Icon name="plus" />新建项目</button>
       <button type="button" className="history-heading archived-heading workspace-sidebar-disclosure" aria-expanded={primaryNavOpen} aria-controls="workspace-primary-links" onClick={() => setPrimaryNavOpen(open => !open)}>主导航<span aria-hidden="true">{primaryNavOpen ? '⌄' : '›'}</span></button>
       <nav className="primary-nav" id="workspace-primary-links" aria-label="主导航" hidden={!primaryNavOpen}>
@@ -928,29 +950,34 @@ export function App() {
       </nav>
       <ProjectNavigation spaceOpen={projectSpaceOpen} onSpaceToggle={() => setProjectSpaceOpen(open => !open)} projects={projects} activeProjectId={activeId} activeTaskId={activeTaskId} states={ui} loading={hostStatus === 'loading'} onProject={project => { setCaseContexts({}); selectContext(project.id); openWorkspace('chat'); if (window.innerWidth <= 760) setSidebarOpen(false); }} onTask={(project, task) => { void chooseTask(project, task); }} onCreateTask={showTaskDialog} onRename={(project, trigger) => { dialogTrigger.current = trigger; setRenameTarget(project); }} onArchive={project => { void projectAction(project, 'archive'); }} onRestore={project => { void projectAction(project, 'restore'); }} />
       <div className="sidebar-bottom workspace-sidebar-bottom"><button type="button" className={`nav-item ${inSettings ? 'selected' : ''}`} aria-label="设置" aria-current={inSettings ? 'page' : undefined} aria-describedby={config?.hasApiKey ? 'settings-configured' : undefined} onClick={event => openSettings(event.currentTarget)}><Icon name="settings" />设置{config?.hasApiKey && <span className="configured-dot" aria-hidden="true" />}</button>{config?.hasApiKey && <span id="settings-configured" className="sr-only">已保存本机配置</span>}<button type="button" className="text-button workspace-locale" disabled title="界面语言切换后续支持" aria-label="中英界面切换，后续支持">中／EN</button></div>
-    </aside>}
-    <main id="main-content" className="main" tabIndex={-1}><header className="topbar"><div className="topbar-context"><button ref={sidebarToggle} className="icon-button" aria-label={sidebarOpen ? '收起侧栏' : '展开侧栏'} aria-expanded={sidebarOpen} aria-controls={sidebarOpen ? 'sidebar' : undefined} onClick={() => setSidebarOpen(value => !value)}><Icon name="panel" /></button><span className="topbar-title">{helpOpen ? '帮助' : pageTitle}</span></div><div className="workspace-switch" role="group" aria-label="工作区切换"><button aria-pressed={!helpOpen && view === 'chat'} onClick={() => openWorkspace('chat')}>分析</button><button aria-pressed={!helpOpen && view === 'decision'} onClick={() => openWorkspace('decision')}>决策</button></div><div className="topbar-actions">{canOpenProjectFiles && !helpOpen && <button type="button" className="icon-button files-toggle" aria-label={showProjectFiles ? '收起项目文件' : '展开项目文件'} aria-expanded={showProjectFiles} aria-controls={showProjectFiles ? 'project-files' : undefined} onClick={toggleProjectFiles}><Icon name="panel" /></button>}<button ref={helpTrigger} className="help-trigger" type="button" aria-label="帮助" aria-expanded={helpOpen} aria-controls="product-help" onClick={() => helpOpen ? closeHelp() : setHelpOpen(true)}><Icon name="help" size={17} />帮助</button><button className="icon-button" aria-label={theme === 'light' ? '切换为深色' : '切换为浅色'} onClick={() => setTheme(old => old === 'light' ? 'dark' : 'light')}><Icon name={theme === 'light' ? 'moon' : 'sun'} /></button></div></header>
+    </aside></ResponsiveWorkspacePanel>}
+    <main id="main-content" className="main" tabIndex={-1}><header className="topbar"><div className="topbar-context"><button ref={sidebarToggle} className="icon-button" aria-label={sidebarOpen ? '收起侧栏' : '展开侧栏'} aria-expanded={sidebarOpen} aria-controls={sidebarOpen ? 'sidebar' : undefined} aria-haspopup={sidebarModal ? 'dialog' : undefined} onClick={() => sidebarOpen ? closeSidebar() : setSidebarOpen(true)}><Icon name="panel" /></button><span className="topbar-title">{helpOpen ? '帮助' : pageTitle}</span></div><div className="workspace-switch" role="group" aria-label="工作区切换"><button aria-pressed={!helpOpen && view === 'chat'} onClick={() => openWorkspace('chat')}>分析</button><button aria-pressed={!helpOpen && view === 'decision'} onClick={() => openWorkspace('decision')}>决策</button></div><div className="topbar-actions">{canOpenProjectFiles && !helpOpen && <button type="button" ref={filesToggle} className="icon-button files-toggle" aria-label={showProjectFiles ? '收起项目文件' : '展开项目文件'} aria-expanded={showProjectFiles} aria-controls={showProjectFiles ? 'project-files' : undefined} aria-haspopup={inspectorModal ? 'dialog' : undefined} onClick={event => toggleProjectFiles(event.currentTarget)}><Icon name="panel" /></button>}<button ref={helpTrigger} className="help-trigger" type="button" aria-label="帮助" aria-expanded={helpOpen} aria-controls="product-help" onClick={() => helpOpen ? closeHelp() : setHelpOpen(true)}><Icon name="help" size={17} />帮助</button><button className="icon-button" aria-label={theme === 'light' ? '切换为深色' : '切换为浅色'} onClick={() => setTheme(old => old === 'light' ? 'dark' : 'light')}><Icon name={theme === 'light' ? 'moon' : 'sun'} /></button></div></header>
       {globalError && <div className="global-notice" role="alert"><span>{globalError}</span><button className="text-button" onClick={async () => { try { await refreshConfigurations(); const saved = await listProjects(); for (const project of saved) mergeProject(project); setGlobalError(''); } catch {} }}>重新连接</button><button className="text-button" onClick={() => setGlobalError('')}>关闭提示</button></div>}{globalNotice && <p className="project-notice" role="status">{globalNotice}</p>}
       {studioProjectAssociationPending && <div className="global-notice" role="alert"><span>项目 {studioProjectAssociationPending.projectId} 已创建；企业关联结果 UNKNOWN，原请求保持。</span><button type="button" className="secondary-button" onClick={() => { void inspectStudioProjectAssociation(); }}>核对原企业关联结果</button></div>}
       {studioUsePending && <div className="global-notice" role="alert"><span>进入分析结果 UNKNOWN；原请求 {studioUsePending.requestId} 保留，未重复创建任务。</span><button type="button" className="secondary-button" onClick={() => { void inspectStudioUse(); }}>核对原创建结果</button></div>}
       <HelpPage open={helpOpen} onBack={closeHelp} />
-      <div hidden={helpOpen} className={`workbench-content ${showProjectFiles ? 'files-visible' : ''} ${showConclusion ? 'conclusion-visible' : ''}`}><div className="workbench-view">
+      <div hidden={helpOpen} className="workbench-content"><div className="workbench-view">
       {(inSettings || personalMounted || webSearchMounted) && <section className="settings-page" aria-labelledby="settings-title" hidden={!inSettings}>
         <header className="page-heading settings-heading">
           <div><h1 id="settings-title">设置</h1><p>管理资料、模型、连接与自动模式。</p></div>
           <button type="button" className="text-button back-button" onClick={backFromSettings}><span aria-hidden="true">←</span>{settingsBackLabel}</button>
         </header>
+        <div className="settings-layout">
         <div className="catalog-tabs settings-tabs" role="group" aria-label="设置分类">
+          <p className="settings-group-label" aria-hidden="true">基础与模型</p>
           <button type="button" className={view === 'usage-context-settings' ? 'active' : undefined} aria-pressed={view === 'usage-context-settings'} aria-controls="settings-usage-panel" onClick={() => openSettingsView('usage-context-settings')}><Icon name="chat" size={16} />使用用途</button>
-          <button type="button" className={view === 'personal-materials' ? 'active' : undefined} aria-pressed={view === 'personal-materials'} aria-controls="settings-personal-panel" onClick={() => openSettingsView('personal-materials')}><Icon name="assets" size={16} />个人资料</button>
           <button type="button" className={view === 'settings' ? 'active' : undefined} aria-pressed={view === 'settings'} aria-controls="settings-model-panel" onClick={() => openSettingsView('settings')}><Icon name="settings" size={16} />模型设置</button>
           <button type="button" className={view === 'web-search-settings' ? 'active' : undefined} aria-pressed={view === 'web-search-settings'} aria-controls="settings-web-search-panel" onClick={() => openSettingsView('web-search-settings')}><Icon name="search" size={16} />网络检索</button>
+          <p className="settings-group-label" aria-hidden="true">能力与连接</p>
           <button type="button" className={view === 'automatic-action-settings' ? 'active' : undefined} aria-pressed={view === 'automatic-action-settings'} aria-controls="settings-automatic-panel" onClick={() => openSettingsView('automatic-action-settings')}><Icon name="check" size={16} />自动模式</button>
           <button type="button" className={view === 'skill-settings' ? 'active' : undefined} aria-pressed={view === 'skill-settings'} aria-controls="settings-skill-panel" onClick={() => openSettingsView('skill-settings')}><Icon name="folder" size={16} />Skill 资料与依赖</button>
           <button type="button" className={view === 'connection-settings' ? 'active' : undefined} aria-pressed={view === 'connection-settings'} aria-controls="settings-connections-panel" onClick={() => openSettingsView('connection-settings')}><Icon name="panel" size={16} />连接配置</button>
+          <p className="settings-group-label" aria-hidden="true">资料与资产包</p>
+          <button type="button" className={view === 'personal-materials' ? 'active' : undefined} aria-pressed={view === 'personal-materials'} aria-controls="settings-personal-panel" onClick={() => openSettingsView('personal-materials')}><Icon name="assets" size={16} />个人资料</button>
           <button type="button" className={view === 'model-pack-settings' ? 'active' : undefined} aria-pressed={view === 'model-pack-settings'} aria-controls="settings-model-pack-panel" onClick={() => openSettingsView('model-pack-settings')}><Icon name="market" size={16} />业务模型包</button>
           <button type="button" className={view === 'capability-plans' ? 'active' : undefined} aria-pressed={view === 'capability-plans'} aria-controls="settings-domain-pack-panel" onClick={() => openSettingsView('capability-plans')}><Icon name="assets" size={16} />领域资产包</button>
         </div>
+        <div className="settings-content">
         <div id="settings-usage-panel" hidden={view !== 'usage-context-settings'}>{view === 'usage-context-settings' && <UsageContextSettingsPage />}</div>
         <div id="settings-model-panel" hidden={view !== 'settings'}>
           {view === 'settings' && <ModelSettings configurations={configurations} selectedId={selectedId} hostStatus={hostStatus} onChange={refreshConfigurations} />}
@@ -969,16 +996,38 @@ export function App() {
         <div id="settings-connections-panel" hidden={view !== 'connection-settings'}>{view === 'connection-settings' && <ConnectorCapabilitySettings onSharedConnections={() => { setDbConnectionsProjectId(undefined); setDbConnectionsOpen(true); }} onProjectSources={openProjectSources} onHelp={() => setHelpOpen(true)} />}</div>
         <div id="settings-model-pack-panel" hidden={view !== 'model-pack-settings'}>{view === 'model-pack-settings' && <ModelRegistryPage embedded onBack={backFromSettings} />}</div>
         <div id="settings-domain-pack-panel" hidden={view !== 'capability-plans'}>{view === 'capability-plans' && <CapabilityPlansSettings onOpenStudio={() => { setStudioMounted(true); setHelpOpen(false); setView('studio'); }} />}</div>
+        </div></div>
       </section>}
       {goalMounted && <div hidden={view !== 'goals'} style={{ display: view === 'goals' ? 'flex' : 'none', flex: 1, minHeight: 0, minWidth: 0 }}><StrategyGoalsPage teachReview={teachReview} clearTeachReview={()=>setTeachReview(undefined)} onReturnReview={()=>{if(!teachReview)return;setCaseFocus(teachReview.teachReview.caseId);setCaseIssueFocus(teachReview.teachReview.issueId);setTeachReview(undefined);setView('cases');lastWorkspace.current='cases';}} caseSource={caseSource} clearCaseSource={()=>setCaseSource(undefined)} onInspectCase={id=>{setCaseFocus(id);setView('cases');lastWorkspace.current='cases';}} management={management} onStage={switchManagementStage} projects={projects} configurations={configurations} selectedConfigurationId={selectedId} onSettings={() => openSettings()} onOpenBoard={() => openWorkspace('decision')} active={view === 'goals' && !helpOpen} onOpenCase={goal => { setGoalForCase(goal); openWorkspace('cases'); }} onStartProject={(goal, usageContext) => { openWorkspace('projects'); openProjectCreation(goal, usageContext); }} onManageMetrics={() => openStudioProfessional({ kind: 'metrics' })} /></div>}
       {mountedPlans.map(projectId => { const project = projects.find(value => value.id === projectId); return project && <div key={projectId} hidden={view !== 'project-plan' || planProjectId !== projectId} style={{ display: view === 'project-plan' && planProjectId === projectId ? 'flex' : 'none', flex: 1, minHeight: 0, minWidth: 0 }}><ProjectPlanPage historyOnly project={project} initialGoal={project.goalOrigin?.goal ?? goalProjectEntrances[projectId]?.goal} initialUsageContext={goalProjectEntrances[projectId]?.usageContext} onBack={() => openWorkspace('projects')} onConfirmed={async () => { await refreshProjects(); setGoalProjectEntrances(previous => { const next = { ...previous }; delete next[projectId]; return next; }); }} onOpenTask={taskId => { void readTaskForNavigation(projectId, taskId).then(value => { mergeProject(value.project); return chooseTask(value.project, value.task); }).catch(error => setGlobalError(safeError(error))); }} onManageCapabilities={() => { selectContext(project.id); openWorkspace('chat'); setFilesOpen(true); }} /></div>; })}
-      {studioMounted && <div hidden={view !== 'studio'} className="studio-workspace"><StudioPage libraryArea={studioLibraryArea} libraryRequest={studioLibraryRequest} onLibraryAreaChange={setStudioLibraryArea} active={view === 'studio' && !helpOpen} currentProjectId={activeId} operatorProjectReady={boundProjectId === activeId} projects={projects} initialSystemId={studioFocus || undefined} onTargetConsumed={() => setStudioFocus('')} onSelectConstruction={selectStudioConstruction} onStartConstruction={system => runStudioConstruction(system, true)} onContinueConstruction={(system, goal) => runStudioConstruction(system, false, goal)} onOpenTask={(projectId, taskId) => { const project = projects.find(value => value.id === projectId), task = project?.tasks.find(value => value.id === taskId); if (project && task) void chooseTask(project, task, false); else void readTaskForNavigation(projectId, taskId).then(value => { mergeProject(value.project); return chooseTask(value.project, value.task, false); }).catch(error => setGlobalError(safeError(error))); }} renderConversation={(_system, workspace) => view === 'studio' && active?.id === workspace.project.id && activeTask?.id === workspace.task.id ? chatContent : <p className="studio-muted">正在核对当前建设任务与会话…</p>} onUseSystem={useStudioSystem} initialProfessionalTarget={studioProfessionalTarget} onProfessionalTargetConsumed={() => setStudioProfessionalTarget(undefined)} onCreateProject={() => openProjectCreation()} onEnterpriseChange={setStudioEnterpriseId} onNavigationGuard={registerStudioLeave} onModalChange={setStudioDialogOpen} /></div>}
+      {studioMounted && <div hidden={view !== 'studio'} className="studio-workspace"><StudioPage libraryArea={studioLibraryArea} libraryRequest={studioLibraryRequest} onLibraryAreaChange={setStudioLibraryArea} onSwitchLibraryArea={openStudioLibrary} active={view === 'studio' && !helpOpen} currentProjectId={activeId} operatorProjectReady={boundProjectId === activeId} projects={projects} initialSystemId={studioFocus || undefined} onTargetConsumed={() => setStudioFocus('')} onSelectConstruction={selectStudioConstruction} onStartConstruction={system => runStudioConstruction(system, true)} onContinueConstruction={(system, goal) => runStudioConstruction(system, false, goal)} onOpenTask={(projectId, taskId) => { const project = projects.find(value => value.id === projectId), task = project?.tasks.find(value => value.id === taskId); if (project && task) void chooseTask(project, task, false); else void readTaskForNavigation(projectId, taskId).then(value => { mergeProject(value.project); return chooseTask(value.project, value.task, false); }).catch(error => setGlobalError(safeError(error))); }} renderConversation={(_system, workspace) => view === 'studio' && active?.id === workspace.project.id && activeTask?.id === workspace.task.id ? chatContent : <p className="studio-muted">正在核对当前建设任务与会话…</p>} onUseSystem={useStudioSystem} initialProfessionalTarget={studioProfessionalTarget} onProfessionalTargetConsumed={() => setStudioProfessionalTarget(undefined)} onCreateProject={() => openProjectCreation()} onEnterpriseChange={setStudioEnterpriseId} onNavigationGuard={registerStudioLeave} onModalChange={setStudioDialogOpen} /></div>}
       {capabilityMounted.includes('requirement') && <div hidden={view !== 'requirement'} style={{ display: view === 'requirement' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto' }}><RequirementPage backLabel={requirementReturnTask ? '返回分析任务' : '返回原工作'} initialInstanceId={requirementFocus} projects={projects} onProjectsChanged={() => { void listProjects().then(value => { if (mounted.current) setProjects(value); }).catch(() => {}); }} onBack={() => requirementReturnTask ? returnFromRequirements() : backFromCapability('requirement')} onSendToTask={(project, task, requirement) => { setRequirementContexts(previous => ({ ...previous, [taskKey(project.id, task.id)]: requirement })); void chooseTask(project, task); }} /></div>}
       {capabilityMounted.includes('refiner') && <div hidden={view !== 'refiner'} style={{ display: view === 'refiner' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto' }}><RefinerPage key={refinerSource ? JSON.stringify(refinerSource) : 'refiner-records'} source={refinerSource} initialDeckId={refinerDeckId} projects={projects} configurations={configurations} onDeckChange={setRefinerDeckId} onNavigationGuard={registerRefinerLeave} onBack={() => backFromCapability('refiner')} /></div>}
       {capabilityMounted.includes('simlab') && <div className="workspace-page-gutter" hidden={view !== 'simlab'} style={{ display: view === 'simlab' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto' }}><SimLabPage backLabel="返回原工作" key={simlabTarget ? JSON.stringify(simlabTarget) : `simlab-records:${capabilityReturn.current.simlab?.projectId || ''}`} initialProjectId={capabilityReturn.current.simlab?.projectId} initialSelection={simlabTarget} projects={projects} onOpenTask={(project, task) => { void chooseTask(project, task); }} onBack={() => backFromCapability('simlab')} /></div>}
       {capabilityMounted.includes('model-pack') && <div className="workspace-page-gutter" hidden={view !== 'model-pack'} style={{ display: view === 'model-pack' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto' }}><ModelRegistryPage backLabel="返回原工作" onBack={() => backFromCapability('model-pack')} /></div>}
-      {inSettings ? null : view === 'project-plan' || view === 'goals' ? null : view === 'cases' ? <CaseBoard onTeachReview={owner=>showManagement(owner.role==='goal'?{area:'gsa',stage:'goals'}:{area:'strategy',stage:'strategy-versions'},undefined,owner)} onReviewGoals={source=>showManagement({area:'gsa',stage:'adopt'},source)} initialSource={caseSource} initialGoal={goalForCase} onInitialGoalConsumed={() => setGoalForCase(undefined)} mapView={caseMapView} onMapViewChange={setCaseMapView} relationUi={caseRelationUi} onRelationUiChange={setCaseRelationUi} onOpenProject={(project, issue) => { if (issue) openProjectCollaboration(project,issue); else { setCaseProjectTarget(project.id); openWorkspace('projects'); } }} decisionUi={caseDecisionUi} onDecisionUiChange={(ownerKey, update) => setCaseDecisionUi(previous => ({ ...previous, [ownerKey]: update(previous[ownerKey] ?? emptyCaseDecisionUiState) }))} currentWork={activeId && activeTaskId ? { projectId: activeId, taskId: activeTaskId } : undefined} onOpenDecisionBoard={target => { setFeedbackReview(target); openWorkspace('decision'); }} initialCaseId={caseFocus} initialIssueId={caseIssueFocus} mode={caseMode} onModeChange={setCaseMode} projects={projects} configurations={configurations} onOpenTask={(project, task, context) => { void boardTask(project, task, context); }} onCreateTask={(project, intent) => showTaskDialog(project, document.activeElement as HTMLElement, intent)} onProjectChange={refreshProjects} /> : view === 'projects' ? <ProjectBoard onOpenWorkflow={(project, target) => openCapability(target, project)} onOpenCollaboration={project => openProjectCollaboration(project)} onOpenPlan={openProjectPlan} initialProjectId={caseProjectTarget || projectReturnFocus} onInitialProjectClose={() => { setProjectReturnFocus(undefined); if (caseProjectTarget) { setCaseProjectTarget(undefined); openWorkspace('cases'); } }} mode={projectMode} onModeChange={setProjectMode} projects={projects} onOpenTask={(project, task) => { void boardTask(project, task); }} onCreateProject={() => openProjectCreation()} onCreateTask={project => showTaskDialog(project, document.activeElement as HTMLElement)} onRename={(project, trigger) => { dialogTrigger.current = trigger; setRenameTarget(project); }} onArchive={project => { void projectAction(project, 'archive'); }} onRestore={project => { void projectAction(project, 'restore'); }} onProjectChange={refreshProjects} /> : view === 'decision' ? <DecisionBoardPage initialReport={boardReportFocus} initialReview={feedbackReview} onOpenFeedbackTask={openFeedbackTask} onOrganize={openPersonal} /> : view === 'requirement' || view === 'refiner' || view === 'simlab' || view === 'model-pack' ? null : view === 'studio' ? null : !active && projects.length > 0 ? <div className="project-start"><BrandMark /><p className="eyebrow">原工作定位待核</p><h1>选择已有项目继续</h1><p>原链接对象暂不可读取，未替换到其他项目或任务。可在 项目地图查找准确原记录。</p><button type="button" className="primary-button" onClick={() => openWorkspace('projects')}>查看已有项目</button></div> : !active ? <div className="project-start"><BrandMark /><p className="eyebrow">你好，欢迎来到 OptraCall</p><h1>从一个项目开始</h1><p>让问题、分析与决策，拥有同一个工作空间。</p><button className="primary-button" onClick={() => openProjectCreation()}><Icon name="plus" />创建第一个项目</button><span>项目、文件与任务历史保存在本机</span></div>  : !activeTask && !archived ? <ProjectCollaboration key={active.id + (projectIssue?.projectId === active.id ? projectIssue.issueId : '')} project={active} issue={projectIssue?.projectId === active.id ? {caseId:projectIssue.caseId,issueId:projectIssue.issueId} : undefined} onChangeScope={scope => openProjectCollaboration(active,scope)} onReturnIssue={returnToProjectIssue} onCreate={intent => showTaskDialog(active, document.activeElement as HTMLElement, intent)} onRefresh={refreshProjects} onHistory={() => openProjectPlan(active)}/> : !activeTask ? <div className="project-start"><BrandMark /><p className="eyebrow">{archived ? '已归档项目' : '项目空间'}</p><h1>{active.name}</h1><p>{archived ? '任务、文件与历史完整保留，恢复项目后可继续工作。' : '文件在项目中共享，对话在任务中独立进行。'}</p>{archived ? <button className="primary-button" disabled={Boolean(projectActionId)} onClick={() => { void projectAction(active, 'restore'); }}>恢复此项目</button> : <button className="primary-button" onClick={event => showTaskDialog(active, event.currentTarget)}>{active.tasks.length ? '新建任务' : '新建第一个任务'}</button>}<span>{active.tasks.length} 个任务 · 三个共享项目文件夹</span></div> : chatContent}
-      </div>{showConclusion && active && activeTask && <ConclusionReviewPanel key={activeKey} project={active} task={activeTask} taskBusy={busy || carrying || Boolean(current?.uncertainPersonalSend)} filesRevision={filesRevision} requirementContext={attachedRequirement} caseContext={selectedCase ? { id: selectedCase.record.id, title: selectedCase.record.title, description: selectedCase.record.description, revision: selectedCase.record.revision } : undefined} enterpriseMaterials={attachedEnterprise} semanticContext={current?.snapshot?.capabilities?.semanticContext} onClose={() => { setConclusionOpenKey(undefined); requestAnimationFrame(() => conclusionTrigger.current?.focus()); }} onOpenBoard={target => { setFeedbackReview(undefined); openWorkspace('decision'); setBoardReportFocus(target); }} onCarry={async reviewId => {
+      {inSettings ? null : view === 'project-plan' || view === 'goals' ? null : view === 'cases' ? <CaseBoard onTeachReview={owner=>showManagement(owner.role==='goal'?{area:'gsa',stage:'goals'}:{area:'strategy',stage:'strategy-versions'},undefined,owner)} onReviewGoals={source=>showManagement({area:'gsa',stage:'adopt'},source)} initialSource={caseSource} initialGoal={goalForCase} onInitialGoalConsumed={() => setGoalForCase(undefined)} mapView={caseMapView} onMapViewChange={setCaseMapView} relationUi={caseRelationUi} onRelationUiChange={setCaseRelationUi} onOpenProject={(project, issue) => { if (issue) openProjectCollaboration(project,issue); else { setCaseProjectTarget(project.id); openWorkspace('projects'); } }} decisionUi={caseDecisionUi} onDecisionUiChange={(ownerKey, update) => setCaseDecisionUi(previous => ({ ...previous, [ownerKey]: update(previous[ownerKey] ?? emptyCaseDecisionUiState) }))} currentWork={activeId && activeTaskId ? { projectId: activeId, taskId: activeTaskId } : undefined} onOpenDecisionBoard={target => { setFeedbackReview(target); openWorkspace('decision'); }} initialCaseId={caseFocus} initialIssueId={caseIssueFocus} reportReturn={reportCaseReturn} mode={caseMode} onModeChange={setCaseMode} projects={projects} configurations={configurations} onOpenTask={(project, task, context) => { void boardTask(project, task, context); }} onCreateTask={(project, intent) => showTaskDialog(project, document.activeElement as HTMLElement, intent)} onProjectChange={refreshProjects} /> : view === 'projects' ? <ProjectBoard onOpenWorkflow={(project, target) => openCapability(target, project)} onOpenCollaboration={project => openProjectCollaboration(project)} onOpenPlan={openProjectPlan} initialProjectId={caseProjectTarget || projectReturnFocus} onInitialProjectClose={() => { setProjectReturnFocus(undefined); if (caseProjectTarget) { setCaseProjectTarget(undefined); openWorkspace('cases'); } }} mode={projectMode} onModeChange={setProjectMode} projects={projects} onOpenTask={(project, task) => { void boardTask(project, task); }} onCreateProject={() => openProjectCreation()} onCreateTask={project => showTaskDialog(project, document.activeElement as HTMLElement)} onRename={(project, trigger) => { dialogTrigger.current = trigger; setRenameTarget(project); }} onArchive={project => { void projectAction(project, 'archive'); }} onRestore={project => { void projectAction(project, 'restore'); }} onProjectChange={refreshProjects} /> : view === 'decision' ? <DecisionBoardPage initialReport={boardReportFocus} initialReview={feedbackReview} onOpenFeedbackTask={openFeedbackTask} onOrganize={openPersonal} /> : view === 'requirement' || view === 'refiner' || view === 'simlab' || view === 'model-pack' ? null : view === 'studio' ? null : !active && projects.length > 0 ? <div className="project-start"><BrandMark /><p className="eyebrow">原工作定位待核</p><h1>选择已有项目继续</h1><p>原链接对象暂不可读取，未替换到其他项目或任务。可在 项目地图查找准确原记录。</p><button type="button" className="primary-button" onClick={() => openWorkspace('projects')}>查看已有项目</button></div> : !active ? <div className="project-start"><BrandMark /><p className="eyebrow">你好，欢迎来到 OptraCall</p><h1>从一个项目开始</h1><p>让问题、分析与决策，拥有同一个工作空间。</p><button className="primary-button" onClick={() => openProjectCreation()}><Icon name="plus" />创建第一个项目</button><span>项目、文件与任务历史保存在本机</span></div>  : !activeTask && !archived ? <ProjectCollaboration key={active.id + (projectIssue?.projectId === active.id ? projectIssue.issueId : '')} project={active} issue={projectIssue?.projectId === active.id ? {caseId:projectIssue.caseId,issueId:projectIssue.issueId} : undefined} onChangeScope={scope => openProjectCollaboration(active,scope)} onReturnIssue={returnToProjectIssue} onCreate={intent => showTaskDialog(active, document.activeElement as HTMLElement, intent)} onRefresh={refreshProjects} onHistory={() => openProjectPlan(active)}/> : !activeTask ? <div className="project-start"><BrandMark /><p className="eyebrow">{archived ? '已归档项目' : '项目空间'}</p><h1>{active.name}</h1><p>{archived ? '任务、文件与历史完整保留，恢复项目后可继续工作。' : '文件在项目中共享，对话在任务中独立进行。'}</p>{archived ? <button className="primary-button" disabled={Boolean(projectActionId)} onClick={() => { void projectAction(active, 'restore'); }}>恢复此项目</button> : <button className="primary-button" onClick={event => showTaskDialog(active, event.currentTarget)}>{active.tasks.length ? '新建任务' : '新建第一个任务'}</button>}<span>{active.tasks.length} 个任务 · 三个共享项目文件夹</span></div> : chatContent}
+      </div>
+      {!helpOpen && showInspector && <ResponsiveWorkspacePanel label="任务检视区" kind="inspector" modal={inspectorModal} onClose={closeInspector}>
+        <div className="workspace-inspector" role="region" aria-label="任务检视区">
+          <header className="workspace-inspector-toolbar">
+            <nav aria-label="检视区分类">
+              <button type="button" aria-pressed={showProjectFiles} onClick={() => selectInspector('files')}>项目文件</button>
+              {view === 'chat' && activeTask && <>
+                <button type="button" aria-pressed={showReport} onClick={() => selectInspector('report')}>报告与依据</button>
+                <button type="button" aria-pressed={showConclusion} onClick={() => selectInspector('conclusion')}>审查结论</button>
+              </>}
+            </nav>
+            <button type="button" className="icon-button" aria-label="关闭检视区" onClick={closeInspector}>×</button>
+          </header>
+          {showReport && active && activeTask && <TaskReportEvidence key={activeKey} projectId={active.id} taskId={activeTask.id} initialReport={inspectedVersion} onReportChange={version => {
+            setInspectedReport(activeKey && version ? { key: activeKey, version } : undefined);
+          }} onOpenCase={caseId => {
+            setTaskInspector(undefined); inspectorTrigger.current = null;
+            setCaseFocus(caseId); setCaseIssueFocus(undefined);
+            setReportCaseReturn({ caseId, projectId: active.id, taskId: activeTask.id });
+            lastWorkspace.current = 'cases'; setView('cases');
+          }} />}
+          {showConclusion && active && activeTask && <ConclusionReviewPanel key={activeKey} project={active} task={activeTask} taskBusy={busy || carrying || Boolean(current?.uncertainPersonalSend)} filesRevision={filesRevision} requestedReport={inspectedVersion} requirementContext={attachedRequirement} caseContext={selectedCase ? { id: selectedCase.record.id, title: selectedCase.record.title, description: selectedCase.record.description, revision: selectedCase.record.revision } : undefined} enterpriseMaterials={attachedEnterprise} semanticContext={current?.snapshot?.capabilities?.semanticContext} onClose={closeInspector} onOpenBoard={target => { setFeedbackReview(undefined); openWorkspace('decision'); setBoardReportFocus(target); }} onCarry={async reviewId => {
         const projectId = active.id, taskId = activeTask.id, key = taskKey(projectId, taskId);
         setCarryingTasks(previous => ({ ...previous, [key]: true }));
         try {
@@ -986,6 +1035,7 @@ export function App() {
           const result = await carryConclusionReview(projectId, taskId, reviewId);
           if (result.task.id !== taskId || result.reviewId !== reviewId) throw new HostRequestError('带回意见的任务或记录归属未能核对。');
           updateTask(projectId, taskId, task => ({ ...task, draft: result.task.draft }));
+          if (inspectorModal && visibleTask.current === key) setTaskInspector(undefined);
           requestAnimationFrame(() => { if (visibleTask.current === key) { textarea.current?.focus(); textarea.current?.scrollIntoView({ block: 'center' }); } });
           return result.appended;
         } finally { setCarryingTasks(previous => { const next = { ...previous }; delete next[key]; return next; }); }
@@ -994,7 +1044,10 @@ export function App() {
           if (activeKey) changeUI(activeKey, old => ({ ...old, error: safeError(error) }));
           else setGlobalError(safeError(error));
         });
-      }} onRefinePptx={(file, reportPath) => { rememberCapabilityReturn('refiner'); setRefinerDeckId(undefined); setRefinerSource({ projectId: active.id, sourcePptx: file.path, reportPath, title: file.name.replace(/\.pptx$/i, '') }); setView('refiner'); }} onClose={closeFiles} />}</div>
+      }} onRefinePptx={(file, reportPath) => { rememberCapabilityReturn('refiner'); setRefinerDeckId(undefined); setRefinerSource({ projectId: active.id, sourcePptx: file.path, reportPath, title: file.name.replace(/\.pptx$/i, '') }); setView('refiner'); }} onClose={closeInspector} />}
+        </div>
+      </ResponsiveWorkspacePanel>}
+      </div>
     </main>
     <DbLinkConnections readOnly={Boolean(dbConnectionsProjectId && projects.find(project => project.id === dbConnectionsProjectId)?.archivedAt)} open={dbConnectionsOpen} onClose={() => setDbConnectionsOpen(false)} onChanged={() => setFilesRevision(value => value + 1)} />
     {Object.entries(comparisonContexts).map(([key, context]) => <ExperienceComparisonDialog key={key} open={comparisonKey === key} context={{ ...context, project: projects.find(value => value.id === context.project.id) ?? context.project }} onClose={() => setComparisonKey(undefined)} onCreated={task => setProjects(previous => previous.map(project => project.id === context.project.id ? { ...project, tasks: project.tasks.some(value => value.id === task.id) ? project.tasks.map(value => value.id === task.id ? task : value) : [...project.tasks, task] } : project))} onOpenTask={task => { const project = projects.find(value => value.id === context.project.id); if (project) { setComparisonKey(undefined); void chooseTask(project, task, false); } }} />)}
