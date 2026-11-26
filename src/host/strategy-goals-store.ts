@@ -1,3 +1,4 @@
+import type { GoalReviewDraft } from './strategy-goal-decomposition-types.ts';
 import { decompositionChildGoal } from './strategy-goal-allocation.ts';
 import { parseStructuredGoal, groupScopeKey } from './structured-goal.ts';
 import fs from 'node:fs';
@@ -109,6 +110,7 @@ type StoredIndex = StrategyGoalsIndex & {
   caseDraftIntents?: Record<string, DecompositionCaseDraftIntent[]>;
   projectHandoffs?: Record<string, DecompositionProjectHandoff[]>;
   cycleReviews?: Record<string, DecompositionCycleReview[]>;
+  reviewDrafts?:Record<string,Record<string,GoalReviewDraft>>;
   nextCycleDrafts?: Record<string, NextCycleDraft[]>;
   strategyReturns?: Record<string, StrategyReturnRecord[]>;
 };
@@ -964,6 +966,15 @@ export class StrategyGoalsStore {
       const existingPlans = index.gsaPlans?.[id] ?? [];
       if (existingPlans.length !== input.expectedPlanVersion) fail('gsa_plan_conflict', 409);
 
+      const previousPlan = existingPlans.at(-1);
+      if (previousPlan) {
+        const sameGoal = !revisedBody && previousPlan.goal.version === requestedVersion.version;
+        if (sameGoal && canonical(previousPlan.plannedActions) === canonical(plannedActions) &&
+            canonical(previousPlan.stageCheckpoints) === canonical(stageCheckpoints) &&
+            canonical(previousPlan.preConfirmEstimate ?? null) === canonical(preConfirmEstimate ?? null)) {
+          fail('gsa_plan_unchanged', 409);
+        }
+      }
       const now = new Date().toISOString();
       let targetVersion = requestedVersion;
       if (!revisedBody && requestedVersion.status === 'candidate' && requestedVersion.formalOrigin?.kind === 'strategy-publication') {
@@ -1018,7 +1029,7 @@ export class StrategyGoalsStore {
         confirmedAt: now,
         decision,
         ...(planVersion > 1 ? { previousPlanVersion: planVersion - 1 } : {}),
-        ...(supersedesReason ? { supersedesReason } : {}),
+        ...(planVersion>1 ? { supersedesReason:supersedesReason??decision } : {}),
       };
       const gsaPlan: GsaPlanVersion = {
         ...corePlan,
@@ -1063,6 +1074,8 @@ export class StrategyGoalsStore {
         fail('gsa_plan_changed', 409);
       }
       const existing = readDecompositionDraft(index, id);
+      if(existing&&existing.gsaPlanVersion!==activePlan.planVersion&&
+         (meta.updatedBy!=='user'||raw.reviewedPreviousPlanVersion!==existing.gsaPlanVersion))fail('gsa_upstream_review_required',409);
       const currentRev = existing?.revision ?? 0;
       if (currentRev !== input.expectedDraftRevision) fail('decomposition_draft_conflict', 409);
 
@@ -1685,7 +1698,7 @@ export class StrategyGoalsStore {
     const actualId = reqUuid(input.operationId);
     if (!object(input.actualSource) || typeof input.actualSource.ref !== 'string' || !input.actualSource.ref.trim() ||
         typeof input.actualSource.label !== 'string' || !input.actualSource.label.trim() ||
-        !Number.isFinite(Date.parse(input.actualSource.cutoffAt)) || !Array.isArray(input.actualPeriods) ||
+        (input.actualSource.cutoffAt ? !Number.isFinite(Date.parse(input.actualSource.cutoffAt)) : !input.actualSource.reportText?.trim()) || !Array.isArray(input.actualPeriods) ||
         input.actualPeriods.length !== 1 || !input.actualPeriods[0]?.periodId ||
         !(input.actualPeriods[0].actualValue === null || Number.isFinite(input.actualPeriods[0].actualValue)) ||
         Object.keys(input).some(key => !['operationId','publicationVersion','rowId','checkpointId','actualSource','actualPeriods','missingCoverageNote','supplementOfCheckId'].includes(key)) ||
@@ -1723,6 +1736,25 @@ export class StrategyGoalsStore {
   assessSubmittedActual(goalId: string, actualId: string, comparability: DecompositionProgressCheckInput['comparability'], note: string, observation?: unknown) {
     const actual = this.readSubmittedActual(goalId, actualId);
     const check: DecompositionProgressCheckInput = {...actual.input, comparability, assessmentNote:reqText(note, 1000)};
+    if(!actual.input.actualSource.cutoffAt){
+      const report=actual.input.actualSource.reportText??'';
+      const data=object(observation)?observation:{};
+      const cutoff=typeof data.cutoffAt==='string'?data.cutoffAt:'';
+      const quote=typeof data.cutoffQuote==='string'?data.cutoffQuote:'';
+      const date=quote.match(/(\d{4})[-年/.](\d{1,2})[-月/.](\d{1,2})/);
+      const sourceDate=date?`${date[1]}-${date[2]!.padStart(2,'0')}-${date[3]!.padStart(2,'0')}`:'';
+      if(data.cutoffState!=='identified'||!Number.isFinite(Date.parse(cutoff))||!quote||!report.includes(quote)||
+         !/(截至|截止|统计.{0,12}至|数据.{0,12}至)/.test(quote)||sourceDate!==cutoff.slice(0,10)){
+        return this.withLock(index=>{
+          const saved=index.submittedActuals?.[uuid(goalId)]?.find(a=>a.actualId===uuid(actualId));
+          if(!saved)fail('goal_actual_not_found',404);
+          saved.assessment={status:'needs-cutoff',note:reqText(note,1000)};
+          return {result:{actual:saved,check:undefined,pending:true as const},dirty:true};
+        });
+      }
+      check.actualSource={...check.actualSource,cutoffAt:cutoff,cutoffQuote:quote};
+    }
+
     if (observation !== undefined) {
       if (!object(observation)) fail('invalid_progress_evidence', 400);
       const quote = reqText(observation.quote, 4000);
@@ -1781,6 +1813,8 @@ export class StrategyGoalsStore {
       ref: reqText(input.actualSource.ref, 300),
       label: reqText(input.actualSource.label, 300),
       cutoffAt: reqText(input.actualSource.cutoffAt, 100),
+      ...(input.actualSource.cutoffQuote?{cutoffQuote:reqText(input.actualSource.cutoffQuote,2000)}:{}),
+      ...(input.actualSource.reportText?{reportText:reqText(input.actualSource.reportText,MAX_GOAL_ACTUAL_REPORT_CHARS)}:{}),
       ...(input.actualSource.coverageNote?.trim() ? { coverageNote: reqText(input.actualSource.coverageNote, 1000) } : {}),
     };
 
@@ -2133,6 +2167,41 @@ export class StrategyGoalsStore {
   }
 
   // ---- GM12: Cycle Review, Next-Cycle Draft & Return to Strategy Choice ----
+
+  readReviewDraft(goalId:string,period:string):GoalReviewDraft {
+    const id=uuid(goalId);reqText(period,100);
+    const ws=this.getGoalWorkspace(id);
+    if(!ws.gsaPlans.some(p=>p.formalTarget.period===period))fail('gsa_plan_required_for_review_period',409);
+    return structuredClone(this.load().reviewDrafts?.[id]?.[period]??{period,revision:0,actualFinalValue:null,actualSourceRef:'',evidenceKeys:[],conclusions:[]});
+  }
+
+  saveReviewDraft(goalId:string,input:GoalReviewDraft & {expectedRevision:number}):GoalReviewDraft {
+    this.assertDecompositionWritable();
+    const id=uuid(goalId),period=reqText(input.period,100);
+    if(!Number.isSafeInteger(input.expectedRevision)||input.expectedRevision<0||!Array.isArray(input.conclusions)||input.conclusions.length>100||
+       !Array.isArray(input.evidenceKeys)||input.evidenceKeys.length>500||!(input.actualFinalValue===null||typeof input.actualFinalValue==='number'&&Number.isFinite(input.actualFinalValue)))fail('invalid_cycle_review',400);
+    const conclusions=input.conclusions.map(c=>({...classifyReviewConclusion(c),discarded:c.discarded===true,selected:c.selected===true&&c.discarded!==true}));
+    if(new Set(conclusions.map(c=>c.id)).size!==conclusions.length)fail('duplicate_review_conclusion',400);
+    return this.withLock(index=>{
+      if(!index.gsaPlans?.[id]?.some(p=>p.formalTarget.period===period))fail('gsa_plan_required_for_review_period',409);
+      const previous=index.reviewDrafts?.[id]?.[period];
+      if((previous?.revision??0)!==input.expectedRevision)fail('review_draft_conflict',409);
+      // Preserve the source scope once a conclusion has been introduced.
+      const preserved=conclusions.map(c=>{
+        const original=previous?.conclusions.find(old=>old.id===c.id);
+        if(!original)return c;
+        if(original.sourceRef!==c.sourceRef)fail('review_evidence_changed',409);
+        return {...classifyReviewConclusion({...c,originalScope:original.originalScope??original.applicableScope}),discarded:c.discarded,selected:c.selected};
+      });
+      const saved:GoalReviewDraft={period,revision:(previous?.revision??0)+1,actualFinalValue:input.actualFinalValue,
+        actualSourceRef:input.actualSourceRef?reqText(input.actualSourceRef,500):'',
+        ...(input.closingReport?{closingReport:reqText(input.closingReport,12000)}:{}),
+        evidenceKeys:input.evidenceKeys.map(key=>reqText(key,500)),conclusions:preserved};
+      this.bumpSchema4(index);
+      ((index.reviewDrafts??={})[id]??={})[period]=saved;
+      return {result:saved,dirty:true};
+    });
+  }
 
   recordCycleReview(goalId: string, input: DecompositionCycleReviewInput): { review: DecompositionCycleReview; replayed: boolean } {
     this.assertDecompositionWritable();

@@ -64,6 +64,9 @@ const messages: Record<string, string> = {
   decomposition_row_cas_conflict: '拆解行基线版本已过期，未覆盖他人或新版本的行修改；请刷新核对。',
   decomposition_frozen_checkpoint_unavailable: '所选检查点未在目标拆解正式版本中冻结，不能作为执行承接依据。',
   decomposition_blob_integrity_failed: '拆解正式版快照完整性校验未通过；未静默修复或替换，请核对原存储。',
+  gsa_plan_unchanged:'内容未变，请修改计划后再确认修订。',
+  review_draft_conflict:'复盘草稿已有较新版本，当前改稿已保留，请重新核对。',
+  goal_plan_basis_required:'请先补齐准确目标 G 和策略 S。',
   gsa_stage_checkpoint_required: '请填写至少一个阶段检查点及其观察依据。',
   gsa_strategies_required: '请先补充目标的具体策略。',
   gsa_planned_actions_required: '总目标 GSA 至少需要填写一条明确的计划 A 才能确认并进入拆解。',
@@ -205,3 +208,6 @@ export const createNextCycleDraft = (goalId: string, input: NextCycleDraftInput)
   request<{ nextCycleDraft: NextCycleDraft; replayed: boolean }>(`${goalPath(goalId)}/next-cycle-draft`, 'POST', input);
 export const recordStrategyReturn = (goalId: string, input: StrategyReturnInput) =>
   request<{ strategyReturn: StrategyReturnRecord; replayed: boolean }>(`${goalPath(goalId)}/return-to-strategy`, 'POST', input);
+
+export const readReviewDraft=(goalId:string,period:string)=>request<{draft:import('../strategy-goal-decomposition-types.ts').GoalReviewDraft}>(`${goalPath(goalId)}/review-draft?period=${encodeURIComponent(period)}`);
+export const saveReviewDraft=(goalId:string,input:import('../strategy-goal-decomposition-types.ts').GoalReviewDraft & {expectedRevision:number})=>request<{draft:import('../strategy-goal-decomposition-types.ts').GoalReviewDraft}>(`${goalPath(goalId)}/review-draft`,'POST',input);

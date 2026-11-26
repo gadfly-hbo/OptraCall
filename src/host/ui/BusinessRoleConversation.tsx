@@ -17,7 +17,12 @@ const roleQuestions = {
   project: '这个项目接下来要推进什么？',
   strategy: '想讨论什么战略问题？',
 };
+export interface BusinessRoleRequest { id:string; text:string; planRequest?:StrategyDiscussionMessage['planRequest']; reviewRequest?:StrategyDiscussionMessage['reviewRequest'] }
 type ConversationProps = {
+  request?:BusinessRoleRequest;
+  onResult?:(detail:StrategyDiscussionDetail,requestId:string)=>void;
+  onRunning?:(running:boolean)=>void;
+  onFailure?:(message:string)=>void;
   owner: BusinessRoleOwner;
   readOnly?: boolean;
   showInlineTitle?: boolean;
@@ -25,11 +30,11 @@ type ConversationProps = {
   onGoalDraft?: (draft: GoalDraftInput, source: GoalRoleSuggestionRef) => void;
   onSettled?: () => void;
 };
-export function BusinessRoleConversation({owner,readOnly,showInlineTitle,openingPrompt,onGoalDraft,onSettled}:ConversationProps){
+export function BusinessRoleConversation({owner,readOnly,showInlineTitle,openingPrompt,onGoalDraft,onSettled,request,onResult,onRunning,onFailure}:ConversationProps){
   const key=JSON.stringify(owner);
-  return <ScopedConversation key={key} owner={owner} ownerKey={key} openingPrompt={openingPrompt} readOnly={readOnly} showInlineTitle={showInlineTitle} onGoalDraft={onGoalDraft} onSettled={onSettled}/>;
+  return <ScopedConversation onFailure={onFailure} request={request} onResult={onResult} onRunning={onRunning} key={key} owner={owner} ownerKey={key} openingPrompt={openingPrompt} readOnly={readOnly} showInlineTitle={showInlineTitle} onGoalDraft={onGoalDraft} onSettled={onSettled}/>;
 }
-function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,openingPrompt,onGoalDraft,onSettled}:ConversationProps & {ownerKey:string}){
+function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,openingPrompt,onGoalDraft,onSettled,request,onResult,onRunning,onFailure}:ConversationProps & {ownerKey:string}){
   const base='/api/business-role?'+new URLSearchParams({owner:ownerKey});
   const title=businessRoleNames[owner.role];
   const inputId=useId();
@@ -37,8 +42,11 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,open
   const [text,setText]=useState(()=>sessionStorage.getItem(storage+'.draft')??openingPrompt??'');
   const [pending,setPending]=useState<StrategyDiscussionMessage|undefined>(()=>{try{return JSON.parse(sessionStorage.getItem(storage+'.request')??'null')??undefined;}catch{return undefined;}});
   const pendingRef=useRef(pending);
+  const settledRun=useRef<string|undefined>(undefined);
   const onSettledRef=useRef(onSettled);
   onSettledRef.current=onSettled;
+  const failureRef=useRef(onFailure);failureRef.current=onFailure;
+  const resultRef=useRef(onResult);resultRef.current=onResult;
   const alive=useRef(false), seq=useRef(0);
   const [view,setView]=useState<RoleView>();
   const [error,setError]=useState(''),[busy,setBusy]=useState(false),[stream,setStream]=useState('');
@@ -46,7 +54,7 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,open
   const [model,setModel]=useState('');
   const [retryOf,setRetryOf]=useState<string|undefined>(()=>sessionStorage.getItem(storage+'.replace')??undefined);
   const [checked,setChecked]=useState<string>();
-  const onError=(reason:unknown)=>{if(alive.current)setError(reason instanceof Error?reason.message:'对话读取失败。');};
+  const onError=(reason:unknown)=>{if(alive.current){const message=reason instanceof Error?reason.message:'对话读取失败。';setError(message);failureRef.current?.(message);}};
   const call=useCallback(async(action:string, method:string, payload?:unknown, signal?:AbortSignal, originalId?:string)=>{
     const response=await fetch(base+(action?'&action='+action:'')+(originalId?'&requestId='+encodeURIComponent(originalId):''),{method,signal,credentials:'omit',cache:'no-store',headers:{'content-type':'application/json','x-optracall-client':'1'},...(payload!==undefined?{body:JSON.stringify(payload)}:{})});
     const value=await response.json();
@@ -64,11 +72,20 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,open
     if(!alive.current||ticket!==seq.current)return;
     setView(next);if(next.discussion)setModel(next.discussion.configurationId);
     setChecked(request?.requestId);
-    if(next.discussion&&request&&canSettleDiscussionMessage(next,request)){
-      remember();sessionStorage.removeItem(storage+'.draft');sessionStorage.removeItem(storage+'.replace');setText('');setRetryOf(undefined);
+    const external=request&&sessionStorage.getItem(storage+'.keep.'+request.requestId)==='1';
+    if(next.discussion&&request&&canSettleDiscussionMessage(next,request)&&(!external||!next.busy&&next.discussion.lastRun?.id===request.requestId&&next.discussion.lastRun.status==='completed')){
+      const keepDraft=sessionStorage.getItem(storage+'.keep.'+request.requestId)==='1';
+      remember();sessionStorage.removeItem(storage+'.replace');setRetryOf(undefined);
+      if(!keepDraft){sessionStorage.removeItem(storage+'.draft');setText('');}
+      if(next.discussion.lastRun?.status==='completed')resultRef.current?.(next,request.requestId);
     } else if(!request && next.discussion?.pendingInput && next.discussion.pendingInput.requestId !== sessionStorage.getItem(storage+'.replace')){
       const original=next.discussion.pendingInput;
-      remember(original);setText(original.text);sessionStorage.setItem(storage+'.draft',original.text);
+      remember(original);if(!original.planRequest&&!original.reviewRequest){setText(original.text);sessionStorage.setItem(storage+'.draft',original.text);}
+    }
+    const terminal=next.discussion?.lastRun;
+    if(!next.busy&&terminal&&terminal.status!=='accepted'&&settledRun.current!==terminal.id){
+      settledRun.current=terminal.id;onSettledRef.current?.();
+      if(external&&['failed','cancelled'].includes(terminal.status))failureRef.current?.('本次建议未完成，原输入已保留，可重试或继续手填。');
     }
     return next;
   },[call,remember,storage]);
@@ -88,7 +105,7 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,open
       if(event.type==='text.delta')setStream(old=>projectDiscussionStreaming(old,event));
       if(event.type==='run.settled'||event.type==='snapshot'&&event.snapshot.status==='idle'){
         setStream('');
-        void load(controller.signal).then(()=>{ if(event.type==='run.settled') onSettledRef.current?.(); }).catch(f=>{if(!controller.signal.aborted)onError(f);});
+        void load(controller.signal).catch(f=>{if(!controller.signal.aborted)onError(f);});
       }
     },controller.signal,base+'&action=events').catch(f=>{if(!controller.signal.aborted)onError(f);});
     return ()=>controller.abort();
@@ -115,6 +132,23 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,open
       } catch(e){onError(e);}
     } finally{if(alive.current)setBusy(false);}
   }
+  const externalSent=useRef<string|undefined>(undefined);
+  useEffect(()=>{
+    const replace=pendingRef.current&&view?.discussion?.lastRun?.id===pendingRef.current.requestId&&['failed','cancelled'].includes(view.discussion.lastRun.status)?pendingRef.current.requestId:undefined;
+    if(!request || externalSent.current===request.id || readOnly || busy || view?.busy || !view || (pendingRef.current&&!replace) ||
+       (!view.discussion && !view.configurationId)) return;
+    externalSent.current=request.id;
+    sessionStorage.setItem(storage+'.keep.'+request.id,'1');
+    const input:StrategyDiscussionMessage={requestId:request.id,text:request.text,expectedRevision:view.discussion?.revision??0,...(replace?{replacePendingRequestId:replace}:{}),
+      ...(request.planRequest?{planRequest:request.planRequest}:{}),...(request.reviewRequest?{reviewRequest:request.reviewRequest}:{})};
+    remember(input);void dispatch(input);
+  },[request,view,busy,readOnly,remember,storage]);
+  useEffect(()=>{
+    const failed=Boolean(pending&&view?.discussion?.lastRun?.id===pending.requestId&&['failed','cancelled'].includes(view.discussion.lastRun.status));
+    const ready=Boolean(view&&(view.discussion||view.configurationId));
+    onRunning?.(busy||Boolean(view?.busy)||Boolean(pending&&!failed)||Boolean(ready&&request&&externalSent.current!==request.id));
+    if(request&&view&&!ready){const message='尚未配置可用模型，可继续手填或在设置中配置后重试。';setError(message);failureRef.current?.(message);}
+  },[busy,view,pending,onRunning,request]);
   const openingSent = useRef(false);
   useEffect(() => {
     if (!openingPrompt || openingSent.current || readOnly || busy || !view || view.discussion ||

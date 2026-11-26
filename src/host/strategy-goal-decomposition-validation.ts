@@ -1033,11 +1033,12 @@ export function classifyReviewConclusion(input: {
   summary: string;
   sourceRef: string;
   applicableScope: string;
+  originalScope?:string;
   evidenceMature: boolean;
   causalVerified: boolean;
   targetScopeSameAsOriginal?: boolean;
 }): CycleReviewConclusion {
-  const sameScope = input.targetScopeSameAsOriginal !== false;
+  const sameScope = input.targetScopeSameAsOriginal !== false && (!input.originalScope || input.originalScope.trim()===input.applicableScope.trim());
   const confirmed = sameScope && input.evidenceMature && input.causalVerified;
   return {
     id: reqText(input.id, 120),
@@ -1045,6 +1046,7 @@ export function classifyReviewConclusion(input: {
     summary: reqText(input.summary, 2000),
     sourceRef: reqText(input.sourceRef, 500),
     applicableScope: reqText(input.applicableScope, 500),
+    ...(input.originalScope?{originalScope:reqText(input.originalScope,500)}:{}),
     evidenceMature: Boolean(input.evidenceMature),
     causalVerified: Boolean(input.causalVerified),
     targetScopeSameAsOriginal: sameScope,

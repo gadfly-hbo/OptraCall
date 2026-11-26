@@ -1,10 +1,10 @@
 import { strategyMapDraftSchema } from './strategy-map-schema.ts';
 import { Type } from 'typebox';
-export type StrategyDiscussionAction = 'read-goals' | 'find-sources' | 'read-source' | 'read-import-source' | 'propose-map-draft' | 'propose-goal' | 'adopt-goal' | 'operation' | 'public-search' | 'read-map' | 'save-map' | 'initiative-files' | 'initiative-read-file' | 'initiative-read-kickoff' | 'initiative-save-kickoff' | 'initiative-save-candidate' | 'initiative-save-verification' | 'initiative-read-candidate' | 'initiative-propose-revision' | 'initiative-read-skill' | 'goal-read-context' | 'goal-read-skill' | 'goal-run-script' | 'goal-save-estimate' | 'goal-save-decomposition-draft' | 'goal-analyze-progress' | 'goal-assess-actual';
+export type StrategyDiscussionAction = 'read-goals' | 'find-sources' | 'read-source' | 'read-import-source' | 'propose-map-draft' | 'propose-goal' | 'adopt-goal' | 'operation' | 'public-search' | 'read-map' | 'save-map' | 'initiative-files' | 'initiative-read-file' | 'initiative-read-kickoff' | 'initiative-save-kickoff' | 'initiative-save-candidate' | 'initiative-save-verification' | 'initiative-read-candidate' | 'initiative-propose-revision' | 'initiative-read-skill' | 'goal-read-context' | 'goal-read-skill' | 'goal-run-script' | 'goal-save-estimate' | 'goal-save-decomposition-draft' | 'goal-analyze-progress' | 'goal-assess-actual' | 'goal-propose-plan' | 'goal-propose-review';
 export type StrategyDiscussionToolContext = { requestId:string; sessionId:string; toolCallId:string; signal:AbortSignal; assertCurrent():void; originalUserText:string; userQuoteEligible:boolean; goalBasis?:import('../host/strategy-goals-types.ts').GoalBasis; importSourceIds?:string[]; selectedImportPages?:Record<string,number[]>; importMode?:'review-draft'; draftGroupId?:string; supersedesDraftEntryId?:string; targetMapRef?:{mapId:string;version:number}; registerCleanup?:(cleanup:(options:{retryFailed?:boolean})=>Promise<void>)=>void };
 export type StrategyDiscussionToolContent = {type:'text';text:string} | {type:'image';data:string;mimeType:string};
 export type StrategyDiscussionPort = (action:StrategyDiscussionAction,input:Record<string,unknown>,context:StrategyDiscussionToolContext)=>Promise<{content:StrategyDiscussionToolContent[];details:Record<string,unknown>}>;
-export const STRATEGY_DISCUSSION_ACTIONS = ['read-goals','find-sources','read-source','read-import-source','propose-map-draft','propose-goal','adopt-goal','operation','public-search','read-map','save-map','initiative-files','initiative-read-file','initiative-read-kickoff','initiative-save-kickoff','initiative-save-candidate','initiative-save-verification','initiative-read-candidate','initiative-propose-revision','initiative-read-skill','goal-read-context','goal-read-skill','goal-run-script','goal-save-estimate','goal-save-decomposition-draft','goal-analyze-progress','goal-assess-actual'] as const;
+export const STRATEGY_DISCUSSION_ACTIONS = ['read-goals','find-sources','read-source','read-import-source','propose-map-draft','propose-goal','adopt-goal','operation','public-search','read-map','save-map','initiative-files','initiative-read-file','initiative-read-kickoff','initiative-save-kickoff','initiative-save-candidate','initiative-save-verification','initiative-read-candidate','initiative-propose-revision','initiative-read-skill','goal-read-context','goal-read-skill','goal-run-script','goal-save-estimate','goal-save-decomposition-draft','goal-analyze-progress','goal-assess-actual','goal-propose-plan','goal-propose-review'] as const;
 const exact = { additionalProperties: false };
 const nonblank = (maxLength = 4000) => Type.String({ minLength: 1, maxLength, pattern: '\\S' });
 const textList = Type.Array(nonblank(), { maxItems: 100 });
@@ -186,6 +186,7 @@ export const goalDecompositionTool = {
     'goal-run-script 以结构化 JSON 输入运行已核定技能脚本，获得可复算引擎版本与输入摘要；不可传任意命令或文件路径。',
     'goal-save-decomposition-draft 按准确 gsaPlanId / gsaPlanVersion / gsaPlanSha256 与 expectedDraftRevision 保存目标拆解草稿，并即时返回 Host 确定性校验结果（金额对平、预留用途与责任人、同口径交叉冲突、补缺覆盖等）。测算填写实据覆盖的 scope，量化目标还须保留 sapMetric（id、version、metricName）；不同范围或不同指标定义继续标待核。本工具仅保存草稿，不发布、不采用、不授权执行。',
     '实绩专属对话按已提交凭证判断覆盖、指标与成熟度，goal-assess-actual 写入该证据的核对结果。comparability 取 comparable、partial-missing、observing 或 incomparable，并用 assessmentNote 说明依据。实绩提供报告原文时按资料提取 observation 的原文逐字引句 quote、实际数值 actualValue、指标 metric（沿计划定义或 SAP ID@版本）、unit、scope 和 periodId，以及覆盖 coverage 和成熟度 maturity；证据不足保持待核。',
+    '报表未手填截止时间时，先从原文提取数据截至日期到 observation.cutoffAt，并逐字保留 cutoffQuote。导出、制表、发布日期不能当数据截止时间。日期缺失或冲突时 cutoffState 取 missing/conflict，说明具体待补项，保留凭证待核。',
     'goal-analyze-progress 只读读取指定正式拆解版与阶段检查记录，辅助可比性与偏差说明。',
     'propose-goal 返回由用户核对的 GSA 修订建议。',
   ].join(' '),
@@ -219,6 +220,7 @@ export const goalDecompositionTool = {
     comparability: Type.Optional(Type.Union(['comparable','partial-missing','observing','incomparable'].map(value => Type.Literal(value)))),
     assessmentNote: Type.Optional(nonblank(1000)),
     observation: Type.Optional(Type.Object({
+      cutoffAt:Type.Optional(nonblank(100)),cutoffQuote:Type.Optional(nonblank(2000)),cutoffState:Type.Optional(Type.Union(['identified','missing','conflict'].map(value=>Type.Literal(value)))),
       quote: nonblank(4000), actualValue: Type.Optional(Type.Number()),
       basis: Type.Optional(Type.Object({
         metric: nonblank(400), unit:nonblank(80), scope:nonblank(400), periodId:nonblank(120),
@@ -228,4 +230,16 @@ export const goalDecompositionTool = {
     }, exact)),
     draft: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
   }, exact),
+};
+
+export const goalPlanTool = {
+  name: 'strategy_goals', label: '计划 A 建议',
+  description: '按当前准确 G/S 和本行原文提供可编辑计划。推荐补空项，优化保留全部数值、期限、范围、否定及证据限制。观察依据没有可用来源时留空。仅建议，无采用或发布权限。',
+  parameters: Type.Object({action:Type.Literal('goal-propose-plan'),summary:Type.String({maxLength:4000}),checkpoint:Type.String({maxLength:2000}),observationBasis:Type.String({maxLength:2000}),note:Type.Optional(Type.String({maxLength:1000}))}, exact),
+};
+
+export const goalReviewTool = {
+  name:'strategy_goals', label:'复盘结论草拟',
+  description:'goal-read-context 读取本期正式 GSA、阶段检查、结账凭证及相关 Case，goal-propose-review 返回带原证据与原范围的可编辑结论。sourceRef 只引用提供的证据身份，因果未知或扩范围标待验证。',
+  parameters:Type.Object({action:Type.Union([Type.Literal('goal-read-context'),Type.Literal('goal-propose-review')]),conclusions:Type.Optional(Type.Array(Type.Object({sourceRef:nonblank(500),title:nonblank(300),summary:nonblank(4000),originalScope:nonblank(500),applicableScope:nonblank(500),evidenceMature:Type.Boolean(),causalVerified:Type.Boolean(),targetScopeSameAsOriginal:Type.Boolean()},exact),{maxItems:30}))},exact),
 };

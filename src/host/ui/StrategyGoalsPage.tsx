@@ -62,13 +62,13 @@ const lines = (text: string) => text.split('\n').map(x => x.trim()).filter(Boole
 const errorUnknown = (error: unknown) => !(error instanceof api.StrategyGoalsRequestError) || error.status >= 500;
 
 /** The original CaseDialog lifecycle and stable per-intent operation ID are reused. */
-function useGoalMutation(onSaved: () => Promise<void> | void) {
+function useGoalMutation(onSaved: (receipt?:unknown) => Promise<void> | void) {
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [pending, setPending] = useState<{ id: string; kind: GoalOperationReceipt['kind'] } | null>(null);
   const operationId = useOperationId();
   const save = async (kind: GoalOperationReceipt['kind'], input: unknown, action: (id: string) => Promise<unknown>) => {
     if (busy || pending) return;
     const id = operationId({ kind, input }); setBusy(true); setError('');
-    try { await action(id); await onSaved(); }
+    try { const receipt=await action(id); await onSaved(receipt); }
     catch (fault) { setError(api.goalError(fault)); if (errorUnknown(fault)) setPending({ id, kind }); }
     finally { setBusy(false); }
   };
@@ -78,7 +78,7 @@ function useGoalMutation(onSaved: () => Promise<void> | void) {
       const { operation } = await api.operation(pending.id);
       if (!operation) { setError('尚未读到原操作完成回执，当前结果仍待核对；未重新提交。'); return; }
       if (operation.kind !== pending.kind) { setError('原操作身份不一致，未采用另一操作结果。'); return; }
-      setPending(null); await onSaved();
+      setPending(null); await onSaved({goal:operation.result});
     } catch (fault) { setError(api.goalError(fault)); }
     finally { setBusy(false); }
   };
@@ -102,7 +102,7 @@ function GoalEditor({ active, handoff, suggestion, initial, record, index, enter
   active: boolean;
   suggestion?:GoalDraftInput; handoff?:ChoiceHandoff; initial?: GoalVersion; record?: StrategyGoalRecord; index: StrategyGoalsIndex; enterprises: StudioEnterpriseDirectory['enterprises'];
   metrics: api.LibraryEntry[]; metricsKnown: boolean;
-  onSaved: () => Promise<void>; onClose: () => void; onManageMetrics: () => void;
+  onSaved: (receipt?:unknown) => Promise<void>; onClose: () => void; onManageMetrics: () => void;
   confirmation?: { busy: boolean; locked: boolean; notice: ReactNode; compare: (input: GoalDraftInput) => ReactNode; onSubmit: (input: GoalDraftInput) => void };
 }) {
   const id = useId();
@@ -378,7 +378,7 @@ export function StrategyGoalsPage({ teachReview,onReturnReview,clearTeachReview,
   const [loading, setLoading] = useState(true), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const {stage,area}=management;
   const view = stage === 'bsc' || stage === 'history' ? stage : 'gsa';
-  const [perspective, setPerspective] = useState<'all' | GoalPerspective>('all'), [selectedId, setSelectedId] = useState(''), [selectedVersion, setSelectedVersion] = useState<number | null>(null);
+  const [perspective, setPerspective] = useState<'all' | GoalPerspective>('all'), [selectedId, setSelectedId] = useState(()=>localStorage.getItem('optracall.goal.selectedId')??''), [selectedVersion, setSelectedVersion] = useState<number | null>(()=>{const raw=localStorage.getItem('optracall.goal.selectedVersion');return raw&&Number.isSafeInteger(Number(raw))?Number(raw):null;});
   const [editor, setEditor] = useState<'create' | 'revise' | 'adopt' | 'relation' | 'feedback' | null>(null), [relationEditor, setRelationEditor] = useState<GoalRelation | undefined>();
   const [editorGoal, setEditorGoal] = useState<{ value: GoalVersion; record: StrategyGoalRecord } | null>(null);
   const [editorSources, setEditorSources] = useState<GoalFeedbackSource[]>([]);
@@ -421,13 +421,21 @@ export function StrategyGoalsPage({ teachReview,onReturnReview,clearTeachReview,
   };
   useEffect(() => { alive.current = true; return () => { alive.current = false; requestId.current++; }; }, []);
   useEffect(() => { if (active) void refresh(); }, [active]);
-  const saved = async () => { setEditor(null); setRelationEditor(undefined); setSelectedVersion(pinnedHandoffGoal.current?.version ?? null); setNotice('已保存本次管理记录；原Case、项目和报告的准确引用保留。'); await refresh(); };
+  useEffect(()=>{try{localStorage.setItem('optracall.goal.selectedId',selectedId);if(selectedVersion===null)localStorage.removeItem('optracall.goal.selectedVersion');else localStorage.setItem('optracall.goal.selectedVersion',String(selectedVersion));}catch{}},[selectedId,selectedVersion]);
+  const saved = async (receipt?:unknown) => {
+    const result=receipt as {goal?:GoalRef}|undefined;
+    if(result?.goal?.goalId && Number.isSafeInteger(result.goal.version)){
+      clearPublicationHandoff();setHandoff(undefined);setDraftScopeKey('');setPerspective('all');
+      pinnedHandoffGoal.current=result.goal;setSelectedId(result.goal.goalId);setSelectedVersion(result.goal.version);
+    }
+    setEditor(null);setRelationEditor(undefined);setNotice('已保存，继续核对当前目标 GSA。');await refresh();
+  };
   const exactPublicationHandoff = publicationHandoff?.receipt.goals.some(goal => goal.goalId === selectedId && goal.version === selectedVersion) ? publicationHandoff : undefined;
   const record = index.goals.find(x => x.id === selectedId);
   const value = exactPublicationHandoff && goalIndexUnavailable ? undefined : record?.versions.find(x => x.version === (selectedVersion ?? record.adoptedVersion ?? record.currentVersion));
   const visible = index.goals.filter(x => perspective === 'all' || current(x).perspective === perspective);
   const options = adoptedVersions(index), sources = [...new Map([...originalSources, ...feedbackSources, ...cases.map(x => ({ label: `Case：${x.title}`, ref: { authority: 'case' as const, id: x.id, version: x.revision } }))].map(x => [sourceKey(x.ref), x])).values()];
-  const select = (id: string) => { clearPublicationHandoff(); setDraftScopeKey('');setHandoff(undefined); setSelectedId(id); setSelectedVersion(null); };
+  const select = (id: string) => { setAuxDialog(null);pinnedHandoffGoal.current=null;clearPublicationHandoff(); setDraftScopeKey('');setHandoff(undefined); setSelectedId(id); setSelectedVersion(null); };
   const relations = value ? index.relations.filter(x => sameRef(x.from, value) || sameRef(x.to, value)) : [];
   const feedback = value ? index.feedback.filter(x => sameRef(x.goal, value)) : [];
   const [handoff,setHandoff]=useState<ChoiceHandoff>();
@@ -586,11 +594,11 @@ export function StrategyGoalsPage({ teachReview,onReturnReview,clearTeachReview,
           onOpenDecisions={() => openAuxDialog('decisions')}
           onOpenHandoffs={() => openAuxDialog('handoffs')}
           onCreateNewGoal={() => openEditor('create')}
-          onReviseGoal={() => openEditor('revise')}
+          onReviseGoal={() => value.formalOrigin?.kind==='strategy-publication'?onStage('strategy-versions'):openEditor('revise')}
           onAdoptGoal={() => openEditor('adopt')}
           onOpenCase={onOpenCase}
           onStartProject={() => onStartProject(refOf(value), resolveNewUsageContext({ goal: value }))}
-          onGoalsReload={refresh}
+          onGoalsReload={async target=>{if(target){pinnedHandoffGoal.current=target;setSelectedId(target.goalId);setSelectedVersion(target.version);}await refresh();}}
           onGoalDraftSuggestion={(draft, source) => openEditor(source.owner.role === 'goal-draft' ? 'create' : 'revise', { ...draft, roleSuggestion: source })}
         />
       )

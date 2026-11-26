@@ -449,3 +449,5 @@
   .gm-goal-header-actions { width: 100%; }
   .gm-goal-header-actions > button { flex: 1 1 auto; }
 }
+
+.gm-plan-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }

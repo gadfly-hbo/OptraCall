@@ -23,9 +23,9 @@ export function parseBusinessRoleOwner(input: unknown): BusinessRoleOwner {
         }};
       }
       if(input.role==='strategy')return invalid();
-      if(input.analysisVariant!==undefined && input.analysisVariant!=='goal-decomposition') return invalid();
+      if(input.analysisVariant!==undefined && !['goal-decomposition','goal-plan','goal-review'].includes(String(input.analysisVariant))) return invalid();
       if(input.actualId !== undefined && (input.analysisVariant !== 'goal-decomposition' || input.caseSource)) return invalid();
-      return {role:'goal',goalId:discussionId(input.goalId),version:Number(input.version),...(input.actualId === undefined ? {} : {actualId:discussionId(input.actualId)}),...(input.caseSource===undefined?{}:{caseSource:parseCaseCreationSource(input.caseSource)}),...(input.analysisVariant==='goal-decomposition'?{analysisVariant:'goal-decomposition' as const}:{})};
+      return {role:'goal',goalId:discussionId(input.goalId),version:Number(input.version),...(input.actualId === undefined ? {} : {actualId:discussionId(input.actualId)}),...(input.caseSource===undefined?{}:{caseSource:parseCaseCreationSource(input.caseSource)}),...(input.analysisVariant ? {analysisVariant:input.analysisVariant as 'goal-decomposition'|'goal-plan'|'goal-review'} : {})};
     }
     case 'case':
       keys(input,['role','caseId','itemId']);
@@ -40,10 +40,10 @@ export function parseBusinessRoleOwner(input: unknown): BusinessRoleOwner {
       return {role:'project',projectId:discussionId(input.projectId)};
     case 'goal-draft': {
       keys(input,['role','draftId','scope','strategyChoice','caseSource','analysisVariant','nextCycleSourceGoalId','goalRef']);
-      if(input.analysisVariant!==undefined && input.analysisVariant!=='goal-estimate') return invalid();
+      if(input.analysisVariant!==undefined && !['goal-estimate','goal-plan'].includes(String(input.analysisVariant))) return invalid();
       let goalRef;
       if (input.goalRef !== undefined) {
-        if (input.analysisVariant !== 'goal-estimate' || input.nextCycleSourceGoalId || input.strategyChoice || input.caseSource || !object(input.goalRef)) return invalid();
+        if (!['goal-estimate','goal-plan'].includes(String(input.analysisVariant)) || input.nextCycleSourceGoalId || input.strategyChoice || input.caseSource || !object(input.goalRef)) return invalid();
         keys(input.goalRef, ['goalId','version']);
         if (input.goalRef.goalId !== input.draftId || !Number.isSafeInteger(input.goalRef.version) || Number(input.goalRef.version) < 1) return invalid();
         goalRef = {goalId:discussionId(input.goalRef.goalId), version:Number(input.goalRef.version)};
@@ -61,7 +61,7 @@ export function parseBusinessRoleOwner(input: unknown): BusinessRoleOwner {
       const scope=input.scope;keys(scope,['kind','id','name','enterpriseId']);
       const kind=scope.kind;
       if(kind!=='enterprise'&&kind!=='department'&&kind!=='personal') return invalid();
-      return {role:'goal-draft',draftId:discussionId(input.draftId),...(goalRef ? {goalRef} : {}),...(input.nextCycleSourceGoalId === undefined ? {} : {nextCycleSourceGoalId:discussionId(input.nextCycleSourceGoalId)}),...(input.caseSource===undefined?{}:{caseSource:parseCaseCreationSource(input.caseSource)}),...(strategyChoice?{strategyChoice}:{}),...(input.analysisVariant==='goal-estimate'?{analysisVariant:'goal-estimate' as const}:{}),scope:{kind,id:shortText(scope.id),name:shortText(scope.name),...(scope.enterpriseId===undefined?{}:{enterpriseId:shortText(scope.enterpriseId)})}};
+      return {role:'goal-draft',draftId:discussionId(input.draftId),...(goalRef ? {goalRef} : {}),...(input.nextCycleSourceGoalId === undefined ? {} : {nextCycleSourceGoalId:discussionId(input.nextCycleSourceGoalId)}),...(input.caseSource===undefined?{}:{caseSource:parseCaseCreationSource(input.caseSource)}),...(strategyChoice?{strategyChoice}:{}),...(input.analysisVariant ? {analysisVariant:input.analysisVariant as 'goal-estimate'|'goal-plan'} : {}),scope:{kind,id:shortText(scope.id),name:shortText(scope.name),...(scope.enterpriseId===undefined?{}:{enterpriseId:shortText(scope.enterpriseId)})}};
     }
     default: return invalid();
   }
@@ -123,7 +123,7 @@ export function createBusinessRoleConversations(options:{
       return options.mutate(()=>({discussion:host.store.update(id,{expectedRevision:Number(input.expectedRevision),configurationId:config.id},config)}));
     }
     if(action!=='messages'||method!=='POST') throw new StrategyDiscussionFault('business_role_action_not_found',404);
-    keys(input,['requestId','text','expectedRevision','replacePendingRequestId']);
+    keys(input,['requestId','text','expectedRevision','replacePendingRequestId','planRequest','reviewRequest']);
     discussionId(input.requestId);
     if(typeof input.text!=='string'||!input.text.trim()||input.text.length>20000||!Number.isSafeInteger(input.expectedRevision))invalid();
     if(!record){
