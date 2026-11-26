@@ -6,8 +6,8 @@ import { TaskReportReferences } from './TaskReportReferences.tsx';
 type Report = ConclusionCandidates['reports'][number];
 const reportKey = ({ relativePath, sha256 }: Report) => `${relativePath}#${sha256 ?? ''}`;
 
-export function TaskReportEvidence({ projectId, taskId, initialReport, onReportChange, onOpenCase }: {
-  projectId: string; taskId: string; initialReport?: Report; onReportChange: (report?: Report) => void; onOpenCase: (caseId: string) => void;
+export function TaskReportEvidence({ projectId, taskId, initialReport, sourceCase, autoOpen = false, onReportChange, onOpenCase }: {
+  projectId: string; taskId: string; initialReport?: Report; sourceCase?: { caseId: string; caseTitle?: string }; autoOpen?: boolean; onReportChange: (report?: Report) => void; onOpenCase: (caseId: string) => void;
 }) {
   const selectId = useId();
   const [candidates, setCandidates] = useState<ConclusionCandidates>();
@@ -15,7 +15,7 @@ export function TaskReportEvidence({ projectId, taskId, initialReport, onReportC
   const [preview, setPreview] = useState<{ report: Report; text: string }>();
   const [error, setError] = useState(''), [loading, setLoading] = useState(true), [reading, setReading] = useState(false);
   const [revision, setRevision] = useState(0);
-  const read = useRef<AbortController | undefined>(undefined);
+  const read = useRef<AbortController | undefined>(undefined), autoOpened = useRef(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -35,16 +35,17 @@ export function TaskReportEvidence({ projectId, taskId, initialReport, onReportC
     read.current?.abort();
     setReading(false); setPreview(undefined); setError('');
   }
-  async function openReport() {
-    if (!current?.reviewable || !current.sha256) return;
-    onReportChange(current);
+  async function openReport(target?: Report) {
+    const item = target ?? current;
+    if (!item?.reviewable || !item.sha256) return;
+    onReportChange(item);
     resetPreview();
     const controller = new AbortController();
     read.current = controller;
     setReading(true);
     try {
-      const text = await readSavedReport(projectId, current.relativePath, current.sha256, controller.signal);
-      if (!controller.signal.aborted) setPreview({ report: current, text });
+      const text = await readSavedReport(projectId, item.relativePath, item.sha256, controller.signal);
+      if (!controller.signal.aborted) setPreview({ report: item, text });
     } catch (fault) {
       if (!controller.signal.aborted) setError(fault instanceof Error ? fault.message : '这版报告目前无法读取。');
     } finally {
@@ -52,8 +53,19 @@ export function TaskReportEvidence({ projectId, taskId, initialReport, onReportC
     }
   }
 
+  useEffect(() => {
+    if (autoOpen && !autoOpened.current && current?.reviewable && current.sha256) {
+      autoOpened.current = true;
+      void openReport(current);
+    }
+  }, [autoOpen, current]);
+
   return <section className="task-report-evidence" aria-label="已保存报告与可用依据">
     <h3 tabIndex={-1} data-panel-focus>报告与依据</h3>
+    {sourceCase && <div className="report-source-case" role="status">
+      <span>来源 Case · <strong>{sourceCase.caseTitle || sourceCase.caseId}</strong></span>
+      <button type="button" className="text-button" onClick={() => onOpenCase(sourceCase.caseId)}>返回来源 Case</button>
+    </div>}
     <button type="button" className="text-button" disabled={loading} onClick={() => { resetPreview(); setCandidates(undefined); setLoading(true); setRevision(value => value + 1); }}>只读刷新</button>
     {loading && <p role="status">正在核对原任务可读取的报告…</p>}
     {error && <p className="cnr-notice error" role="alert">{error}</p>}

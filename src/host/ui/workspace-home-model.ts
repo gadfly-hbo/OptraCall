@@ -1,0 +1,554 @@
+import type { CaseArtifactView, CaseDetail, CaseProjectLink, CaseRecord, CaseStatus, WorkEvent } from '../case-types.ts';
+import type { StrategyGoalsIndex } from '../strategy-goals-types.ts';
+import { taskPurpose, taskTypes, type TaskType } from '../task-assignment.ts';
+import type { ClientProject, ClientTask } from './project-types.ts';
+
+export type InitialWorkspaceView = 'home' | 'goals' | 'studio' | 'chat' | 'cases';
+
+export function resolveInitialWorkspaceView(locationHref: string): InitialWorkspaceView {
+  const params = new URL(locationHref).searchParams;
+  if (params.has('management')) return 'goals';
+  if (params.has('studio')) return 'studio';
+  if (params.has('project') || params.has('task')) return 'chat';
+  if (params.has('returnCase')) return 'cases';
+  return 'home';
+}
+
+export type HomeCaseAccessState = 'ready' | 'empty' | 'forbidden' | 'unavailable';
+
+export type HomeFoundationId = 'strategy' | 'goals' | 'semantic' | 'analysis';
+
+export interface HomeFoundationSnapshot {
+  state: 'ready' | 'forbidden' | 'unavailable';
+  status: string;
+  detail: string;
+}
+
+export interface HomeFoundationTile {
+  id: HomeFoundationId;
+  title: string;
+  rhythm: string;
+  status: string;
+  tone: 'good' | 'neutral' | 'warn';
+  detail: string;
+}
+
+export type HomeProofSource =
+  | { kind: 'report'; label: string; caseId: string; caseTitle: string; projectId: string; taskId: string; relativePath: string; sha256: string }
+  | { kind: 'case'; label: string; caseId: string }
+  | { kind: 'projects'; label: string };
+
+export type HomeProofModel =
+  | {
+      kind: 'grouped';
+      caption: string;
+      total: number;
+      unit: string;
+      portion: number;
+      groups: { label: string; count: number; unit: string }[];
+      source: HomeProofSource | null;
+    }
+  | {
+      kind: 'readiness';
+      caption: string;
+      completedCount: number;
+      totalCount: 3;
+      portion: number;
+      facts: { text: string; confirmed: boolean }[];
+      nextActionLabel: string;
+      source: HomeProofSource | null;
+    };
+
+export type HomeQueueItem =
+  | {
+      kind: 'case';
+      id: string;
+      caseId: string;
+      title: string;
+      context: string;
+      statusLabel: string;
+      tone: 'attention' | 'active' | 'review';
+      owner: string;
+      dateLabel: string;
+    }
+  | {
+      kind: 'report';
+      id: string;
+      caseId: string;
+      caseTitle: string;
+      projectId: string;
+      taskId: string;
+      relativePath: string;
+      sha256: string;
+      title: string;
+      context: string;
+      statusLabel: string;
+      tone: 'review';
+      owner: string;
+      dateLabel: string;
+    };
+
+export type HomeActivityTarget =
+  | { kind: 'case'; caseId: string }
+  | { kind: 'project'; projectId: string }
+  | { kind: 'task'; projectId: string; taskId: string; caseId?: string; caseTitle?: string; openReport?: boolean; reportPath?: string; reportSha256?: string };
+
+export interface HomeActivityItem {
+  id: string;
+  timeLabel: string;
+  timestamp: string;
+  title: string;
+  detail: string;
+  target: HomeActivityTarget;
+}
+
+export interface WorkspaceHomeInput {
+  caseAccessState: HomeCaseAccessState;
+  caseAccessMessage?: string;
+  enterpriseName?: string;
+  cases: readonly CaseRecord[];
+  projectLinks: readonly CaseProjectLink[];
+  focusCaseId?: string;
+  focusDetail?: CaseDetail | null;
+  projects: readonly ClientProject[];
+  goals?: StrategyGoalsIndex | null;
+  foundations?: Partial<Record<HomeFoundationId, HomeFoundationSnapshot>>;
+}
+
+export interface WorkspaceHomeModel {
+  caseAccessState: HomeCaseAccessState;
+  caseAccessMessage?: string;
+  enterpriseName: string;
+  headline: string;
+  focusCase: CaseRecord | null;
+  focusStatusLabel: string;
+  focusActionBadge?: string;
+  linkedProject: ClientProject | null;
+  goalSummary: { goalText: string; strategyText: string; hasBinding: boolean };
+  proof: HomeProofModel;
+  queue: HomeQueueItem[];
+  activities: HomeActivityItem[];
+  counts: {
+    activeCases: number;
+    totalCases: number;
+    activeProjects: number;
+    totalProjects: number;
+    inProgressActions: number;
+  };
+  foundations: HomeFoundationTile[];
+}
+
+const CASE_STATUS_LABELS: Record<CaseStatus, string> = {
+  pending: '待处理',
+  analyzing: '分析中',
+  awaiting_confirmation: '待确认',
+  observing: '待观察',
+  closed: '已结束',
+};
+
+const EVENT_LABELS: Record<WorkEvent['eventType'], string> = {
+  case_created: '创建决策 Case',
+  case_updated: '更新 Case 进展',
+  case_closed: '结束 Case',
+  case_reopened: '重新打开 Case',
+  project_linked: '关联执行项目',
+  project_unlinked: '解除项目关联',
+  artifact_linked: '关联分析产物',
+  artifact_updated: '更新产物记录',
+  artifact_unlinked: '解除产物引用',
+  note_added: '追加 Case 说明',
+  project_work_updated: '更新项目工作进展',
+  project_work_note_added: '追加项目说明',
+  case_strategy_choice: '记录策略取舍',
+};
+
+function shortDate(iso?: string | null): string {
+  if (!iso) return '待安排';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '待安排';
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${month}/${day}`;
+}
+
+function activityTime(iso?: string | null): string {
+  if (!iso) return '最近';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '最近';
+  const now = new Date();
+  if (date.toDateString() === now.toDateString()) {
+    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  }
+  return shortDate(iso);
+}
+
+function caseTone(status: CaseStatus, hasInProgressAction: boolean): 'attention' | 'active' | 'review' {
+  if (status === 'awaiting_confirmation') return 'attention';
+  if (status === 'observing') return 'review';
+  if (hasInProgressAction || status === 'analyzing') return 'active';
+  return 'attention';
+}
+
+function defaultFoundationTile(id: HomeFoundationId, snapshot?: HomeFoundationSnapshot): HomeFoundationTile {
+  const meta: Record<HomeFoundationId, { title: string; rhythm: string }> = {
+    strategy: { title: '战略选择', rhythm: '年度规划 · 季度或月度回顾' },
+    goals: { title: '目标管理', rhythm: '年度设定 · 月度或周度跟进' },
+    semantic: { title: '语义资产', rhythm: '按需建设业务口径' },
+    analysis: { title: '分析资产', rhythm: '按需沉淀分析方法' },
+  };
+  const info = meta[id];
+  if (!snapshot) {
+    return { id, ...info, status: '未开始', tone: 'neutral', detail: '按需开展建设' };
+  }
+  if (snapshot.state === 'forbidden' || snapshot.state === 'unavailable') {
+    return { id, ...info, status: snapshot.status || '暂不可读', tone: 'warn', detail: snapshot.detail };
+  }
+  const good = snapshot.status !== '未开始';
+  return { id, ...info, status: snapshot.status, tone: good ? 'good' : 'neutral', detail: snapshot.detail };
+}
+
+function findAvailableReport(detail: CaseDetail | null | undefined): CaseArtifactView | undefined {
+  if (!detail) return undefined;
+  return detail.artifacts.find(
+    item => !item.unlinkedAt && item.role === 'report' && item.availability === 'available' && item.taskId && item.observedSha256,
+  );
+}
+
+export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHomeModel {
+  const activeProjects = input.projects.filter(project => !project.archivedAt);
+  const projectMap = new Map(input.projects.map(project => [project.id, project]));
+  const activeCases = input.cases
+    .filter(item => item.status !== 'closed')
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const focusCase =
+    (input.focusCaseId ? input.cases.find(item => item.id === input.focusCaseId) : undefined) ??
+    activeCases[0] ??
+    input.cases[0] ??
+    null;
+
+  const focusDetail = input.focusDetail && focusCase && input.focusDetail.case.id === focusCase.id ? input.focusDetail : null;
+  const focusLinks = focusCase
+    ? input.projectLinks.filter(link => link.caseId === focusCase.id)
+    : [];
+  const focusProjects = focusLinks
+    .map(link => projectMap.get(link.projectId))
+    .filter((item): item is ClientProject => Boolean(item));
+  const linkedProject = focusProjects.find(project => !project.archivedAt) ?? focusProjects[0] ?? null;
+
+  const inProgressActions = input.projects.filter(
+    project => !project.archivedAt && project.work?.workStatus === 'in_progress',
+  ).length;
+
+  // Resolve exact pinned goal version from goalBinding (never silently switching to latest).
+  let goalText = '为眼前的问题确定一个可核对的目标';
+  let strategyText = '选择一条值得尝试的策略';
+  let hasBinding = false;
+  let boundGoalOwner: string | undefined;
+  if (focusDetail?.goalBinding) {
+    hasBinding = true;
+    const binding = focusDetail.goalBinding;
+    const goalRecord = input.goals?.goals.find(item => item.id === binding.primary.goalId);
+    const exactVersion = goalRecord?.versions.find(item => item.version === binding.primary.version);
+    if (exactVersion) {
+      goalText = `${exactVersion.title}（v${exactVersion.version}）`;
+      boundGoalOwner = exactVersion.responsible || undefined;
+      strategyText = binding.strategy || exactVersion.strategies?.[0] || '已绑定目标，策略待补充';
+    } else {
+      goalText = `目标 ${binding.primary.goalId}（v${binding.primary.version}）`;
+      strategyText = binding.strategy || '原目标版本暂未读到，保留准确引用';
+    }
+  } else if (focusCase) {
+    goalText = focusCase.description || '在 Case 中明确目标版本与口径';
+    strategyText = focusCase.judgement || '尚未填写当前判断与策略';
+  }
+
+  const primaryReport = findAvailableReport(focusDetail);
+  const reportSource: HomeProofSource | null =
+    primaryReport && focusCase && primaryReport.taskId && primaryReport.observedSha256
+      ? {
+          kind: 'report',
+          label: `来源 · ${primaryReport.displayName || primaryReport.relativePath.split('/').at(-1)}`,
+          caseId: focusCase.id,
+          caseTitle: focusCase.title,
+          projectId: primaryReport.projectId,
+          taskId: primaryReport.taskId,
+          relativePath: primaryReport.relativePath,
+          sha256: primaryReport.observedSha256,
+        }
+      : focusCase
+        ? { kind: 'case', label: `来源 · Case 修订 v${focusCase.revision}`, caseId: focusCase.id }
+        : null;
+
+  // Build proof panel strictly from real records; fall back to 3-item readiness checklist when no grouped data exists.
+  let proof: HomeProofModel;
+  const activeArtifacts = focusDetail?.artifacts.filter(item => !item.unlinkedAt) ?? [];
+  if (focusCase && focusProjects.length >= 2) {
+    const runningOrInProgress = focusProjects.filter(project => project.work?.workStatus === 'in_progress').length;
+    const awaitingOrOther = focusProjects.length - runningOrInProgress;
+    proof = {
+      kind: 'grouped',
+      caption: '关联项目进展分布',
+      total: focusProjects.length,
+      unit: '个项目',
+      portion: Math.round((runningOrInProgress / focusProjects.length) * 100),
+      groups: [
+        { label: '执行中项目', count: runningOrInProgress, unit: '个' },
+        { label: '待推进 / 观察', count: awaitingOrOther, unit: '个' },
+      ],
+      source: reportSource,
+    };
+  } else if (focusCase && activeArtifacts.length >= 2) {
+    const reports = activeArtifacts.filter(item => item.role === 'report').length;
+    const others = activeArtifacts.length - reports;
+    proof = {
+      kind: 'grouped',
+      caption: '已关联依据与产物',
+      total: activeArtifacts.length,
+      unit: '份记录',
+      portion: Math.round((reports / activeArtifacts.length) * 100),
+      groups: [
+        { label: '正式报告', count: reports, unit: '份' },
+        { label: '分析与资料', count: others, unit: '份' },
+      ],
+      source: reportSource,
+    };
+  } else {
+    const facts = [
+      { text: '明确目标与策略', confirmed: hasBinding },
+      { text: '关联执行项目', confirmed: focusProjects.length > 0 },
+      { text: '留存报告或决策记录', confirmed: activeArtifacts.length > 0 || Boolean(focusCase?.judgement.trim()) },
+    ];
+    const completedCount = facts.filter(item => item.confirmed).length;
+    proof = {
+      kind: 'readiness',
+      caption: focusCase ? '当前 Case 工作记录' : '已有工作记录',
+      completedCount,
+      totalCount: 3,
+      portion: Math.round((completedCount / 3) * 100),
+      facts,
+      nextActionLabel: !focusCase
+        ? '从业务问题创建首个 Case'
+        : !hasBinding
+          ? '核对目标与策略版本'
+          : focusProjects.length === 0
+            ? '关联或新建执行项目'
+            : '继续在 Case 中补充依据与决定',
+      source: reportSource,
+    };
+  }
+
+  // Build "需要你处理" queue from active Cases + available focus report review.
+  const orderedActiveCases = focusCase && focusCase.status !== 'closed'
+    ? [focusCase, ...activeCases.filter(item => item.id !== focusCase.id)]
+    : activeCases;
+
+  const queue: HomeQueueItem[] = orderedActiveCases.slice(0, 3).map(record => {
+    const links = input.projectLinks.filter(link => link.caseId === record.id);
+    const linked = links.map(link => projectMap.get(link.projectId)).filter((item): item is ClientProject => Boolean(item));
+    const hasInProgress = linked.some(project => project.work?.workStatus === 'in_progress');
+    const owner =
+      linked.find(project => project.work?.assignee)?.work?.assignee ||
+      (record.id === focusCase?.id ? boundGoalOwner : undefined) ||
+      '待指定';
+    return {
+      kind: 'case',
+      id: `case:${record.id}`,
+      caseId: record.id,
+      title: record.nextStep.trim() || '明确这件事的下一步',
+      context: record.title,
+      statusLabel: hasInProgress && record.status !== 'awaiting_confirmation' ? '执行中' : CASE_STATUS_LABELS[record.status],
+      tone: caseTone(record.status, hasInProgress),
+      owner,
+      dateLabel: shortDate(record.updatedAt),
+    };
+  });
+
+  if (primaryReport && focusCase && primaryReport.taskId && primaryReport.observedSha256) {
+    queue.push({
+      kind: 'report',
+      id: `report:${primaryReport.id}`,
+      caseId: focusCase.id,
+      caseTitle: focusCase.title,
+      projectId: primaryReport.projectId,
+      taskId: primaryReport.taskId,
+      relativePath: primaryReport.relativePath,
+      sha256: primaryReport.observedSha256,
+      title: `核对「${primaryReport.displayName || primaryReport.relativePath.split('/').at(-1)}」的依据`,
+      context: `${primaryReport.taskName || primaryReport.projectName || '项目报告'} · ${primaryReport.observedSha256.slice(0, 8)}`,
+      statusLabel: '待核对',
+      tone: 'review',
+      owner: linkedProject?.work?.assignee || '待核对',
+      dateLabel: shortDate(primaryReport.observedAt || primaryReport.updatedAt),
+    });
+  }
+
+  // Build "最近活动" from real Case events, project events, and recent tasks.
+  const activityEntries: HomeActivityItem[] = [];
+  if (focusDetail && focusCase) {
+    for (const event of [...focusDetail.events, ...focusDetail.projectEvents]) {
+      const targetProject = event.subjectType === 'project' ? projectMap.get(event.subjectId) : undefined;
+      activityEntries.push({
+        id: `event:${event.id}`,
+        timeLabel: activityTime(event.occurredAt),
+        timestamp: event.occurredAt,
+        title: EVENT_LABELS[event.eventType] ?? '更新工作记录',
+        detail: event.note || (targetProject ? targetProject.name : focusCase.title),
+        target: targetProject ? { kind: 'project', projectId: targetProject.id } : { kind: 'case', caseId: focusCase.id },
+      });
+    }
+  }
+  for (const project of activeProjects) {
+    for (const task of project.tasks) {
+      if (task.archivedAt) continue;
+      activityEntries.push({
+        id: `task:${project.id}/${task.id}`,
+        timeLabel: activityTime(task.updatedAt),
+        timestamp: task.updatedAt,
+        title: task.name,
+        detail: `${project.name}${task.assignment ? ` · ${taskPurpose[task.assignment.type].label}` : ''}`,
+        target: {
+          kind: 'task',
+          projectId: project.id,
+          taskId: task.id,
+          ...(focusCase && focusLinks.some(link => link.projectId === project.id)
+            ? { caseId: focusCase.id, caseTitle: focusCase.title }
+            : {}),
+        },
+      });
+    }
+  }
+  activityEntries.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+
+  const headline = focusCase
+    ? focusCase.nextStep.trim() || focusCase.judgement.trim() || focusCase.title
+    : '从第一个 Case 开始';
+
+  const focusActionBadge =
+    linkedProject?.work?.workStatus === 'in_progress'
+      ? '关联行动执行中'
+      : linkedProject?.work?.workStatus === 'awaiting_feedback'
+        ? '关联行动待反馈'
+        : undefined;
+
+  return {
+    caseAccessState: input.caseAccessState,
+    caseAccessMessage: input.caseAccessMessage,
+    enterpriseName: input.enterpriseName || '当前工作区',
+    headline,
+    focusCase,
+    focusStatusLabel: focusCase ? CASE_STATUS_LABELS[focusCase.status] : '项目可独立开始',
+    focusActionBadge,
+    linkedProject,
+    goalSummary: { goalText, strategyText, hasBinding },
+    proof,
+    queue: queue.slice(0, 4),
+    activities: activityEntries.slice(0, 3),
+    counts: {
+      activeCases: activeCases.length,
+      totalCases: input.cases.length,
+      activeProjects: activeProjects.length,
+      totalProjects: input.projects.length,
+      inProgressActions,
+    },
+    foundations: (['strategy', 'goals', 'semantic', 'analysis'] as const).map(id =>
+      defaultFoundationTile(id, input.foundations?.[id]),
+    ),
+  };
+}
+
+export interface ProjectTaskTypeSummary {
+  byType: Record<TaskType, number>;
+  unassigned: number;
+  archived: number;
+  total: number;
+}
+
+export function summarizeProjectTaskTypes(tasks: readonly ClientTask[]): ProjectTaskTypeSummary {
+  const byType: Record<TaskType, number> = {
+    requirement: 0,
+    analysis: 0,
+    plan: 0,
+    decision: 0,
+    do: 0,
+    teach: 0,
+  };
+  let unassigned = 0;
+  let archived = 0;
+  for (const task of tasks) {
+    if (task.archivedAt) archived += 1;
+    const type = task.assignment?.type;
+    if (type && taskTypes.includes(type)) byType[type] += 1;
+    else unassigned += 1;
+  }
+  return { byType, unassigned, archived, total: tasks.length };
+}
+
+export type WorkspaceSearchTarget =
+  | { kind: 'view'; id: string; group: string; title: string; subtitle: string; view: 'home' | 'cases' | 'projects' | 'decision' | 'help' }
+  | { kind: 'foundation'; id: string; group: string; title: string; subtitle: string; foundation: HomeFoundationId }
+  | { kind: 'settings'; id: string; group: string; title: string; subtitle: string; settingsView: 'usage-context-settings' | 'settings' | 'web-search-settings' | 'automatic-action-settings' | 'skill-settings' | 'connection-settings' | 'personal-materials' | 'model-pack-settings' | 'capability-plans' }
+  | { kind: 'case'; id: string; group: string; title: string; subtitle: string; caseId: string }
+  | { kind: 'project'; id: string; group: string; title: string; subtitle: string; projectId: string }
+  | { kind: 'task'; id: string; group: string; title: string; subtitle: string; projectId: string; taskId: string };
+
+const STATIC_SEARCH_ITEMS: readonly WorkspaceSearchTarget[] = [
+  { kind: 'view', id: 'nav:home', group: '日常工作', title: '工作台首页', subtitle: '当前待决定事项、队列、最近活动与基础建设提醒', view: 'home' },
+  { kind: 'view', id: 'nav:cases', group: '日常工作', title: '决策星图', subtitle: 'Decision Case 与项目关联关系', view: 'cases' },
+  { kind: 'view', id: 'nav:projects', group: '日常工作', title: '项目地图', subtitle: '查看项目与六类任务', view: 'projects' },
+  { kind: 'view', id: 'nav:decision', group: '日常工作', title: '决策工作台', subtitle: '决策看板与反馈复盘', view: 'decision' },
+  { kind: 'foundation', id: 'foundation:strategy', group: '基础建设', title: '战略选择', subtitle: '战略共创、检验、发布与版本管理', foundation: 'strategy' },
+  { kind: 'foundation', id: 'foundation:goals', group: '基础建设', title: '目标管理', subtitle: '总 GSA、拆解草稿、阶段跟进与到期复盘', foundation: 'goals' },
+  { kind: 'foundation', id: 'foundation:semantic', group: '基础建设', title: '语义资产', subtitle: '业务语义、数据映射、企业资料与体系工作台', foundation: 'semantic' },
+  { kind: 'foundation', id: 'foundation:analysis', group: '基础建设', title: '分析资产', subtitle: '分析指标、分析方法与体系工作台', foundation: 'analysis' },
+  { kind: 'settings', id: 'settings:usage-context-settings', group: '设置 · 基础与模型', title: '使用用途', subtitle: '选择当前工作用途与上下文偏好', settingsView: 'usage-context-settings' },
+  { kind: 'settings', id: 'settings:settings', group: '设置 · 基础与模型', title: '模型设置', subtitle: '配置本机模型、线路与凭据', settingsView: 'settings' },
+  { kind: 'settings', id: 'settings:web-search-settings', group: '设置 · 基础与模型', title: '网络检索', subtitle: '配置网络搜索顺序与策略', settingsView: 'web-search-settings' },
+  { kind: 'settings', id: 'settings:automatic-action-settings', group: '设置 · 能力与连接', title: '自动模式', subtitle: '控制保存、审查、Case 等自动动作开关', settingsView: 'automatic-action-settings' },
+  { kind: 'settings', id: 'settings:skill-settings', group: '设置 · 能力与连接', title: 'Skill 资料与依赖', subtitle: '查看已安装 Skill 与运行依赖', settingsView: 'skill-settings' },
+  { kind: 'settings', id: 'settings:connection-settings', group: '设置 · 能力与连接', title: '连接配置', subtitle: '共享数据库连接与项目来源配置', settingsView: 'connection-settings' },
+  { kind: 'settings', id: 'settings:personal-materials', group: '设置 · 资料与资产包', title: '个人资料', subtitle: '管理个人知识、经验与留存记录', settingsView: 'personal-materials' },
+  { kind: 'settings', id: 'settings:model-pack-settings', group: '设置 · 资料与资产包', title: '业务模型包', subtitle: '查看与注册纯计算模型包', settingsView: 'model-pack-settings' },
+  { kind: 'settings', id: 'settings:capability-plans', group: '设置 · 资料与资产包', title: '领域资产包', subtitle: '查看领域资产包与项目授权', settingsView: 'capability-plans' },
+  { kind: 'view', id: 'nav:help', group: '帮助', title: '帮助与操作手册', subtitle: '查看完整操作指南与离线手册', view: 'help' },
+];
+
+export function filterWorkspaceSearchItems(input: {
+  query: string;
+  projects: readonly ClientProject[];
+  cases: readonly CaseRecord[];
+}): WorkspaceSearchTarget[] {
+  const dynamicItems: WorkspaceSearchTarget[] = [
+    ...input.cases.map<WorkspaceSearchTarget>(record => ({
+      kind: 'case',
+      id: `case:${record.id}`,
+      group: 'Decision Case',
+      title: record.title,
+      subtitle: `${CASE_STATUS_LABELS[record.status]} · ${record.nextStep || record.judgement || '查看 Case 详情'}`,
+      caseId: record.id,
+    })),
+    ...input.projects.map<WorkspaceSearchTarget>(project => ({
+      kind: 'project',
+      id: `project:${project.id}`,
+      group: project.archivedAt ? '已归档项目' : '项目',
+      title: project.name,
+      subtitle: `${project.tasks.length} 个任务${project.work?.assignee ? ` · ${project.work.assignee}` : ''}`,
+      projectId: project.id,
+    })),
+    ...input.projects.flatMap(project =>
+      project.tasks.map<WorkspaceSearchTarget>(task => ({
+        kind: 'task',
+        id: `task:${project.id}/${task.id}`,
+        group: '任务',
+        title: task.name,
+        subtitle: `${project.name}${task.assignment ? ` · ${taskPurpose[task.assignment.type].label}` : ''}${task.archivedAt ? ' · 已归档' : ''}`,
+        projectId: project.id,
+        taskId: task.id,
+      })),
+    ),
+  ];
+
+  const all = [...STATIC_SEARCH_ITEMS, ...dynamicItems];
+  const needle = input.query.trim().toLocaleLowerCase();
+  if (!needle) return all.slice(0, 12);
+  return all.filter(item => `${item.title}\n${item.subtitle}\n${item.group}`.toLocaleLowerCase().includes(needle)).slice(0, 20);
+}

@@ -22,6 +22,7 @@ import type { CaseRelationRevision } from '../case-relation-types.ts';
 export type CaseBoardProps = {
   onTeachReview?(owner:import('../business-role-types.ts').TeachReviewOwner):void;
   initialGoal?: import('../case-types.ts').CaseGoalEntry; initialSource?: import('../case-types.ts').CaseCreationSource; onReviewGoals?: (source?: import('../case-types.ts').CaseCreationSource) => void; onInitialGoalConsumed?: () => void;
+  initialCreate?: boolean; onInitialCreateConsumed?: () => void; onCaseChanged?: () => void;
   decisionUi: Record<string, CaseDecisionUiState>; onDecisionUiChange: (ownerKey: string, update: CaseDecisionUiUpdate) => void;
   currentWork?: { projectId: string; taskId: string }; reportReturn?: { caseId: string; projectId: string; taskId: string }; onOpenDecisionBoard?: (target?: import('./FeedbackContextPanel.tsx').FeedbackReviewStart) => void;
   projects: ClientProject[]; configurations: PublicModelConfiguration[]; initialCaseId?: string | null; initialIssueId?: string; mode?: 'cards' | 'list'; onModeChange?: (mode: 'cards' | 'list') => void;
@@ -43,7 +44,7 @@ const adoptionReviewReasons: Record<string, string> = { interrupted: '上次保�
 export function BoardViewSwitch({ value, onChange, label = '看板显示方式' }: { value: 'cards' | 'list'; onChange: (value: 'cards' | 'list') => void; label?: string }) {
   return <div className="case-view-switch" role="group" aria-label={label}><button type="button" aria-pressed={value === 'cards'} onClick={() => onChange('cards')}><span aria-hidden="true">▦</span> 方块</button><button type="button" aria-pressed={value === 'list'} onClick={() => onChange('list')}><span aria-hidden="true">☰</span> 列表</button></div>;
 }
-export function CaseBoard({ initialGoal, initialSource, onReviewGoals, onTeachReview, onInitialGoalConsumed, projects, configurations, onOpenTask, onCreateTask, onProjectChange, initialCaseId, initialIssueId, reportReturn, mode: providedMode, onModeChange, currentWork, onOpenDecisionBoard, decisionUi, onDecisionUiChange, onOpenProject, mapView: providedMapView, onMapViewChange, relationUi: providedRelationUi, onRelationUiChange }: CaseBoardProps) {
+export function CaseBoard({ initialGoal, initialSource, onReviewGoals, onTeachReview, onInitialGoalConsumed, initialCreate, onInitialCreateConsumed, onCaseChanged, projects, configurations, onOpenTask, onCreateTask, onProjectChange, initialCaseId, initialIssueId, reportReturn, mode: providedMode, onModeChange, currentWork, onOpenDecisionBoard, decisionUi, onDecisionUiChange, onOpenProject, mapView: providedMapView, onMapViewChange, relationUi: providedRelationUi, onRelationUiChange }: CaseBoardProps) {
   const [storage, setStorage] = useState<CaseStorageStatus | null>(null), [data, setData] = useState<CaseList>({ cases: [], projectLinks: [] }), [loading, setLoading] = useState(true), [dataReady, setDataReady] = useState(false), [initializing, setInitializing] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [localMode, setLocalMode] = useState<'cards' | 'list'>('cards'), [creating, setCreating] = useState(false), [selectedId, setSelectedId] = useState<string | null>(null), [detail, setDetail] = useState<CaseDetail | null>(null), [detailLoading, setDetailLoading] = useState(false), [detailError, setDetailError] = useState(''), [tab, setTab] = useState<'overview' | 'projects' | 'artifacts' | 'history'>('overview'), [editing, setEditing] = useState<Editing | null>(null);
   const [goalWriting, setGoalWriting] = useState(false);
@@ -51,6 +52,7 @@ export function CaseBoard({ initialGoal, initialSource, onReviewGoals, onTeachRe
   const [creationSource, setCreationSource] = useState<typeof initialSource>();
   const prepareCase = () => { if (onReviewGoals) onReviewGoals(); else setCreating(true); };
   useEffect(() => { if (initialGoal) { setCreationSource(initialSource); setCreationGoal(initialGoal); setCreating(true); onInitialGoalConsumed?.(); } }, [initialGoal, onInitialGoalConsumed]);
+  useEffect(() => { if (initialCreate && storage?.state === 'ready') { setCreating(true); onInitialCreateConsumed?.(); } }, [initialCreate, storage?.state, onInitialCreateConsumed]);
   const mode = providedMode ?? localMode; const setMode = (value: 'cards' | 'list') => { setLocalMode(value); onModeChange?.(value); };
   const [localMapView, setLocalMapView] = useState(initialCaseMapView), [localRelationUi, setLocalRelationUi] = useState(initialCaseRelationUi);
   const mapView = providedMapView ?? localMapView, relationUi = providedRelationUi ?? localRelationUi;
@@ -69,7 +71,7 @@ export function CaseBoard({ initialGoal, initialSource, onReviewGoals, onTeachRe
   useEffect(() => { let alive = true; void (async () => { try { const state = await api.status(); if (!alive) return; setStorage(state); if (state.state === 'ready') { const value = await api.list(); if (alive) { setData(value); setDataReady(true); } } } catch (error) { if (alive) setError(caseError(error)); } finally { if (alive) setLoading(false); } })(); return () => { alive = false; }; }, []);
   useEffect(() => { if (initialCaseId) { setSelectedId(initialCaseId); setTab('overview'); } }, [initialCaseId]);
   useEffect(() => { if (selectedId) { setDetail(null); void readDetail(selectedId); void onProjectChange().catch(() => setDetailError('项目列表读取失败，请刷新核对项目工作信息。')); } }, [selectedId]);
-  const afterSave = async (message = '已保存。') => { setNotice(message); await Promise.all([refresh(), onProjectChange().catch(() => setError('记录已保存，但项目列表刷新失败，请重试刷新。')), selectedRef.current ? readDetail(selectedRef.current) : Promise.resolve()]); };
+  const afterSave = async (message = '已保存。') => { setNotice(message); onCaseChanged?.(); await Promise.all([refresh(), onProjectChange().catch(() => setError('记录已保存，但项目列表刷新失败，请重试刷新。')), selectedRef.current ? readDetail(selectedRef.current) : Promise.resolve()]); };
   const open = (record: CaseRecord) => { setSelectedId(record.id); setTab('overview'); setDetailError(''); };
   const dismissDetail = () => { if (!editing && !goalWriting) { setSelectedId(null); setDetail(null); } };
   const mutation = (record: CaseRecord, operationId: string) => ({ expectedRevision: record.revision, operationId });

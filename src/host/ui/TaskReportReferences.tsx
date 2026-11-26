@@ -13,9 +13,10 @@ type Props = { projectId: string; taskId: string; path: string; sha256: string; 
 export function TaskReportReferences({ projectId, taskId, path, sha256, onOpenCase }: Props) {
   const [evidence, setEvidence] = useState<{ summary: DataContextSummary; files: FileNode[] }>();
   const [evidenceBusy, setEvidenceBusy] = useState(false), [evidenceError, setEvidenceError] = useState('');
-  const [text, setText] = useState<{ title: string; value: string }>();
+  const [text, setText] = useState<{ title: string; value: string; citationId?: string }>();
   const [cases, setCases] = useState<CaseRecord[]>(), [caseBusy, setCaseBusy] = useState(false), [caseError, setCaseError] = useState('');
   const evidenceEpoch = useRef(0), caseRead = useRef<AbortController | undefined>(undefined);
+  const citationTrigger = useRef<HTMLElement | null>(null), citationHeading = useRef<HTMLDivElement>(null);
   useEffect(() => () => { evidenceEpoch.current++; caseRead.current?.abort(); }, []);
 
   async function loadEvidence() {
@@ -29,15 +30,38 @@ export function TaskReportReferences({ projectId, taskId, path, sha256, onOpenCa
     } finally { if (ticket === evidenceEpoch.current) setEvidenceBusy(false); }
   }
 
-  async function showEvidence(title: string, read: () => Promise<string>) {
+  async function showEvidence(title: string, read: () => Promise<string>, citationId?: string) {
+    if (document.activeElement instanceof HTMLElement) citationTrigger.current = document.activeElement;
     const ticket = ++evidenceEpoch.current;
     setEvidenceBusy(true); setEvidenceError(''); setText(undefined);
     try {
       const value = await read();
-      if (ticket === evidenceEpoch.current) setText({ title, value });
+      if (ticket === evidenceEpoch.current) {
+        setText({ title, value, citationId });
+        requestAnimationFrame(() => citationHeading.current?.focus());
+      }
     } catch (failure) { if (ticket === evidenceEpoch.current) setEvidenceError(projectDataError(failure)); }
     finally { if (ticket === evidenceEpoch.current) setEvidenceBusy(false); }
   }
+
+  function closeCitation() {
+    setText(undefined);
+    requestAnimationFrame(() => {
+      if (citationTrigger.current?.isConnected) citationTrigger.current.focus();
+    });
+  }
+
+  useEffect(() => {
+    if (!text) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      closeCitation();
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [Boolean(text)]);
 
   async function readCases() {
     caseRead.current?.abort();
@@ -81,10 +105,19 @@ export function TaskReportReferences({ projectId, taskId, path, sha256, onOpenCa
         const { record } = await readProjectDataCitation(projectId, id);
         if (record.projectId !== projectId || record.citationId !== id || record.report.originalPath !== path || record.report.sha256 !== sha256) throw new Error('固定来源身份未能核对。');
         return [record.declaration || '来源未声明', record.revisionReason].filter(Boolean).join('\n\n');
-      }); }} /> : <button type="button" className="text-button" disabled={evidenceBusy} onClick={() => void loadEvidence()}>查看固定输入与计算依据</button>}
+      }, id); }} /> : <button type="button" className="text-button" disabled={evidenceBusy} onClick={() => void loadEvidence()}>查看固定输入与计算依据</button>}
     {evidenceBusy && <p role="status">正在读取所选报告的依据…</p>}
     {evidenceError && <p className="cnr-notice error" role="alert">{evidenceError}</p>}
-    {text && <pre className="task-report-text" tabIndex={0} aria-label={text.title}>{text.value}</pre>}
+    {text && <section className="task-citation-reader" role="region" aria-label="引用原文检视" onKeyDown={event => {
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeCitation(); }
+    }}>
+      <div ref={citationHeading} tabIndex={-1} className="task-citation-reader-head">
+        <strong>{text.title}</strong>
+        <button type="button" className="text-button" onClick={closeCitation}>关闭引用</button>
+      </div>
+      <p className="task-citation-meta">项目 {projectId}{text.citationId ? ` · 引用 ${text.citationId}` : ''} · {path} · SHA-256 {sha256.slice(0, 12)}</p>
+      <pre className="task-report-text" tabIndex={0} aria-label={text.title}>{text.value}</pre>
+    </section>}
     <section className="task-report-case" aria-label="本版报告关联 Case">
       <button type="button" className="text-button" disabled={caseBusy} onClick={() => void readCases()}>核对关联 Case</button>
       {caseBusy && <p role="status">正在核对本版报告的关联…</p>}
