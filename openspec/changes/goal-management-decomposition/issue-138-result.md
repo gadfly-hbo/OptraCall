@@ -48,6 +48,10 @@
 
 永久浏览器反例将第二轮准确原请求的业务终态延迟投影，旧产品真实失败，见 `receipt-race-red.log`。修正仅对外部待核的原 owner／requestId 最多八次退避 GET，失败或取消停止，切换归属清理，未知仍保留待核；不重发模型或自动采用。修后十三条真实浏览器路径通过，新增断言核对只发一条原模型请求；三十五项测试及构建通过，见 `receipt-race-green.log`、`receipt-race-tests.log`、`receipt-race-build.log`。新固定候选的最终非作者结论另行核定。
 
+第四候选 `ad5209230fc78ef5ae862da01c513f151a1281ec` 的挂载期间恢复通过，但非作者再测“待核时手改、切目标后返回”发现父复盘组件另建编号，多调用一轮模型，整体仍不通过。原报告为 UI 的 `final-review-ad52092.md`，代码已测范围与整体阻断分别保留。作者把该严格路径加入永久浏览器，旧产品实际失败为 `2 !== 1`，见 `receipt-resume-red.log`。
+
+后续修正复用既有业务会话的 pending 请求，仅另存原请求的证据 hash 对应关系。父复盘恢复原编号，BRC 将其识别为已发送，不重放。回填按原证据标记，等待期间新资料不偷记已处理，无原标记时不补造。十三条浏览器、三十五项测试与构建通过，见 `receipt-resume-green.log`、`receipt-resume-tests.log`、`receipt-resume-build-2.log`。首次构建的类型错误与原失败日志继续保留。最终非作者结论仍按新固定候选记录。
+
 ## 完整检查与限制
 
 首轮 `npm run check` 使用 Node 25.9.0 和任务子收割器运行。既有 `db-link-pg-lifecycle.test.ts` 在并行负载中持续等待，原现场保留在 `full-check-1.log`。隔离执行同一文件二十项通过，见 `db-lifecycle-isolated.log`。随后只结束该停滞测试 worker，使其他检查继续。此轮命令保留失败，不记为完整通过。最终 PR head 与 main 的完整 CI 另行核定。

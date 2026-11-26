@@ -669,7 +669,7 @@ try {
   const reviewOwner={role:'goal',goalId:candidate.goal.goalId,version:candidate.goal.version,analysisVariant:'goal-review'};
   const reviewRoute='/api/business-role?owner='+encodeURIComponent(JSON.stringify(reviewOwner));
   const firstReviewRun=(await api(reviewRoute)).discussion.lastRun.id;
-  let delayedReviewRun, delayedReviewReads=0, reviewReleaseAt=0;
+  let delayedReviewRun, delayedReviewReads=0, reviewReleaseAt=0, holdReviewReceipt=true;
   const reviewMessages=[];
   const observeReviewMessage=request=>{
     const url=new URL(request.url());
@@ -685,7 +685,7 @@ try {
     if(!detail.busy&&detail.discussion?.lastRun?.id!==firstReviewRun&&detail.discussion?.lastRun?.status==='completed'){
       delayedReviewRun=detail.discussion.lastRun.id;
       reviewReleaseAt||=Date.now()+1200;
-      if(Date.now()<reviewReleaseAt){
+      if(holdReviewReceipt||Date.now()<reviewReleaseAt){
         delayedReviewReads++;
         return route.fulfill({response,json:{...detail,discussion:{...detail.discussion,lastRun:{...detail.discussion.lastRun,status:'unknown'}}}});
       }
@@ -696,6 +696,12 @@ try {
     .getByRole("navigation", { name: "目标管理三阶段流程" })
     .getByRole("button", { name: /到期复盘/ })
     .click();
+  await waitFor(()=>delayedReviewReads,count=>count>0,'the second review must wait on its original receipt');
+  await page.getByRole('textbox',{name:'结论摘要',exact:true}).first().fill('负责人等待原结果期间修改的结论');
+  await waitFor(()=>api(candidate.route+'/review-draft?period=2027-01'),value=>value.draft.conclusions[0].summary==='负责人等待原结果期间修改的结论','editing during receipt recovery should save');
+  await choose(normal);
+  holdReviewReceipt=false;
+  await choose(candidate);
   await waitFor(
     () => page.getByRole("textbox", { name: "结论摘要", exact: true }).count(),
     (count) => count === 2,
@@ -707,13 +713,13 @@ try {
   assert.equal((await api(reviewRoute)).discussion.lastRun.id,delayedReviewRun);
   page.off('request',observeReviewMessage);
   await page.unroute('**/api/business-role?**');
-  results.push('F12 delayed terminal receipt recovered by readonly original-request reads without another model run');
+  results.push('F12 delayed terminal receipt and target return recover the original request without another model run');
   assert.equal(
     await page
       .getByRole("textbox", { name: "结论摘要", exact: true })
       .first()
       .inputValue(),
-    "负责人保存失败后仍须保留的结论",
+    "负责人等待原结果期间修改的结论",
   );
   assert.equal(
     await page
@@ -742,7 +748,7 @@ try {
       .getByRole("textbox", { name: "结论摘要", exact: true })
       .first()
       .inputValue(),
-    "负责人保存失败后仍须保留的结论",
+    "负责人等待原结果期间修改的结论",
   );
   await button("用选中结论起草下一期").click();
   const next = await waitFor(
@@ -753,7 +759,7 @@ try {
   assert.equal(next.nextCycleDrafts[0].selectedConclusions.length, 1);
   assert.equal(
     next.nextCycleDrafts[0].selectedConclusions[0].summary,
-    "负责人保存失败后仍须保留的结论",
+    "负责人等待原结果期间修改的结论",
   );
   assert.equal(next.publications.length, 1);
   results.push(

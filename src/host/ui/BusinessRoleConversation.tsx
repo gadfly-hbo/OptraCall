@@ -18,6 +18,15 @@ const roleQuestions = {
   strategy: '想讨论什么战略问题？',
 };
 export interface BusinessRoleRequest { id:string; text:string; planRequest?:StrategyDiscussionMessage['planRequest']; reviewRequest?:StrategyDiscussionMessage['reviewRequest'] }
+const roleStorage=(ownerKey:string)=>'optracall.role-discussion.v1.'+ownerKey;
+export function readPendingBusinessRoleRequest(owner:BusinessRoleOwner):BusinessRoleRequest|undefined {
+  try {
+    const storage=roleStorage(JSON.stringify(owner));
+    const input:StrategyDiscussionMessage|null=JSON.parse(sessionStorage.getItem(storage+'.request')??'null');
+    if(!input||typeof input.requestId!=='string'||typeof input.text!=='string'||sessionStorage.getItem(storage+'.keep.'+input.requestId)!=='1')return;
+    return {id:input.requestId,text:input.text,...(input.planRequest?{planRequest:input.planRequest}:{}),...(input.reviewRequest?{reviewRequest:input.reviewRequest}:{})};
+  }catch{return;}
+}
 type ConversationProps = {
   request?:BusinessRoleRequest;
   onResult?:(detail:StrategyDiscussionDetail,requestId:string)=>void;
@@ -38,7 +47,7 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,open
   const base='/api/business-role?'+new URLSearchParams({owner:ownerKey});
   const title=businessRoleNames[owner.role];
   const inputId=useId();
-  const storage='optracall.role-discussion.v1.'+ownerKey;
+  const storage=roleStorage(ownerKey);
   const [text,setText]=useState(()=>sessionStorage.getItem(storage+'.draft')??openingPrompt??'');
   const [pending,setPending]=useState<StrategyDiscussionMessage|undefined>(()=>{try{return JSON.parse(sessionStorage.getItem(storage+'.request')??'null')??undefined;}catch{return undefined;}});
   const pendingRef=useRef(pending);
@@ -156,7 +165,7 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,open
       } catch(e){onError(e);}
     } finally{if(alive.current)setBusy(false);}
   }
-  const externalSent=useRef<string|undefined>(undefined);
+  const externalSent=useRef<string|undefined>(readPendingBusinessRoleRequest(owner)?.id);
   useEffect(()=>{
     const replace=pendingRef.current&&view?.discussion?.lastRun?.id===pendingRef.current.requestId&&['failed','cancelled'].includes(view.discussion.lastRun.status)?pendingRef.current.requestId:undefined;
     if(!request || externalSent.current===request.id || readOnly || busy || view?.busy || !view || (pendingRef.current&&!replace) ||

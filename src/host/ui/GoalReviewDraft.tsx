@@ -6,6 +6,7 @@ import type {
 } from "../strategy-goal-decomposition-types.ts";
 import {
   BusinessRoleConversation,
+  readPendingBusinessRoleRequest,
   type BusinessRoleRequest,
 } from "./BusinessRoleConversation.tsx";
 import * as api from "./strategy-goals-client.ts";
@@ -49,12 +50,14 @@ export function GoalReviewDraft({
   const [running, setRunning] = useState(false);
   const [request, setRequest] = useState<BusinessRoleRequest>();
   const lastGenerated = useRef("");
+  const requestEvidenceKey = useRef<string|undefined>(undefined);
   const revisionSerial = useRef(0);
   const inFlight = useRef(false);
   const current = useRef(draft);
   current.current = draft;
   const alive = useRef(true);
   const storage = `optracall.goal.review:${goal.goalId}:${period}`;
+  const reviewOwner = {role:"goal",goalId:goal.goalId,version:goal.version,analysisVariant:"goal-review"} as const;
   const plans = reviewWorkspace.gsaPlans.filter(
     (p) => p.formalTarget.period === period,
   );
@@ -187,10 +190,26 @@ export function GoalReviewDraft({
           draft.evidenceKeys.includes(key)
         )
           return;
+        const original=readPendingBusinessRoleRequest(reviewOwner);
+        if(original?.reviewRequest){
+          let originalKey:string|undefined;
+          try{
+            const saved=JSON.parse(sessionStorage.getItem(storage+'.generation')??'null');
+            if(saved?.requestId===original.id&&typeof saved.evidenceKey==='string'&&/^[a-f0-9]{64}$/.test(saved.evidenceKey))originalKey=saved.evidenceKey;
+          }catch{}
+          lastGenerated.current=originalKey??key;
+          requestEvidenceKey.current=originalKey;
+          setRunning(true);
+          setRequest(original);
+          return;
+        }
         lastGenerated.current = key;
+        requestEvidenceKey.current=key;
         setRunning(true);
+        const id=crypto.randomUUID();
+        try{sessionStorage.setItem(storage+'.generation',JSON.stringify({requestId:id,evidenceKey:key}));}catch{}
         setRequest({
-          id: crypto.randomUUID(),
+          id,
           text: "请根据本期末版正式目标、已选结账材料、阶段检查与相关 Case，先起草带原证据和适用范围的复盘结论。优先用检查编号作为 sourceRef。保留事实与待验证点，结论交由负责人取舍。",
           reviewRequest: {
             period,
@@ -214,6 +233,9 @@ export function GoalReviewDraft({
     saving,
     lastPlan,
     period,
+    goal.goalId,
+    goal.version,
+    storage,
   ]);
   if (!draft) return <p role="status">{error || "正在读取复盘草稿…"}</p>;
   const selected = draft.conclusions.filter((c) => c.selected && !c.discarded);
@@ -491,12 +513,7 @@ export function GoalReviewDraft({
         <details>
           <summary>复盘 Agent 对话与状态</summary>
           <BusinessRoleConversation
-            owner={{
-              role: "goal",
-              goalId: goal.goalId,
-              version: goal.version,
-              analysisVariant: "goal-review",
-            }}
+            owner={reviewOwner}
             request={request}
             readOnly={disabled}
             showInlineTitle={false}
@@ -505,6 +522,10 @@ export function GoalReviewDraft({
             onResult={(detail, id) => {
               const value = current.current;
               if (!value || !alive.current || id !== request?.id) return;
+              try{
+                const saved=JSON.parse(sessionStorage.getItem(storage+'.generation')??'null');
+                if(saved?.requestId===id)sessionStorage.removeItem(storage+'.generation');
+              }catch{}
               const basis = request.reviewRequest;
               if (
                 basis &&
@@ -512,8 +533,10 @@ export function GoalReviewDraft({
                   basis.actualSourceRef !== value.actualSourceRef ||
                   basis.actualFinalValue !== value.actualFinalValue ||
                   (basis.closingReport ?? "") !== (value.closingReport ?? ""))
-              )
+              ){
+                lastGenerated.current="";
                 return;
+              }
               const suggestion = detail.reviewSuggestions?.find(
                 (s) => s.requestId === id,
               );
@@ -542,7 +565,9 @@ export function GoalReviewDraft({
                 }));
               update({
                 ...value,
-                evidenceKeys: [...value.evidenceKeys, lastGenerated.current],
+                evidenceKeys: requestEvidenceKey.current
+                  ? [...new Set([...value.evidenceKeys,requestEvidenceKey.current])]
+                  : value.evidenceKeys,
                 conclusions: [...value.conclusions, ...additions],
               });
             }}
