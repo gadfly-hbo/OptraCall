@@ -1,0 +1,95 @@
+{
+  "scope": "Issue #138 approved Demo UIA-01–09 rework; screenshots before Git",
+  "baseHead": "15bff578c5b5b1d1f8db566144024de087c5e942",
+  "productCandidate": "candidate-3",
+  "candidateManifestSha256": "0d6689cf8c96188718ca7fd03dc0df820d8c2ca424665e4347d036f2e706fbf3",
+  "productAndTestFiles": {
+    "src/host/ui/GoalDecompositionWorkspace.tsx": "9f51e4af0b7a541f44c53b1d3c4973a19d94cdf8de1522ff2830f1806a39e3f8",
+    "src/host/ui/GoalJourneyViews.tsx": "ed0dc0db498ec11fe13305cc3c499cd863e538281555a85f888bc8ebc98e9f44",
+    "src/host/ui/GoalReviewDraft.tsx": "b5a756257e6c7be2d14370da40814ab97243dd7a381aace17f266da477abf3a7",
+    "src/host/ui/StrategyGoalsPage.tsx": "1d0114e6e459d0611730dcd6cbc723bcff083aa08157adbfd716a141008af0b3",
+    "src/host/ui/strategy-goals.css": "8a1b9db4d935c7f19d1e168d5b3ca89bfdfbd0c3af87f781dc3208cf72eb41bb",
+    "tests/browser-goal-ui-alignment.mjs": "671ab02ad8436ad9ab6489aa146852fedde98f28451b80c7538ebd818e4c8e38",
+    "tests/browser-issue-136-goal-decomposition.mjs": "2c9567cc5e1732ed31f71b9f515d99b948dcc1120d4e26cde3e61c5e55144bf3",
+    "tests/browser-issue-138-goal-trial.mjs": "83ccad75270b7be35534bb1375af0880c4e1e7132675d6b3ccdb4a58b4140342"
+  },
+  "approvedDemoSha256": "7b1d3031768b2ad13b39850c35879deb601c7beca7ca134eff262d40e92cab0a",
+  "documentationAfterReview": {
+    "spec.md": "1e5014c3e73fcb2419b564ab7f58fffa23237d5d1c6f22e0fe69280783c4e380",
+    "tasks.md": "d2ca767600b92126ea2cd13c34c49854948d2f3972987b8d17a82683f2ec7684",
+    "issue-138-result.md": "6607e21f699ebecbf8978e9e66b6c0146a6d5594a631de6341d96059b37185f4"
+  },
+  "independent": {
+    "reviewer": "/root/ui_rework_independent",
+    "verdict": {
+      "time": "2026-11-26T09:20:23.779329+00:00",
+      "scope": "Issue #138 UI rework independent review",
+      "candidate": "candidate-3",
+      "candidateManifestSHA256": "0d6689cf8c96188718ca7fd03dc0df820d8c2ca424665e4347d036f2e706fbf3",
+      "base": "15bff578c5b5b1d1f8db566144024de087c5e942",
+      "uiAcceptance": {
+        "UIA-01": "PASS",
+        "UIA-02": "PASS",
+        "UIA-03": "PASS",
+        "UIA-04": "PASS",
+        "UIA-05": "PASS",
+        "UIA-06": "PASS",
+        "UIA-07": "PASS",
+        "UIA-08": "PASS",
+        "UIA-09": "PASS"
+      },
+      "fourPrinciples": "PASS within this change",
+      "unresolvedUiFindings": [],
+      "exactIdentity": "candidate-3-start.json and candidate-3-end.json",
+      "candidate2EvidenceUse": "Only unchanged paths after candidate3 static diff review; affected cancellation/layout/history retested candidate3.",
+      "rawFailuresPreserved": true,
+      "fullCheck": "Author original 3132 pass / 1 fail / 196 skipped; CNR-A4 unchanged targeted run passes with task-scoped subreaper; original overall failure preserved; not independent full rerun.",
+      "git": "No Git writes; HEAD remained base at final identity check",
+      "userApproval": "Not implied; screenshot approval remains with user",
+      "report": "review.md"
+    },
+    "report": "/workspace/scratch/issue138-ui-rework/.local/ui-rework/independent/review.md",
+    "reportSha256": "4f64fe48cadb74c9c46cda7573918e10930669b5dc8317a33d7ad33700b3eed6"
+  },
+  "checks": {
+    "build": "PASS",
+    "targetedBrowserTrial": "13 paths PASS",
+    "publicationBrowserRegression": "8 paths PASS",
+    "workspaceAndCancelRegression": "PASS",
+    "realFourStageCapture": "PASS",
+    "fullCheck": {
+      "total": 3329,
+      "pass": 3132,
+      "fail": 1,
+      "skipped": 196,
+      "status": "FAIL preserved",
+      "failure": "CNR-A4 owned SDK driver exited after IPC disconnect: false",
+      "diagnosis": "Exact observed descendant PID 198261 is Z under PID1; unchanged test PASS with task-scoped external subreaper",
+      "targetedReaperPass": 1
+    }
+  },
+  "evidence": {
+    "candidate-3.json": "0d6689cf8c96188718ca7fd03dc0df820d8c2ca424665e4347d036f2e706fbf3",
+    "build-10.log": "0d17445b25c455fd011f132dcb34268e452ee8a4ad2f230e40dd04630ea71de5",
+    "publication-regression-3.log": "94cb9a8434d21238d34b013c5bd51438c24e6f1b6a60d0208fb798c5b91694be",
+    "trial-5.log": "79dbe71846f1ff4e4bdb0432b18306bfdd7aa4d01c95d595af5349aaaa364f17",
+    "cancel-metadata-green.log": "07a3c1e38960e4e9bcacd41af86b64a57c486972ae8b876d94c39c95baef6df3",
+    "capture-final-4.log": "52bc88763b6420993df0f454c7175657f68b3147ecd106b1617376394f480de7",
+    "check-2.log": "315287af56b398b5fd1fe285bc2ef97d96440dd032a5df5d06a4678673d573d8",
+    "crash-without-reaper.log": "99088c96a08e13f45fceb2b65d9efbba83cc44b2947b732556ffb6d9c4c6aecd",
+    "crash-without-reaper-processes.json": "b17af8f36e8087d73989413049baa2abedc2d28bb2e2588a181ffe83f7824288",
+    "crash-reaper-isolated.log": "495b42125b511d5976b98cc0512ae76a6196ae3a5572caf154270fbd6aa0518e"
+  },
+  "screenshots": {
+    "gallery": "/workspace/scratch/goal-ui-rework-delivery/index.html",
+    "gallerySha256": "36ed215ae19c80fa2caae021cdc91b2e359335fc90ea3bda8be088b3ff9a0b59",
+    "manifest": "/workspace/scratch/goal-ui-rework-delivery/screenshots-manifest.json",
+    "manifestSha256": "2a96dd49259b90832cb990628bd72050c85aae2e18b0987912b7dcef90d558f9"
+  },
+  "deliveryGate": {
+    "userScreenshotApproval": "CONFIRMED 2026-11-26",
+    "gitAuthorization": "User explicitly authorized commit, PR, CI and merge",
+    "commitPushPrMerge": "PENDING_AT_RECORD_FREEZE; actual receipts on Issue #138",
+    "deviceOrServiceUpdate": "NOT_PERFORMED"
+  }
+}

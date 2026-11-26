@@ -104,6 +104,7 @@ try {
   await choose(normal);
   const estimateField = page.getByRole('spinbutton',{name:'同口径可达测算值'});
   const beforeEdit = await ws(normal);
+  await btn("核对测算依据").click();
   await estimateField.fill('111');
   assert.ok(await btn('核对并发布').isDisabled());
   await page.getByRole('heading',{name:/实时拆解表.*rev 2/}).waitFor();
@@ -111,6 +112,7 @@ try {
   assert.equal(writes.filter(p => p === normal.route + '/decomposition/draft').length,1);
   await estimateField.fill('112');
   await page.getByRole('heading',{name:/实时拆解表.*rev 3/}).waitFor();
+  await page.keyboard.press("Escape");
   const writesBeforePreview = writes.filter(route=>!route.endsWith('/publish-preview')).length;
   const original = await ws(normal);
   await btn('返回修改草稿',await preview()).click();
@@ -172,7 +174,8 @@ try {
   await startHost(samePort);
   await openGoals();
   await choose(lost);
-  const recovered = page.getByRole('region',{name:'原发布操作的冻结回执'});
+  const recovered = page.locator('details[aria-label="原发布操作的冻结回执"]');
+  await recovered.locator('summary').click();
   await recovered.getByRole('heading',{name:'原操作已发布拆解正式版 v1'}).waitFor();
   await recovered.getByRole('row').filter({hasText:'G-01'}).getByText('50万元',{exact:true}).waitFor();
   await page.getByText('拆解正式版 v2 生效中',{exact:true}).waitFor();
@@ -256,7 +259,9 @@ try {
   await btn('版本与来源').click();
   await btn('查看此版',versionDialog.getByRole('listitem').filter({hasText:revisedTitle})).click();
   await page.getByRole('heading',{name:revisedTitle,exact:true}).waitFor();
+  await btn('修改 GSA').click();
   await page.getByLabel('计划 A 1 内容').fill('按修订基线检查本期门店');
+  await page.getByText('另设阶段检查点与确认信息',{exact:true}).click();
   await btn('添加阶段检查点').click();
   await page.getByLabel('阶段检查点 1 名称').fill('月度门店盘点');
   await page.getByLabel('阶段检查点 1 观察依据').fill('已结账净销售日报');
@@ -273,11 +278,13 @@ try {
   await btn('查看此版',versionDialog.getByRole('listitem').filter({hasText:normal.title + ' · v1'})).click();
   await page.getByText('历史只读版本 v1',{exact:true}).waitFor();
   await page.getByRole('navigation',{name:'目标管理三阶段流程'}).getByRole('button').first().click();
-  const officialCell = page.locator('.gm-metric-card').filter({hasText:'正式目标值（固定权威）'});
+  const officialCell = page.locator('.gj-figures > div').filter({hasText:'正式目标值'});
   await officialCell.getByText('120万元',{exact:true}).waitFor();
-  assert.ok(await btn('保存草稿').isDisabled());
+  assert.ok(await btn('修订拆解草稿').isDisabled());
   await followup();
+  await page.locator('summary').filter({hasText:'偏差提醒设置'}).click();
   assert.ok(await btn('保存阈值').isDisabled(),'historical version can only read thresholds');
+  const reportDetails=page.locator('.gj-report');if(!await reportDetails.evaluate(el=>el.open))await reportDetails.locator(':scope > summary').click();
   assert.ok(await btn('提交本次实绩，交 Agent 核对').isDisabled());
   const thresholdPath = normal.route + '/decomposition/threshold';
   const stale = await fetch(base + thresholdPath, {method:'POST',
@@ -310,6 +317,7 @@ try {
   await page.route('**'+unknownLookup+'*',route => route.fulfill({status:404,json:{code:'not_found'}}),{times:1});
   await btn('确认发布 v1',await preview()).click();
   await page.getByText(/只读核对暂时失败/).waitFor();
+  const draftOps=page.locator('.gj-more').filter({hasText:'草稿操作'});if(!await draftOps.evaluate(el=>el.open))await draftOps.locator('summary').click();
   assert.ok(await btn('保存草稿').isDisabled());
   assert.equal(await btn('重试原发布意图').count(),0);
   assert.equal(reads.filter(p => p.startsWith(unknownLookup)).length,1);

@@ -11,7 +11,7 @@ import {
   providerMessageText,
 } from "./fixtures/tool-provider.ts";
 
-const evidence = path.resolve(".local/issue138/browser");
+const evidence = path.resolve(".local/ui-rework/four-stage-browser");
 await mkdir(evidence, { recursive: true });
 const root = path.join(evidence, randomUUID());
 const host = createHost({
@@ -269,9 +269,18 @@ let page;
 try {
   const normal = await seed("北区自动保存");
   const candidate = await seed("南区候选目标", false);
-  page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
   page.on("pageerror", (e) => errors.push(e.message));
   const button = (name) => page.getByRole("button", { name, exact: true });
+  const shot=async name=>{
+    await page.evaluate(()=>{window.scrollTo(0,0);document.querySelectorAll('*').forEach(el=>{if(el.scrollTop)el.scrollTop=0;});});
+    await page.screenshot({path:path.join(evidence,name+'.png'),fullPage:true});
+  };
+  const openEstimate=async()=>{if(!await page.getByRole('spinbutton',{name:'同口径可达测算值'}).isVisible())await button('核对测算依据').click();};
+  const closeDialog=async()=>{await page.keyboard.press('Escape');};
+  const editConclusion=async(text)=>{await button('修改结论').first().click();await page.getByRole('textbox',{name:'结论摘要',exact:true}).fill(text);await button('保存这项修改').click();};
+  const conclusions=()=>page.locator('.gj-conclusion[aria-label^="复盘结论"]');
+
   await page.goto(base);
   await page
     .getByRole("navigation", { name: "主导航", exact: true })
@@ -287,6 +296,8 @@ try {
     .getByRole("heading", { name: normal.goal.title, exact: true })
     .waitFor();
   const before = await api(normal.route + "/workspace");
+  assert.equal(await page.locator('.gm-right-table input:visible,.gm-right-table select:visible').count(),0);
+  await openEstimate();
   await page.getByRole("spinbutton", { name: "同口径可达测算值" }).fill("111");
   const saved = await waitFor(
     () => api(normal.route + "/workspace"),
@@ -299,6 +310,7 @@ try {
   await page
     .getByRole("heading", { name: normal.goal.title, exact: true })
     .waitFor();
+  await openEstimate();
   assert.equal(
     await page
       .getByRole("spinbutton", { name: "同口径可达测算值" })
@@ -342,7 +354,10 @@ try {
   );
   await page.getByRole("spinbutton", { name: "同口径可达测算值" }).fill("111");
   await button("请 Agent 合并保留的改稿").waitFor();
+  await closeDialog();
+  await page.getByText("草稿操作",{exact:true}).click();
   await button("同步最新草稿").click();
+  await openEstimate();
   assert.equal(
     await page
       .getByRole("spinbutton", { name: "同口径可达测算值" })
@@ -363,6 +378,7 @@ try {
   );
 
   const choose = async (item) => {
+    if(await page.locator("dialog[open]").count())await closeDialog();
     await button("切换目标").click();
     await page
       .getByRole("dialog", { name: "切换目标" })
@@ -374,11 +390,14 @@ try {
       .waitFor();
   };
   await choose(candidate);
+  await shot("01-gsa-initial");
+  await button("修改 GSA").click();
   await button("保存 GSA 候选").click();
   await page
     .getByText("GSA 候选已保存，正式版继续以已确认版本为准。", { exact: true })
     .waitFor();
   assert.equal((await api(candidate.route + "/workspace")).gsaPlans.length, 0);
+  await button("修改 GSA").click();
   await button("＋ 添加计划 A").click();
   await button("＋ 添加计划 A").click();
   await page
@@ -474,12 +493,10 @@ try {
   await page
     .getByRole("heading", { name: candidate.goal.title, exact: true })
     .waitFor();
-  assert.equal(
-    await page
-      .getByRole("textbox", { name: "计划 A 1 内容", exact: true })
-      .inputValue(),
-    notes,
-  );
+  await shot('01-gsa-ready');
+  await button('修改 GSA').click();
+  assert.equal(await page.getByRole('textbox',{name:'计划 A 1 内容',exact:true}).inputValue(),notes);
+  await shot('01-gsa-edit');
   await button("确认 GSA，开始拆解").click();
   await button("按此要求起草").waitFor();
   assert.equal((await api(candidate.route + "/workspace")).draft, null);
@@ -502,7 +519,7 @@ try {
     { times: 1 },
   );
   await button("确认更新 GSA 计划 v2").click();
-  await page.getByRole("region", { name: "原 GSA 确认回执" }).waitFor();
+  await page.locator('details[aria-label="原 GSA 确认回执"]').waitFor();
   await button("按此要求起草").waitFor();
   assert.equal(gsaWrites, 1);
   assert.equal((await api(candidate.route + "/workspace")).gsaPlans.length, 2);
@@ -542,6 +559,21 @@ try {
   results.push(
     "F3 candidate persistence, one confirmation and F9 verbatim one-click draft",
   );
+  assert.equal(await page.locator('.gm-workspace').count(),1);
+  assert.equal(await page.locator('.gm-right-table input:visible,.gm-right-table select:visible').count(),0);
+  await page.getByRole('button',{name:'按品类',exact:true}).waitFor();
+  await shot('02-decomposition');
+  await page.getByRole('button',{name:'按品类',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'按品类',exact:true}).getAttribute('aria-pressed'),'true');
+  await page.setViewportSize({width:390,height:844});
+  await button('查看拆解表 ↓').click();
+  assert.equal(await page.locator('.gm-right-table').evaluate(el=>el===document.activeElement),true);
+  await shot('02-mobile-result');
+  await button('↑ 返回对话').click();
+  assert.equal(await page.locator('.gm-left-agent').evaluate(el=>el===document.activeElement),true);
+  await shot('02-mobile-agent');
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'mobile must not overflow');
+  await page.setViewportSize({width:1600,height:1000});
   await button("核对并发布").click();
   const preview = page.getByRole("dialog", { name: "核对并发布目标拆解表 v1" });
   await preview.waitFor();
@@ -551,7 +583,11 @@ try {
     (await api(candidate.route + "/workspace")).activePublication.version,
     1,
   );
+  await shot('02-published');
+  assert.equal(await page.locator('.gm-right-table:visible').count(),0);
+  assert.equal(await page.getByRole('region',{name:'当前正式拆解版'}).locator('input:visible,select:visible,textarea:visible').count(),0);
   await button("开始阶段跟进").click();
+  await page.getByText('调整检查版本、责任范围与阶段',{exact:true}).click();
   await page
     .getByRole("combobox", { name: "选择检查责任行" })
     .selectOption("G-TOTAL");
@@ -571,6 +607,7 @@ try {
   assert.equal(assessed.checks[0].overallPending, false);
   await page.keyboard.press("Escape");
   await page.getByText(/本次粘贴报表 · 2027-01-07 · 零售事业部/).waitFor();
+  await shot('03-followup');
   await button("用这份核对").click();
   await page.getByRole("dialog", { name: "Agent 核对实绩" }).waitFor();
   await page.keyboard.press("Escape");
@@ -582,14 +619,9 @@ try {
     .getByRole("navigation", { name: "目标管理三阶段流程" })
     .getByRole("button", { name: /到期复盘/ })
     .click();
-  await page
-    .getByRole("textbox", { name: "结论摘要", exact: true })
-    .first()
-    .waitFor();
-  await page
-    .getByRole("textbox", { name: "结论摘要", exact: true })
-    .first()
-    .fill("负责人改写后保留的结论");
+  await conclusions().first().waitFor();
+  assert.equal(await page.getByRole('textbox',{name:'结论摘要',exact:true}).count(),0,'review starts with readable conclusions');
+  await editConclusion('负责人改写后保留的结论');
   await page.getByRole("checkbox", { name: "带入下一期" }).first().check();
   await waitFor(
     () => api(candidate.route + "/review-draft?period=2027-01"),
@@ -599,10 +631,7 @@ try {
     "review edits should save",
   );
   await page.route("**/review-draft", (route) => route.abort(), { times: 1 });
-  await page
-    .getByRole("textbox", { name: "结论摘要", exact: true })
-    .first()
-    .fill("负责人保存失败后仍须保留的结论");
+  await editConclusion('负责人保存失败后仍须保留的结论');
   await button("重试保存复盘草稿").waitFor();
   const remoteReview = await api(
     candidate.route + "/review-draft?period=2027-01",
@@ -617,10 +646,7 @@ try {
   await page.reload();
   await page.getByRole("region", { name: "复盘保存冲突对照" }).waitFor();
   assert.equal(
-    await page
-      .getByRole("textbox", { name: "结论摘要", exact: true })
-      .first()
-      .inputValue(),
+    await conclusions().first().locator(':scope > p').first().textContent(),
     "负责人保存失败后仍须保留的结论",
   );
   assert.equal(
@@ -678,6 +704,7 @@ try {
   };
   page.on('request',observeReviewMessage);
   await page.route('**/api/business-role?**',async route=>{
+    try {
     const url=new URL(route.request().url());
     if(route.request().method()!=='GET'||url.searchParams.has('action')||url.searchParams.get('owner')!==JSON.stringify(reviewOwner))return route.continue();
     const response=await route.fetch();
@@ -687,23 +714,24 @@ try {
       reviewReleaseAt||=Date.now()+1200;
       if(holdReviewReceipt||Date.now()<reviewReleaseAt){
         delayedReviewReads++;
-        return route.fulfill({response,json:{...detail,discussion:{...detail.discussion,lastRun:{...detail.discussion.lastRun,status:'unknown'}}}});
+        return await route.fulfill({response,json:{...detail,discussion:{...detail.discussion,lastRun:{...detail.discussion.lastRun,status:'unknown'}}}});
       }
     }
-    return route.fulfill({response,json:detail});
+    return await route.fulfill({response,json:detail});
+    }catch(error){if(!String(error).includes('Route is already handled'))throw error; /* A goal switch cancelled this intercepted read. */}
   });
   await page
     .getByRole("navigation", { name: "目标管理三阶段流程" })
     .getByRole("button", { name: /到期复盘/ })
     .click();
   await waitFor(()=>delayedReviewReads,count=>count>0,'the second review must wait on its original receipt');
-  await page.getByRole('textbox',{name:'结论摘要',exact:true}).first().fill('负责人等待原结果期间修改的结论');
+  await editConclusion('负责人等待原结果期间修改的结论');
   await waitFor(()=>api(candidate.route+'/review-draft?period=2027-01'),value=>value.draft.conclusions[0].summary==='负责人等待原结果期间修改的结论','editing during receipt recovery should save');
   await choose(normal);
   holdReviewReceipt=false;
   await choose(candidate);
   await waitFor(
-    () => page.getByRole("textbox", { name: "结论摘要", exact: true }).count(),
+    () => conclusions().count(),
     (count) => count === 2,
     "new check should be added automatically on return",
   );
@@ -715,10 +743,7 @@ try {
   await page.unroute('**/api/business-role?**');
   results.push('F12 delayed terminal receipt and target return recover the original request without another model run');
   assert.equal(
-    await page
-      .getByRole("textbox", { name: "结论摘要", exact: true })
-      .first()
-      .inputValue(),
+    await conclusions().first().locator(':scope > p').first().textContent(),
     "负责人等待原结果期间修改的结论",
   );
   assert.equal(
@@ -739,18 +764,21 @@ try {
     fullPage: true,
   });
   await page.reload();
-  await page
-    .getByRole("textbox", { name: "结论摘要", exact: true })
-    .first()
-    .waitFor();
+  await conclusions().first().waitFor();
   assert.equal(
-    await page
-      .getByRole("textbox", { name: "结论摘要", exact: true })
-      .first()
-      .inputValue(),
+    await conclusions().first().locator(':scope > p').first().textContent(),
     "负责人等待原结果期间修改的结论",
   );
-  await button("用选中结论起草下一期").click();
+  await page.getByRole('spinbutton',{name:'期末结账实绩',exact:true}).fill('123');
+  await page.getByRole('textbox',{name:'结账凭证引用',exact:true}).fill('2027-01 财务结账凭证（合成验收）');
+  await page.getByRole('textbox',{name:'结账材料原文',exact:true}).fill('2027年1月零售事业部全渠道与门店净销售额123万元，期间已结账，覆盖完整。');
+  await waitFor(()=>api(candidate.route+'/review-draft?period=2027-01'),v=>v.draft.actualFinalValue===123&&v.draft.closingReport?.includes('覆盖完整'),'closing evidence saved');
+  const closing=page.locator('details').filter({has:page.getByText('查看或补充期末结账资料',{exact:true})});
+  if(await closing.evaluate(el=>el.open))await closing.locator('summary').click();
+  await shot('04-review');
+  await conclusions().first().scrollIntoViewIfNeeded();
+  await page.screenshot({path:path.join(evidence,'04-review-conclusions.png')});
+  await button("用选中结论起草下一期（1）").click();
   const next = await waitFor(
     () => api(candidate.route + "/workspace"),
     (ws) => ws.nextCycleDrafts.length === 1,
@@ -805,6 +833,7 @@ try {
   }
   throw error;
 } finally {
+  await page?.unrouteAll({behavior:"wait"});
   await browser.close();
   await host.close();
   await provider.close();

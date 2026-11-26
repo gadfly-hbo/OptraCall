@@ -1,3 +1,4 @@
+import { GoalFigures, GoalPlanSheet, GoalSource, GsaWorksheet } from './GoalJourneyViews.tsx';
 import { goalDraftChanges } from './goal-draft-changes.ts';
 import { GoalReviewDraft } from './GoalReviewDraft.tsx';
 import { GoalPlanAssistance } from './GoalPlanAssistance.tsx';
@@ -195,6 +196,7 @@ export function GoalDecompositionWorkspace({
   onOpenDecisions,
   onOpenHandoffs,
   onCreateNewGoal,
+  managementTools,
   onReviseGoal,
   onAdoptGoal,
   onOpenCase,
@@ -211,6 +213,7 @@ export function GoalDecompositionWorkspace({
   onOpenDecisions: () => void;
   onOpenHandoffs: () => void;
   onCreateNewGoal: () => void;
+  managementTools?: import('react').ReactNode;
   onReviseGoal: () => void;
   onAdoptGoal: () => void;
   onOpenCase: (goal: GoalRef & { strategy?: string }) => void;
@@ -222,6 +225,7 @@ export function GoalDecompositionWorkspace({
   const [loadingWs, setLoadingWs] = useState(true);
   const [wsError, setWsError] = useState('');
   const [notice, setNotice] = useState('');
+  useEffect(()=>{if(!notice)return;const timeout=setTimeout(()=>setNotice(''),6500);return()=>clearTimeout(timeout);},[notice]);
   const [stage, setStage] = useState<BusinessStage>(()=>{try{const saved=sessionStorage.getItem('optracall.goal.stage:'+record.id);return saved==='followup'||saved==='review'?saved:'plan';}catch{return 'plan';}});
   useEffect(()=>{try{sessionStorage.setItem('optracall.goal.stage:'+record.id,stage);}catch{}},[record.id,stage]);
   const [analysisDialogOpen,setAnalysisDialogOpen]=useState(false);
@@ -229,6 +233,12 @@ export function GoalDecompositionWorkspace({
   const [analysisTurn,setAnalysisTurn]=useState<{kind:'actual'|'next-cycle';ownerId:string;request:import('./BusinessRoleConversation.tsx').BusinessRoleRequest}>();
   const [analysisRequest, setAnalysisRequest] = useState<{kind:'actual'|'next-cycle'; id:string} | null>(null);
   const [editingGsa, setEditingGsa] = useState(false);
+  const [editingDecomposition,setEditingDecomposition]=useState(false);
+  const [editPart,setEditPart]=useState<'rows'|'details'|'estimate'|null>(null);
+  const agentPane=useRef<HTMLElement>(null), resultPane=useRef<HTMLElement>(null);
+  const gsaBeforeEdit=useRef<{actions:GsaPlannedAction[];points:GsaStageCheckpoint[];reason:string;confirmedBy:string;decision:string}|null>(null);
+  const openGsaEditor=()=>{gsaBeforeEdit.current={actions:structuredClone(plannedActions),points:structuredClone(stageCheckpoints),reason:gsaReason,confirmedBy:gsaConfirmedBy,decision:gsaDecision};setEditingGsa(true);};
+  const closeGsaEditor=()=>{const before=gsaBeforeEdit.current;if(before){setPlannedActions(before.actions);setStageCheckpoints(before.points);setGsaReason(before.reason);setGsaConfirmedBy(before.confirmedBy);setGsaDecision(before.decision);}setEditingGsa(false);};
   const editingGsaRef=useRef(editingGsa);editingGsaRef.current=editingGsa;
   const [gsaRecovery,setGsaRecovery]=useState(()=>readPendingGsa(record.id));
   const [recoveredGsa,setRecoveredGsa]=useState<GsaPlanVersion|null>(null);
@@ -393,6 +403,7 @@ export function GoalDecompositionWorkspace({
           editBase.current=unsaved?restoreDraft(draftCacheKey+'.base',built):null;
           setDraftForm(unsaved ?? built);
           setDraftDirty(Boolean(unsaved));
+          if(unsaved)setEditingDecomposition(true);
           if(unsaved&&unsaved.expectedDraftRevision!==built.expectedDraftRevision){
             setDraftSaveState('error');setDraftSaveError('服务器草稿已有新修订，本地改稿已保留，请先核对并合并。');setDraftConflict(ws);
           }
@@ -515,7 +526,7 @@ export function GoalDecompositionWorkspace({
     setThreshDirection(displayedThreshold?.adverseDirection ?? 'below');
     setThreshUnit(displayedThreshold?.unit ?? 'percent');
   }, [displayedThreshold, threshGranularity, thresholdMetric]);
-  const activeStageMode = !activeGsaPlan || editingGsa ? 'gsa-confirm' : 'decompose';
+  const activeStageMode = !activeGsaPlan ? 'gsa-confirm' : 'decompose';
   const upstreamNeedsReview=Boolean(activeGsaPlan&&workspace&&workspace.latestDraftRevision>0&&(!workspace.draft||workspace.draft.gsaPlanVersion!==activeGsaPlan.planVersion)&&draftForm?.reviewedPreviousPlanVersion===undefined);
   const reviewUpstream=async()=>{
     if(!activeGsaPlan||mutationsLocked)return;
@@ -531,6 +542,7 @@ export function GoalDecompositionWorkspace({
         reviewedPreviousPlanVersion:prior.gsaPlanVersion,expectedDraftRevision:prior.revision,
         estimate:{...carried.estimate,formalTargetValue:plan.formalTarget.value,gapValue:carried.estimate.estimatedValue===null?null:plan.formalTarget.value-carried.estimate.estimatedValue}});
       editSerial.current++;setDraftDirty(true);setDraftSaveState('unsaved');setPreview(null);
+      setEditingDecomposition(true);
       setNotice('已按负责人核对承接新版总 GSA，原拆解明细保留为草稿，请继续核对差额与阶段计划。');
     }catch(fault){setWsError(fault instanceof Error?fault.message:api.goalError(fault));}finally{setBusy(false);}
   };
@@ -542,7 +554,7 @@ export function GoalDecompositionWorkspace({
   const planOwner:BusinessRoleOwner={role:'goal',goalId:goal.goalId,version:goal.version,analysisVariant:'goal-plan'};
   const saveGsaCandidate=async()=>{
     setBusy(true);setWsError('');
-    try{await api.saveGsaPlanDraft(record.id,{goalVersion:goal.version,plannedActions,stageCheckpoints,...(preEstimate?{preConfirmEstimate:preEstimate}:{})});setGsaDraftNotice('GSA 候选已保存，正式版继续以已确认版本为准。');}
+    try{await api.saveGsaPlanDraft(record.id,{goalVersion:goal.version,plannedActions,stageCheckpoints,...(preEstimate?{preConfirmEstimate:preEstimate}:{})});setGsaDraftNotice('GSA 候选已保存，正式版继续以已确认版本为准。');setEditingGsa(false);await loadWorkspace();}
     catch(fault){setWsError(api.goalError(fault));}finally{setBusy(false);}
   };
 
@@ -852,6 +864,7 @@ export function GoalDecompositionWorkspace({
       clearPendingIntent(record.id);
       setPendingIntent(null);
       setPreview(null);
+      setEditingDecomposition(false);
       setNotice(`已正式发布目标拆解表 v${res.publication.version}（提交子目标 ${res.publication.committedGoals.length} 条，原草稿与历史版本分别保留）。`);
       await onGoalsReload();
       await loadWorkspace(true);
@@ -882,6 +895,7 @@ export function GoalDecompositionWorkspace({
       if (res.status === 'committed' && res.publication) {
         const publication = res.publication;
         setRecoveredReceipt({ operationId: intent.operationId, publication });
+        setEditingDecomposition(false);
         try {
           sessionStorage.setItem(receiptKey, JSON.stringify({ operationId: intent.operationId, version: publication.version, sha256: publication.snapshotSha256 }));
         } catch { /* The fetched frozen receipt remains available on this screen. */ }
@@ -1312,35 +1326,22 @@ export function GoalDecompositionWorkspace({
   const estVal = draftForm?.estimate.estimatedValue ?? null;
   const gapVal = formalVal !== null && estVal !== null ? Number((formalVal - estVal).toFixed(4)) : null;
 
+  const draftFeedback=<div role="status"><p>{draftSaveState==='saving'?'正在保存…':draftDirty?'改稿待保存':'草稿已保存'}</p>{draftSaveState==='error'&&<div role="alert"><p>{draftSaveError}</p><button className="secondary-button" onClick={()=>void handleSaveDraft()}>重试保存草稿</button>{draftConflict&&<button className="secondary-button" disabled={splitRunning||mutationsLocked} onClick={mergeDraftConflict}>请 Agent 合并保留的改稿</button>}</div>}</div>;
+
   return (
     <div className="gm-workspace" data-goal-id={record.id}>
-      {/* Confirmed A Goal Header + Effective Version Toolbar */}
-      <header className="gm-goal-header">
-        <div className="gm-goal-header-main">
-          <div className="gm-goal-title-row">
-            <h2 className="gm-goal-title">{goal.title}</h2>
-            <span className={`gm-status-pill gm-status-${statusBadge.tone}`}>{statusBadge.label}</span>
-          </div>
-          <p className="sg-muted gm-goal-meta">
-            范围：{goal.scope.name} · 负责：{goal.responsible} · 版本：v{goal.version}
-            {activeGsaPlan ? ` · GSA 计划 v${activeGsaPlan.planVersion}` : ''}
-            {activePub ? ` · 拆解正式版 v${activePub.version}` : ''}
-            {goal.dueAt ? ` · 期限 ${goal.dueAt.slice(0, 10)}` : ''}
-          </p>
-        </div>
-        <div className="gm-goal-header-actions">
-          {workspace&&!activeGsaPlan&&!revisingGsa&&gsaMissing.length===0&&<button type="button" className="primary-button" disabled={busy||mutationsLocked||endedCycle} onClick={()=>void handleConfirmGsa()}>确认并进入拆解</button>}
-          <button type="button" className="secondary-button" onClick={onOpenSwitcher}>切换目标</button>
-          <button type="button" className="secondary-button" onClick={onOpenVersions}>版本与来源</button>
-          <button type="button" className="secondary-button" onClick={onOpenDecisions}>
-            关联决策{(workspace?.caseDraftIntents.length ?? 0) > 0 ? ` (${workspace!.caseDraftIntents.length})` : ''}
-          </button>
-          <button type="button" className="secondary-button" onClick={onOpenHandoffs}>
-            执行承接 ({workspace?.handoffs.length ?? 0})
-          </button>
-          <button type="button" className="primary-button" onClick={onCreateNewGoal}>＋ 新建目标</button>
+      <header className="gj-page-head">
+        <div><div className="gj-eyebrow">目标管理</div><h1 className="gm-goal-title">{goal.title}</h1>
+          <p className="gj-context">{goal.formalOrigin?.period||goal.dueAt?.slice(0,10)||'周期待补'} · {goal.scope.name} · {goal.responsible}
+            <button type="button" className="text-button" onClick={onOpenSwitcher}>切换目标</button></p></div>
+        <div className="gj-title-actions"><span className={`gm-status-pill gm-status-${statusBadge.tone}`}>{statusBadge.label}</span>
+          <button type="button" className="secondary-button" disabled={busy||mutationsLocked||endedCycle||draftDirty||draftSaveState==='saving'} onClick={openGsaEditor}>{activeGsaPlan?'修订总 GSA':'修改 GSA'}</button>
+          {stage==='plan'&&workspace&&!activeGsaPlan&&!revisingGsa&&<button type="button" className="primary-button" disabled={busy||mutationsLocked||endedCycle} onClick={()=>gsaMissing.length?openGsaEditor():void handleConfirmGsa()}>{gsaMissing.length?'补齐 GSA 后开始拆解':'确认并进入拆解'}</button>}
         </div>
       </header>
+      <section className="gj-toolbar" aria-label="当前目标的版本、决策与执行"><div>{goal.status==='adopted'?'当前生效版':'本期候选'} <strong>目标 v{goal.version}{activeGsaPlan?` · 总 GSA v${activeGsaPlan.planVersion}`:''}{activePub?` · 拆解正式版 v${activePub.version}`:''}</strong></div>
+        <div className="sg-row"><button type="button" className="secondary-button" onClick={onOpenVersions}>版本与来源</button><button type="button" className="secondary-button" onClick={onOpenDecisions}>关联决策</button><button type="button" className="secondary-button" onClick={onOpenHandoffs}>执行承接 ({workspace?.handoffs.length??0})</button><details className="gj-more"><summary>更多</summary><button type="button" className="text-button" onClick={onCreateNewGoal}>＋ 新建目标</button>{managementTools}</details></div>
+      </section>
 
       {/* Historical Version Read-Only Banner (P1 #8) */}
       {isHistoricalVersion && (
@@ -1430,34 +1431,19 @@ export function GoalDecompositionWorkspace({
         </aside>
       )}
 
-      {recoveredReceipt && !pendingLocked && (
-        <section className="sg-panel" aria-label="原发布操作的冻结回执">
-          <h3>原操作已发布拆解正式版 v{recoveredReceipt.publication.version}</h3>
-          <p className="sg-muted">操作编号 {recoveredReceipt.operationId} · 目标 v{recoveredReceipt.publication.snapshot.gsaPlan.goal.version} · 总 GSA v{recoveredReceipt.publication.gsaPlanVersion}</p>
-          <div className="sg-table-scroll">
-            <table className="sg-table">
-              <thead><tr><th>责任行</th><th>发布时的目标</th><th>目标值</th></tr></thead>
-              <tbody>{recoveredReceipt.publication.snapshot.rows.map(row => (
-                <tr key={row.rowId}><td>{row.rowId}</td><td>{row.title}</td><td>{row.targetValue === null ? '待定' : row.targetValue + row.unit}</td></tr>
-              ))}</tbody>
-            </table>
-          </div>
-          <DownloadVersion route={`/api/strategy/goals/${record.id}/decomposition/publications/${recoveredReceipt.publication.version}/export`} />
-        </section>
-      )}
-
       <CaseFormError error={wsError} />
       {workspace?.draftUnavailable && <p role="status">原拆解草稿的范围或引用暂不可读，请核对原授权。</p>}
       {notice && <p className="case-notice" role="status">{notice}</p>}
+      {gsaDraftNotice&&!editingGsa&&!notice&&<p className="case-notice" role="status">{gsaDraftNotice}</p>}
 
       {(gsaRecovery.input||gsaRecovery.error)&&<aside className="gm-recovery-card" aria-label="总 GSA 确认结果待核"><strong>总 GSA 确认结果待核</strong><p>{gsaRecovery.error||'正在按原确认编号核对结果，原输入和版本保留。'}</p><div className="sg-row"><button className="primary-button" disabled={busy||!gsaRecovery.input} onClick={()=>void recoverGsa()}>核对原 GSA 确认</button><button className="secondary-button" disabled={busy||!gsaRecovery.input||Boolean(gsaRecovery.error)} onClick={()=>gsaRecovery.input&&void dispatchGsa(gsaRecovery.input)}>按原意图重试确认</button></div></aside>}
-      {recoveredGsa&&<section className="gm-card" aria-label="原 GSA 确认回执"><strong>原确认回执 · 总 GSA v{recoveredGsa.planVersion}</strong><p>{recoveredGsa.plannedActions.map(action=>[action.summary,action.checkpoint,action.observationBasis].filter(Boolean).join(' · ')).join('；')}</p></section>}
-      {activePub&&!pendingLocked&&<section className="gm-card" aria-label="当前正式拆解版"><div className="sg-row-between"><strong>拆解正式版 v{activePub.version} · 总 GSA v{activePub.gsaPlanVersion}</strong><button type="button" className="primary-button" onClick={()=>setStage('followup')}>开始阶段跟进</button></div><p>{activePub.snapshot.rows.map(row=>`${row.title} ${row.targetValue??'待定'}${row.unit}`).join(' · ')}</p></section>}
+
+
       {upstreamNeedsReview&&<aside className="gm-card" aria-label="核对新版总 GSA"><strong>总 GSA 已更新，原拆解仍引用旧版</strong><p>请在「版本与来源」核对原版与新版，再明确承接旧稿继续拆解。</p><button type="button" className="secondary-button" disabled={busy||mutationsLocked} onClick={()=>void reviewUpstream()}>已核对，承接原拆解草稿</button></aside>}
       {/* Confirmed A 3-Stage Business Stepper */}
       <nav className="gm-stage-tabs" aria-label="目标管理三阶段流程">
         <button type="button" aria-current={stage === 'plan' ? 'step' : undefined} onClick={() => setStage('plan')}>
-          <span className="gm-step-num">1</span> 确认总目标 GSA / 拆解与发布
+          <span className="gm-step-num">1</span> {activeGsaPlan?'目标拆解与发布':'目标拆解 · 核对 GSA'}
         </button>
         <button type="button" aria-current={stage === 'followup' ? 'step' : undefined} onClick={() => setStage('followup')}>
           <span className="gm-step-num">2</span> 阶段跟进
@@ -1477,204 +1463,29 @@ export function GoalDecompositionWorkspace({
       {stage === 'plan' && workspace && <>
         {endedCycle&&<aside role="status"><p>本周期已结束，计划只读。可继续阶段跟进和到期复盘，或切换到当前目标。</p><button type="button" onClick={onOpenSwitcher}>切换当前目标</button></aside>}
         <fieldset className="gm-plan-fieldset" disabled={endedCycle}>{activeStageMode === 'gsa-confirm' ? (
-          <section className="sg-panel gm-gsa-confirm" aria-label="确认总目标 GSA">
-            <aside className="gm-card" aria-label="总 GSA 就绪状态">
-              <strong>{gsaMissing.length?'补齐总 GSA 后开始拆解':'总 GSA 资料齐备，核对后即可开始拆解'}</strong>
-              {gsaMissing.length>0&&<><p>待补齐 {gsaMissing.join('、')}</p><button type="button" className="secondary-button" onClick={()=>{
-                if(!goal.formalOrigin||!goal.strategies?.length){onReviseGoal();return;}
-                const point=stageCheckpoints.findIndex(p=>p.label.trim()&&!p.observationBasis?.trim());
-                if(point>=0){document.querySelector<HTMLInputElement>(`[aria-label="阶段检查点 ${point+1} 观察依据"]`)?.focus();return;}
-                const actionIndex=Math.max(0,plannedActions.findIndex(a=>a.summary.trim()));
-                const action=plannedActions[actionIndex];
-                const field=!action?.summary.trim()?'内容':!action.checkpoint?.trim()?'检查点':'观察依据';
-                document.querySelector<HTMLInputElement>(`[aria-label="计划 A ${actionIndex+1} ${field}"]`)?.focus();
-              }}>查看并补齐</button></>}
-            </aside>
-            <div className="sg-row-between">
-              <div>
-                <h3>{activeGsaPlan ? `更新总目标 GSA 计划（当前 v${activeGsaPlan.planVersion}）` : '步骤 1a · 确认总目标 G、策略 S 与计划 A'}</h3>
-                <p className="sg-muted">
-                  一次确认即完成总目标采用与上层 GSA 计划冻结，随后进入拆解工作台；计划 A 仅代表管理计划，不代表已授权经营行动。
-                </p>
-              </div>
-              <div className="sg-row">
-                {activeGsaPlan && (
-                  <button type="button" className="text-button" onClick={() => {setEditingGsa(false);setGsaReason('');setPlannedActions(structuredClone(workspace.gsaDraft?.plannedActions??activeGsaPlan.plannedActions));setStageCheckpoints(structuredClone(workspace.gsaDraft?.stageCheckpoints??activeGsaPlan.stageCheckpoints));}}>返回拆解工作台</button>
-                )}
-                <button type="button" className="secondary-button" disabled={mutationsLocked} onClick={onReviseGoal}>修订基础 G/S 字段</button>
-                {goal.status !== 'adopted' && (
-                  <button type="button" className="text-button" disabled={mutationsLocked} onClick={onAdoptGoal}>单独采纳候选</button>
-                )}
-              </div>
-            </div>
-
-            <div className="gm-gsa-grid">
-              <div className="gm-card">
-                <strong>G · 正式目标</strong>
-                <p>{goal.outcome}</p>
-                <p className="sg-muted">
-                  {goal.formalOrigin
-                    ? `正式值：${goal.formalOrigin.targetValue}${goal.formalOrigin.unit}（${goal.formalOrigin.period} · ${goal.formalOrigin.kind === 'strategy-publication' ? '来自正式战略发布' : '手动拟定例外'}）`
-                    : '沿用既有目标记录（补充计划 A 即可进入拆解）'}
-                </p>
-              </div>
-              <div className="gm-card">
-                <strong>S · 核心策略</strong>
-                {goal.strategies?.length ? (
-                  <ul>{goal.strategies.map((s, i) => <li key={i}>{s}</li>)}</ul>
-                ) : (
-                  <p className="sg-muted">尚未填写策略，可点击右上「修订基础 G/S 字段」补充。</p>
-                )}
-              </div>
-            </div>
-
-            <div className="gm-card gm-plan-a-editor">
-              <div className="sg-row-between">
-                <div>
-                  <strong>A · 上层计划动作（必填至少 1 条 · 仅管理计划，非经营行动授权）</strong>
-                  <p className="sg-muted">仅修改上层计划 A 确认后会生成新的 GSA 计划版（vN+1），保留原已采用目标历史。</p>
-                </div>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  disabled={mutationsLocked}
-                  onClick={() => setPlannedActions(old => [...old, { id: crypto.randomUUID(), summary: '', checkpoint: '' }])}
-                >
-                  ＋ 添加计划 A
-                </button>
-              </div>
-              {plannedActions.map((act, idx) => (
-                <div key={act.id} className="gm-card"><div className="gm-inline-row">
-                  <input
-                    className="gm-input"
-                    aria-label={`计划 A ${idx + 1} 内容`}
-                    placeholder="填写明确的计划动作（例如：上线冬季礼盒与复购券包）"
-                    disabled={mutationsLocked}
-                    value={act.summary}
-                    onChange={e => setPlannedActions(old => old.map((x, i) => (i === idx ? { ...x, summary: e.target.value } : x)))}
-                  />
-                  <input
-                    className="gm-input gm-input-sm"
-                    aria-label={`计划 A ${idx + 1} 检查点`}
-                    placeholder="检查点（可选）"
-                    disabled={mutationsLocked}
-                    value={act.checkpoint ?? ''}
-                    onChange={e => setPlannedActions(old => old.map((x, i) => (i === idx ? { ...x, checkpoint: e.target.value } : x)))}
-                  />
-                  <input className="gm-input" aria-label={`计划 A ${idx + 1} 观察依据`} placeholder="核对这项行动所用的观察依据"
-                    disabled={mutationsLocked} value={act.observationBasis ?? ''}
-                    onChange={e => setPlannedActions(old => old.map((action, i) => i === idx ? { ...action, observationBasis: e.target.value } : action))}
-                  />
-                  {plannedActions.length > 1 && (
-                    <button type="button" className="text-button" disabled={mutationsLocked} onClick={() => setPlannedActions(old => old.filter((_, i) => i !== idx))}>移除</button>
-                  )}
-                </div><GoalPlanAssistance key={JSON.stringify([goal.goalId,goal.version,goal.strategies,act.id,editingGsa])}
-                  owner={planOwner} action={act} ready={Boolean(goal.formalOrigin&&goal.strategies?.length)} disabled={mutationsLocked}
-                  onChange={next=>setPlannedActions(actions=>actions.map(a=>a.id===next.id?next:a))}/></div>
-              ))}
-            </div>
-
-            <div className="gm-gsa-action-editor">
-              <div className="sg-row-between">
-                <strong>上层阶段检查点</strong>
-                <button type="button" className="secondary-button" disabled={mutationsLocked}
-                  onClick={() => setStageCheckpoints(items => [...items, { id: crypto.randomUUID(), label: '' }])}>
-                  添加阶段检查点
-                </button>
-              </div>
-              {stageCheckpoints.map((point, index) => (
-                <div key={point.id} className="gm-inline-row">
-                  <input className="gm-input" aria-label={`阶段检查点 ${index + 1} 名称`} placeholder="检查内容"
-                    disabled={mutationsLocked} value={point.label}
-                    onChange={e => setStageCheckpoints(items => items.map(p => p.id === point.id ? { ...p, label: e.target.value } : p))} />
-                  <input className="gm-input gm-input-sm" aria-label={`阶段检查点 ${index + 1} 日期`} type="date"
-                    disabled={mutationsLocked} value={point.targetDate ?? ''}
-                    onChange={e => setStageCheckpoints(items => items.map(p => p.id === point.id ? { ...p, targetDate: e.target.value } : p))} />
-                  <input className="gm-input" aria-label={`阶段检查点 ${index + 1} 观察依据`} placeholder="观察依据"
-                    disabled={mutationsLocked} value={point.observationBasis ?? ''}
-                    onChange={e => setStageCheckpoints(items => items.map(p => p.id === point.id ? { ...p, observationBasis: e.target.value } : p))} />
-                  <button type="button" className="text-button" disabled={mutationsLocked}
-                    onClick={() => setStageCheckpoints(items => items.filter(p => p.id !== point.id))}>移除检查点</button>
-                </div>
-              ))}
-            </div>
-
-            <div className="gm-form-grid">
-              <label className="case-field">
-                <span>确认说明</span>
-                <input className="gm-input" disabled={mutationsLocked} value={gsaDecision} onChange={e => setGsaDecision(e.target.value)} />
-              </label>
-              <label className="case-field">
-                <span>确认人</span>
-                <input className="gm-input" disabled={mutationsLocked} value={gsaConfirmedBy} onChange={e => setGsaConfirmedBy(e.target.value)} />
-              </label>
-            </div>
-
-            <div className="gm-pre-estimate-box">
-              <div className="sg-row-between">
-                <strong>确认前可达性测算（可选 · 复用统一 Pi Agent）</strong>
-                <button type="button" className="text-button" onClick={() => setShowEstimateAgent(v => !v)}>
-                  {showEstimateAgent ? '收起测算对话' : '打开确认前测算 Agent'}
-                </button>
-              </div>
-              {preEstimate && (
-                <p className="sg-muted">
-                  已保存测算：正式 {preEstimate.formalTargetValue}{preEstimate.unit} · 测算 {preEstimate.estimatedValue ?? '待补'}{preEstimate.unit} · 差额 {preEstimate.gapValue ?? '待核'}{preEstimate.unit}（{preEstimate.basis}）
-                </p>
-              )}
-              {showEstimateAgent && (
-                <div className="gm-agent-embed">
-                  <BusinessRoleConversation
-                    owner={estimateOwner}
-                    readOnly={mutationsLocked}
-                    showInlineTitle={false}
-                    onGoalDraft={onGoalDraftSuggestion}
-                    onSettled={() => void loadPreEstimate()}
-                  />
-                </div>
-              )}
-            </div>
-
-            {revisingGsa&&<div className="gm-card"><label>修订原因<input className="gm-input" aria-label="GSA 修订原因" value={gsaReason} disabled={mutationsLocked} onChange={e=>setGsaReason(e.target.value)}/></label>
-              <details><summary>核对原版与本次计划</summary><p>原版 {comparisonGsa?.formalTarget.value}{comparisonGsa?.formalTarget.unit} · {comparisonGsa?.plannedActions.map(a=>[a.summary,a.checkpoint,a.observationBasis].filter(Boolean).join(' · ')).join('；')}</p><p>本次 {plannedActions.map(a=>[a.summary,a.checkpoint,a.observationBasis].filter(Boolean).join(' · ')).join('；')}</p></details></div>}
-            {gsaDraftNotice&&<p role="status">{gsaDraftNotice}</p>}
-            <div className="gm-confirm-bar">
-              <button type="button" className="secondary-button" disabled={busy||mutationsLocked} onClick={()=>void saveGsaCandidate()}>保存 GSA 候选</button>
-              <button
-                type="button"
-                className="primary-button"
-                disabled={busy || mutationsLocked || gsaMissing.length>0 || !gsaChanged || Boolean(revisingGsa&&!gsaReason.trim())}
-                onClick={() => void handleConfirmGsa()}
-              >
-                {revisingGsa ? `确认更新 GSA 计划 v${workspace.latestGsaPlanVersion + 1}` : '确认 GSA，开始拆解'}
-              </button>
-              {goal.status === 'adopted' && (
-                <div className="sg-row">
-                  <button type="button" className="secondary-button" onClick={() => onOpenCase({ goalId: goal.goalId, version: goal.version, strategy: goal.strategies?.[0] })}>
-                    从此目标创建 Case
-                  </button>
-                  <button type="button" className="secondary-button" onClick={onStartProject}>
-                    从此目标开始项目
-                  </button>
-                </div>
-              )}
-            </div>
+          <GsaWorksheet goal={goal} actions={plannedActions} checkpoints={stageCheckpoints} estimate={preEstimate} missing={gsaMissing} onEdit={openGsaEditor} onConfirm={()=>void handleConfirmGsa()} disabled={busy||mutationsLocked||endedCycle} onEstimate={()=>{openGsaEditor();setShowEstimateAgent(true);}}/>
+        ) : activePub&&!editingDecomposition&&!pendingLocked ? (
+          <section className="gj-card gj-published" aria-label="当前正式拆解版"><header className="gj-card-head"><div><h2>正式目标拆解表 <span className="gm-status-pill gm-status-ok">v{activePub.version} 已发布</span></h2><p>总 GSA v{activePub.gsaPlanVersion} · 下游按此准确版本引用</p></div><div className="sg-row"><button className="secondary-button" disabled={mutationsLocked} onClick={()=>setEditingDecomposition(true)}>修订拆解草稿</button><button className="primary-button" onClick={()=>setStage('followup')}>开始阶段跟进</button></div></header>
+            <GoalPlanSheet sheet={activePub.snapshot} formalValue={activePub.snapshot.gsaPlan.formalTarget.value} unit={activePub.snapshot.gsaPlan.formalTarget.unit} published/>
+            <div className="gj-card-body"><DownloadVersion route={`/api/strategy/goals/${record.id}/decomposition/publications/${activePub.version}/export`} /></div>
           </section>
         ) : (
           /* Stage 1b: Confirmed A Side-by-Side Main Workspace */
           <div className="gm-split-workspace">
             {/* LEFT COLUMN: Real Unified BusinessRoleConversation (goal-decomposition) */}
-            <section className="gm-left-agent" aria-label="目标拆解 Agent 协作区">
+            <section ref={agentPane} tabIndex={-1} className="gm-left-agent" aria-label="目标拆解 Agent 协作区">
               <div className="sg-row-between gm-pane-header">
                 <div>
                   <h3>目标拆解 Agent</h3>
-                  <p className="sg-muted">自动读写本目标拆解草稿与固定技能脚本；不会自行正式发布。</p>
+                  <p className="sg-muted">用一句业务要求形成拆解草稿，核对后由负责人发布。</p>
                 </div>
-                <button type="button" className="text-button" disabled={mutationsLocked||draftDirty||draftSaveState==='saving'} onClick={() => setEditingGsa(true)}>
+                <button type="button" className="text-button" disabled={mutationsLocked||draftDirty||draftSaveState==='saving'} onClick={openGsaEditor}>
                   调整总 GSA / 计划 A
                 </button>
               </div>
-              <div className="gm-card"><p>{splitRequirement}</p><button type="button" className="secondary-button" disabled={mutationsLocked||upstreamNeedsReview||splitRunning} onClick={()=>{setSplitRunning(true);setSplitRequest({id:crypto.randomUUID(),text:splitRequirement});}}>按此要求起草</button></div>
+              <button className="gj-mobile-jump secondary-button" onClick={()=>{resultPane.current?.scrollIntoView({behavior:'smooth'});resultPane.current?.focus({preventScroll:true});}}>查看拆解表 ↓</button>
+              <section className="gj-note"><strong>当前已带入</strong><p>{goal.outcome}</p><p>{goal.scope.name} · {activeGsaPlan?.formalTarget.period} · 总 GSA v{activeGsaPlan?.planVersion}</p><GoalSource goal={goal}/><details><summary>计划与可用依据</summary><p>{activeGsaPlan?.plannedActions.map(a=>a.summary).join('；')}</p><p>{draftForm?.estimate.basis||'可在对话中补充经营资料'}</p></details></section>
+              <div className="gj-quick-prompt"><p>{splitRequirement}</p><button type="button" className="secondary-button" disabled={mutationsLocked||upstreamNeedsReview||splitRunning} onClick={()=>{setSplitRunning(true);setSplitRequest({id:crypto.randomUUID(),text:splitRequirement});}}>按此要求起草</button></div>
               <BusinessRoleConversation
                 owner={decompositionOwner} request={splitRequest} onRunning={setSplitRunning}
                 readOnly={mutationsLocked||endedCycle||upstreamNeedsReview}
@@ -1685,23 +1496,25 @@ export function GoalDecompositionWorkspace({
             </section>
 
             {/* RIGHT COLUMN: Live Decomposition Table, Conflicts, Time Plan, Preview & Publish */}
-            <section className="gm-right-table" aria-label="实时拆解表与发布区">
+            <section ref={resultPane} tabIndex={-1} className="gm-right-table" aria-label="实时拆解表与发布区">
+              <button className="gj-mobile-jump secondary-button" onClick={()=>{agentPane.current?.scrollIntoView({behavior:'smooth'});agentPane.current?.focus({preventScroll:true});}}>↑ 返回对话</button>
               <div className="sg-row-between gm-pane-header">
                 <div>
                   <h3>实时拆解表 {workspace.draft ? `· 草稿 rev ${workspace.draft.revision}` : '· 初始草稿'}</h3>
                   <p role="status" aria-label="草稿保存状态">{draftSaveState==='saving'?'正在保存…':draftSaveState==='error'?'保存失败，改稿已保留':draftDirty?'待保存':workspace.draft?'已保存':'等待形成拆解草稿'}</p>
-                  {draftSaveState==='error'&&<div role="alert"><p>{draftSaveError}</p><button type="button" className="secondary-button" onClick={()=>void handleSaveDraft()}>重试保存草稿</button>{draftConflict&&<button type="button" className="secondary-button" disabled={splitRunning||mutationsLocked} onClick={mergeDraftConflict}>请 Agent 合并保留的改稿</button>}</div>}
+                  {!editPart&&draftSaveState==='error'&&<div role="alert"><p>{draftSaveError}</p><button type="button" className="secondary-button" onClick={()=>void handleSaveDraft()}>重试保存草稿</button>{draftConflict&&<button type="button" className="secondary-button" disabled={splitRunning||mutationsLocked} onClick={mergeDraftConflict}>请 Agent 合并保留的改稿</button>}</div>}
                   <p className="sg-muted">
                     绑定总目标 GSA 计划 v{activeGsaPlan!.planVersion} · 正式目标值、可达测算值与差额始终分别保留
                   </p>
                 </div>
                 <div className="sg-row">
-                  <button type="button" className="text-button" disabled={busy} onClick={() => void loadWorkspace()}>
+                  {activePub&&<button type="button" className="text-button" onClick={()=>setEditingDecomposition(false)}>查看正式版</button>}
+                  <details className="gj-more"><summary>草稿操作</summary><button type="button" className="text-button" disabled={busy} onClick={() => void loadWorkspace()}>
                     同步最新草稿
                   </button>
                   <button type="button" className="secondary-button" disabled={busy || mutationsLocked} onClick={() => void handleSaveDraft()}>
                     保存草稿
-                  </button>
+                  </button></details>
                   <button
                     type="button"
                     className="primary-button"
@@ -1713,9 +1526,10 @@ export function GoalDecompositionWorkspace({
                 </div>
               </div>
 
+              {draftForm&&<GoalPlanSheet sheet={draftForm} formalValue={formalVal??0} unit={formalUnit} onEdit={part=>setEditPart(part)}/>}
               {/* Three Separate Metric Cards (GM03 / GM06) */}
-              {draftForm && (
-                <div className="gm-metric-cards">
+              {draftForm && editPart==='estimate' && (
+                <CaseDialog active title="核对可达测算" onClose={()=>setEditPart(null)}>{draftFeedback}<div className="gm-metric-cards">
                   <div className="gm-metric-card">
                     <span>正式目标值（固定权威）</span>
                     <strong>{formalVal ?? '—'}{formalUnit}</strong>
@@ -1754,7 +1568,7 @@ export function GoalDecompositionWorkspace({
                     <strong>{gapVal === null ? '待核' : `${gapVal > 0 ? '+' : ''}${gapVal}${formalUnit}`}</strong>
                     <small>{gapVal !== null && gapVal > 0 ? '正缺口须列不重叠补缺策略' : '无正缺口，无需强列补缺策略'}</small>
                   </div>
-                </div>
+                </div></CaseDialog>
               )}
 
               {/* GM07 Cross-View Conflict Alignment Card */}
@@ -1819,8 +1633,8 @@ export function GoalDecompositionWorkspace({
               )}
 
               {/* Allocation Rows Table */}
-              {draftForm && (
-                <div className="gm-section-block">
+              {draftForm && editPart==='rows' && (
+                <CaseDialog active title="调整责任分配" className="sg-dialog gm-aux-dialog" onClose={()=>setEditPart(null)}>{draftFeedback}<div className="gm-section-block">
                   <div className="sg-row-between">
                     <h4>责任拆解明细 ({draftForm.rows.length})</h4>
                     <button type="button" className="secondary-button" disabled={mutationsLocked} onClick={addRow}>＋ 新增拆解行</button>
@@ -1921,15 +1735,15 @@ export function GoalDecompositionWorkspace({
                       </tbody>
                     </table>
                   </div>
-                </div>
+                </div></CaseDialog>
               )}
 
               {/* Reserves & Gap Strategies & Time Plan */}
-              {draftForm && (
-                <details className="gm-collapsible" open={draftForm.reserves.length > 0 || (gapVal !== null && gapVal > 0)}>
-                  <summary>
+              {draftForm && editPart==='details' && (
+                <CaseDialog active title="调整预留、补缺与时间计划" className="sg-dialog gm-aux-dialog" onClose={()=>setEditPart(null)}>{draftFeedback}<div className="gm-collapsible">
+                  <h3>
                     预留项 ({draftForm.reserves.length} · 合计 {reserveSum}{formalUnit}) · 补缺策略 ({draftForm.gapStrategies.length}) · 时间计划 ({draftForm.timePlan.length} 阶段)
-                  </summary>
+                  </h3>
                   <div className="gm-section-block">
                     <div className="sg-row-between">
                       <h4>明确预留项（须写用途与责任人，不自动采用为子目标）</h4>
@@ -2073,36 +1887,224 @@ export function GoalDecompositionWorkspace({
                       </table>
                     </div>
                   </div>
-                </details>
+                </div></CaseDialog>
               )}
             </section>
           </div>
         )
       }</fieldset></>}
 
+      {editingGsa&&workspace&&<CaseDialog active title={activeGsaPlan?'修订总 GSA':'修改 GSA'} className="sg-dialog gj-gsa-dialog" busy={busy} onClose={closeGsaEditor}>
+        <CaseFormError error={wsError}/><fieldset className="gm-plan-fieldset" disabled={endedCycle}>
+          <section className="sg-panel gm-gsa-confirm" aria-label="确认总目标 GSA">
+            <section className="gj-gsa-editor-source" aria-label="本期 G 与 S 来源"><div className="sg-row-between"><strong>{goal.formalOrigin?`本期目标 · ${goal.formalOrigin.targetValue}${goal.formalOrigin.unit}`:'正式目标待补齐'}</strong><button type="button" className="text-button" disabled={mutationsLocked} onClick={()=>{closeGsaEditor();onReviseGoal();}}>修订基础 G/S 字段</button></div>
+              <p>{goal.formalOrigin?.period||'周期待补'} · {goal.scope.name}</p><p>策略 S · {goal.strategies?.join('；')||'待补齐'}</p><GoalSource goal={goal}/>
+              <details><summary>查看完整目标</summary><p>{goal.outcome}</p></details>
+            </section>
+
+            <div className="gm-card gm-plan-a-editor">
+              <div className="sg-row-between">
+                <div>
+                  <strong>本期计划与检查依据</strong>
+                  <p className="sg-muted">计划可由 Agent 推荐或优化，再由你修改确认。</p>
+                </div>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={mutationsLocked}
+                  onClick={() => setPlannedActions(old => [...old, { id: crypto.randomUUID(), summary: '', checkpoint: '' }])}
+                >
+                  ＋ 添加计划 A
+                </button>
+              </div>
+              {plannedActions.map((act, idx) => (
+                <div key={act.id} className="gm-card"><div className="gj-plan-fields"><label>计划 A
+                  <input
+                    className="gm-input"
+                    aria-label={`计划 A ${idx + 1} 内容`}
+                    placeholder="填写明确的计划动作（例如：上线冬季礼盒与复购券包）"
+                    disabled={mutationsLocked}
+                    value={act.summary}
+                    onChange={e => setPlannedActions(old => old.map((x, i) => (i === idx ? { ...x, summary: e.target.value } : x)))}
+                  />
+                  </label><label>阶段检查点<input
+                    className="gm-input"
+                    aria-label={`计划 A ${idx + 1} 检查点`}
+                    placeholder="写明何时检查、核对什么"
+                    disabled={mutationsLocked}
+                    value={act.checkpoint ?? ''}
+                    onChange={e => setPlannedActions(old => old.map((x, i) => (i === idx ? { ...x, checkpoint: e.target.value } : x)))}
+                  />
+                  </label><label>观察依据<input className="gm-input" aria-label={`计划 A ${idx + 1} 观察依据`} placeholder="核对这项行动所用的观察依据"
+                    disabled={mutationsLocked} value={act.observationBasis ?? ''}
+                    onChange={e => setPlannedActions(old => old.map((action, i) => i === idx ? { ...action, observationBasis: e.target.value } : action))}
+                  />
+                  </label>{plannedActions.length > 1 && (
+                    <button type="button" className="text-button" disabled={mutationsLocked} onClick={() => setPlannedActions(old => old.filter((_, i) => i !== idx))}>移除</button>
+                  )}
+                </div><GoalPlanAssistance key={JSON.stringify([goal.goalId,goal.version,goal.strategies,act.id,editingGsa])}
+                  owner={planOwner} action={act} ready={Boolean(goal.formalOrigin&&goal.strategies?.length)} disabled={mutationsLocked}
+                  onChange={next=>setPlannedActions(actions=>actions.map(a=>a.id===next.id?next:a))}/></div>
+              ))}
+            </div>
+
+            <details className="gj-details"><summary>另设阶段检查点与确认信息</summary><div className="gm-gsa-action-editor">
+              <div className="sg-row-between">
+                <strong>上层阶段检查点</strong>
+                <button type="button" className="secondary-button" disabled={mutationsLocked}
+                  onClick={() => setStageCheckpoints(items => [...items, { id: crypto.randomUUID(), label: '' }])}>
+                  添加阶段检查点
+                </button>
+              </div>
+              {stageCheckpoints.map((point, index) => (
+                <div key={point.id} className="gm-inline-row">
+                  <input className="gm-input" aria-label={`阶段检查点 ${index + 1} 名称`} placeholder="检查内容"
+                    disabled={mutationsLocked} value={point.label}
+                    onChange={e => setStageCheckpoints(items => items.map(p => p.id === point.id ? { ...p, label: e.target.value } : p))} />
+                  <input className="gm-input gm-input-sm" aria-label={`阶段检查点 ${index + 1} 日期`} type="date"
+                    disabled={mutationsLocked} value={point.targetDate ?? ''}
+                    onChange={e => setStageCheckpoints(items => items.map(p => p.id === point.id ? { ...p, targetDate: e.target.value } : p))} />
+                  <input className="gm-input" aria-label={`阶段检查点 ${index + 1} 观察依据`} placeholder="观察依据"
+                    disabled={mutationsLocked} value={point.observationBasis ?? ''}
+                    onChange={e => setStageCheckpoints(items => items.map(p => p.id === point.id ? { ...p, observationBasis: e.target.value } : p))} />
+                  <button type="button" className="text-button" disabled={mutationsLocked}
+                    onClick={() => setStageCheckpoints(items => items.filter(p => p.id !== point.id))}>移除检查点</button>
+                </div>
+              ))}
+            </div>
+
+            <div className="gm-form-grid">
+              <label className="case-field">
+                <span>确认说明</span>
+                <input className="gm-input" disabled={mutationsLocked} value={gsaDecision} onChange={e => setGsaDecision(e.target.value)} />
+              </label>
+              <label className="case-field">
+                <span>确认人</span>
+                <input className="gm-input" disabled={mutationsLocked} value={gsaConfirmedBy} onChange={e => setGsaConfirmedBy(e.target.value)} />
+              </label>
+            </div>
+
+            </details><details className="gj-details" open={showEstimateAgent}><summary>确认前可达性测算</summary><div className="gm-pre-estimate-box">
+              <div className="sg-row-between">
+                <strong>确认前可达性测算（可选 · 复用统一 Pi Agent）</strong>
+                <button type="button" className="text-button" onClick={() => setShowEstimateAgent(v => !v)}>
+                  {showEstimateAgent ? '收起测算对话' : '打开确认前测算 Agent'}
+                </button>
+              </div>
+              {preEstimate && (
+                <p className="sg-muted">
+                  已保存测算：正式 {preEstimate.formalTargetValue}{preEstimate.unit} · 测算 {preEstimate.estimatedValue ?? '待补'}{preEstimate.unit} · 差额 {preEstimate.gapValue ?? '待核'}{preEstimate.unit}（{preEstimate.basis}）
+                </p>
+              )}
+              {showEstimateAgent && (
+                <div className="gm-agent-embed">
+                  <BusinessRoleConversation
+                    owner={estimateOwner}
+                    readOnly={mutationsLocked}
+                    showInlineTitle={false}
+                    onGoalDraft={onGoalDraftSuggestion}
+                    onSettled={() => void loadPreEstimate()}
+                  />
+                </div>
+              )}
+            </div>
+
+            </details>
+            {revisingGsa&&<div className="gm-card"><label>修订原因<input className="gm-input" aria-label="GSA 修订原因" value={gsaReason} disabled={mutationsLocked} onChange={e=>setGsaReason(e.target.value)}/></label>
+              <details><summary>核对原版与本次计划</summary><p>原版 {comparisonGsa?.formalTarget.value}{comparisonGsa?.formalTarget.unit} · {comparisonGsa?.plannedActions.map(a=>[a.summary,a.checkpoint,a.observationBasis].filter(Boolean).join(' · ')).join('；')}</p><p>本次 {plannedActions.map(a=>[a.summary,a.checkpoint,a.observationBasis].filter(Boolean).join(' · ')).join('；')}</p></details></div>}
+            {gsaDraftNotice&&<p role="status">{gsaDraftNotice}</p>}
+            <div className="gm-confirm-bar gj-dialog-footer"><button type="button" className="text-button" disabled={busy} onClick={closeGsaEditor}>取消</button>
+              <button type="button" className="secondary-button" disabled={busy||mutationsLocked} onClick={()=>void saveGsaCandidate()}>保存 GSA 候选</button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={busy || mutationsLocked || gsaMissing.length>0 || !gsaChanged || Boolean(revisingGsa&&!gsaReason.trim())}
+                onClick={() => void handleConfirmGsa()}
+              >
+                {revisingGsa ? `确认更新 GSA 计划 v${workspace.latestGsaPlanVersion + 1}` : '确认 GSA，开始拆解'}
+              </button>
+            </div>
+          </section>
+        </fieldset></CaseDialog>}
+
       {/* STAGE 2: Follow-up Checks & Case Draft Intents (GM10 / GM11) */}
       {stage === 'followup' && workspace && (
-        <section className="sg-panel gm-stage-panel" aria-label="阶段跟进与偏差核对">
+        <section className="gj-followup" aria-label="阶段跟进与偏差核对"><div className="gj-card gj-follow-main">
           <div className="sg-row-between">
             <div>
-              <h3>步骤 2 · 阶段跟进与偏差核对</h3>
+              <h3>阶段跟进 · 对照正式计划核对实绩</h3>
               <p className="sg-muted">
-                每次检查严格绑定当时的拆解正式版冻结计划；部分门店未出数时仅展示已出数对比，不给整体偏差百分比，也不计入连续触发。
+                选用本期实绩，由 Agent 核对可比性、分析偏差。每次检查保留当时的准确版本。
               </p>
             </div>
-            <div className="sg-row gm-threshold-bar">
-              <label>检查周期<select disabled={mutationsLocked} className="sg-select" value={threshGranularity} onChange={e => setThreshGranularity(e.target.value as DecompositionTimePeriod['granularity'])}><option value="day">日</option><option value="week">周</option><option value="month">月</option></select></label>
-              <label>不利方向<select disabled={mutationsLocked} className="sg-select" value={threshDirection} onChange={e => setThreshDirection(e.target.value as typeof threshDirection)}><option value="below">低于计划</option><option value="above">高于计划</option></select></label>
-              <label>幅度单位<select disabled={mutationsLocked} className="sg-select" value={threshUnit} onChange={e => setThreshUnit(e.target.value as typeof threshUnit)}><option value="percent">百分比</option><option value="percentage-points">百分点</option></select></label>
-              <label>单期幅度阈值
-                <input disabled={mutationsLocked} type="number" className="gm-input gm-input-xs" value={threshMagnitude} onChange={e => setThreshMagnitude(e.target.value)} />
-              </label>
-              <label>连续期数
-                <input disabled={mutationsLocked} type="number" className="gm-input gm-input-xs" value={threshConsecutive} onChange={e => setThreshConsecutive(e.target.value)} />
-              </label>
-              <button type="button" className="secondary-button" disabled={mutationsLocked || busy || !activePub} onClick={() => void handleSaveThreshold()}>保存阈值</button>
-            </div>
+
           </div>
+
+          {/* Check History */}
+          <section className="gj-check-results">
+            <h3>实绩核对结果</h3>
+            {workspace.checks.length ? (
+              <ul className="sg-history">
+                {workspace.checks.slice().reverse().map(chk => (
+                  <li key={chk.checkId}><details className="gj-check" open={chk.checkId===workspace.checks.at(-1)?.checkId}><summary>{chk.periods.map(p=>p.label).join('、')} · 拆解正式版 v{chk.publicationVersion} · {chk.actualSource.label}{chk.checkId===workspace.checks.at(-1)?.checkId?' · 最新检查':''}</summary>
+                    <div className="gj-check-body"><GoalFigures items={[
+                      {label:'冻结计划',value:chk.periods.length===1?`${chk.periods[0].plannedValue??'待定'}${chk.actualSource.basis?.unit??''}`:'见逐期对照',note:`总 GSA v${chk.gsaPlanVersion} · 拆解 v${chk.publicationVersion}`},
+                      {label:'本期实绩',value:chk.periods.length===1?`${chk.periods[0].actualValue??'待补'}${chk.actualSource.basis?.unit??''}`:'见逐期对照',note:chk.actualSource.cutoffAt},
+                      {label:'整体偏差',value:chk.overallPending?'待补':chk.overallVariancePct==null?'暂不能计算':`${chk.overallVariancePct}%`,note:chk.overallPending?(chk.missingCoverageNote||'覆盖或可比性待核'):chk.trigger.reason}]}/>
+                    <div className="sg-table-scroll"><table className="gj-result-table"><thead><tr><th>检查阶段</th><th>冻结计划</th><th>实绩</th><th>偏差</th></tr></thead><tbody>{chk.periods.map(p=><tr key={p.periodId}><td>{p.label}</td><td>{p.plannedValue??'未定'}</td><td>{p.actualValue??'待补'}</td><td>{p.variancePct==null?'待核':`${p.variancePct}%`}</td></tr>)}</tbody></table></div>
+                    <div className="gj-note"><strong>Agent 核对说明</strong><p>{chk.assessmentNote||chk.trigger.reason}</p>{chk.evidenceQuote&&<blockquote>{chk.evidenceQuote}</blockquote>}</div>
+                    <details className="gj-details"><summary>本次实绩凭证与准确引用</summary>
+                    <div className="sg-row-between">
+                      <div>
+                        <strong>{chk.checkId} · 拆解版 v{chk.publicationVersion} · {chk.rowId} · {chk.actualSource.label}</strong>{' '}
+                        <span className={`sg-badge ${chk.trigger.triggered ? '' : 'pending'}`}>
+                          {chk.overallPending
+                            ? '部分未出数 · 整体偏差待补'
+                            : chk.trigger.triggered
+                              ? `已触发偏差提示 (${chk.trigger.type})`
+                              : '未触发阈值'}
+                        </span>
+                      </div>
+                      <span className="sg-muted">{caseDate(chk.recordedAt)}</span>
+                    </div>
+                    <p className="sg-muted">
+                      {chk.actualSource.cutoffQuote&&<span>截至时间原句「{chk.actualSource.cutoffQuote}」<br/></span>}
+                      实绩凭证：{chk.actualSource.ref}（截至 {chk.actualSource.cutoffAt}）·{' '}
+                      {chk.overallPending
+                        ? `整体偏差：待补（${chk.missingCoverageNote || '部分门店未出数，不自动折算整体百分比'}）`
+                        : `整体绝对差额：${chk.overallAbsoluteDiff ?? '—'} · 整体偏差百分比：${chk.overallVariancePct === null ? '无法计算（计划为 0 或未定）' : `${chk.overallVariancePct}%`}`}
+                    </p>
+                    <p>{chk.trigger.reason}</p></details><h4>本次处理</h4>
+                    {chk.caseChoice ? (
+                      <p className="sg-muted">已选择处理方式：{chk.caseChoice.kind}（{chk.caseChoice.note || '已记录'}）{chk.caseChoice.kind === 'continue-existing' && onInspectCase && <button disabled={mutationsLocked} type="button" className="text-button"
+                        onClick={() => { if (chk.caseChoice?.kind === 'continue-existing') onInspectCase(chk.caseChoice.caseId); }}>查看原 Case</button>}</p>
+                    ) : (
+                      <div className="sg-row">
+                        <button type="button" className="secondary-button" disabled={mutationsLocked || busy} onClick={() => void handleCheckChoice(chk.checkId, 'observe')}>继续观察</button>
+                        <button type="button" className="secondary-button" disabled={mutationsLocked || busy} onClick={() => void handleCheckChoice(chk.checkId, 'supplement')}>安排补证</button>
+                        {chk.caseCandidatesUnavailable && <span className="sg-muted">原 Case 暂待核对。</span>}
+                        {(chk.caseCandidates ?? []).map(candidate => (
+                          <button key={candidate.caseId} type="button" className="secondary-button" disabled={mutationsLocked || busy}
+                            onClick={() => void handleCheckChoice(chk.checkId, 'continue-existing', candidate.caseId, candidate.strategy)}>
+                            确认同一问题并续接「{candidate.title}」· {candidate.strategy}
+                          </button>
+                        ))}
+                        {(chk.caseStrategies?.length ?? 0) > 1 && <select disabled={mutationsLocked} className="sg-select" aria-label="新 Case 采用的具体策略"
+                          value={checkStrategies[chk.checkId] ?? ''} onChange={e => setCheckStrategies(old => ({...old, [chk.checkId]: e.target.value}))}>
+                          <option value="">选择具体策略</option>
+                          {chk.caseStrategies?.map(strategy => <option key={strategy}>{strategy}</option>)}
+                        </select>}
+                        <button type="button" className="primary-button" disabled={mutationsLocked || busy || (chk.caseStrategies?.length ?? 0) > 1 && !checkStrategies[chk.checkId]}
+                          onClick={() => void handleCheckChoice(chk.checkId, 'create-new-draft', undefined, checkStrategies[chk.checkId])}>另建独立 Case 草稿</button>
+                      </div>
+                    )}
+                  </div></details></li>
+                ))}
+              </ul>
+            ) : (
+              <p className="sg-muted">尚无阶段检查记录。</p>
+            )}
+          </section>
 
           {activePub ? (() => {
             const targetPub = selectedCheckPub ?? activePub;
@@ -2122,8 +2124,8 @@ export function GoalDecompositionWorkspace({
             });
             return (
             <div className="gm-card">
-              <strong>按所选冻结拆解版 v{targetPub.version} 记录一次阶段检查</strong>
-              <div className="gm-form-grid">
+              <div className="gj-section-heading"><h3>选用本期实绩</h3><span className="sg-muted">拆解正式版 v{targetPub.version} · {targetRow?.scopeLabel||'总目标'} · {selectedPeriod?.label||'阶段待定'}</span></div>
+              <details className="gj-details"><summary>调整检查版本、责任范围与阶段</summary><div className="gm-form-grid">
                 <label className="case-field">
                   <span>选择拆解正式版</span>
                   <select
@@ -2188,6 +2190,7 @@ export function GoalDecompositionWorkspace({
                     ))}
                   </select>
                 </label>
+              </div></details><div className="gj-receipts">
                 {savedForPeriod.length>0&&<div className="case-field"><strong>选用已保存的实绩</strong>{savedForPeriod.map(actual=>{const assessed=workspace.checks.find(check=>check.operationId===actual.actualId);const receipt=assessed?.actualSource??actual.input.actualSource;return <div className="gm-card" key={actual.actualId}>
                   <p>{receipt.label} · {receipt.cutoffAt||'截至日期待核'} · {receipt.basis?.scope||receipt.coverageNote||'覆盖范围待核'}</p>
                   {receipt.cutoffQuote&&<p>原句「{receipt.cutoffQuote}」</p>}
@@ -2197,6 +2200,7 @@ export function GoalDecompositionWorkspace({
                   }}>补充截至时间后重新核对</button></>}
                   <button type="button" className="secondary-button" disabled={mutationsLocked||busy} onClick={()=>startActualCheck(actual.actualId)}>用这份核对</button>
                 </div>})}</div>}
+              </div><details className="gj-details gj-report" open={savedForPeriod.length===0}><summary>提交新的实绩报表</summary><div className="gm-form-grid">
                 <label className="case-field"><span>实绩报表原文</span>
                   <textarea disabled={mutationsLocked} className="gm-input" aria-label="实绩报表原文" value={reportText}
                     placeholder="粘贴报表或本次检查相关段落，Agent 将从原文核对数值、口径和覆盖范围。"
@@ -2269,75 +2273,16 @@ export function GoalDecompositionWorkspace({
               </details>
               <button type="button" className="primary-button" disabled={busy || mutationsLocked} onClick={() => void handleRecordCheck()}>
                 提交本次实绩，交 Agent 核对
-              </button>
+              </button></details>
             </div>
             );
           })() : (
             <p className="sg-muted">尚未发布正式拆解表。若无需拆解表，您仍可直接在下方从已采用 G+S 发起主动试点 Case 草稿。</p>
           )}
 
-          {/* Check History */}
-          <div className="gm-section-block">
-            <h4>历史阶段检查记录 ({workspace.checks.length})</h4>
-            {workspace.checks.length ? (
-              <ul className="sg-history">
-                {workspace.checks.slice().reverse().map(chk => (
-                  <li key={chk.checkId}>
-                    <div className="sg-row-between">
-                      <div>
-                        <strong>{chk.checkId} · 拆解版 v{chk.publicationVersion} · {chk.rowId} · {chk.actualSource.label}</strong>{' '}
-                        <span className={`sg-badge ${chk.trigger.triggered ? '' : 'pending'}`}>
-                          {chk.overallPending
-                            ? '部分未出数 · 整体偏差待补'
-                            : chk.trigger.triggered
-                              ? `已触发偏差提示 (${chk.trigger.type})`
-                              : '未触发阈值'}
-                        </span>
-                      </div>
-                      <span className="sg-muted">{caseDate(chk.recordedAt)}</span>
-                    </div>
-                    <p className="sg-muted">
-                      {chk.actualSource.cutoffQuote&&<span>截至时间原句「{chk.actualSource.cutoffQuote}」<br/></span>}
-                      实绩凭证：{chk.actualSource.ref}（截至 {chk.actualSource.cutoffAt}）·{' '}
-                      {chk.overallPending
-                        ? `整体偏差：待补（${chk.missingCoverageNote || '部分门店未出数，不自动折算整体百分比'}）`
-                        : `整体绝对差额：${chk.overallAbsoluteDiff ?? '—'} · 整体偏差百分比：${chk.overallVariancePct === null ? '无法计算（计划为 0 或未定）' : `${chk.overallVariancePct}%`}`}
-                    </p>
-                    <p>{chk.trigger.reason}</p>
-                    {chk.caseChoice ? (
-                      <p className="sg-muted">已选择处理方式：{chk.caseChoice.kind}（{chk.caseChoice.note || '已记录'}）{chk.caseChoice.kind === 'continue-existing' && onInspectCase && <button disabled={mutationsLocked} type="button" className="text-button"
-                        onClick={() => { if (chk.caseChoice?.kind === 'continue-existing') onInspectCase(chk.caseChoice.caseId); }}>查看原 Case</button>}</p>
-                    ) : (
-                      <div className="sg-row">
-                        <button type="button" className="secondary-button" disabled={mutationsLocked || busy} onClick={() => void handleCheckChoice(chk.checkId, 'observe')}>继续观察</button>
-                        <button type="button" className="secondary-button" disabled={mutationsLocked || busy} onClick={() => void handleCheckChoice(chk.checkId, 'supplement')}>安排补证</button>
-                        {chk.caseCandidatesUnavailable && <span className="sg-muted">原 Case 暂待核对。</span>}
-                        {(chk.caseCandidates ?? []).map(candidate => (
-                          <button key={candidate.caseId} type="button" className="secondary-button" disabled={mutationsLocked || busy}
-                            onClick={() => void handleCheckChoice(chk.checkId, 'continue-existing', candidate.caseId, candidate.strategy)}>
-                            确认同一问题并续接「{candidate.title}」· {candidate.strategy}
-                          </button>
-                        ))}
-                        {(chk.caseStrategies?.length ?? 0) > 1 && <select disabled={mutationsLocked} className="sg-select" aria-label="新 Case 采用的具体策略"
-                          value={checkStrategies[chk.checkId] ?? ''} onChange={e => setCheckStrategies(old => ({...old, [chk.checkId]: e.target.value}))}>
-                          <option value="">选择具体策略</option>
-                          {chk.caseStrategies?.map(strategy => <option key={strategy}>{strategy}</option>)}
-                        </select>}
-                        <button type="button" className="primary-button" disabled={mutationsLocked || busy || (chk.caseStrategies?.length ?? 0) > 1 && !checkStrategies[chk.checkId]}
-                          onClick={() => void handleCheckChoice(chk.checkId, 'create-new-draft', undefined, checkStrategies[chk.checkId])}>另建独立 Case 草稿</button>
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="sg-muted">尚无阶段检查记录。</p>
-            )}
-          </div>
-
           {/* Proactive Pilot Case Draft (works even without decomposition table!) */}
-          <div className="gm-card">
-            <strong>主动试点 Case 草稿（无拆解表也可从已采用 G+S 发起）</strong>
+          <details className="gj-details"><summary>另行发起主动试点 Case</summary><div className="gm-card">
+            <strong>从已采用 G+S 发起主动试点</strong>
             <div className="gm-form-grid">
               {(goal.strategies?.length ?? 0) > 1 && <label className="case-field"><span>试点采用的具体策略</span>
                 <select disabled={mutationsLocked} className="sg-select" value={pilotStrategy} onChange={e => setPilotStrategy(e.target.value)}>
@@ -2357,23 +2302,36 @@ export function GoalDecompositionWorkspace({
             <button type="button" className="secondary-button" disabled={mutationsLocked || busy || goal.status !== 'adopted'} onClick={() => void handleCreatePilotCase()}>
               生成主动试点 Case 草稿意图
             </button>
-          </div>
+          </div></details>
+        </div><aside className="gj-card gj-case-rules"><header className="gj-card-head"><h3>Case 提示规则</h3></header><div className="gj-card-body">
+          <p>可比实绩达到任一条件时，提示负责人核对已有事项。续接或新建 Case 由负责人决定。</p>
+          {workspace.checks.at(-1)&&<><h4>最新检查采用的规则</h4><p>{workspace.checks.at(-1)!.thresholdSnapshot.configured?[workspace.checks.at(-1)!.thresholdSnapshot.magnitudePct===undefined?'':`不利偏差 ${workspace.checks.at(-1)!.thresholdSnapshot.magnitudePct}${workspace.checks.at(-1)!.thresholdSnapshot.unit==='percentage-points'?'个百分点':'%'}`,workspace.checks.at(-1)!.thresholdSnapshot.consecutivePeriods===undefined?'':`连续 ${workspace.checks.at(-1)!.thresholdSnapshot.consecutivePeriods} 期`].filter(Boolean).join(' 或 '):'当时尚未配置阈值'}</p></>}
+          <h4>下一次检查</h4>
+            <details className="gj-details gj-threshold"><summary>偏差提醒设置 · {displayedThreshold?.configured?[displayedThreshold.magnitudePct===undefined?'':`${displayedThreshold.magnitudePct}${displayedThreshold.unit==='percentage-points'?'个百分点':'%'}`,displayedThreshold.consecutivePeriods===undefined?'':`连续 ${displayedThreshold.consecutivePeriods} 期`].filter(Boolean).join(' 或 '):'尚未配置'}</summary><div className="sg-row gm-threshold-bar">
+              <label>检查周期<select disabled={mutationsLocked} className="sg-select" value={threshGranularity} onChange={e => setThreshGranularity(e.target.value as DecompositionTimePeriod['granularity'])}><option value="day">日</option><option value="week">周</option><option value="month">月</option></select></label>
+              <label>不利方向<select disabled={mutationsLocked} className="sg-select" value={threshDirection} onChange={e => setThreshDirection(e.target.value as typeof threshDirection)}><option value="below">低于计划</option><option value="above">高于计划</option></select></label>
+              <label>幅度单位<select disabled={mutationsLocked} className="sg-select" value={threshUnit} onChange={e => setThreshUnit(e.target.value as typeof threshUnit)}><option value="percent">百分比</option><option value="percentage-points">百分点</option></select></label>
+              <label>单期幅度阈值
+                <input disabled={mutationsLocked} type="number" className="gm-input gm-input-xs" value={threshMagnitude} onChange={e => setThreshMagnitude(e.target.value)} />
+              </label>
+              <label>连续期数
+                <input disabled={mutationsLocked} type="number" className="gm-input gm-input-xs" value={threshConsecutive} onChange={e => setThreshConsecutive(e.target.value)} />
+              </label>
+              <button type="button" className="secondary-button" disabled={mutationsLocked || busy || !activePub} onClick={() => void handleSaveThreshold()}>保存阈值</button>
+            </div></details>          <button type="button" className="text-button" onClick={onOpenVersions}>查看计划引用</button>
+        </div></aside>
         </section>
       )}
 
       {/* STAGE 3: Cycle Review, Next Cycle Draft & Strategy Return (GM12) */}
       {stage === 'review' && workspace && (
         <section className="sg-panel gm-stage-panel" aria-label="到期复盘与下期起草">
-          <h3>步骤 3 · 到期复盘</h3>
-          <p className="sg-muted">
-            严格以本周期最后生效的已确认总目标 GSA 评估完成情况（期初目标仅作备忘），完整保留历史阶段检查；空白实绩保持待补，不自动记为 0；由负责人勾选结论子集起草下期或回送战略。
-          </p>
-
-          <label className="case-field">复盘期间<select className="sg-select" value={reviewPeriod||activeGsaPlan?.formalTarget.period||''} onChange={e=>setReviewPeriod(e.target.value)}>{[...new Set(workspace.gsaPlans.map(p=>p.formalTarget.period))].map(period=><option key={period}>{period}</option>)}</select></label>
+          <header className="gj-review-head"><div><h3>到期复盘</h3><p className="sg-muted">以本期最后生效目标评估达成，由负责人选定要带入下一期的经验。</p></div>
+          <details className="gj-review-period"><summary>本期复盘口径 · {reviewPeriod||activeGsaPlan?.formalTarget.period||'待选择'}</summary><label className="case-field">复盘期间<select className="sg-select" value={reviewPeriod||activeGsaPlan?.formalTarget.period||''} onChange={e=>setReviewPeriod(e.target.value)}>{[...new Set(workspace.gsaPlans.map(p=>p.formalTarget.period))].map(period=><option key={period}>{period}</option>)}</select></label></details>
+          </header>
           {(reviewPeriod||activeGsaPlan?.formalTarget.period)&&<GoalReviewDraft key={reviewPeriod||activeGsaPlan?.formalTarget.period} goal={goal} workspace={workspace} period={reviewPeriod||activeGsaPlan!.formalTarget.period} disabled={mutationsLocked} onSaved={loadWorkspace} onNext={handleNextCycleDraft}/>}
 
-          <div className="gm-section-block">
-            <h4>已保存复盘记录 ({workspace.reviews.length})</h4>
+          <details className="gj-details"><summary>历史复盘记录与战略回送 ({workspace.reviews.length})</summary><div className="gm-section-block">
             {workspace.reviews.length ? (
               <ul className="sg-history">
                 {workspace.reviews.slice().reverse().map(rev => {
@@ -2431,16 +2389,33 @@ export function GoalDecompositionWorkspace({
             ) : (
               <p className="sg-muted">尚无到期复盘记录。</p>
             )}
-          </div>
+          </div></details>
         </section>
       )}
 
-      {stage === 'followup' && workspace?.submittedActuals?.map(actual => {
+      {recoveredReceipt && !pendingLocked && (
+        <details className="gj-details" aria-label="原发布操作的冻结回执"><summary>原发布操作的冻结回执</summary>
+          <h3>原操作已发布拆解正式版 v{recoveredReceipt.publication.version}</h3>
+          <p className="sg-muted">操作编号 {recoveredReceipt.operationId} · 目标 v{recoveredReceipt.publication.snapshot.gsaPlan.goal.version} · 总 GSA v{recoveredReceipt.publication.gsaPlanVersion}</p>
+          <div className="sg-table-scroll">
+            <table className="sg-table">
+              <thead><tr><th>责任行</th><th>发布时的目标</th><th>目标值</th></tr></thead>
+              <tbody>{recoveredReceipt.publication.snapshot.rows.map(row => (
+                <tr key={row.rowId}><td>{row.rowId}</td><td>{row.title}</td><td>{row.targetValue === null ? '待定' : row.targetValue + row.unit}</td></tr>
+              ))}</tbody>
+            </table>
+          </div>
+          <DownloadVersion route={`/api/strategy/goals/${record.id}/decomposition/publications/${recoveredReceipt.publication.version}/export`} />
+        </details>
+      )}
+
+      {recoveredGsa&&<details className="gj-details" aria-label="原 GSA 确认回执"><summary>原 GSA 确认回执</summary><strong>原确认回执 · 总 GSA v{recoveredGsa.planVersion}</strong><p>{recoveredGsa.plannedActions.map(action=>[action.summary,action.checkpoint,action.observationBasis].filter(Boolean).join(' · ')).join('；')}</p></details>}
+      {stage === 'followup' && Boolean(workspace?.submittedActuals?.length) && <details className="gj-details"><summary>实绩核对对话记录</summary>{workspace?.submittedActuals?.map(actual => {
         const checked = workspace.checks.find(c => c.operationId === actual.actualId);
         return <p key={actual.actualId}><button className="text-button" onClick={() => {setAnalysisTurn(undefined);setAnalysisDialogOpen(true);setAnalysisRequest({kind:'actual', id:actual.actualId});}}>
           {actual.input.actualSource.label} · {checked ? '查看 Agent 核对' : '待 Agent 核对'}
         </button>{checked?.assessmentNote}</p>;
-      })}
+      })}</details>}
       {stage === 'review' && workspace?.nextCycleDrafts.map(draft => <p key={draft.draftId}>
         <button className="text-button" onClick={() => {setAnalysisTurn(undefined);setAnalysisDialogOpen(true);setAnalysisRequest({kind:'next-cycle', id:draft.draftId});}}>
           {draft.nextPeriod} · 查看起草对话
