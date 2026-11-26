@@ -192,6 +192,7 @@ export function GoalReviewDraft({
           return;
         const original=readPendingBusinessRoleRequest(reviewOwner);
         if(original?.reviewRequest){
+          if(request?.id===original.id)return;
           let originalKey:string|undefined;
           try{
             const saved=JSON.parse(sessionStorage.getItem(storage+'.generation')??'null');
@@ -233,6 +234,7 @@ export function GoalReviewDraft({
     saving,
     lastPlan,
     period,
+    request,
     goal.goalId,
     goal.version,
     storage,

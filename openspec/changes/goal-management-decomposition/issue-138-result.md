@@ -52,6 +52,8 @@
 
 后续修正复用既有业务会话的 pending 请求，仅另存原请求的证据 hash 对应关系。父复盘恢复原编号，BRC 将其识别为已发送，不重放。回填按原证据标记，等待期间新资料不偷记已处理，无原标记时不补造。十三条浏览器、三十五项测试与构建通过，见 `receipt-resume-green.log`、`receipt-resume-tests.log`、`receipt-resume-build-2.log`。首次构建的类型错误与原失败日志继续保留。最终非作者结论仍按新固定候选记录。
 
+第五候选 `dec5fafb4daca66d2eef221b7eb5af7b51a03c54` 的正常恢复、跨目标返回、新证据及 UI 适用范围通过，代码复核追加“原请求失败／取消且等待期间有新证据”时，实际复现父子状态恢复循环。1.6 秒内分别出现 5190／5154 批 DOM 变化，模型请求与 GET 未重放，整体仍不通过。原报告为代码目录 `re-review-dec5faf.md`，failed／cancelled 原反例分别保留。修正为同一原编号只恢复一次，避免新证据 hash 变化反复恢复已观察的请求。修后作者三十五项测试、十三条浏览器和构建通过，见 `receipt-terminal-tests.log`、`receipt-terminal-browser.log`、`receipt-terminal-build.log`；该两类反例由非作者在新固定候选增量复验。
+
 ## 完整检查与限制
 
 首轮 `npm run check` 使用 Node 25.9.0 和任务子收割器运行。既有 `db-link-pg-lifecycle.test.ts` 在并行负载中持续等待，原现场保留在 `full-check-1.log`。隔离执行同一文件二十项通过，见 `db-lifecycle-isolated.log`。随后只结束该停滞测试 worker，使其他检查继续。此轮命令保留失败，不记为完整通过。最终 PR head 与 main 的完整 CI 另行核定。
