@@ -181,3 +181,11 @@
 Host 只提供输入契约、准确上下文、原存储／权限／发布校验和可纠正的安全错误；方法、算式、技能选择和错误修正仍由 Agent 自主决定。复用官方 Pi 1.4.0 的原生 schema 校验、工具调用与续接，沿 Interface v3 与原 goal/goal-draft owner，不新增调度、会话、依赖或 SDK 改写。用户只需表达业务要求、补真正缺失的事实并决定发布，无须提供 Host schema、编造 SAP 或重录已有草稿。已保存和可发布分开，经营授权未放宽。
 
 本轮仅工程合成验证，不代表真实供应商模型的专业预测能力通过。用户原文中的待核基线、分母、负责人、贡献与日历来源继续待业务核对；没有改动正式业务数据或更新 MacBook／Mac mini。非作者已完成本地增量复核；PR 实际 head CI、授权 squash 和 main push CI 后在同一 #138 回填实际提交及结案状态，不能以本地 PASS 提前结案。回退可 revert 本次提交恢复旧工具契约，已有草稿字段与存储格式不迁移、不回写旧文件。
+
+### 首次远端 CI 超时与直接阻塞修正
+
+候选 `f0c66e688de9a402c8ed090af3319740d639c9b9` 已推送并创建 [PR #141](https://github.com/gadfly-hbo/OptraCall/pull/141)。[首次 CI](https://github.com/gadfly-hbo/OptraCall/actions/runs/45808419552) 实际 head 匹配，作业从北京时间 19:12:16 到 19:37:31，结果为 **cancelled**，GitHub 明确报 `The job has exceeded the maximum execution time of 25m0s`。原日志 `pr-ci-attempt-1.log` 保留；已执行部分未见断言失败，持续通过至 fixed-draft clear 的末段验证，随后被取消，尚无根测试总数、构建或审计结论。不能称为远端全量 PASS，也不把取消归为产品功能失败。
+
+这直接阻塞 DC05/H5 的完整 CI。仅增加 Check 作业总时限 25→35 分钟，为现有 3334 项检查留出余量；触发条件、权限、准确提交、Node/依赖、测试与构建审计步骤均保留。产品和永久测试仍与非作者通过的 candidate-5 字节一致。新增范围只为关闭已观察的交付阻塞，按同一任务记录 YAML 核对、非作者增量和新实际 head CI，不盲目重跑或降低检查强度。
+
+YAML 解析与完整对象对照 PASS：把新预算还原为 25 后与旧工作流完全相同。`/root/draft_contract_review` 对该增量独立复核 PASS，无新增发现；独立核实原超时、准确 head 和候选字节，权限、全部检查与单项时限未变。报告及静态核对摘要已录入同一证据索引；新的准确 head 和 main 完整 CI 仍待实际执行，不由本项静态 PASS 替代。

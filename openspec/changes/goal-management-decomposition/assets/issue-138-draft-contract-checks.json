@@ -202,12 +202,31 @@
   },
   "delivery": {
     "state": "pending actual PR head and main CI",
-    "receipt": "https://github.com/gadfly-hbo/OptraCall/issues/138"
+    "receipt": "https://github.com/gadfly-hbo/OptraCall/issues/138",
+    "attempts": [
+      {
+        "head": "f0c66e688de9a402c8ed090af3319740d639c9b9",
+        "runId": 45808419552,
+        "url": "https://github.com/gadfly-hbo/OptraCall/actions/runs/45808419552",
+        "conclusion": "cancelled",
+        "reason": "job exceeded maximum execution time of 25m0s; no full suite/build/audit conclusion",
+        "logSha256": "7155d345a8cff4b4226dfdca369178eb6495a2a5e95e34820b04d09a7ea2a867"
+      }
+    ]
   },
   "limits": [
     "Original eight payloads unavailable; no exact replay claim.",
     "Actual Host and official Pi with synthetic Provider, not live model professional evaluation.",
     "Only newly exposed Host safe errors omit input values/keys; official SDK schema error may echo submitted arguments.",
     "No MacBook, Mac mini, production data or service adoption performed."
-  ]
+  ],
+  "ciTimeoutIncrement": {
+    "beforeMinutes": 25,
+    "afterMinutes": 35,
+    "onlyChangedWorkflowField": "jobs.check.timeout-minutes",
+    "productAndTests": "unchanged candidate-5",
+    "yamlCheckSha256": "b3bba435b0380cac50bf633d5e20d0acbd0e25922cbeccca9a190bfa51fa4622",
+    "independentReview": "PASS; no findings; actual new-head/main CI remains pending",
+    "independentReviewSha256": "000fe411f767360be100ce8f4501084fcb4cb993bb9064e4ea0aeea9af7fcf43"
+  }
 }
