@@ -1,5 +1,8 @@
 import { allocatedTarget } from './strategy-goal-allocation.ts';
 import { createHash } from 'node:crypto';
+import { Errors } from 'typebox/value';
+import type { TSchema } from 'typebox';
+import { decompositionDraftInputSchema, reachabilityEstimateSchema } from '../agent/goal-decomposition-schema.ts';
 import type {
   CycleReviewConclusion,
   DecompositionDraft,
@@ -227,7 +230,48 @@ export function parseStageCheckpoints(v: unknown, allowIncomplete=false): GsaSta
   });
 }
 
+/** Diagnostic only: the existing parser stays authoritative, with no new acceptance or retry policy. */
+function inputFeedback<T>(schema: TSchema, input: unknown, parse: () => T, prefix = ''): T {
+  try { return parse(); } catch (error) {
+    if (!(error instanceof GoalDecompositionError) || error.status !== 400) throw error;
+    const fields = Errors(schema, input).flatMap(issue => {
+      if (issue.keyword === 'required') return issue.params.requiredProperties.map(name => ({
+        path: `${issue.instancePath}/${name}`, message: '必填字段；结构见工具 parameters。',
+      }));
+      const messages: Record<string, string> = {
+        type: '字段类型不符合工具 parameters。', pattern: '文字格式不符；可空字段可用空字符串，不可只有空白。',
+        maxLength: '文字长度超过字段限制。', minLength: '必填文字不能为空。',
+        maxItems: '条目数超过字段限制。', additionalProperties: '包含未声明的字段，请按工具 parameters 修正。',
+        const: '取值须属于工具声明的枚举。', anyOf: '字段须符合工具声明的一种结构。',
+      };
+      return [{ path: issue.instancePath || '/', message: messages[issue.keyword] ?? '字段结构不符合工具 parameters，请核对类型与约束。' }];
+    }).slice(0, 12);
+    if (error.code === 'invalid_reachability_estimate_gap') fields.unshift({
+      path: `${prefix}/gapValue`, message: 'gapValue 必须等于 formalTargetValue - estimatedValue；保留真实差额，未知用 null。',
+    });
+    if (error.code === 'duplicate_decomposition_row_id') fields.unshift({ path: '/rows', message: '每行 rowId 必须唯一；修订沿用其原稳定 ID。' });
+    if (!fields.length) fields.push({ path: '/', message: `${error.code}；按工具字段契约核对非空文字、稳定行 ID 和类型。` });
+    const visibleFields = fields.slice(0, 12).map(field => {
+      // Dynamic dimension keys are user content, not safe schema field names.
+      const path = field.path.replace(/^(\/rows\/\d+\/dimensions)\/.*$/, '$1');
+      return { ...field, path: /^(\/[A-Za-z0-9_]+)*$/.test(path) && path.length <= 180 ? path : '/' };
+    });
+    const fault = new GoalDecompositionError(error.code, error.status, {
+      ...error.details, saved: false, validationStage: 'input-structure', publishValidation: 'not-run', fields: visibleFields,
+      instruction: '本次未保存；未点名区块不代表已核验。按字段修正后可保存草稿，不要要求用户提供内部 schema 或编造数据。',
+      issues: visibleFields.map(field => ({ reason: error.code, path: field.path.slice(1).replaceAll('/', '.') })),
+    });
+    // Reuse the Runtime's existing safe-tool-error-v1 envelope. It intentionally hides unmarked error details.
+    fault.message = `${error.code}：未保存；发布校验 not-run，未点名区块不代表已核。${visibleFields.map(field => `${field.path}: ${field.message}`).join('；')}`.slice(0, 1900);
+    throw Object.assign(fault, { exposure: 'safe-tool-error-v1' as const });
+  }
+}
+
 export function parseReachabilityEstimate(v: unknown): ReachabilityEstimate {
+  return inputFeedback(reachabilityEstimateSchema, v, () => parseReachabilityEstimateFields(v));
+}
+
+function parseReachabilityEstimateFields(v: unknown): ReachabilityEstimate {
   if (!isObj(v)) fail('invalid_reachability_estimate', 400);
   const metricKind = reqMetricKind(v.metricKind);
   const formalTargetValue = reqFinite(v.formalTargetValue, 'invalid_reachability_estimate');
@@ -300,11 +344,15 @@ function parseRowCheckpoint(v: unknown): DecompositionRowCheckpoint {
 }
 
 export function parseDecompositionDraftInput(raw: unknown): DecompositionDraftInput {
+  return inputFeedback(decompositionDraftInputSchema, raw, () => parseDecompositionDraftFields(raw), '/estimate');
+}
+
+function parseDecompositionDraftFields(raw: unknown): DecompositionDraftInput {
   if (!isObj(raw)) fail('invalid_decomposition_draft', 400);
   if (typeof raw.gsaPlanSha256 !== 'string' || !SHA256_RE.test(raw.gsaPlanSha256)) fail('invalid_decomposition_draft', 400);
   if (!Number.isSafeInteger(raw.gsaPlanVersion) || Number(raw.gsaPlanVersion) < 1) fail('invalid_decomposition_draft', 400);
   if (!Number.isSafeInteger(raw.expectedDraftRevision) || Number(raw.expectedDraftRevision) < 0) fail('invalid_decomposition_draft', 400);
-  const estimate = parseReachabilityEstimate(raw.estimate);
+  const estimate = parseReachabilityEstimateFields(raw.estimate);
   if (!Array.isArray(raw.rows) || raw.rows.length > 200) fail('invalid_decomposition_rows', 400);
   const seenRowIds = new Set<string>();
   const rows: DecompositionRow[] = raw.rows.map(item => {

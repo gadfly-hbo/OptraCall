@@ -1,0 +1,232 @@
+{
+  "schema": 1,
+  "issue": 138,
+  "scope": "DC01–DC05 goal draft tool contract follow-up",
+  "base": "051aff0fc7438262bad962988b9f8834f04799d8",
+  "candidate": "candidate-5",
+  "sourceFiles": [
+    {
+      "path": "src/agent/goal-decomposition-schema.ts",
+      "sha256": "bc191783b912fa1581c99b9897e9fc0d487afbb19a9e442a3daf63ff95c72261"
+    },
+    {
+      "path": "src/agent/strategy-discussion.ts",
+      "sha256": "558d1c23fb3fbd24b0c2ce70eff745779dbb3118a081806e79d558a189f5bd19"
+    },
+    {
+      "path": "src/host/business-role-types.ts",
+      "sha256": "984fba791ba22a41f8d3f608b8e247e26e21b0c1ff48faf9914894b34f3f8878"
+    },
+    {
+      "path": "src/host/strategy-discussion-host.ts",
+      "sha256": "1c3e9304f12582d52010502ef95757a7d10a0cf04220c9df72dfa6f54bc019c0"
+    },
+    {
+      "path": "src/host/strategy-goal-decomposition-validation.ts",
+      "sha256": "d57063bfc00a14d9dbd5fbe1957e37639ed2f277851e28da45ca1fc19b980655"
+    },
+    {
+      "path": "tests/business-role-sessions.test.ts",
+      "sha256": "ff0856ddc76f53f62f78171f8bd37024d6caa2d4ad5ef0089066a85469a5f1b4"
+    },
+    {
+      "path": "tests/goal-decomposition-contract.test.ts",
+      "sha256": "c3d7d9dae9946e0936ca2b5a468a76d04722ced9807e288d72b5af173a9cee27"
+    }
+  ],
+  "approvedDemoSha256": "7b1d3031768b2ad13b39850c35879deb601c7beca7ca134eff262d40e92cab0a",
+  "sdk": "official @earendil-works/pi-coding-agent 1.4.0",
+  "agentSessionInterface": 3,
+  "dependenciesChanged": false,
+  "uiChanged": false,
+  "storageSchemaChanged": false,
+  "checks": [
+    {
+      "evidence": ".local/draft-contract/red.log",
+      "sha256": "1add8b572bb94859eadf3b0c8a71be63cfac55c20b67f143d09c904e5c632c39",
+      "result": "FAIL before implementation",
+      "counts": {
+        "tests": 2,
+        "pass": 0,
+        "fail": 2
+      }
+    },
+    {
+      "evidence": ".local/draft-contract/green-1.log",
+      "sha256": "e20d38b348312aa8f83ae70996b9b0f8ba30e4580c41be7977618c923c7874cb",
+      "result": "FAIL: safe error details filtered; fixed via existing exposure contract",
+      "counts": {
+        "tests": 2,
+        "pass": 1,
+        "fail": 1
+      }
+    },
+    {
+      "evidence": ".local/draft-contract/green-2.log",
+      "sha256": "33b29c45eb11d371110d0c5c12e16c788b9fb37edaefadc29526f7f7adcc1843",
+      "result": "PASS initial fix",
+      "counts": {
+        "tests": 2,
+        "pass": 2,
+        "fail": 0
+      }
+    },
+    {
+      "evidence": ".local/draft-contract/targeted-1.log",
+      "sha256": "051dad9b186945a1ea6ef15ee46ca510ef5892daa8b7bb009ad4aee836c6edff",
+      "result": "PASS initial affected regressions",
+      "counts": {
+        "tests": 25,
+        "pass": 25,
+        "fail": 0
+      }
+    },
+    {
+      "evidence": ".local/draft-contract/contract-final.log",
+      "sha256": "ca36c9915739d9eadea1f5c62d501d7a2f6dddae78d2e4abe44e31d3925e85ab",
+      "result": "FAIL in new SAP fixture: root property unavailable",
+      "counts": {
+        "tests": 5,
+        "pass": 4,
+        "fail": 1
+      }
+    },
+    {
+      "evidence": ".local/draft-contract/contract-final-2.log",
+      "sha256": "5b31486326e55531db13e83d0d92281307f39202012fe2d4a3bf2493145f5673",
+      "result": "PASS after fixture correction",
+      "counts": {
+        "tests": 5,
+        "pass": 5,
+        "fail": 0
+      }
+    },
+    {
+      "evidence": ".local/draft-contract/role-version-regression.log",
+      "sha256": "ae6dc062533452b4a1c0182b978fda60107873ac87f851d39cad1e961bd53360",
+      "result": "PASS exact prompt-version expectations updated; behavior assertions retained",
+      "counts": {
+        "tests": 4,
+        "pass": 4,
+        "fail": 0
+      }
+    },
+    {
+      "evidence": ".local/draft-contract/candidate-4-targeted.log",
+      "sha256": "04bf16b658f452a1dd6ca6b3ab618b3f994754150d30749cd933ca2339e68f73",
+      "result": "PASS 4 affected files",
+      "counts": {
+        "tests": 30,
+        "pass": 30,
+        "fail": 0
+      }
+    },
+    {
+      "evidence": ".local/draft-contract/candidate-5-contract.log",
+      "sha256": "372a9540f470e41fdec8c06d86e47c0d4b78393008e1163d96fb21dd98d6ae73",
+      "result": "PASS final schema boundary increment",
+      "counts": {
+        "tests": 5,
+        "pass": 5,
+        "fail": 0
+      }
+    },
+    {
+      "evidence": ".local/draft-contract/candidate-5-build.log",
+      "sha256": "886f96f46ba504589467693904b1352eb61561714173086bb83c4db305816b22",
+      "result": "PASS typecheck and build"
+    },
+    {
+      "evidence": ".local/draft-contract/audit.log",
+      "sha256": "25ecebe01f17aadef48d6217a655100aa0af0595b1d612f548bb54e13927377e",
+      "result": "PASS high threshold; 2 existing moderate advisories; dependencies unchanged"
+    },
+    {
+      "evidence": ".local/draft-contract/review/independent-targeted.log",
+      "sha256": "ea9bbfa26ac4ca7b1ed537c8ba7ebe64d9fb860addf2ca28764e317386f0a962",
+      "result": "PASS before review corrections; limited candidate identity",
+      "counts": {
+        "tests": 26,
+        "pass": 26,
+        "fail": 0
+      }
+    },
+    {
+      "evidence": ".local/draft-contract/review/independent-probes.log",
+      "sha256": "ae4f6b8d8bdc52a4c3cb81074e012b8341f4223764e4bc3ed85b5ec147f8f317",
+      "result": "MIXED CANDIDATE: preserved; not a fixed-candidate native RED/PASS",
+      "counts": {
+        "tests": 4,
+        "pass": 2,
+        "fail": 2
+      }
+    },
+    {
+      "evidence": ".local/draft-contract/review/independent-final.log",
+      "sha256": "417b2b7683ed262be205a22f479353ff3ac3fbf823c1d78467eac11d2d7e377c",
+      "result": "PASS candidate-5 independent probes + permanent suite",
+      "counts": {
+        "tests": 11,
+        "pass": 11,
+        "fail": 0
+      }
+    }
+  ],
+  "independentReview": {
+    "reviewer": "/root/draft_contract_review",
+    "conclusion": "PASS within local increment and four principles",
+    "reportSha256": "d74f6f904bd670d435d19cff587d05c670e2716eddb02553c5addc953ed1d52b",
+    "closedFindings": [
+      "P2 whitespace field diagnosis",
+      "P2 dimension key contract and safe diagnosis",
+      "P3 maximum safe integer identity"
+    ],
+    "boundaryVariants": 101,
+    "remainingScannedRootPathGaps": 0,
+    "deliveryRecordReviewSha256": "96f2825c75c0fa6d75fe8665318bc70a2a361f061342089678c0e51e3c318474"
+  },
+  "completeLocalCheck": {
+    "state": "completed with preserved failures",
+    "log": ".local/draft-contract/fullcheck-1.log",
+    "sha256": "feef23a1c6723ebe3c5974c09f687ce5d62c4a6c953d3fb4806326f2042e8ac4",
+    "counts": {
+      "tests": 3334,
+      "pass": 3136,
+      "fail": 2,
+      "skipped": 196
+    },
+    "knownFailures": "2 old literal prompt-version expectations caused synthetic Provider refusal; three exact version assertions updated to 1.3.1, original session assertions retained and all 4 session tests then pass. Final affected regressions and build pass. Original full run is not relabeled PASS.",
+    "sourceTiming": "This full run started before final schema boundary corrections; affected tests rerun against the frozen candidate. Actual-head CI remains required.",
+    "boundaryCheck": "PASS",
+    "command": "PATH=/workspace/scratch/issue136-node25-matched-bin:$PATH python3 .local/draft-contract/run-with-reaper.py npm run check"
+  },
+  "delivery": {
+    "state": "pending actual PR head and main CI",
+    "receipt": "https://github.com/gadfly-hbo/OptraCall/issues/138",
+    "attempts": [
+      {
+        "head": "f0c66e688de9a402c8ed090af3319740d639c9b9",
+        "runId": 45808419552,
+        "url": "https://github.com/gadfly-hbo/OptraCall/actions/runs/45808419552",
+        "conclusion": "cancelled",
+        "reason": "job exceeded maximum execution time of 25m0s; no full suite/build/audit conclusion",
+        "logSha256": "7155d345a8cff4b4226dfdca369178eb6495a2a5e95e34820b04d09a7ea2a867"
+      }
+    ]
+  },
+  "limits": [
+    "Original eight payloads unavailable; no exact replay claim.",
+    "Actual Host and official Pi with synthetic Provider, not live model professional evaluation.",
+    "Only newly exposed Host safe errors omit input values/keys; official SDK schema error may echo submitted arguments.",
+    "No MacBook, Mac mini, production data or service adoption performed."
+  ],
+  "ciTimeoutIncrement": {
+    "beforeMinutes": 25,
+    "afterMinutes": 35,
+    "onlyChangedWorkflowField": "jobs.check.timeout-minutes",
+    "productAndTests": "unchanged candidate-5",
+    "yamlCheckSha256": "b3bba435b0380cac50bf633d5e20d0acbd0e25922cbeccca9a190bfa51fa4622",
+    "independentReview": "PASS; no findings; actual new-head/main CI remains pending",
+    "independentReviewSha256": "000fe411f767360be100ce8f4501084fcb4cb993bb9064e4ea0aeea9af7fcf43"
+  }
+}
