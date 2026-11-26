@@ -117,6 +117,13 @@
     @media(max-width:600px){.gsa-action-list{grid-template-columns:1fr}.gsa-action-list dd{margin:0 0 5px!important}
       #detail-dialog:has(#gsa-editor) .dialog-footer{padding:8px;gap:4px;flex-wrap:wrap}#detail-dialog:has(#gsa-editor) .dialog-footer button{font-size:12px}}
 
+
+    .plan-advice-inline{display:flex;flex-wrap:wrap;align-items:center;gap:7px 10px;margin:9px 0 11px}
+    .plan-advice-inline small,.plan-advice-editor-help{font-size:12px;line-height:1.55;color:var(--muted)}
+    .plan-advice-trigger,.plan-advice-row{border-color:var(--accent-soft);color:var(--accent);background:var(--accent-wash)}
+    .plan-advice-row{margin:2px 0 8px}.plan-advice-add-actions{display:flex;gap:7px;flex-wrap:wrap}
+    @media(max-width:600px){.plan-advice-inline{align-items:flex-start}.plan-advice-inline small{flex-basis:100%}}
+
   </style>
 </head>
 <body>
@@ -158,7 +165,7 @@
   const queryEntry = pageUrl.searchParams.get('entry');
   const fileEntry = document.documentElement.dataset.entry;
   const hashEntry = {'#try-confirmed':'confirmed','#try-missing':'missing'}[location.hash];
-  const previewEntry = [queryEntry, fileEntry, hashEntry].find(value => ['ready','confirmed','missing'].includes(value));
+  const previewEntry = [queryEntry, fileEntry, hashEntry].find(value => ['ready','confirmed','missing','plan-a'].includes(value));
   function newTrialId(){
     return globalThis.crypto?.randomUUID?.() || (Date.now().toString(36)+'-'+Math.random().toString(36).slice(2));
   }
@@ -423,11 +430,11 @@
     const source=`<section class="gsa-editor-source" aria-label="正式战略来源"><strong>${linked?'已承接正式战略':'本期候选待承接的正式战略'}</strong>
       <p>战略发布 S-2027 v3 · G-2027-01<br>G · 2027 年 1 月净销售额 120 万元<br>S1 · 新品增长与平台活动共同补足增量</p>
       <details><summary>如何修改战略目标或策略</summary><p>在「战略选择」修订并发布新版本，再回目标管理核对并承接新版本。${linked?'本次编辑沿用上述发布版。':'请在本期 GSA 表点击「承接战略发布版 G 和 S」。'}</p></details></section>`;
-    const rows=actions.map((row,i)=>`<fieldset data-gsa-row="${esc(row.id)}" class="gsa-editor-row"><legend>第 ${i+1} 项计划 A</legend>
+    const rows=actions.map((row,i)=>`<fieldset data-gsa-row="${esc(row.id)}" class="gsa-editor-row"><legend>第 ${i+1} 项计划 A</legend><button type="button" class="small plan-advice-row" data-plan-advice data-action="plan-advice-row" data-row-index="${i}" data-testid="plan-a-recommend-row-${i+1}">让 Agent 推荐本项计划 A</button>
       ${gsaColumns.map(f=>`<label for="gsa-${f.key}-${i+1}">${f.label}<input maxlength="600" id="gsa-${f.key}-${i+1}" data-testid="gsa-${f.key}-${i+1}" data-gsa-field="${f.key}" value="${esc(row[f.key])}"></label>`).join('')}
       ${actions.length>1?`<button type="button" class="small ghost" data-action="gsa-remove-row" data-row="${esc(row.id)}">移除此项</button>`:''}</fieldset>`).join('');
-    openDialog(title,`<form id="gsa-editor" data-testid="gsa-editor">${source}<h3 class="aux-section-title">本期管理计划</h3>${rows}
-      <button type="button" class="small" data-action="gsa-add-row" data-testid="gsa-add-row">＋ 添加计划 A</button>
+    openDialog(title,`<form id="gsa-editor" data-testid="gsa-editor">${source}<h3 class="aux-section-title">本期管理计划</h3><p class="small-text muted plan-advice-editor-help" data-testid="plan-a-editor-hint">${adviceHint(!!adviceContext())}</p>${rows}
+      <div class="plan-advice-add-actions"><button type="button" class="small" data-action="gsa-add-row" data-testid="gsa-add-row">＋ 添加计划 A</button><button type="button" class="small" data-plan-advice data-action="plan-advice-add" data-testid="plan-a-recommend-add">让 Agent 推荐并新增一项</button></div>
       ${base?`<label class="gsa-editor-reason" for="gsa-editor-reason">修订原因<textarea id="gsa-editor-reason" data-testid="gsa-editor-reason" maxlength="1200" placeholder="说明本次调整的原因。${'确认后形成 v'+(base+1)+'。'}">${esc(reason)}</textarea></label><div class="gsa-diff" data-testid="gsa-editor-changes" id="gsa-editor-changes"></div>`:''}</form>`,
       `<button type="button" data-testid="gsa-editor-cancel" data-dialog-close>取消</button><button type="button" data-action="gsa-save-draft" data-testid="gsa-save-draft" class="${base?'':'primary'}">${base?'保存修订草稿':'保存 GSA 草稿'}</button>
       ${base?`<button type="button" class="primary" data-action="gsa-confirm-revision" data-testid="gsa-confirm-revision">确认修订为 v${base+1}</button>`:''}`);
@@ -435,6 +442,7 @@
   }
   function updateGsaEditor(){
     const draft=gsaReadEditor();
+    if(draft)syncAdviceEditor(draft.actions);
     if(!draft?.base)return;
     const changes=changeList(gsaPlan(draft.base).actions,draft.actions);
     const missing=draft.actions.some(row=>gsaColumns.some(f=>!row[f.key]));
@@ -469,6 +477,162 @@
     editingGsa=null;closeDialog();render();
     notify(!draft.base?'本期计划已保存到 GSA 草稿，仍待确认。':confirm?'总 GSA v'+(draft.base+1)+' 已确认，既有版本可在「版本与来源」查看。':'已保存修订草稿，当前仍使用总 GSA v'+draft.base+'。');
     document.querySelector('[data-testid="edit-gsa"]')?.focus({preventScroll:true});
+  }
+
+
+  // The trial has one active sales goal and a read-only historical goal.
+  // Eligibility uses the active goal/strategy values, independent of source type.
+  function adviceContext(){
+    if(!isSales()||gsaLocked()||(entryCandidate()&&!entryFields().linked))return null;
+    const goal=goalInfo(),plan=gsaPlan()||makeGsaPlan(0,[],'',[],null);
+    if(!plan.strategy||plan.goalValue==null||!goal.period||!goal.scope)return null;
+    return {period:goal.period,scope:goal.scope,strategy:plan.strategy,metric:'净销售额',target:plan.goalValue+' '+plan.unit};
+  }
+  const adviceThemes=[
+    {key:'store',matches:/到货|可售|陈列|重点门店|缺货/},
+    {key:'increment',matches:/不重叠|去重|重复计入|贡献边界|非活动期/},
+    {key:'campaign',matches:/平台|活动期|投放|促销/},
+    {key:'closing',matches:/月底|月末|结账|退款|对账/}
+  ];
+  function adviceTheme(row){
+    for(const text of [row.action,row.checkpoint,row.basis])
+      for(const theme of adviceThemes)if(theme.matches.test(text||''))return theme.key;
+    return null;
+  }
+  const adviceEmpty=row=>gsaColumns.filter(f=>!String(row[f.key]||'').trim());
+  function nextAdviceTheme(rows){
+    const used=new Set(rows.map(adviceTheme).filter(Boolean));
+    return adviceThemes.find(theme=>!used.has(theme.key))?.key||null;
+  }
+  function rowCanTakeAdvice(row,others){
+    const gaps=adviceEmpty(row);
+    return gaps.length>0 && (gaps.length<gsaColumns.length || !!nextAdviceTheme(others));
+  }
+  function adviceHint(ready){
+    return ready?'合成 Agent 根据本期 G 和 S 推荐。已有内容会保留，建议可直接编辑。':'先在本期 GSA 表承接战略发布版 G 和 S，再让 Agent 推荐计划。';
+  }
+  function inlineAdviceInfo(rows){
+    const ready=!!adviceContext(),first=rows[0],adding=adviceEmpty(first).length===0;
+    const allowed=ready && (adding?!!nextAdviceTheme(rows):rowCanTakeAdvice(first,rows.slice(1)));
+    return {adding,allowed,label:adding?'让 Agent 推荐并新增一项计划 A':'让 Agent 推荐计划 A',
+      hint:ready&&!allowed?'本示例的不同计划建议已覆盖，可继续手工填写。':adviceHint(ready)};
+  }
+  function adviceInlineControls(rows){
+    const info=inlineAdviceInfo(rows);
+    return `<div class="plan-advice-inline"><button type="button" class="small plan-advice-trigger" data-plan-advice data-action="plan-advice-inline" data-testid="plan-a-recommend-inline" aria-describedby="plan-a-inline-hint" ${info.allowed?'':'disabled'}>${info.label}</button>
+      <small id="plan-a-inline-hint" data-testid="plan-a-inline-hint">${info.hint}</small></div>`;
+  }
+  function syncAdviceInline(){
+    const button=document.querySelector('[data-testid="plan-a-recommend-inline"]');
+    if(!button)return;
+    const info=inlineAdviceInfo(gsaDraftActions());
+    button.disabled=!info.allowed;
+    button.textContent=info.label;
+    $('plan-a-inline-hint').textContent=info.hint;
+  }
+  function syncAdviceEditor(rows){
+    const ready=!!adviceContext(),form=$('gsa-editor');
+    if(!form)return;
+    form.querySelectorAll('[data-action="plan-advice-row"]').forEach((b,i)=>{
+      const row=rows[i];
+      b.disabled=!ready || !rowCanTakeAdvice(row,rows.filter((_,j)=>i!==j));
+      b.textContent=adviceEmpty(row).length?'让 Agent 推荐本项计划 A':'本项已填齐';
+    });
+    const add=form.querySelector('[data-action="plan-advice-add"]');
+    if(add){add.disabled=!ready||!nextAdviceTheme(rows);add.title=ready&&!nextAdviceTheme(rows)?'本示例的不同计划建议已覆盖，可手工添加。':'';}
+  }
+  // Generate content only in response to an explicit recommendation click.
+  function samplePlanAdvice(ctx,theme,row){
+    const action=row.action?.trim(),cp=row.checkpoint?.trim(),basis=row.basis?.trim();
+    if(theme==='store')return {action:'在重点门店试行新品陈列，登记可售货品、缺货与陈列执行情况。',
+      checkpoint:ctx.period+'首周末核对试点门店到货、上架与可售范围，标记需补货的门店。',
+      basis:'建议对照新品到货单、陈列检查记录及可比门店的'+ctx.metric+'日报。'};
+    if(theme==='campaign')return {action:'按平台活动日历登记参与渠道、活动商品与纳入口径的订单。',
+      checkpoint:ctx.period+'第 2 周末核对活动覆盖及同口径'+ctx.metric+'，区分已退款订单。',
+      basis:'建议核对平台活动日历、活动订单明细及同归属期退款记录。'};
+    if(theme==='closing')return {action:'在全渠道对齐订单与退款归属期，汇总当月可比'+ctx.metric+'。',
+      checkpoint:ctx.period+'结账后，对照正式目标 '+ctx.target+' 核对当期金额及范围缺口。',
+      basis:'建议核对各渠道结账报表、退款明细及本期'+ctx.metric+'指标定义。'};
+    if(theme==='increment')return {action:'为新品非活动期订单与平台活动订单划定不重叠的贡献范围，单列归属待核订单。',
+      checkpoint:ctx.period+'活动结算后，抽核订单的渠道、活动标记和商品归属，检查增量是否重复计入。',
+      basis:'建议对照新品清单、活动范围与订单标记，按同一'+ctx.metric+'口径复核。'};
+    return {action:cp?'围绕「'+cp+'」安排'+ctx.scope+'的落实检查，依据'+ctx.strategy+'核对本期执行范围。'
+          :'围绕'+ctx.strategy+'核实'+ctx.scope+'内的执行范围，并按'+ctx.metric+'口径记录待核事项。',
+      checkpoint:ctx.period+'阶段检查时核对'+(action?'「'+action+'」的落实情况':'本项计划的覆盖范围')+'，记录进度与待补资料。',
+      basis:basis||'建议对照本项计划的执行记录、覆盖清单与同口径'+ctx.metric+'周报。'};
+  }
+  function advisedRow(ctx,row,others){
+    if(!ctx||!rowCanTakeAdvice(row,others))return null;
+    const gaps=adviceEmpty(row);
+    const theme=adviceTheme(row)||(gaps.length===gsaColumns.length?nextAdviceTheme(others):null);
+    const suggestion=samplePlanAdvice(ctx,theme,row),result={...row};
+    for(const f of gaps)result[f.key]=suggestion[f.key].slice(0,600);
+    return result;
+  }
+  function additionalAdvisedRow(ctx,rows){
+    if(!ctx||!nextAdviceTheme(rows))return null;
+    const id='A-'+Array.from(crypto.getRandomValues(new Uint32Array(3)),n=>n.toString(16)).join('-');
+    return advisedRow(ctx,{id,action:'',checkpoint:'',basis:''},rows);
+  }
+  function recommendInline(){
+    const ctx=adviceContext();
+    if(!ctx||state.gsaConfirmed)return;
+    const rows=gsaDraftActions(),info=inlineAdviceInfo(rows);
+    if(!info.allowed)return;
+    if(info.adding){
+      const added=additionalAdvisedRow(ctx,rows);
+      if(!added)return;
+      state.ui.gsaInitialActions=[...rows,added];
+      render();
+      document.querySelector('[data-testid="plan-a-recommend-inline"]')?.focus({preventScroll:true});
+      notify('已新增一项推荐计划，保存于本期 GSA 草稿。');
+      return;
+    }
+    const suggested=advisedRow(ctx,rows[0],rows.slice(1));
+    if(!suggested)return;
+    if(entryCandidate()){
+      const fields=entryFields();
+      for(const f of adviceEmpty(rows[0])){
+        fields[f.key]=suggested[f.key];
+        const input=$('entry-'+f.key);
+        if(input)input.value=fields[f.key];
+      }
+      persist();updateEntryReadiness();
+    }else{
+      state.ui.gsaInitialActions=[suggested,...rows.slice(1)];
+      render();
+    }
+    notify('建议已补入本期计划的空白字段，可继续编辑或确认 GSA。');
+  }
+  function rawAdviceEditor(){
+    const draft=gsaReadEditor(),form=$('gsa-editor');
+    if(!draft || !form)return null;
+    form.querySelectorAll('[data-gsa-row]').forEach((el,i)=>{
+      for(const f of gsaColumns)draft.actions[i][f.key]=el.querySelector('[data-gsa-field="'+f.key+'"]').value;
+    });
+    if($('gsa-editor-reason'))draft.reason=$('gsa-editor-reason').value;
+    return draft;
+  }
+  function recommendEditor(source,adding){
+    const ctx=adviceContext(),draft=rawAdviceEditor();
+    if(!ctx||!draft||draft.base!==gsaVersion())return;
+    if(adding){
+      const added=additionalAdvisedRow(ctx,draft.actions);
+      if(!added)return;
+      draft.actions.push(added);
+      editingGsa=draft;
+      drawGsaEditor();
+      $('gsa-action-'+draft.actions.length)?.focus();
+      notify('已在本次编辑中新增一项推荐计划，可继续修改。');
+      return;
+    }
+    const index=Number(source.dataset.rowIndex),row=draft.actions[index];
+    if(!row)return;
+    const result=advisedRow(ctx,row,draft.actions.filter((_,i)=>i!==index));
+    if(!result)return;
+    for(const f of adviceEmpty(row))$('gsa-'+f.key+'-'+(index+1)).value=result[f.key];
+    updateGsaEditor();
+    notify('已补齐本项计划的空白字段，可继续修改。');
   }
 
   function entryCandidate(){
@@ -564,7 +728,7 @@
         <div class="entry-source" data-testid="entry-source-card"><span class="source-badge">S-2027 v3</span>
           <strong>零售事业部 · 2027 年 1 月</strong><p>G-2027-01 · 全渠道净销售额 120 万元<br>S1 · 新品增长与平台活动共同补足增量</p>
           ${fields.linked?'<span class="entry-linked" data-testid="entry-source-linked">已承接至本期候选</span>':'<button type="button" class="small" id="entry-link-source" data-action="entry-link-source" data-testid="entry-link-source">承接战略发布版 G 和 S</button>'}</div>
-      </div></div><div class="gsa-row"><span class="gsa-letter">A</span><div><h3>本期计划与检查依据</h3>
+      </div></div><div class="gsa-row"><span class="gsa-letter">A</span><div><h3>本期计划与检查依据</h3>${adviceInlineControls(gsaDraftActions())}
         <div class="entry-fields">${entryInputs.map(f=>`<label for="entry-${f.key}">${f.label}<input required maxlength="600" id="entry-${f.key}" data-entry-field="${f.key}" data-testid="entry-${f.key}" placeholder="${f.hint}" value="${esc(fields[f.key])}"></label>`).join('')}</div>${gsaDraftActions().length>1?gsaActionList(gsaDraftActions().slice(1)):''}
       </div></div></div>
       <div class="gsa-footer"><p>确认后，Agent 将基于本期 G、S、A 起草拆解表。</p><button type="button" data-action="confirm-gsa" data-testid="entry-confirm-form" ${issues.length?'disabled':''}>确认并进入目标拆解</button></div>
@@ -574,6 +738,7 @@
     return issues.length?'待补 '+issues.map(x=>x.label).join('、')+'。':'G、S、计划 A、阶段检查点和观察依据已齐备。';
   }
   function updateEntryReadiness(){
+    syncAdviceInline();
     const issues=entryIssues(),status=$('entry-status');
     if(status)status.textContent=entrySummary(issues);
     const trigger=document.querySelector('[data-testid="confirm-gsa"]');
@@ -629,7 +794,7 @@
   function handoffDetail(id){const r=state.ui.handoffs.find(r=>r.id===id&&r.goal===state.ui.selectedGoal);if(!r)return;openAux('原承接记录 · '+r.projectId,`<h3>项目方案草稿 · 尚未确认方案</h3><dl class="version-source-grid"><dt>父总目标 GSA</dt><dd>${r.gsaRef?esc(r.gsaRef):'原承接记录未记录父 GSA，需沿准确冻结拆解表回源，不能用当前默认值补填。'}</dd><dt>准确原计划</dt><dd>${r.planRef}</dd><dt>目标行</dt><dd>${r.line.id} · ${r.line.scope} · ${r.line.amount} 万</dd><dt>计划责任</dt><dd>${r.line.owner}</dd><dt>原检查点</dt><dd>${r.checkpoint.id} · ${r.checkpoint.date} · ${r.checkpoint.target} 万</dd><dt>实际授权</dt><dd>无。承接引用不等于任务、人员或经营行动授权。</dd><dt>进度／反馈</dt><dd>尚无实际执行记录。</dd></dl><p class="boundary">这是同一引用的原记录，重复承接不会新增项目草稿。以后发布新版，也不自动改写本记录。</p>`);}
   function reviewPage(){const selected=state.ui.reviewSelected||[];return `<section class="card"><div class="card-head"><div><h2>到期对照与下一阶段</h2><p class="small-text muted" style="margin-top:4px">合成到期情景 · 最后生效正式目标，不受拆解周计划修订影响</p></div><span class="status">原检查保留</span></div><div class="card-body"><div class="legacy-grid"><div><span>最后生效正式目标 G</span><strong>120 万</strong></div><div><span>期初承诺 · 仅作备忘</span><strong>120 万</strong></div><div><span>期末可比实绩</span><strong>123 万</strong></div></div><div class="note success">${gsaVersion()?'按本期最后确认的总 GSA v'+gsaVersion()+' 评估':'按原正式战略目标评估'}，期末净销售额比 120 万元目标高 3 万元。总量达成不证明新品或平台活动的贡献已获因果验证。</div><details class="details"><summary>阶段检查仍按各自原版本回看</summary><div class="details-body">${state.checkHistory.length?state.checkHistory.map(c=>`<p>${esc(c.id)} · ${esc(checkParentLabel(c))} · 拆解表 v${c.planNo} · ${esc(c.sourceRef)} · ${esc(c.trigger.reason)}${c.caseChoice?' · 原 Case 选择保留':''}</p>`).join(''):'尚无已保存阶段检查，本合成期末摘要不补造缺失过程证据。'}</div></details><h3 class="aux-section-title">负责人选择带入下一期的结论或待验证假设</h3><label class="review-choice"><input type="checkbox" name="review-conclusion" value="new-product" ${selected.includes('new-product')?'checked':''}><span><strong>继续观察重点门店新品陈列试点（待验证假设）</strong><br><span class="muted">原依据 Case C-014 / ACT-01/r1 只说明试点资料。Case 仍进行中，实际执行反馈待整理，尚不能认定策略有效；适用范围仅重点直营门店，继续试验与扩展均标待验证。</span></span></label><label class="review-choice"><input type="checkbox" name="review-conclusion" value="timing" ${selected.includes('timing')?'checked':''}><span><strong>新品上市延后时重排阶段目标，不改写历史检查</strong><br><span class="muted">原依据为本次拆解发布版与原阶段检查引用，适用范围为同类供货约束。未发生修订时只作待验证建议。</span></span></label><div class="actions" style="margin-top:15px"><button class="primary" data-action="draft-next-cycle" data-testid="draft-next-cycle">让 Agent 据所选结论起草下一期</button></div>${state.ui.nextCycleDraft?`<div class="record-card" data-testid="next-cycle-draft"><h3>2027 年 2 月目标草稿 · 未采用／未发布</h3>${state.ui.nextCycleDraft.reviewGsaRef?'<p>形成草稿时的复盘依据 · '+esc(state.ui.nextCycleDraft.reviewGsaRef)+'</p>':''}<p>${state.ui.nextCycleDraft.conclusions.map(c=>esc(c.title)+' · 原依据 '+esc(c.source)+' · 适用范围 '+esc(c.scope)).join('<br>')}</p><p>正式目标值与资源约束待下一期总目标 GSA 核对，原复盘与本期生效目标不变。Agent 输出为脚本模拟。</p></div>`:''}</div></section>`;}
   function metrics(){return `<div class="metric-grid"><div class="metric"><span>正式目标值</span><strong>120<em>万</em></strong><small>来源于正式战略发布版</small></div><div class="metric"><span>可达测算值</span><strong>112<em>万</em></strong><small>同期间、同范围、同口径</small></div><div class="metric gap"><span>待策略补足的差额</span><strong>8<em>万</em></strong><small>120 − 112，保留原测算</small></div></div>`;}
-  function gsa(){if(entryCandidate())return entryForm();return `<div class="gsa-layout"><section class="card" aria-labelledby="gsa-title"><div class="card-head"><div><h2 id="gsa-title">确认总目标 GSA</h2><p class="muted small-text" style="margin-top:5px">G 与 S 已从正式战略 S-2027 v3 带入，请核对本期计划 A。</p></div><span class="status">待确认</span></div><div class="gsa-rows"><div class="gsa-row"><span class="gsa-letter">G</span><div><h3>1 月净销售额达到 120 万元</h3><p>零售事业部 · 2027.01.01—01.31<br>净销售额 = 已支付商品金额 − 同归属期退款，不含运费。基线为可比门店与渠道。</p><div class="source-line"><span class="source-badge">SAP 净销售额 / v2</span><span>战略发布 S-2027 v3 · G-2027-01</span></div></div></div><div class="gsa-row"><span class="gsa-letter">S</span><div><h3>新品增长与平台活动共同补足增量</h3><span class="gsa-origin">已承接策略 S1</span><p>稳定可比业务贡献，重点门店开展新品陈列与回访，平台活动聚焦新增转化。新品与活动贡献按不重叠范围估算。</p></div></div><div class="gsa-row"><span class="gsa-letter">A</span><div><h3>本期计划与检查依据</h3>${gsaActionList(gsaDraftActions())}</div></div></div></section><aside class="stack"><div>${metrics()}<div class="note">测算帮助判断可达性。正式目标仍为 120 万，8 万差额需要在拆解发布前说明补足策略与预期贡献。</div></div><div class="card"><div class="card-body info-list"><div><h3>已带入当前工作</h3><p>正式战略发布版、指标定义、经营范围及可用的获准资料。</p></div><div><h3>确认后与 Agent 协作</h3><p>按贡献分配子目标，再结合商品与经营节奏排出时间计划。方法和工具由 Agent 按问题选择。</p></div><div><h3>只处理必要的经营取舍</h3><p>无需重录已承接的目标，也不要求逐项审批普通读取。</p></div></div></div></aside></div>`;}
+  function gsa(){if(entryCandidate())return entryForm();return `<div class="gsa-layout"><section class="card" aria-labelledby="gsa-title"><div class="card-head"><div><h2 id="gsa-title">确认总目标 GSA</h2><p class="muted small-text" style="margin-top:5px">G 与 S 已从正式战略 S-2027 v3 带入，请核对本期计划 A。</p></div><span class="status">待确认</span></div><div class="gsa-rows"><div class="gsa-row"><span class="gsa-letter">G</span><div><h3>1 月净销售额达到 120 万元</h3><p>零售事业部 · 2027.01.01—01.31<br>净销售额 = 已支付商品金额 − 同归属期退款，不含运费。基线为可比门店与渠道。</p><div class="source-line"><span class="source-badge">SAP 净销售额 / v2</span><span>战略发布 S-2027 v3 · G-2027-01</span></div></div></div><div class="gsa-row"><span class="gsa-letter">S</span><div><h3>新品增长与平台活动共同补足增量</h3><span class="gsa-origin">已承接策略 S1</span><p>稳定可比业务贡献，重点门店开展新品陈列与回访，平台活动聚焦新增转化。新品与活动贡献按不重叠范围估算。</p></div></div><div class="gsa-row"><span class="gsa-letter">A</span><div><h3>本期计划与检查依据</h3>${adviceInlineControls(gsaDraftActions())}${gsaActionList(gsaDraftActions())}</div></div></div></section><aside class="stack"><div>${metrics()}<div class="note">测算帮助判断可达性。正式目标仍为 120 万，8 万差额需要在拆解发布前说明补足策略与预期贡献。</div></div><div class="card"><div class="card-body info-list"><div><h3>已带入当前工作</h3><p>正式战略发布版、指标定义、经营范围及可用的获准资料。</p></div><div><h3>确认后与 Agent 协作</h3><p>按贡献分配子目标，再结合商品与经营节奏排出时间计划。方法和工具由 Agent 按问题选择。</p></div><div><h3>只处理必要的经营取舍</h3><p>无需重录已承接的目标，也不要求逐项审批普通读取。</p></div></div></div></aside></div>`;}
   function chat(){
     const editable = state.editingDraft && !state.operation;
     const requestButton = !state.generated
@@ -875,6 +1040,9 @@
   }
   function evidence(){openDialog('本次草稿采用的示例依据',`<div class="info-list"><div><h3>我情 · 可比经营数据 r2</h3><p>门店与渠道覆盖一致的净销售额、商品可售节奏。示例测算可达 112 万。</p></div><div><h3>行情与敌情 · 已获准材料</h3><p>活动日历与竞品公开促销观察仅作为外部假设。资料不足时说明影响，不强制凑齐三类材料。</p></div><div><h3>增量与经营约束</h3><p>新品与平台活动按不重叠范围估算 5 万、3 万。需要后续实绩验证，不能把数学对平当成因果成立。</p></div></div><p class="boundary">所有内容均为虚构资料。Demo 不执行预测算法或真实工具，正式产品沿统一 Pi 接入在权限内自主选择方法。</p>`);}
   function handleAction(action,source){
+    if(action==='plan-advice-inline'){recommendInline();return;}
+    if(action==='plan-advice-row'||action==='plan-advice-add'){recommendEditor(source,action==='plan-advice-add');return;}
+
     if(action==='adopt-draft-parent'){
       adoptDraftParent();return;
     }
@@ -985,7 +1153,7 @@
       const number=15+state.checkHistory.filter(item=>item.caseChoice==='new').length;
       selectedCheck().caseChoice='new';selectedCheck().caseId='C-'+String(number).padStart(3,'0');
     }render();notify('已模拟建立独立 Case 草稿，后续取舍与行动由负责人承接。');break;case'next-check':state.activeCheckId=null;state.nextCheckPlanNo=state.knownPublishedNo;state.report=null;render();notify('已明确选用当前生效 v'+state.knownPublishedNo+' 开始下一次检查，历史检查保持原版。');break;case'observe':if(selectedCheck()){selectedCheck().caseChoice='observe';render();}notify('本次检查和提示已保留，负责人选择继续观察，没有创建 Case。');break;}}
-  document.addEventListener('click',event=>{const close=event.target.closest('[data-dialog-close]');if(close){closeDialog();return;}const button=event.target.closest('[data-action]');if(button&&!button.disabled)handleAction(button.dataset.action,button);});
+  document.addEventListener('click',event=>{const close=event.target.closest('[data-dialog-close]');if(close){closeDialog();return;}const button=event.target.closest('[data-action]');if(button&&!button.disabled&&!(button.hasAttribute('data-plan-advice')&&event.detail>1))handleAction(button.dataset.action,button);});
   document.addEventListener('submit',event=>{if(event.target.id==='chat-form'){event.preventDefault();sendMessage($('chat-input').value);}if(event.target.id==='align-form'){event.preventDefault();const value=Number($('aligned-value').value),basis=$('alignment-basis').value.trim();state.alignmentDraftValue=$('aligned-value').value;state.alignmentDraftBasis=basis;if(![45,50].includes(value)||!basis){state.alignmentError='本演示请采用双方已确认的 45 万或 50 万完整方案，并填写双方确认依据。正式产品由 Agent 核对完整明细，不能只改一个交叉值。';render();$('aligned-value')?.focus();return;}state.aligned=true;state.alignedValue=value;state.alignmentBasis=basis;state.alignmentError='';state.draftRevision++;addAgent('已依据双方确认采用 '+value+' 万方案的完整明细，同时展示受影响的另一个交叉单元，重新汇总各视图合计仍为 120 万。冲突没有转成预留，可继续核对后发布。');render();notify('双方确认依据与受影响明细已保存，交叉项重新校验通过。');}if(event.target.id==='reserve-form'){event.preventDefault();state.reservePurpose=$('reserve-purpose').value.trim();state.reserveOwner=$('reserve-owner').value.trim();state.draftRevision++;closeDialog();render();notify(state.reservePurpose&&state.reserveOwner?'预留用途与责任人已更新。':'草稿已保存，预留字段待补，发布保持停用。');}if(event.target.id==='gap-form'){event.preventDefault();state.gapStrategy=$('gap-present').checked;state.draftRevision++;closeDialog();render();notify(state.gapStrategy?'补缺策略已保留在草稿中。':'草稿已保存，补缺策略待补，不能发布。');}if(event.target.id==='report-form'){event.preventDefault();if(selectedCheck())return;const report=$('report-select').value;if(!report){notify('请选定本次使用的实绩资料。');$('report-select').focus();return;}const plan=checkPlan();if(!plan)return;state.report=report;const comparison=comparisonFor(report,plan),trigger=triggerFor(report,state.threshold,comparison.percentages);const check={id:'CHECK-'+String(state.checkHistory.length+1).padStart(3,'0'),report,planNo:plan.no,parentGsaRef:plan.gsa,goalId:'G-TOTAL',checkpointId:'CP-202701-W2-TOTAL',caseChoice:null,threshold:state.threshold,comparison,trigger,sourceRef:reportInfo(report).ref};state.checkHistory.push(check);state.activeCheckId=check.id;state.nextCheckPlanNo=null;render();notify(reportInfo(report).status?'本次检查已保存 · '+reportInfo(report).status:'已保存本次检查与原计划、实绩引用。');}});
   document.addEventListener('submit',event=>{if(event.target.id==='proactive-case-form'){event.preventDefault();const title=$('case-title').value.trim();if(!title){notify('事项名称仍需说明。');return;}const duplicate=caseRecords().find(c=>c.title===title&&['进行中','草稿待确认'].includes(c.status));if(duplicate){caseDetail(duplicate.id);notify('已有同一事项，优先打开原 Case，没有另建。');return;}const c={id:'C-DEMO-'+(state.ui.newCases.length+1),title,goal:'sales',goalVersion:'原目标 v1 · G/S',strategy:'S1 新品增长与平台活动',period:'2027 年 1 月',scope:'零售事业部重点试点门店',status:'草稿待确认',year:'2027',basis:'负责人明确建立重点试点；原目标 G-retail-202701/v1；尚未授权行动',historical:false};state.ui.newCases.push(c);persist();caseDetail(c.id);notify('已明确建立合成 Case 草稿，未创建任务或行动授权。');}if(event.target.id==='handoff-preview-form'){event.preventDefault();previewHandoff($('handoff-plan').value,$('handoff-line').value);}});
 
@@ -1050,8 +1218,16 @@
     }catch{}
   });
 
-  if (seedEntryPreview) startEntryExample(previewEntry);
-  if (!seedEntryPreview || previewEntry==='ready') render();
+  if (seedEntryPreview && previewEntry==='plan-a'){
+    startEntryExample('missing');
+    entryFields().linked=true;
+    render();
+    document.querySelector('[data-testid="plan-a-recommend-inline"]')?.scrollIntoView({block:'center'});
+  }else if (seedEntryPreview && previewEntry!=='ready'){
+    startEntryExample(previewEntry);
+  }else{
+    render();
+  }
 })();
 </script>
 </body>
