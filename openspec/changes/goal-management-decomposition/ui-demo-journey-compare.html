@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>OptraCall · 目标管理原型对照</title>
+  <style>
+    :root{color-scheme:light dark;--paper:#f4f4f8;--panel:#fff;--text:#282336;--muted:#615b71;--line:#dcdbe5;--accent:#634ac0;--on:#f0edfa}
+    *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--text);font:14px/1.5 Inter,system-ui,"PingFang SC","Microsoft YaHei",sans-serif}button,a{font:inherit}a{color:var(--accent);text-underline-offset:3px}button:focus-visible,a:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+    body{height:100dvh;display:flex;flex-direction:column}.bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 18px;background:var(--panel);border-bottom:1px solid var(--line)}h1,h2{margin:0}h1{font-size:16px}h2{font-size:13px;font-weight:600}
+    .modes{display:flex;align-items:center;gap:2px;border:1px solid var(--line);padding:3px;border-radius:7px}.modes button{background:transparent;color:var(--muted);border:0;cursor:pointer;padding:4px 12px;border-radius:4px}.modes button[aria-pressed=true]{background:var(--on);color:var(--accent);font-weight:600}
+    .views{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);padding:8px;gap:8px}.views[data-mode=both]{grid-template-columns:repeat(2,minmax(0,1fr))}.views[data-mode=new] .prev,.views[data-mode=old] .next{display:none}.pane{min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}.label{display:flex;justify-content:space-between;align-items:center;padding:6px 12px;border-bottom:1px solid var(--line)}.label a{font-size:12px}.stage{min-height:0;flex:1;position:relative;overflow:hidden}.stage iframe{position:absolute;left:0;top:0;border:0;transform-origin:top left;width:100%;height:100%;background:var(--panel)}
+    .entry-links button{font:inherit;font-size:12px;cursor:pointer;border:1px solid var(--line);border-radius:4px;background:var(--panel);color:var(--text);padding:3px 7px}.entry-links button[aria-pressed=true]{color:var(--accent);background:var(--on);border-color:var(--accent)}.entry-links{align-items:center;display:flex;gap:8px 12px;flex-wrap:wrap}.label{gap:5px 12px;flex-wrap:wrap}
+    @media(max-width:850px){.views[data-mode=both]{grid-template-columns:minmax(0,1fr);grid-template-rows:repeat(2,minmax(0,1fr))}.bar{gap:5px;padding:8px}.modes button{padding:4px 8px}}@media(max-width:460px){.bar{align-items:start;flex-direction:column;gap:6px}.views{padding:4px;gap:4px}h1{font-size:14px}}
+    @media(prefers-color-scheme:dark){:root{--paper:#191722;--panel:#22202d;--text:#f0eef5;--muted:#cbc7d6;--line:#463f52;--accent:#c7bcff;--on:#3b3453}}
+  </style>
+</head>
+<body>
+  <header class="bar">
+    <h1>目标管理 · 原型对照</h1>
+    <div class="modes" aria-label="选择显示的原型">
+      <button type="button" data-mode="old">上一版 A</button><button type="button" data-mode="both">同时看</button><button type="button" data-mode="new">本次试看版</button>
+    </div>
+  </header>
+  <main class="views" id="views">
+    <section class="pane prev"><div class="label"><h2>上一版 A 整合版</h2><a href="ui-demo-integrated.html" target="_blank" rel="noopener">单独打开</a></div><div class="stage"><iframe title="上一版 A 整合版" src="ui-demo-integrated.html"></iframe></div></section>
+    <section class="pane next"><div class="label"><h2>本次试看版 · 目标拆解入口</h2><div class="entry-links"><button type="button" data-entry="ready" aria-pressed="false">试资料齐备目标</button><button type="button" data-entry="confirmed" aria-pressed="false">试已确认目标</button><button type="button" data-entry="missing" aria-pressed="false">试资料未齐目标</button><a href="ui-demo-journey.html" target="_blank" rel="noopener">单独打开</a></div></div><div class="stage"><iframe title="目标拆解入口试用" src="ui-demo-journey.html"></iframe></div></section>
+  </main>
+  <script>
+    const views = document.getElementById('views');
+    const stages = [...views.querySelectorAll('.stage')];
+    const modes = [...document.querySelectorAll('button[data-mode]')];
+    function sizeFrames(){
+      for (const stage of stages){
+        if (!stage.clientWidth || !stage.clientHeight) continue;
+        const desktopCompare = views.dataset.mode === 'both' && window.innerWidth > 850;
+        const width = desktopCompare ? Math.max(1210, stage.clientWidth) : stage.clientWidth;
+        const scale = stage.clientWidth / width;
+        const frame = stage.querySelector('iframe');
+        frame.style.width = width + 'px';
+        frame.style.height = Math.ceil(stage.clientHeight / scale) + 'px';
+        frame.style.transform = 'scale(' + scale + ')';
+      }
+    }
+    function show(mode){
+      views.dataset.mode = mode;
+      for (const button of modes) button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
+      sizeFrames();
+    }
+    for (const button of modes) button.addEventListener('click', () => show(button.dataset.mode));
+    const entryButtons = [...document.querySelectorAll('button[data-entry]')];
+    const newPane = views.querySelector('.next');
+    function selectEntry(button,trial){
+      const entry=button.dataset.entry;
+      const next=new URL('ui-demo-journey.html',location.href);
+      next.searchParams.set('entry',entry);
+      next.searchParams.set('trial',trial);
+      newPane.querySelector('iframe').src=next.href;
+      newPane.querySelector('.entry-links a').href=next.href;
+      for(const choice of entryButtons) choice.setAttribute('aria-pressed',String(choice===button));
+      newPane.querySelector('h2').textContent='本次试看版 · '+button.textContent.replace(/^试/,'');
+      try { history.replaceState({...history.state,optraComparison:{entry,trial}},''); } catch {}
+    }
+    for(const button of entryButtons){
+      button.addEventListener('click',()=>selectEntry(button,globalThis.crypto?.randomUUID?.() || Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)));
+    }
+    const saved=history.state?.optraComparison;
+    const prior=entryButtons.find(button=>button.dataset.entry===saved?.entry);
+    if(prior && typeof saved.trial==='string' && /^[a-zA-Z0-9-]{1,80}$/.test(saved.trial)) selectEntry(prior,saved.trial);
+    const observer = new ResizeObserver(sizeFrames);
+    for (const stage of stages) observer.observe(stage);
+    show(window.innerWidth > 850 ? 'both' : 'new');
+  </script>
+</body>
+</html>
