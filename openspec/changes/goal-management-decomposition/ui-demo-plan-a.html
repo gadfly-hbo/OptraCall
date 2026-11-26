@@ -29,7 +29,7 @@
     .gsa-origin{margin:0 0 4px;display:inline-block;color:var(--accent);font-weight:600;font-size:12px}
     .gsa-checks{display:grid;grid-template-columns:auto 1fr;gap:5px 12px;font-size:13px;line-height:1.55;margin:5px 0 0}
     .gsa-checks dt{font-weight:600;color:var(--ink)}.gsa-checks dd{margin:0;color:var(--muted)}
-  
+
     .dc-grid .dc-jump{display:none}
     .dc-sheet-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
     .dc-sheet-head .dc-publish{flex:none;font-size:13px;min-height:34px}
@@ -127,6 +127,30 @@
     .plan-polish-btn{color:var(--accent);border-color:var(--accent-soft);background:var(--accent-wash)}
     .gsa-editor-row .plan-polish-btn,.gsa-editor-row .plan-undo-btn{margin:2px 0 8px 4px}
     .plan-polish-issue{display:block;flex-basis:100%;color:var(--ink);font-size:12px}.plan-polish-btn[hidden],.plan-undo-btn[hidden],.plan-polish-issue[hidden]{display:none}
+
+    .first-split{width:100%;border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--accent-wash);color:var(--ink)}
+    .first-split h3{font-size:13px}.first-split p{font-size:13px;line-height:1.65;margin:4px 0 10px}
+    .split-save-panel{display:flex;align-items:center;flex-wrap:wrap;gap:9px;padding:6px 18px;color:var(--muted);font-size:12px}
+    .split-save-panel [data-status="saved"]{color:var(--success)}.split-save-panel [data-status="failed"],.split-save-panel [data-status="stale"]{color:var(--error)}
+
+
+    .report-pick{margin:16px 0}.report-pick h3{margin:0 0 7px}.report-line{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+    .report-line strong,.report-line small,.actual-selected small,.actual-selected strong{display:block}.report-line strong{font-size:13px}.report-line small,.actual-selected small{color:var(--muted);font-size:12px}.report-line button{flex-shrink:0}
+    .new-report .form-field{display:grid;margin:10px 0;gap:5px}.new-report textarea,.new-report input,.new-report select{min-width:0;width:100%}.actual-samples{margin:12px 0}
+    .report-quote{margin:10px 0;padding:10px 12px;border-left:3px solid var(--accent);background:var(--accent-wash);font-size:13px}.report-quote p{margin:4px 0;overflow-wrap:anywhere}
+    .actual-selected{margin:12px 0}.report-original{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}
+
+
+    .period-review-heading,.period-review-title,.period-review-controls,.period-review-submit,.period-review-discarded{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+    .period-review-heading{margin:22px 0 12px}.period-review-heading h3{font-size:16px}.period-review-heading p{margin-top:3px}
+    .period-review-items{display:grid;gap:12px}.period-review-item{padding:15px;border:1px solid var(--line);border-radius:9px;min-width:0;overflow-wrap:anywhere}
+    .period-review-title small,.period-review-submit span,.period-review-discarded{color:var(--muted);font-size:12px}
+    .period-review-text{margin:8px 0;font-size:14px;white-space:pre-wrap}
+    .period-review-scope{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:12px;margin:9px 0;color:var(--muted)}
+    .period-review-scope dd{margin:0}.period-review-controls{margin-top:12px}.period-review-controls label{display:flex;align-items:center;gap:5px;font-size:13px;font-weight:550}
+    .period-review-item .details{margin-top:7px}.period-review-item .details-body p+p{margin-top:7px}
+    .period-review-submit{margin:15px 0}.period-review-discarded{padding:5px 0}.period-review-item textarea{margin:6px 0}
+
   </style>
 </head>
 <body>
@@ -149,6 +173,7 @@
           <select id="entry-sample" data-testid="entry-sample">
             <option value="ready">齐备待确认</option><option value="confirmed">已确认</option><option value="missing">GSA 资料待补</option>
           </select></label><small class="entry-sample-note">三个合成样例分别保存，切回可继续原先的草稿和进度。</small>
+        <button type="button" class="small" data-action="simulate-draft-save-failure" data-testid="simulate-draft-save-failure">模拟下次草稿保存失败</button>
         <label for="scenario">演示场景 <select id="scenario" data-testid="scenario-select"><option value="normal">正常发布</option><option value="conflict">交叉冲突</option><option value="lost">发布失答恢复</option></select></label>
         <label for="lost-outcome" id="lost-label" hidden>模拟结果 <select id="lost-outcome" data-testid="lost-outcome"><option value="saved">已保存，回包丢失</option><option value="not-executed">确定未执行</option><option value="unknown">仍未知</option><option value="not-found">未查到回执，仍待核</option></select></label>
         <span class="demo-caption">合成资料 · Agent 为脚本模拟 · 切换场景将重置演示</span><button class="small ghost" id="reset-demo" data-testid="reset-demo">重置场景</button><button class="small" id="reopen-demo" data-testid="reopen-demo">模拟重新打开</button>
@@ -214,11 +239,205 @@
   const verifiedPublications=()=>state.published.filter(pub=>state.knownPublishedNo!==null&&pub.no<=state.knownPublishedNo);
   function captureInput(){const input=$('chat-input');if(input&&isSales())state.ui.draftInput=input.value;}
 
-  function persist(){try{sessionStorage.setItem(STORE,JSON.stringify(state));}catch{memoryOnly=true;}}
+  function persist(){try{sessionStorage.setItem(STORE,JSON.stringify(state));return true;}catch{memoryOnly=true;return false;}}
   function notify(message){$('toast').textContent=message;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,4800);}
   const selectedCheck=()=>state.checkHistory.find(c=>c.id===state.activeCheckId)||null;
   const currentPublished=()=>state.published.find(p=>p.no===state.knownPublishedNo);
   const checkPlan=()=>{const c=selectedCheck();return state.published.find(p=>p.no===(c?.planNo||state.nextCheckPlanNo||state.knownPublishedNo));};
+
+  const fixedReportKeys=['complete','incomplete','open','mismatch','two-periods'];
+  function checkReportInfo(check){
+    if(check?.receipt?.info)return check.receipt.info;
+    if(!check || fixedReportKeys.includes(check.report))return reportInfo(check?.report);
+    return {label:'原凭证待核',values:[],actualLabel:'报表实绩',coverage:'覆盖范围待核',cutoff:'待核',status:'原凭证待核',reason:'本条记录未保存可读取的原凭证。'};
+  }
+  function reportSample(kind){
+    const amount={clear:'26.4',missing:'24.8',ambiguous:'25.6'}[kind]||'26.4';
+    const cutoff=kind==='missing'?[]:(kind==='ambiguous'?['数据截至：2027-01-14 20:00','数据截至：2027-01-14 23:59']:['数据截至：2027-01-14 23:59']);
+    return ['1 月净销售周报（合成）','期间：2027 年 1 月第 2 周','指标：净销售额 SAP v2',
+      '覆盖：全部渠道与门店','结账状态：已结账','净销售额实绩：'+amount+' 万元',...cutoff,'导出时间：2027-01-15 09:00'].join('\n');
+  }
+  function reportParts(text){return text.split(/[\n；;。]+/).map(part=>part.trim()).filter(Boolean);}
+  function dateToken(){
+    return /\d{4}(?:[-./]\d{1,2}[-./]\d{1,2}|年\s*\d{1,2}月\s*\d{1,2}日?)(?:[T\s]+\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:Z|[+-]\d{2}:\d{2}))?)?/gi;
+  }
+  function normalizeReportDate(value){
+    const m=/^(\d{4})[-/.年]\s*(\d{1,2})[-/.月]\s*(\d{1,2})日?(?:(?:T|\s)+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*(Z|[+-]\d{2}:\d{2}))?)?$/i.exec(value.trim());
+    if(!m)return '';
+    const [,y,mo,d,h,mi,sec,tz]=m;
+    const day=new Date(Date.UTC(+y,+mo-1,+d));
+    if(day.getUTCFullYear()!==+y||day.getUTCMonth()+1!==+mo||day.getUTCDate()!==+d||+(h||0)>23||+(mi||0)>59||+(sec||0)>59)return '';
+    if(tz && tz.toUpperCase()!=='Z' && (+tz.slice(1,3)>14||+tz.slice(4)>59||(+tz.slice(1,3)===14&&+tz.slice(4)!==0)))return '';
+    const pad=v=>String(v).padStart(2,'0');
+    return y+'-'+pad(mo)+'-'+pad(d)+(h===undefined?'':' '+pad(h)+':'+mi+(sec?':'+sec:'')+(tz||''));
+  }
+  function cutoffCandidates(text){
+    const found=[];
+    for(const chunk of reportParts(text)){
+      // Only a date bound to an explicit data cutoff counts. Period ends and export times have different meanings.
+      const segments=chunk.split(/[，,]/);
+      for(const phrase of segments){
+        const marker=/(?:^|\s)(?:(?:(?:本次|本期|本份)?(?:报表数据|销售数据|统计数据|原始数据|数据|实绩|统计|报表))(?:截至|截止)(?:日期|时间|时点)?(?:为|至|到)?\s*[:：]?\s*|^(?:截至(?:日期|时间|时点)?|截止(?:日期|时间|时点))\s*[:：]\s*)/g;
+        const marks=[...phrase.matchAll(marker)];
+        marks.forEach((mark,i)=>{
+          const tail=phrase.slice(mark.index+mark[0].length,marks[i+1]?.index??phrase.length).split(/导出时间|生成时间|制表时间|打印时间|报告日期|目标日期|提交期限/)[0];
+          if(/^\s*(?:待定|不详|未知|未注明)/.test(tail))return;
+          for(const match of tail.matchAll(dateToken())){
+            const value=normalizeReportDate(match[0]);
+            if(value&&!found.some(row=>row.value===value))found.push({value,quote:phrase.trim()});
+          }
+        });
+      }
+    }
+    return found;
+  }
+  function amountFromSource(parts){
+    // Inspect every claim about an actual, including empty, qualified and nonnumeric claims.
+    // Identical RMB amounts expressed in 元 and 万元 can refer to the same reported value.
+    const field=/^(?:第\s*[2二]\s*周\s*|(?:本期|本周|全渠道|已覆盖范围|已报范围|可比|暂报|合计|实际|预计|预估|估算)\s*)*(?:净销售额(?:实绩|实际值)?|实际净销售额|净销实绩|实绩(?:值|金额)?|已报净额)(?=\s*[:：=为（(]|[\s\d]|$)/;
+    const amount=/^\s*[:：=为]\s*(?:(?:人民币|CNY|RMB)\s*)?([-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*(万元|万|元)\s*$/i;
+    const values=new Set();
+    for(const part of parts){
+      const match=field.exec(part);
+      if(!match)continue;
+      if(/预计|预估|暂报|估算/.test(match[0]))return [];
+      const number=amount.exec(part.slice(match[0].length));
+      if(!number)return [];
+      const value=Number(number[1].replaceAll(',',''))/(number[2]==='元'?10000:1);
+      if(!Number.isFinite(value))return [];
+      values.add(value);
+    }
+    const currencies=reportFields(parts,'币种|金额币种|实绩币种|货币|货币单位');
+    if(currencies.some(currency=>!/^(?:人民币|CNY|RMB|人民币元)$/i.test(currency)))return [];
+    const units=reportFields(parts,'金额单位|实绩单位|单位');
+    if(units.some(unit=>!/^(?:人民币)?(?:元|万元|万)$/.test(unit)))return [];
+    const uncertain=parts.some(part=>/(?:实绩|实际金额|实报数|实绩单位|实绩币种).{0,9}(?:待确认|待核实|待补|待定|不明|不确定|未确定|暂估|仅为预计|尚待核对|仅供参考|预计值|估算值)/.test(part));
+    return !uncertain&&values.size===1?[...values]:[];
+  }
+  function excludedReportScope(text){
+    const clauses=text.split(/[\n；;。！!，,]/).map(clause=>clause.trim()).filter(Boolean);
+    const business=/(?:门店|店铺|商店|直营店|加盟店|分店|闭店|渠道|网点|直营网点|区域|大区|分公司|线上|线下|电商平台|平台业务|线上平台|天猫|抖音|京东|小程序)/;
+    const exclude=/(?:不(?:包含|包括|含|计入|纳入|统计|覆盖)|未(?:包含|包括|含|计入|纳入|统计|覆盖|上报|报数)|已?排除(?:了)?|剔除(?:了)?|漏计|遗漏|暂缺|缺少|缺报)/g;
+    const financial=/^(?:同归属期)?(?:退款|运费|税费|服务费|配送费|手续费|包装费|折扣|优惠券|折让|退货金额|增值税)/;
+    for(const clause of clauses){
+      if(/(?:缺报|漏报|未出数|未上报|缺.{0,5}家门店)/.test(clause))return clause;
+      for(const word of clause.matchAll(exclude)){
+        const after=clause.slice(word.index+word[0].length).replace(/^\s*了?\s*/,'');
+        const before=clause.slice(0,word.index);
+        // Fee exclusions describe metric calculation. A business unit excluded from coverage describes scope.
+        const objects=after.split(/(?:以及|及|和|与|、)/);
+        if(objects.some(obj=>!financial.test(obj.trim())&&business.test(obj)))return clause;
+        if(business.test(before)&&/^(?:$|本(?:次|期)(?:统计|范围|覆盖)|(?:整体|汇总|总额|范围|数据|报表))/.test(after))return clause;
+      }
+      if(business.test(clause)&&/(?:除外|未报|不在.{0,5}(?:范围|报表)|以外才计入|除.{0,12}(?:门店|渠道|网点|线上|线下).{0,3}外|仅(?:覆盖|含|统计|包括)|只(?:覆盖|含|统计))/.test(clause))return clause;
+    }
+    return '';
+  }
+  function reportFields(parts,label){
+    const values=parts.map(part=>new RegExp('^(?:'+label+')\\s*[:：]\\s*(.+)$').exec(part)?.[1]).filter(Boolean);
+    return [...new Set(values)];
+  }
+  function assessNewReceipt(text,cutoff,name){
+    const parts=reportParts(text),values=amountFromSource(parts);
+    const period=reportFields(parts,'期间|归属期间|报表期间|统计周期');
+    const metrics=reportFields(parts,'指标|指标口径|口径'),scopes=reportFields(parts,'覆盖|覆盖范围|业务范围|范围');
+    const closes=reportFields(parts,'结账状态|观察窗|结账');
+    const label=name||'粘贴的报表',scope=scopes[0]||'覆盖范围待核',excluded=excludedReportScope(text);
+    const base={label,values,actualLabel:'报表实绩',coverage:excluded?'源文载有未覆盖范围':scope,period:period.length===1?period[0]:'期间待核',cutoff};
+    const result=(status,reason,actualLabel=base.actualLabel)=>({...base,status,reason,actualLabel});
+    if(period.length!==1||!/^2027\s*年\s*0?1\s*月\s*第\s*(?:2|二)\s*周$|^2027-01-W0?2$/i.test(period[0]))return result('期间待核','原文未唯一确认 2027 年 1 月第 2 周；暂不比较本检查点。');
+    if(metrics.length!==1||!(/^(?:净销售额\s*(?:[（(]\s*)?SAP\s*(?:净销售额\s*)?(?:[/·]\s*)?v2\s*[）)]?|SAP\s*净销售额\s*(?:[/·]\s*)?v2)$/i.test(metrics[0])))return result('口径不可比','原报表未明确采用冻结计划的净销售额 SAP v2 口径，暂不计算偏差。','原报表数值');
+    if(scopes.length!==1||!/^(?:全部|全)渠道(?:与|和|及|\s*[＋+]\s*)(?:全部|所有|全)?门店$/.test(scope)||excluded)return result('覆盖待补',excluded?'原文载有范围缺口：“'+excluded+'”。暂不计算整体偏差。':'报表覆盖尚未与全部渠道与门店对齐；仅保留已报范围和原值。','已报范围实绩');
+    const date=cutoff.slice(0,10),clock=cutoff.slice(11,16);
+    const beforeClose=date<'2027-01-14'||(date==='2027-01-14'&&clock&&clock<'23:59');
+    if(closes.length!==1||!/^(?:已结账|已结算|已关账|已闭合|已关闭)$/.test(closes[0])||beforeClose)return result('待结账','观察窗、结账状态或截至时间尚不满足本期核对条件。','暂报实绩');
+    if(!values.length)return result('数值待核','原文未给出唯一、单位明确且已核实的实绩；空项、冲突或待确认的实绩均需核对。暂不计算整体偏差。');
+    return {...base,actualLabel:'可比实绩',reason:'已按原文核对期间、净销售额 SAP v2、全部渠道与门店的覆盖及结账状态。'};
+  }
+  function fixedReceipt(key){
+    const info=clone(reportInfo(key)),period=key==='two-periods'?'2027 年 1 月第 1、2 周':'2027 年 1 月第 2 周';
+    const cutoffQuote='数据截至：'+info.cutoff;
+    const text=[info.label,'期间：'+period,'覆盖：'+info.coverage,cutoffQuote,info.reason].join('\n');
+    return {key,ref:info.ref,name:info.label,text,period,cutoff:info.cutoff,cutoffMode:'extracted',cutoffQuote,info:{...info,period}};
+  }
+  function availableReceipts(){
+    const all=fixedReportKeys.map(fixedReceipt);
+    for(const check of state.checkHistory){
+      const r=check.receipt;
+      if(r&&!all.some(row=>row.ref===r.ref))all.push(r);
+    }
+    return all;
+  }
+  function recordReceipt(r){
+    const plan=checkPlan();
+    if(!plan||selectedCheck()||state.tab!=='follow'||!isSales())return;
+    const actuals=[...r.info.values],plans=actuals.length===2?plan.weeks.slice(0,2):[plan.weeks[1]];
+    const percentages=r.info.status?[]:actuals.map((actual,i)=>(actual-plans[i])/plans[i]*100);
+    const trigger=r.info.status?{type:'incomparable',reason:r.info.reason}:triggerFor(r.key,state.threshold,percentages);
+    const id='CHECK-'+String(state.checkHistory.length+1).padStart(3,'0');
+    const check={id,report:r.key,receipt:clone(r),sourceRef:r.ref,planNo:plan.no,parentGsaRef:plan.gsa,
+      goalId:'G-TOTAL',checkpointId:'CP-202701-W2-TOTAL',threshold:state.threshold,caseChoice:null,
+      comparison:{actuals,plans,percentages},trigger};
+    state.checkHistory.push(check);
+    state.report=r.key;state.activeCheckId=id;state.nextCheckPlanNo=null;
+    render();notify('已保存 '+id+' · '+(r.info.status||'已核对可比实绩'));
+  }
+  function reportComposer(plan){
+    const drafts=state.ui.actualReportDrafts??={};
+    return drafts[plan.no]??={text:'',name:'',choice:'',manual:'',open:false};
+  }
+  function sourceExcerpt(c,info){
+    const record=c.receipt;
+    if(!record)return '<p>此旧检查只保存了凭证引用与截至时间。</p>';
+    return `<div class="report-quote" data-testid="check-cutoff-quote"><strong>${record.cutoffMode==='manual'?'负责人补充的截至时间':record.cutoffMode==='selected'?'负责人选定的原句':'截至时间原句'}</strong><p>${esc(record.cutoffQuote||record.cutoff)}</p></div>
+      <details class="details"><summary>查看留存的原报表</summary><div class="details-body"><p>${esc(record.name)}</p><pre class="report-original" data-testid="check-source-original">${esc(record.text)}</pre></div></details>`;
+  }
+  function reportChoices(plan){
+    const draft=reportComposer(plan);
+    const receipts=availableReceipts();
+    return `<section class="report-pick"><h3>已存实绩凭证</h3>${receipts.map(r=>`<div class="report-line"><div><strong>${esc(r.info.label)}</strong><small>${esc(r.period)} · ${esc(r.info.coverage)} · 截至 ${esc(r.cutoff)}</small></div><button class="small" data-action="use-saved-report" data-report-ref="${esc(r.ref)}" data-testid="use-report-${esc(r.key)}">用这份核对</button></div>`).join('')}</section>
+      <details class="details new-report" id="actual-composer" ${draft.open?'open':''}><summary data-testid="new-report-toggle">提交新报表</summary><div class="details-body">
+      <form id="new-actual-form"><label class="form-field"><strong>报表原文</strong><textarea rows="6" maxlength="12000" id="actual-text" data-testid="report-text" placeholder="粘贴期间、指标、实绩、覆盖范围、结账状态和数据截至时间。">${esc(draft.text)}</textarea></label>
+      <label class="form-field actual-file">读取 UTF-8 文本报表<input type="file" id="actual-file" data-testid="report-file" accept=".txt,.md,.csv,.tsv,text/*"></label>
+      <div class="actions actual-samples"><span class="small-text muted">试填样例</span>${[['clear','单一截至时间'],['missing','缺少截至时间'],['ambiguous','两条截至时间']].map(([key,label])=>`<button type="button" class="small" data-action="fill-report-example" data-example="${key}" data-testid="report-sample-${key}">${label}</button>`).join('')}</div>
+      <div id="cutoff-fields">${cutoffFields(draft)}</div><p class="small-text" id="actual-error" role="status"></p>
+      <button class="primary small" type="submit" data-testid="submit-new-report">提交这份报表并核对</button></form></div></details>`;
+  }
+  function cutoffFields(draft){
+    if(!draft.text.trim())return '<p class="small-text muted" data-testid="report-cutoff-evidence">录入报表后，将列出数据截至时间及对应原句。</p>';
+    const dates=cutoffCandidates(draft.text),ambiguous=dates.length>1;
+    const quotes=dates.map(row=>'<p>'+esc(row.quote)+'</p>').join('');
+    return `<div class="report-quote" data-testid="report-cutoff-evidence"><strong>${dates.length===1?'从原文识别的截至时间 · '+esc(dates[0].value):ambiguous?'报表含多个数据截至时间，请选定本次所用':'未识别到明确的数据截至时间，请补充'}</strong>${quotes}</div>
+      ${ambiguous?`<label class="form-field">选择原文中的截至时间<select id="actual-choice" data-testid="report-cutoff-choice"><option value="">请选择</option>${dates.map(row=>`<option value="${esc(row.value)}" ${draft.choice===row.value?'selected':''}>${esc(row.value)}</option>`).join('')}</select></label>`:''}
+      ${dates.length!==1?`<label class="form-field">${ambiguous?'或手工补充准确截至时间':'负责人补充截至时间'}<input id="actual-manual" data-testid="report-cutoff-manual" value="${esc(draft.manual)}" placeholder="2027-01-14 23:59"></label>`:''}`;
+  }
+  function activeReportDraft(){
+    const p=checkPlan();
+    return p&&!selectedCheck()&&state.tab==='follow'&&isSales()?reportComposer(p):null;
+  }
+  function changeReportText(draft,text,name){
+    draft.text=text;draft.name=name;draft.open=true;draft.choice='';draft.manual='';
+    $('actual-text').value=text;
+    $('cutoff-fields').innerHTML=cutoffFields(draft);
+    $('actual-error').textContent='';persist();
+  }
+  function submitNewReceipt(){
+    const d=activeReportDraft();
+    if(!d)return;
+    const error=$('actual-error');
+    if(!d.text.trim()){error.textContent='请先选择文件或粘贴本次报表。';$('actual-text').focus();return;}
+    const dates=cutoffCandidates(d.text);
+    const selected=dates.length===1?dates[0]:dates.find(row=>row.value===d.choice);
+    const cutoff=selected?.value||normalizeReportDate(d.manual);
+    if(!cutoff){error.textContent='请明确数据截至时间，使用完整年月日，可附时分。';($('actual-choice')||$('actual-manual'))?.focus();return;}
+    const key='submitted-'+(globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,9));
+    const name=d.name||'粘贴的报表';
+    const info=assessNewReceipt(d.text,cutoff,name);
+    const r={key,ref:name+' / '+key,name,text:d.text,period:info.period,cutoff,cutoffMode:selected?(dates.length===1?'extracted':'selected'):'manual',cutoffQuote:selected?.quote||'',info};
+    delete state.ui.actualReportDrafts[checkPlan().no];
+    recordReceipt(r);
+  }
+
   function reportInfo(id){
     const reports={
       complete:{label:'第 2 周完整实绩 · 全渠道与门店 · 27 万',ref:'actual-202701-w2-complete/r2',values:[27],coverage:'覆盖完整',actualLabel:'可比实绩',cutoff:'2027.01.14 23:59',reason:'全渠道和门店均已结账，同期间、同范围、同净销售额口径。'},
@@ -337,8 +556,92 @@
     const draft=draftPlanContents();
     return Object.keys(draft).some(key=>JSON.stringify(draft[key])!==JSON.stringify(current[key]));
   }
+
+  // Each demo sample owns a separate saved draft. The main UI snapshot also retains
+  // pending input for recovery, but it is never proof that a draft is publishable.
+  const splitSaveJobs=new Map();
+  let splitPreviewBasis=null;
+  function splitSaveKey(){
+    return STORE+'.saved-split.'+(state.ui.entrySample||'ready')+'.G-retail-202701';
+  }
+  function splitDraftSignature(){
+    return JSON.stringify({instance:state.ui.splitDraftInstance,goal:'G-retail-202701',scenario:state.scenario,
+      revision:state.draftRevision,parent:gsaRef(draftParentVersion()),contents:draftPlanContents(),
+      aligned:state.aligned,alignmentBasis:state.alignmentBasis,conflict:hasConflict()});
+  }
+  function splitPreviewStamp(){
+    return JSON.stringify([splitSaveKey(),splitDraftSignature(),gsaVersion(),state.knownPublishedNo]);
+  }
+  function splitSaveStatus(){
+    if(!isSales()||!state.generated||!state.editingDraft||state.operation)return 'idle';
+    const signature=splitDraftSignature();
+    if(state.ui.splitSaveError===signature)return 'failed';
+    try{
+      const receipt=sessionStorage.getItem(splitSaveKey());
+      if(receipt===signature)return 'saved';
+      if(state.ui.splitLastReceipt && receipt!==state.ui.splitLastReceipt && !splitSaveJobs.has(splitSaveKey()))return 'stale';
+    }catch{return 'failed';}
+    return 'saving';
+  }
+  function splitStatusText(){
+    const status=splitSaveStatus();
+    if(status==='saved')return '草稿 r'+state.draftRevision+' 已保存';
+    if(status==='failed')return '草稿保存失败，编辑内容仍保留在本页。';
+    if(status==='stale')return '已存版本发生变化，当前草稿需要重新核对。';
+    if(status==='saving')return '正在保存草稿 r'+state.draftRevision+'…';
+    return '';
+  }
+  function splitSavePanel(){
+    return `<div class="split-save-panel"><span role="status" aria-live="polite" data-testid="draft-save-state" data-status="${splitSaveStatus()}">${splitStatusText()}</span>
+      <button type="button" class="small" data-action="retry-draft-save" data-testid="retry-draft-save" ${splitSaveStatus()==='failed'?'':'hidden'}>重试保存</button></div>`;
+  }
+  function updateSplitIndicators(){
+    const status=splitSaveStatus();
+    const badge=document.querySelector('[data-testid="draft-save-state"]');
+    if(badge){badge.dataset.status=status;badge.textContent=splitStatusText();}
+    const modalStatus=document.querySelector('[data-testid="reserve-save-state"]');
+    if(modalStatus)modalStatus.textContent=splitStatusText();
+    const retry=document.querySelector('[data-testid="retry-draft-save"]');
+    if(retry)retry.hidden=status!=='failed';
+    const publishButton=document.querySelector('[data-testid="publish-button"]');
+    if(publishButton)publishButton.disabled=!canPublish();
+  }
+  function trackSplitSave(){
+    if(!isSales()||!state.generated||!state.editingDraft||state.operation)return;
+    if(!state.ui.splitDraftInstance)state.ui.splitDraftInstance=String(Date.now())+'-'+Math.random().toString(36).slice(2);
+    const key=splitSaveKey(),signature=splitDraftSignature(),owner=state;
+    const oldJob=splitSaveJobs.get(key);
+    if(oldJob?.signature===signature || state.ui.splitSaveError===signature)return;
+    if(oldJob){clearTimeout(oldJob.timer);splitSaveJobs.delete(key);}
+    let baseline;
+    try{baseline=sessionStorage.getItem(key);}catch{state.ui.splitSaveError=signature;return;}
+    if(baseline===signature || (owner.ui.splitLastReceipt && baseline!==owner.ui.splitLastReceipt))return;
+    const job={signature,timer:null};
+    splitSaveJobs.set(key,job);
+    job.timer=setTimeout(()=>{
+      if(splitSaveJobs.get(key)!==job)return;
+      splitSaveJobs.delete(key);
+      try{
+        if(owner.ui.splitFailNext){
+          owner.ui.splitFailNext=false;
+          throw new Error('trial save interruption');
+        }
+        if(state===owner && !persist())throw new Error('UI recovery storage unavailable');
+        if(sessionStorage.getItem(key)!==baseline)throw new Error('draft changed during save');
+        sessionStorage.setItem(key,signature);
+        owner.ui.splitLastReceipt=signature;
+        owner.ui.splitSaveError=null;
+        owner.saveCount=(owner.saveCount||0)+1;
+      }catch{owner.ui.splitSaveError=signature;}
+      if(state===owner){
+        persist();
+        if(isSales())updateSplitIndicators();
+      }
+    },400);
+  }
+
   function canPublish(){
-    return state.gsaConfirmed && !requiresParentReview() && state.generated && !hasConflict() &&
+    return splitSaveStatus()==='saved' && state.gsaConfirmed && !requiresParentReview() && state.generated && !hasConflict() &&
       state.reservePurpose.trim() && state.reserveOwner.trim() && state.gapStrategy &&
       state.editingDraft && !state.operation && draftDiffersFromPublication();
   }
@@ -948,7 +1251,7 @@
     return `<section class="card entry-gsa" aria-labelledby="gsa-title">
       <div class="card-head"><div><h2 id="gsa-title">确认总目标 GSA</h2>
       <p class="muted small-text">2027 年 1 月 · 零售事业部全渠道 · 林负责人</p></div></div>
-      
+
       <div class="gsa-rows"><div class="gsa-row"><span class="gsa-letter">G/S</span><div>
         <h3>${fields.linked?'已承接正式目标与策略':'承接适用的正式战略发布'}</h3>
         <p>${fields.linked?'正式目标 G 为 120 万元，策略 S1 为新品增长与平台活动。':'当前候选尚缺正式目标值、来源及具体策略。以下发布版适用于本期范围。'}</p>
@@ -1006,7 +1309,7 @@
     }
     const option=selectedVersion(),options=versionOptions(),info=goalInfo(),access=sourceUnavailable(option),historical=option.kind==='plan'?option.pub.no!==state.knownPublishedNo:option.kind==='legacy'?option.no!==2:option.kind==='gsa'?option.no!==gsaVersion():false;const current=access==='available';openAux('版本与来源',`<p class="small-text muted">${info.title} · ${info.period} · ${info.scope}</p><div class="form-field" style="margin-top:14px"><label for="version-select">查看准确版本</label><select id="version-select" data-testid="version-select" style="width:100%">${options.map(item=>`<option value="${item.key}" ${item.key===option.key?'selected':''}>${item.label}</option>`).join('')}</select></div><p class="small-text muted" style="margin-top:10px">${historical?'正在只读查看历史版本，当前生效指针保持不变。':'这里只列已知的原已采用记录、已确认总 GSA 及已核实拆解版。候选草稿不冒充正式版。'}</p>${isSales()&&state.operation?.status==='unknown'?'<div class="note warning" data-testid="versions-pending" style="margin-top:12px">原发布操作结果待核，未核实的新版本不会提前列出或导出。原已核实生效版仍保留。</div>':''}<div class="handoff-snapshot" style="margin-top:13px"><strong>${option.label}</strong><div class="mono" style="margin-top:5px" data-testid="selected-version-ref">${esc(versionRef(option))}</div></div>${!current?`<div class="note warning" style="margin-top:13px" data-testid="source-unavailable">${access==='denied'?'当前没有读取权限。':'原来源暂时失读。'}保留上方准确身份与原选择，不能改用最新版，也不能导出未核实正文。恢复原来源后再核对。</div>`:versionBody(option)}<div class="actions" style="margin-top:15px"><button class="primary small" data-action="export-version" data-testid="export-version" ${current?'':'disabled'}>${option.kind==='plan'?'导出此正式拆解 HTML':option.kind==='adopted'?'导出原 GSA（原口径）':'导出此准确 GSA HTML'}</button>${isSales()&&option.kind==='plan'?'<button class="small" data-action="view-version-checks">查看本版检查与 Case 引用</button>':''}</div><details class="details"><summary>原型评审 · 来源读取异常</summary><div class="details-body"><label class="small-text">模拟此准确来源 <select id="source-access" data-testid="source-access"><option value="available" ${access==='available'?'selected':''}>可读取</option><option value="denied" ${access==='denied'?'selected':''}>无读权</option><option value="unavailable" ${access==='unavailable'?'selected':''}>暂时失读</option></select></label></div></details>`);}
   function versionBody(option){if(option.kind==='gsa')return gsaVersionBody(option.no);const sales=isSales(),p=option.pub;return `${p?publicationParentBlock(p):''}<dl class="version-source-grid" data-testid="version-body"><dt>期间与范围</dt><dd>${goalInfo().period} · ${goalInfo().scope}</dd><dt>正式目标</dt><dd>${sales?'120 万元':option.target}；${!sales&&option.no===1?'当时的正式目标，现仅历史回看':'以本版已采用值为准'}。</dd><dt>原战略发布</dt><dd>${sales?'S-2027 / v3 · G-2027-01':option.no===1?'S-east-2026 / v3 · 初始正式复购目标23%':'S-east-2026 / v4 · 正式修订复购目标24%'}，准确发布来源原样保留。</dd><dt>指标与基线</dt><dd>${sales?'合成 SAP 净销售额 / v2；可比期 108 万元；同口径可达测算 112 万元，差额 8 万元。':'合成 SAP 30日有效复购率 / v3；基线 22%；按成熟同队列有效复购人数／合格会员数核算，退款处理按原定义。'}</dd><dt>策略 S</dt><dd>${sales?'新品增长与平台活动共同补足增量。':'直营店首购回访试点，按成熟观察窗核对。'}</dd><dt>${option.kind==='adopted'||option.kind==='legacy'?'原 GSA 的 A':'计划 A'}</dt><dd>${p?formatFrozenActions(frozenParent(p)):option.kind==='adopted'?'本条原目标已采用 G/S。原实际安排为 Case C-014 决定 D2、项目 P-007 方案 v2 与看板 B-021 的门店陈列试点，2026-11-20 明确授权，陈店长负责、已完成、反馈待整理。本版没有新总 GSA 的计划 A，不从旧授权补造本期计划。':option.kind==='legacy'?'原 Case C-E11 决定 D4、项目 P-E03 方案 v3／看板 B-E07 的首购后7日回访试点，2026-10-01 明确授权，周店长负责、已完成，成熟队列观察已记录；按历史原口径保留，不补造新计划 A。':state.ui.entrySample==='missing'?esc([entryFields().action,entryFields().checkpoint,entryFields().basis].join(' · ')):'月初核对新品试点与可售货品；第 2 周检查全渠道可比净销售额与增量依据；月末对照准确实绩复盘。仅已确认计划，不是行动授权。'}</dd><dt>责任与期限</dt><dd>${goalInfo().owner} · ${goalInfo().due}</dd><dt>留存与修订</dt><dd>${p?esc(p.publicationReason||(p.no===1?'首次拆解发布':'按当时确认的拆解修订发布')):option.kind==='legacy'?option.no===2?'2026-10-15 生效 · 上游正式战略发布 v4 修订目标后，经观察窗与资源复核承接 24%，替代原 v3 的 23%；期初承诺仅备忘。':'2026-09-25 采用 · 承接上游正式战略发布 v3 的 23%；后由原 GSA v2 承接战略 v4 的 24% 替代。':'2026-11-25 · '+(option.kind==='gsa'?'确认总 GSA v1，补齐本期计划 A，未授权经营执行。':'原已采用 G/S，历史采用事实不重写。')}</dd></dl>${p?`<div class="aux-section-title">本准确拆解版的正式明细</div><div class="table-scroll"><table><thead><tr><th>目标行</th><th>责任范围</th><th>金额</th><th>负责人</th></tr></thead><tbody>${p.allocations.map(row=>`<tr><td>${row.id}</td><td>${row.scope}</td><td>${row.amount} 万</td><td>${row.owner}</td></tr>`).join('')}<tr><td>预留</td><td>${esc(p.reserve.purpose)}</td><td>5 万</td><td>${esc(p.reserve.owner)}</td></tr></tbody></table></div><div class="aux-section-title">本版冻结的行级检查点</div>${p.checkpoints?.length?`<div class="table-scroll" data-testid="version-checkpoints"><table><thead><tr><th>检查点ID</th><th>目标行</th><th>日期</th><th>计划值</th></tr></thead><tbody>${p.checkpoints.map(cp=>`<tr><td>${esc(cp.id)}</td><td>${esc(cp.goalId)}</td><td>${esc(cp.date)}</td><td>${cp.target} 万</td></tr>`).join('')}</tbody></table></div>`:'<p class="small-text muted">此旧发布快照未保存行级检查点，保持未知，不用当前草稿回填。</p>'}<p class="small-text muted" style="margin-top:10px">本版分周计划 ${p.weeks.join(' / ')} 万，已分配 115 万。新品非活动期增量 5 万＋平台额外增量 3 万覆盖原 8 万测算缺口。预留与可达性差额分别保留。</p>`:''}`;}
-  function versionEvidence(){const option=selectedVersion();if(option.kind!=='plan')return;const rows=state.checkHistory.filter(c=>c.planNo===option.pub.no);openAux('本版检查与 Case 引用',`<p class="small-text muted">只读回看 ${esc(versionRef(option))}，不会切换当前生效版或改写旧检查。</p>${rows.length?rows.map(c=>`<div class="record-card"><h3>${esc(c.id)} · 计划 v${c.planNo} · ${esc(checkParentLabel(c))}</h3><p>${esc(reportInfo(c.report).actualLabel)} ${esc(c.sourceRef)} · ${c.comparison.actuals.join(' / ')} 万<br>原计划 ${c.comparison.plans.join(' / ')} 万 · ${c.report==='incomplete'||c.trigger.type==='incomparable'?'整体待核 · '+esc(reportInfo(c.report).status||'可比性待核'):'原偏差 '+c.comparison.percentages.map(v=>Number(v.toFixed(2))+'%').join(' / ')}<br>保存的阈值 ${c.threshold==='none'?'未配置':'10% 或连续 2 期'} · ${esc(c.trigger.reason)}<br>Case ${c.caseChoice==='existing'?'已选择 C-014':c.caseChoice==='new'?'已选择新 Case 草稿 '+esc(c.caseId||'C-015'):c.caseChoice==='observe'?'已选择继续观察':'未选择'}</p></div>`).join(''):'<div class="aux-empty">本准确版尚无已保存的阶段检查引用。</div>'}`);}
+  function versionEvidence(){const option=selectedVersion();if(option.kind!=='plan')return;const rows=state.checkHistory.filter(c=>c.planNo===option.pub.no);openAux('本版检查与 Case 引用',`<p class="small-text muted">只读回看 ${esc(versionRef(option))}，不会切换当前生效版或改写旧检查。</p>${rows.length?rows.map(c=>`<div class="record-card"><h3>${esc(c.id)} · 计划 v${c.planNo} · ${esc(checkParentLabel(c))}</h3><p>${esc(checkReportInfo(c).actualLabel)} ${esc(c.sourceRef)} · ${c.comparison.actuals.length?c.comparison.actuals.join(' / ')+' 万':'实绩数值待核'}<br>原计划 ${c.comparison.plans.join(' / ')} 万 · ${c.report==='incomplete'||c.trigger.type==='incomparable'?'整体待核 · '+esc(checkReportInfo(c).status||'可比性待核'):'原偏差 '+c.comparison.percentages.map(v=>Number(v.toFixed(2))+'%').join(' / ')}<br>保存的阈值 ${c.threshold==='none'?'未配置':'10% 或连续 2 期'} · ${esc(c.trigger.reason)}<br>Case ${c.caseChoice==='existing'?'已选择 C-014':c.caseChoice==='new'?'已选择新 Case 草稿 '+esc(c.caseId||'C-015'):c.caseChoice==='observe'?'已选择继续观察':'未选择'}</p></div>`).join(''):'<div class="aux-empty">本准确版尚无已保存的阶段检查引用。</div>'}`);}
   function caseRecords(){const base=isSales()?[{id:'C-014',title:'活动后新品转化',goal:'sales',goalVersion:'原目标 v1 · G/S',strategy:'S1 新品增长与平台活动',period:'2027 年 1 月',scope:'零售事业部全渠道与门店',status:'进行中',year:'2027',basis:'原目标 G-retail-202701/v1 与活动观察记录 ACT-01/r1',historical:false},{id:'C-008',title:'活动预热前测',goal:'sales',goalVersion:'原目标 v1 · G/S',strategy:'S1 新品增长与平台活动',period:'2027 年 1 月',scope:'重点试点门店',status:'已关闭',year:'2027',basis:'原试点记录 ACT-PRE/r2；关闭结论保留',historical:true}]:[{id:'C-E11',title:'华东直营首购回访试点',goal:'legacy',goalVersion:'原 GSA v1 · 历史 23%',strategy:'S1 首购回访与成熟队列观察',period:'2026 年第四季度',scope:'华东直营试点门店',status:'已关闭',year:'2026',basis:'原 GSA-east-2026q4/v1 与成熟队列观察 OBS-E/r3',historical:true}];const createdFromCheck=isSales()?state.checkHistory.filter(c=>c.caseChoice==='new'):[];const projected=createdFromCheck.map(check=>({id:check.caseId||'C-015',title:'本期偏差的独立判断草稿',goal:'sales',goalVersion:'原目标 v1 · '+checkParentLabel(check),strategy:'S1 新品增长与平台活动',period:'2027 年 1 月',scope:'零售事业部全渠道与门店',status:'草稿待确认',year:'2027',basis:'负责人在 '+check.id+' 明确选择另建 Case 草稿；实绩 '+check.sourceRef,planRef:'GDT-retail-202701/v'+check.planNo+' / G-TOTAL / '+check.checkpointId,historical:false}));return base.concat(projected,state.ui.newCases.filter(c=>c.goal===state.ui.selectedGoal)).filter((record,index,all)=>all.findIndex(item=>item.id===record.id)===index);}
   function decisions(){const year=state.ui.caseYear||goalInfo().year,rows=caseRecords().filter(c=>year==='all'||c.year===year);openAux('关联决策',`<p class="small-text muted">先查看以本目标某准确版为主目标的 Case。按当前目标周期展示，年度筛选可选。没有待决事项时，无需先建 Case。</p><label class="form-field" style="display:block;margin-top:12px"><span class="small-text">年度范围</span><select id="case-year" data-testid="case-year" style="margin-left:8px"><option value="${goalInfo().year}" ${year===goalInfo().year?'selected':''}>目标周期 · ${goalInfo().year}</option><option value="all" ${year==='all'?'selected':''}>全部已关联年度</option></select></label>${rows.length?rows.map(c=>`<div class="record-card"><h3>${c.id} · ${esc(c.title)} <span class="status ${c.status==='进行中'?'':'warning'}">${c.status}</span></h3><p>主目标 · ${esc(c.goalVersion)}<br>具体策略 · ${esc(c.strategy)}<br>范围／周期 · ${esc(c.scope)} · ${esc(c.period)}<br>原依据 · ${esc(c.basis)}${c.planRef?'<br>准确拆解与检查 · '+esc(c.planRef):''}</p>${c.historical?'<p>已关闭或历史版本，仅查看原记录，不自动当作进行中事项续接。</p>':c.status==='草稿待确认'?'<p>已保存草稿，去原 Case 入口继续核对。尚非进行中，不自动续接或授权。</p>':'<p>同一问题优先续接此事项，原目标与原证据不自动切换到新拆解版。</p>'}<div class="actions"><button class="small" data-action="case-detail" data-case-id="${c.id}" data-testid="case-${c.id}">查看原 Case</button>${c.status==='进行中'&&!c.historical?`<button class="small" data-action="case-continue" data-case-id="${c.id}">续接此 Case</button>`:''}</div></div>`).join(''):'<div class="aux-empty">此范围没有已关联 Case，不推断没有经营问题。</div>'}<div class="actions" style="margin-top:15px">${isSales()?'<button class="primary small" data-action="case-new" data-testid="proactive-case">为重点试点主动建立 Case</button>':'<span class="small-text muted">本目标仅演示历史只读，不办理新 Case。</span>'}</div><p class="boundary">主动 Case 可从原已采用 G+S 准入，不要求先发布新拆解表、配置阈值或选择实绩。本页只是原 Case 入口的窄演示，不重建 Case 全系统。</p>`);}
   function findCase(id){return caseRecords().find(c=>c.id===id);}
@@ -1019,13 +1322,177 @@
   function previewHandoff(no,lineId){const pub=verifiedPublications().find(pub=>pub.no===Number(no)),line=pub?.allocations.find(row=>row.id===lineId);if(!isSales()||!pub||!line){notify('未能核对准确正式版与目标行，原选择保留。');return;}const existing=state.ui.handoffs.find(r=>r.goal==='sales'&&r.version===pub.no&&r.line.id===lineId);if(existing){handoffDetail(existing.id);return;}const checkpoint=pub.checkpoints?.find(cp=>cp.goalId===lineId);if(!checkpoint){openAux('原行级检查点待核','<p class="small-text">准确正式拆解快照没有可读取的本行检查点，保留原表与目标行身份，不从当前草稿或行金额补造历史凭据。本次新拆解行承接暂不提交，仍可回看原已采用目标的项目入口及已有执行记录。</p>');return;}openAux('确认承接到项目方案草稿',`<p class="small-text muted">固定已发布的准确版本与本目标行。常规项目工作不要求先建 Case。</p><dl class="version-source-grid"><dt>总目标</dt><dd>${esc(pub.gsa)} · G-retail-202701</dd><dt>正式拆解</dt><dd>GDT-retail-202701/v${pub.no}</dd><dt>目标行</dt><dd>${line.id} · ${line.scope} · ${line.amount} 万</dd><dt>计划责任</dt><dd>${line.owner}</dd><dt>检查点</dt><dd>${checkpoint.date} 期末核对 ${checkpoint.target} 万 · ${checkpoint.id}。不把总表周计划当成本行目标。</dd></dl><div class="note">本次只形成项目方案草稿的准确引用。具体任务、人员安排、项目方案确认及行动授权仍在原项目／Case／看板办理。</div><div class="actions" style="margin-top:15px"><button class="primary small" data-action="confirm-handoff" data-plan-no="${pub.no}" data-line-id="${lineId}" data-testid="confirm-handoff">明确承接为项目方案草稿</button></div>`);}
   function confirmHandoff(no,lineId){const pub=verifiedPublications().find(p=>p.no===Number(no)),line=pub?.allocations.find(r=>r.id===lineId);if(!pub||!line||!isSales())return;const checkpoint=pub.checkpoints?.find(cp=>cp.goalId===lineId);if(!checkpoint){notify('原正式快照的行级检查点待核，保留原选择，未新增承接记录。');return;}let record=state.ui.handoffs.find(r=>r.goal==='sales'&&r.version===pub.no&&r.line.id===lineId);if(!record){record={id:'handoff-'+(state.ui.handoffs.length+1),goal:'sales',version:pub.no,projectId:'P-DEMO-'+(state.ui.handoffs.length+1),planRef:'GDT-retail-202701/v'+pub.no,gsaRef:pub.gsa,line:clone(line),checkpoint:clone(checkpoint),authority:null,projectPlanStatus:'draft'};state.ui.handoffs.push(record);}persist();handoffDetail(record.id);notify('已明确保存准确承接引用，未创建实际执行任务或行动授权。');}
   function handoffDetail(id){const r=state.ui.handoffs.find(r=>r.id===id&&r.goal===state.ui.selectedGoal);if(!r)return;openAux('原承接记录 · '+r.projectId,`<h3>项目方案草稿 · 尚未确认方案</h3><dl class="version-source-grid"><dt>父总目标 GSA</dt><dd>${r.gsaRef?esc(r.gsaRef):'原承接记录未记录父 GSA，需沿准确冻结拆解表回源，不能用当前默认值补填。'}</dd><dt>准确原计划</dt><dd>${r.planRef}</dd><dt>目标行</dt><dd>${r.line.id} · ${r.line.scope} · ${r.line.amount} 万</dd><dt>计划责任</dt><dd>${r.line.owner}</dd><dt>原检查点</dt><dd>${r.checkpoint.id} · ${r.checkpoint.date} · ${r.checkpoint.target} 万</dd><dt>实际授权</dt><dd>无。承接引用不等于任务、人员或经营行动授权。</dd><dt>进度／反馈</dt><dd>尚无实际执行记录。</dd></dl><p class="boundary">这是同一引用的原记录，重复承接不会新增项目草稿。以后发布新版，也不自动改写本记录。</p>`);}
-  function reviewPage(){const selected=state.ui.reviewSelected||[];return `<section class="card"><div class="card-head"><div><h2>到期对照与下一阶段</h2><p class="small-text muted" style="margin-top:4px">合成到期情景 · 最后生效正式目标，不受拆解周计划修订影响</p></div><span class="status">原检查保留</span></div><div class="card-body"><div class="legacy-grid"><div><span>最后生效正式目标 G</span><strong>120 万</strong></div><div><span>期初承诺 · 仅作备忘</span><strong>120 万</strong></div><div><span>期末可比实绩</span><strong>123 万</strong></div></div><div class="note success">${gsaVersion()?'按本期最后确认的总 GSA v'+gsaVersion()+' 评估':'按原正式战略目标评估'}，期末净销售额比 120 万元目标高 3 万元。总量达成不证明新品或平台活动的贡献已获因果验证。</div><details class="details"><summary>阶段检查仍按各自原版本回看</summary><div class="details-body">${state.checkHistory.length?state.checkHistory.map(c=>`<p>${esc(c.id)} · ${esc(checkParentLabel(c))} · 拆解表 v${c.planNo} · ${esc(c.sourceRef)} · ${esc(c.trigger.reason)}${c.caseChoice?' · 原 Case 选择保留':''}</p>`).join(''):'尚无已保存阶段检查，本合成期末摘要不补造缺失过程证据。'}</div></details><h3 class="aux-section-title">负责人选择带入下一期的结论或待验证假设</h3><label class="review-choice"><input type="checkbox" name="review-conclusion" value="new-product" ${selected.includes('new-product')?'checked':''}><span><strong>继续观察重点门店新品陈列试点（待验证假设）</strong><br><span class="muted">原依据 Case C-014 / ACT-01/r1 只说明试点资料。Case 仍进行中，实际执行反馈待整理，尚不能认定策略有效；适用范围仅重点直营门店，继续试验与扩展均标待验证。</span></span></label><label class="review-choice"><input type="checkbox" name="review-conclusion" value="timing" ${selected.includes('timing')?'checked':''}><span><strong>新品上市延后时重排阶段目标，不改写历史检查</strong><br><span class="muted">原依据为本次拆解发布版与原阶段检查引用，适用范围为同类供货约束。未发生修订时只作待验证建议。</span></span></label><div class="actions" style="margin-top:15px"><button class="primary" data-action="draft-next-cycle" data-testid="draft-next-cycle">让 Agent 据所选结论起草下一期</button></div>${state.ui.nextCycleDraft?`<div class="record-card" data-testid="next-cycle-draft"><h3>2027 年 2 月目标草稿 · 未采用／未发布</h3>${state.ui.nextCycleDraft.reviewGsaRef?'<p>形成草稿时的复盘依据 · '+esc(state.ui.nextCycleDraft.reviewGsaRef)+'</p>':''}<p>${state.ui.nextCycleDraft.conclusions.map(c=>esc(c.title)+' · 原依据 '+esc(c.source)+' · 适用范围 '+esc(c.scope)).join('<br>')}</p><p>正式目标值与资源约束待下一期总目标 GSA 核对，原复盘与本期生效目标不变。Agent 输出为脚本模拟。</p></div>`:''}</div></section>`;}
+
+  const closingReceipt={
+    ref:'actual-202701-month-close/r1',title:'2027 年 1 月全渠道净销售额结账报表',
+    period:'2027 年 1 月',scope:'零售事业部 · 全渠道与门店',metric:'SAP 净销售额 / v2',actual:123,
+    excerpt:'本期全渠道与门店净销售额合计 123 万元。已扣除同归属期退款，不含运费。'
+  };
+  function reviewBaseline(){
+    const gsa=gsaPlan(),candidate=entryCandidate(),adopted=!gsa&&!candidate;
+    const key=gsa?'gsa-v'+gsa.version:adopted?'adopted-gs':'';
+    const readable=key&&sourceUnavailable({key})==='available';
+    return {ref:gsa?gsaRef(gsa.version):adopted?goalInfo().id+'/v1':'',key,readable:!!readable,
+      label:gsa?'总 GSA v'+gsa.version:adopted?'原已采用目标 v1':'本期候选尚无已确认总 GSA',
+      value:readable?(gsa?gsa.goalValue:120):null,source:readable?(gsa?.source||'S-2027 v3 · G-2027-01'):''};
+  }
+  function reviewCheckRows(){return state.checkHistory.filter(c=>c.id&&(!c.parentGsaRef||c.parentGsaRef.startsWith('GSA-retail-202701/')));}
+  function reviewSource(name,ref,excerpt){return {name,ref,excerpt};}
+  function reviewCandidate(key,label,text,scope,pending,sources){
+    return {key,label,original:text,originalScope:scope,originalPending:pending,text,scope,pending,sources,selected:false,discarded:false};
+  }
+  function reviewCheckAccess(check){
+    if(check.planNo && sourceUnavailable({key:'plan-'+check.planNo})!=='available')return false;
+    const parent=versionFromRef(check.parentGsaRef)||state.published.find(p=>p.no===check.planNo)?.parentGsaVersion;
+    return !parent||sourceUnavailable({key:'gsa-v'+parent})==='available';
+  }
+  function reviewCheckCandidate(check){
+    const known=['complete','incomplete','open','mismatch','two-periods'].includes(check.report)?reportInfo(check.report):null;
+    const data=check.comparison||{},report=check.receipt,reason=check.trigger?.reason||'原检查未记录触发原因。';
+    const info=report?.info||known;
+    const scope=info?.coverage||'以提交时冻结的实绩范围为准';
+    const period=report?.period||info?.period||goalInfo().period;
+    const plans=(data.plans||[]).join(' / '),actuals=(data.actuals||[]).join(' / ');
+    const comparable=Array.isArray(data.percentages)&&data.percentages.length>0;
+    const status=info?.status||'';
+    const metric=comparable&&plans&&actuals?'在原检查口径下，阶段计划为 '+plans+' 万元，可比实绩为 '+actuals+' 万元。'
+      :('原阶段记录'+(status?'标记为「'+status+'」':'的可比性待核')+'。'+(actuals?'报表所列金额为 '+actuals+' 万元。':''));
+    const outcome=check.caseChoice==='existing'?'负责人选择续接已有 Case。':check.caseChoice==='new'?'负责人选择另建 Case 草稿。':check.caseChoice==='observe'?'负责人选择继续观察。':'';
+    const frozenParent=check.parentGsaRef||state.published.find(p=>p.no===check.planNo)?.gsa||'父总 GSA 引用待核';
+    const frozenPlan=check.planNo?'GDT-retail-202701/v'+check.planNo:'原拆解版本待核';
+    const evidence=reviewSource('原阶段检查',check.id,[frozenParent,frozenPlan,check.goalId||'目标行待核',check.checkpointId||'检查点待核',reason,outcome].filter(Boolean).join(' · '));
+    const receipt=reviewSource(report?.name||info?.label||'该次选用的实绩凭证',check.sourceRef||report?.ref||'原凭证引用待核',
+      [report?.text||info?.reason||'原凭证正文待核。',report?.cutoffQuote||'',report?.cutoff||info?.cutoff||''].filter(Boolean).join(' · '));
+    return reviewCandidate('check-'+check.id,'阶段检查 · '+check.id,metric+outcome,
+      period+' · '+scope+' · '+(check.checkpointId||'原检查点待核'),
+      comparable?'阶段偏差的原因和策略效果，还需该期间的执行反馈与可比样本验证。':'需补齐可比口径或覆盖凭证，再判断该阶段整体偏差。',[evidence,receipt]);
+  }
+  function reviewCaseCandidate(c){
+    const open=c.status==='进行中',draft=c.status==='草稿待确认';
+    const text='「'+c.title+'」'+(open?'仍在进行，可把该事项作为下一期继续验证的假设。':draft?'是待确认的 Case 草稿，仍需负责人判断是否承接。':'已关闭，可按原试点范围回看记录。');
+    return reviewCandidate('case-'+c.id,'Case · '+c.id,text,c.period+' · '+c.scope,
+      open?'策略效果、实际反馈及是否可扩大适用范围仍待验证。':draft?'立项、执行和实际反馈均待核。':'关闭状态不能说明策略成效，沿用前需核对原结论与新一期的适用条件。',
+      [reviewSource('原 Case 记录',c.id,[c.title,c.goalVersion,c.planRef,c.basis,'状态 '+c.status].filter(Boolean).join(' · '))]);
+  }
+  function collectReviewItems(base){
+    const report=closingReceipt,goal=goalInfo(),diff=+(report.actual-base.value).toFixed(2);
+    const closing=reviewCandidate('closing','期末目标达成',
+      report.period+'净销售额为 '+report.actual+' 万元，'+(diff===0?'达到':diff>0?'高于':'低于')+'最后生效的 '+base.value+' 万元目标'+(diff===0?'':' '+Math.abs(diff)+' 万元')+'。',
+      report.period+' · '+report.scope+' · '+report.metric,
+      '本表只有月度总量。新品和平台活动各贡献多少，仍需分项数据与可比依据。',
+      [reviewSource(report.title,report.ref,report.excerpt),reviewSource('最后生效的正式目标',base.ref,base.label+' · '+base.source+' · 正式净销售额目标 '+base.value+' 万元')]);
+    const checks=reviewCheckRows().filter(reviewCheckAccess).map(reviewCheckCandidate);
+    const cases=caseRecords().filter(c=>c.goal===state.ui.selectedGoal && c.period===goal.period && c.id&&c.basis).map(reviewCaseCandidate);
+    return [closing,...checks,...cases];
+  }
+  function periodReview(base,update=false){
+    if(!base.readable)return null;
+    const sessions=state.ui.periodReviews??={};
+    if(!sessions[base.ref]||update){
+      const work=sessions[base.ref]??={baseRef:base.ref,items:[]};
+      const existing=new Set(work.items.map(item=>item.key));
+      const added=collectReviewItems(base).filter(item=>!existing.has(item.key));
+      if(added.length){work.items.push(...added);persist();}
+    }
+    return sessions[base.ref];
+  }
+  function reviewItemReadable(item){
+    if(!item.key.startsWith('check-'))return true;
+    const check=reviewCheckRows().find(c=>item.key==='check-'+c.id);
+    return !!check&&reviewCheckAccess(check);
+  }
+  function selectedReviewItems(work){return (work?.items||[]).filter(x=>x.selected&&!x.discarded&&reviewItemReadable(x));}
+  function reviewEvidenceHtml(item){
+    return `<details class="details" data-testid="review-evidence-${esc(item.key)}"><summary>原证据与版本</summary><div class="details-body">${item.sources.map(s=>`<p><strong>${esc(s.name)}</strong> · <span class="mono">${esc(s.ref)}</span><br>${esc(s.excerpt)}</p>`).join('')}</div></details>`;
+  }
+  function reviewScopeChanged(item){return item.originalScope!=null&&item.scope!==item.originalScope;}
+  function reviewEditReady(item){return !!(item.buffer?.trim()&&(item.scopeBuffer??item.scope).trim()&&(item.pendingBuffer??item.pending).trim());}
+  function finishReviewEdit(item){delete item.buffer;delete item.scopeBuffer;delete item.pendingBuffer;}
+  function reviewItemHtml(item){
+    const key=esc(item.key),button=(action,label)=>`<button class="small" type="button" data-action="review-item-${action}" data-review-id="${key}" data-testid="review-${action}-${key}" ${action==='save'&&!reviewEditReady(item)?'disabled':''}>${label}</button>`;
+    if(!reviewItemReadable(item))return `<p class="note warning">${esc(item.label)} 的原版本暂不可读取，恢复原来源后可查看并选用。</p>`;
+    if(item.discarded)return `<div class="period-review-discarded"><span>${esc(item.label)} · 已舍弃</span>${button('restore','恢复这条结论')}</div>`;
+    const editing=typeof item.buffer==='string',edited=item.text!==item.original||item.scope!==(item.originalScope??item.scope)||item.pending!==(item.originalPending??item.pending);
+    return `<article class="period-review-item" data-testid="review-item-${key}"><div class="period-review-title"><h3>${esc(item.label)}</h3><small>${reviewScopeChanged(item)?'范围调整 · 待验证假设':edited?'负责人已修改':'Agent 原稿'}</small></div>
+      ${editing?`<label class="form-field">修改结论<textarea data-review-edit="${key}" data-review-field="buffer" data-testid="review-text-${key}" maxlength="2000">${esc(item.buffer)}</textarea></label>
+        <label class="form-field">适用范围<input data-review-edit="${key}" data-review-field="scopeBuffer" data-testid="review-scope-input-${key}" maxlength="600" value="${esc(item.scopeBuffer??item.scope)}"></label>
+        <label class="form-field">待验证项<input data-review-edit="${key}" data-review-field="pendingBuffer" data-testid="review-pending-input-${key}" maxlength="1000" value="${esc(item.pendingBuffer??item.pending)}"></label><div class="actions">${button('save','保存修改')}${button('cancel','取消修改')}</div>`:`<p class="period-review-text" data-testid="review-current-${key}">${esc(item.text)}</p>`}
+      ${editing?'':`<dl class="period-review-scope"><dt>适用范围</dt><dd>${esc(item.scope)}</dd><dt>待验证</dt><dd>${esc(item.pending)}</dd></dl>`}
+      ${reviewScopeChanged(item)?`<p class="note warning" data-testid="review-scope-warning-${key}">原证据支持的范围 · ${esc(item.originalScope)}<br>调整后的适用范围是下一期的待验证假设。</p>`:''}
+      ${reviewEvidenceHtml(item)}
+      ${edited?`<details class="details" data-testid="review-original-${key}"><summary>对照 Agent 原稿</summary><div class="details-body"><p>${esc(item.original)}</p><p>原适用范围 · ${esc(item.originalScope??item.scope)}</p><p>原待验证项 · ${esc(item.originalPending??item.pending)}</p></div></details>`:''}
+      <div class="period-review-controls"><label><input type="checkbox" name="review-conclusion" value="${key}" data-review-pick="${key}" data-testid="review-select-${key}" ${item.selected?'checked':''}> 选入下一期</label>
+      <div class="actions">${editing?'':button('edit','修改结论')}${button('discard','舍弃')}</div></div></article>`;
+  }
+  function reviewClosingReport(){
+    const r=closingReceipt;
+    return `<details class="details" data-testid="review-source-closing"><summary>查看月末结账报表</summary><div class="details-body"><strong>${esc(r.title)}</strong> · <span class="mono">${esc(r.ref)}</span><p>${esc(r.scope)} · ${esc(r.metric)}</p><p>${esc(r.excerpt)}</p><small>合成结账凭证</small></div></details>`;
+  }
+  function nextCycleHtml(draft){
+    if(!draft)return '';
+    const sourceLost=draft.reviewSourceKey&&sourceUnavailable({key:draft.reviewSourceKey})!=='available';
+    return `<section class="record-card" data-testid="next-cycle-draft"><h3>2027 年 2 月目标草稿 · 未采用／未发布</h3>
+      ${draft.reviewGsaRef?`<p>形成草稿时的正式目标 · <span class="mono">${esc(draft.reviewGsaRef)}</span></p>`:''}
+      ${(draft.conclusions||[]).map(c=>sourceLost||(c.key&&!reviewItemReadable(c))
+        ?'<p>该条结论的原来源暂不可读，恢复后可核对原文。</p>'
+        :`<p><strong>${esc(c.title)}</strong><br>原依据 · ${esc(c.source)}<br>${reviewScopeChanged(c)||c.scopeStatus==='hypothesis'?'下一期拟用范围（待验证假设）':'适用范围'} · ${esc(c.scope)}${reviewScopeChanged(c)||c.scopeStatus==='hypothesis'?'<br>原证据支持的范围 · '+esc(c.originalScope??c.scope):''}${c.pending?'<br>待验证 · '+esc(c.pending):''}</p>`).join('')}
+      <p>下一期的正式目标值与资源安排，仍需在下一期总 GSA 中核对。</p></section>`;
+  }
+  function reviewPage(){
+    const base=reviewBaseline(),work=periodReview(base,true),checks=reviewCheckRows();
+    const visible=(work?.items||[]).filter(i=>!i.discarded),discarded=(work?.items||[]).filter(i=>i.discarded);
+    const picked=selectedReviewItems(work),allowed=picked.length&&!picked.some(i=>typeof i.buffer==='string');
+    return `<section class="card"><div class="card-head"><div><h2>到期复盘</h2><p class="small-text muted">2027 年 1 月 · 净销售额 · 合成到期情景</p></div></div><div class="card-body">
+      <div class="legacy-grid"><div><span>最后生效正式目标</span><strong>${base.readable?esc(base.value)+' 万':'待核'}</strong></div><div><span>期初承诺 · 仅作备忘</span><strong>${base.readable?'120 万':'待核'}</strong></div><div><span>期末可比实绩</span><strong>123 万</strong></div></div>
+      <p class="small-text muted">${esc(base.label)}${base.ref?' · '+esc(base.ref):''}</p>${reviewClosingReport()}
+      ${checks.length?`<details class="details" data-testid="review-history"><summary>回看 ${checks.length} 条原阶段检查</summary><div class="details-body">${checks.map(c=>`<p>${esc(c.id)} · ${esc(checkParentLabel(c))} · 拆解表 v${esc(c.planNo||'待核')} · ${esc(c.sourceRef||'实绩引用待核')}${reviewCheckAccess(c)?' · '+esc(c.trigger?.reason||'原检查未记录触发原因。'):' · 原版本暂不可读'}</p>`).join('')}</div></details>`:'<p class="note" data-testid="review-no-checks">本期尚无已保存的阶段检查。下列结论只使用可读的月末报表、正式目标和 Case。</p>'}
+      ${!work?`<p class="note warning">${base.ref?'本期末版正式目标暂不可读，请在「版本与来源」恢复该版本。':'请先确认本期总 GSA，再与期末实绩对照。'}</p>`:
+      `<div class="period-review-heading"><div><h3>Agent 起草的复盘结论</h3><p class="small-text muted">模拟 Agent 按本期可读资料起草。逐条核对后，选出要带入下一期的内容。</p></div><button type="button" class="small" data-action="review-agent-draft" data-testid="review-agent-draft">重新核对本期资料</button></div>
+      <div class="period-review-items">${visible.map(reviewItemHtml).join('')}</div>
+      ${discarded.length?`<details class="details"><summary>已舍弃 ${discarded.length} 条</summary><div class="details-body">${discarded.map(reviewItemHtml).join('')}</div></details>`:''}
+      <div class="period-review-submit"><span data-testid="review-selection-count">已选 ${picked.length} 条</span><button type="button" class="primary" data-testid="draft-next-cycle" data-action="draft-next-cycle" ${allowed?'':'disabled'}>${state.ui.nextCycleDraft?'按所选更新下一期草稿':'按所选结论起草下一期'}</button></div>`}
+      ${nextCycleHtml(state.ui.nextCycleDraft)}</div></section>`;
+  }
+  function handlePeriodReview(action,source){
+    if(!isSales()||state.tab!=='review')return;
+    const base=reviewBaseline(),work=periodReview(base);
+    if(!work)return;
+    if(action==='review-agent-draft'){
+      const count=work.items.length;periodReview(base,true);render();
+      notify(work.items.length===count?'当前可读资料均已纳入。':'已补入新资料，已有结论保持原稿与修改记录。');return;
+    }
+    if(action==='draft-next-cycle'){
+      const picked=selectedReviewItems(work);
+      if(!picked.length||picked.some(i=>typeof i.buffer==='string'))return;
+      state.ui.nextCycleDraft={period:'2027年2月',reviewGsaRef:base.ref,reviewSourceKey:base.key,
+        conclusions:picked.map(i=>({key:i.key,title:i.text,original:i.original,originalScope:i.originalScope??i.scope,originalPending:i.originalPending??i.pending,scopeStatus:reviewScopeChanged(i)?'hypothesis':'as-sourced',source:i.sources.map(s=>s.name+' '+s.ref).join(' / '),sources:clone(i.sources),scope:i.scope,pending:i.pending}))};
+      render();notify('已将选定结论与原证据带入下一期目标草稿。');return;
+    }
+    const item=work.items.find(i=>i.key===source.dataset.reviewId);
+    if(!item||!reviewItemReadable(item))return;
+    switch(action){
+      case 'review-item-edit': if(item.discarded)return;item.originalScope??=item.scope;item.originalPending??=item.pending;item.buffer=item.text;item.scopeBuffer=item.scope;item.pendingBuffer=item.pending;break;
+      case 'review-item-save': if(item.discarded||!reviewEditReady(item))return;item.text=item.buffer.trim();item.scope=(item.scopeBuffer??item.scope).trim();item.pending=(item.pendingBuffer??item.pending).trim();finishReviewEdit(item);break;
+      case 'review-item-cancel':finishReviewEdit(item);break;
+      case 'review-item-discard':item.discarded=true;item.selected=false;finishReviewEdit(item);break;
+      case 'review-item-restore':item.discarded=false;item.selected=false;break;
+      default:return;
+    }
+    state.ui.reviewSelected=selectedReviewItems(work).map(i=>i.key);render();
+    if(action==='review-item-edit')document.querySelector('[data-review-edit="'+CSS.escape(item.key)+'"]')?.focus();
+  }
+
   function metrics(){return `<div class="metric-grid"><div class="metric"><span>正式目标值</span><strong>120<em>万</em></strong><small>来源于正式战略发布版</small></div><div class="metric"><span>可达测算值</span><strong>112<em>万</em></strong><small>同期间、同范围、同口径</small></div><div class="metric gap"><span>待策略补足的差额</span><strong>8<em>万</em></strong><small>120 − 112，保留原测算</small></div></div>`;}
   function gsa(){if(entryCandidate())return entryForm();return `<div class="gsa-layout"><section class="card" aria-labelledby="gsa-title"><div class="card-head"><div><h2 id="gsa-title">确认总目标 GSA</h2><p class="muted small-text" style="margin-top:5px">G 与 S 已从正式战略 S-2027 v3 带入，请核对本期计划 A。</p></div><span class="status">待确认</span></div><div class="gsa-rows"><div class="gsa-row"><span class="gsa-letter">G</span><div><h3>1 月净销售额达到 120 万元</h3><p>零售事业部 · 2027.01.01—01.31<br>净销售额 = 已支付商品金额 − 同归属期退款，不含运费。基线为可比门店与渠道。</p><div class="source-line"><span class="source-badge">SAP 净销售额 / v2</span><span>战略发布 S-2027 v3 · G-2027-01</span></div></div></div><div class="gsa-row"><span class="gsa-letter">S</span><div><h3>新品增长与平台活动共同补足增量</h3><span class="gsa-origin">已承接策略 S1</span><p>稳定可比业务贡献，重点门店开展新品陈列与回访，平台活动聚焦新增转化。新品与活动贡献按不重叠范围估算。</p></div></div><div class="gsa-row"><span class="gsa-letter">A</span><div><h3>本期计划与检查依据</h3>${adviceInlineControls(gsaDraftActions())}${gsaActionList(gsaDraftActions())}</div></div></div></section><aside class="stack"><div>${metrics()}<div class="note">测算帮助判断可达性。正式目标仍为 120 万，8 万差额需要在拆解发布前说明补足策略与预期贡献。</div></div><div class="card"><div class="card-body info-list"><div><h3>已带入当前工作</h3><p>正式战略发布版、指标定义、经营范围及可用的获准资料。</p></div><div><h3>确认后与 Agent 协作</h3><p>按贡献分配子目标，再结合商品与经营节奏排出时间计划。方法和工具由 Agent 按问题选择。</p></div><div><h3>只处理必要的经营取舍</h3><p>无需重录已承接的目标，也不要求逐项审批普通读取。</p></div></div></div></aside></div>`;}
+
+  const firstSplitRequest='请依据本期已确认的 GSA，按渠道和品类拆解净销售目标，结合新品上市与平台活动安排周计划，并说明可达测算、分配依据和需要补足的差额。';
+
   function chat(){
     const editable = state.editingDraft && !state.operation;
     const requestButton = !state.generated
-      ? '<button class="suggestion" data-action="suggest-initial" data-testid="suggest-initial">按渠道、品类拆解并安排周计划 ↗</button>'
+      ? `<section class="first-split"><h3>建议的拆解要求</h3><p data-testid="split-request">${esc(firstSplitRequest)}</p>
+          <div class="actions"><button class="primary small" data-action="suggest-initial" data-testid="suggest-initial">按此要求起草</button>
+          <button class="inline-button" data-action="edit-split-request" data-testid="edit-split-request">自行编辑要求</button></div></section>`
       : state.delayed
         ? '<button class="suggestion" data-action="suggest-restore" data-testid="suggest-restore">恢复原上市排期 ↗</button>'
         : '<button class="suggestion" data-action="suggest-delay" data-testid="suggest-delay">新品延后两周，活动预算不变 ↗</button>';
@@ -1039,7 +1506,7 @@
       ${editable?`<div class="suggestion-row">${requestButton}</div>`:''}
       ${state.generated?'<button type="button" class="inline-button dc-jump" data-action="dc-to-sheet" data-testid="jump-to-sheet">查看拆解表 ↓</button>':''}
       <form class="composer" id="chat-form"><label for="chat-input">拆解要求</label>
-        <textarea id="chat-input" data-testid="chat-input" rows="3" placeholder="例如，按渠道与品类分配，留 5 万给新品上市，再排出这四周的计划。" ${editable?'':'disabled'}>${esc(state.ui.draftInput||'')}</textarea>
+        <textarea id="chat-input" data-testid="chat-input" rows="3" placeholder="输入自己的拆解要求、经营节奏或限制条件。" ${editable?'':'disabled'}>${esc(state.ui.draftInput||'')}</textarea>
         <div class="composer-foot"><small>${editable?'可用示例，也可直接输入。':'正在核对原发布操作。'}</small><button class="primary small" type="submit" data-testid="send-message" ${editable?'':'disabled'}>发送 ↑</button></div>
       </form>
     </section>`;
@@ -1067,7 +1534,7 @@
       <div class="table-scroll"><table class="dc-lines" aria-label="目标拆解草稿明细" data-testid="decomposition-table">
         <thead><tr><th>子目标 / 策略</th><th>分配</th><th>负责人</th></tr></thead>
         <tbody>${ordered.map(row=>`<tr><td><strong>${esc(row.scope)}</strong><span class="subtle-line">${esc(row.id)} · ${esc(row.strategy)}</span></td><td class="table-target">${row.amount} 万</td><td>${esc(row.owner)}</td></tr>`).join('')}
-        <tr class="reserve-row"><td>${esc(state.reservePurpose||'预留用途待补')}<span class="subtle-line">单列预留</span></td><td class="table-target">5 万</td><td>${esc(state.reserveOwner||'责任人待补')}</td></tr></tbody>
+        <tr class="reserve-row"><td>${esc(state.reservePurpose||'预留用途待补')}<span class="subtle-line">单列预留</span>${state.editingDraft&&!state.operation?'<button class="inline-button" data-action="edit-reserve" data-testid="edit-reserve">编辑预留用途和责任人</button>':''}</td><td class="table-target">5 万</td><td>${esc(state.reserveOwner||'责任人待补')}</td></tr></tbody>
       </table></div><div class="dc-reconcile"><span>已分配 <b>${total}</b> + 预留 <b>5</b></span><strong>${total+5} 万</strong></div>
       <details class="details dc-check-list"><summary>查看责任行的期末检查点</summary><div class="details-body">
       ${ordered.map(r=>`<div class="review-line"><span>${esc(r.scope)}<small class="subtle-line">${esc(r.id)} · 1 月 31 日 · ${byCategory?'商品净销明细':'渠道净销明细'}</small></span><strong>${r.amount} 万</strong></div>`).join('')}
@@ -1087,7 +1554,7 @@
         <div data-testid="gap-strategy">${state.gapStrategy?`<div class="dc-gap"><div><span>新品非活动期增量</span><strong>5 万</strong></div><div><span>平台活动额外增量</span><strong>3 万</strong></div></div><p class="dc-caption">两个范围分别估算，预计覆盖 8 万，后续按实绩核验。</p>`:'<p class="note warning">补缺策略及其预期贡献待补。</p>'}</div>
         <details class="details"><summary>预留用途、责任人与发布前校验</summary><div class="details-body">
           <p>预留用途 · ${esc(state.reservePurpose||'尚未填写')}<br>责任人 · ${esc(state.reserveOwner||'尚未填写')}</p>
-          ${editable?'<button class="small" data-action="edit-reserve" data-testid="edit-reserve">编辑预留</button>':''}
+
           <ul><li>${state.reservePurpose&&state.reserveOwner?'115 万分配 + 5 万明确预留 = 120 万':'预留的用途或负责人待补'}</li><li>${hasConflict()?'两处交叉冲突待对齐':'两份交叉明细一致'}</li><li>${state.gapStrategy?'预期贡献覆盖 8 万缺口':'补缺策略及贡献待补'}</li></ul>
         </div></details>${opDetails()}
       </section>`;
@@ -1137,33 +1604,33 @@
     const blocked = !!state.operation;
     return `${publishedReceipt()}${recovery()}<div class="work-grid dc-grid">${chat()}
       <section class="card dc-sheet" aria-labelledby="split-title"><div class="card-head dc-sheet-head"><div><h2 tabindex="-1" id="split-title">目标拆解表</h2>
-        <p class="small-text faint">总 GSA v${draftParentVersion()} · ${blocked?'发布待核':state.generated?'草稿 r'+state.draftRevision:'待生成'}</p></div>
+        <p data-testid="draft-revision" class="small-text faint">总 GSA v${draftParentVersion()} · ${blocked?'发布待核':state.generated?'草稿 r'+state.draftRevision:'待生成'}</p></div>
         <button class="primary dc-publish" data-action="review-publish" data-testid="publish-button" ${canPublish()?'':'disabled'}>核对并发布</button></div>
+        ${state.generated && !blocked?splitSavePanel():''}
         ${state.generated?'<button type="button" class="inline-button dc-jump dc-back" data-action="dc-to-chat" data-testid="jump-to-chat">↑ 返回对话</button>':''}
       ${state.generated?splitBody():`<div class="card-body dc-figures">${metrics()}</div><div class="dc-empty"><div class="empty-illustration" aria-hidden="true"><i></i><i></i><i></i></div>
         <h3>生成第一份拆解草稿</h3><p>向目标 Agent 发送本期要求，核对分配给谁、每周承诺多少，以及如何补足 8 万缺口。</p></div>`}
-      <div class="publish-footer"><p>${blocked?'发布结果待核，请先查询原操作。':!state.generated?'收到拆解要求后即可保存草稿。':hasConflict()?'两处交叉明细待对齐。':'发布前可预览责任行、检查点及预留。'}</p><div class="actions">
-        <button class="small" data-action="save-draft" data-testid="save-draft" ${!state.generated||blocked?'disabled':''}>保存草稿</button>
+      <div class="publish-footer"><p>${blocked?'发布结果待核，请先查询原操作。':!state.generated?'发送要求后生成拆解草稿。':hasConflict()?'两处交叉明细待对齐。':'发布前可预览责任行、检查点及预留。'}</p><div class="actions">
+
         </div></div>
       </section></div>`;
   }
   function follow(){
     const p=checkPlan();if(!p){state.tab='plan';return plan();}
-    const c=selectedCheck(),info=reportInfo(c?.report),pending=!!info.status;
-    const {actuals,plans,percentages}=c?.comparison||comparisonFor(c?.report||'complete',p);
+    const c=selectedCheck(),info=checkReportInfo(c),pending=!!info.status;
+    const {actuals,plans,percentages}=c?.comparison||{actuals:[],plans:[p.weeks[1]],percentages:[]};
     const format=value=>String(Number(value.toFixed(2)));
     const signed=value=>(value>0?'+':'')+format(value)+'%';
     const savedThreshold=c?.threshold||state.threshold;
     return `<div class="follow-layout"><section class="card"><div class="card-head"><div><h2>${c?'本次阶段检查':'第 2 周 · 核对阶段实绩'}</h2><p class="small-text muted">拆解表 v${p.no} · ${esc(publicationParentLabel(p))} · 全渠道与门店 · 总目标汇总</p></div><span class="status ${c?pending?'warning':'success':''}">${c?(info.status||'已保存检查'):'待选实绩'}</span></div>
       <div class="card-body">
-      ${state.checkHistory.length?`<div class="form-field"><label for="check-history">检查记录</label><select id="check-history" data-testid="check-history">${!c?`<option value="" selected>新检查 · 拆解表 v${p.no}</option>`:''}${state.checkHistory.slice().reverse().map(item=>`<option value="${esc(item.id)}" ${c?.id===item.id?'selected':''}>${esc(item.id)} · v${item.planNo} · ${esc(reportInfo(item.report).label)}</option>`).join('')}</select></div>`:''}
+      ${state.checkHistory.length?`<div class="form-field"><label for="check-history">检查记录</label><select id="check-history" data-testid="check-history">${!c?`<option value="" selected>新检查 · 拆解表 v${p.no}</option>`:''}${state.checkHistory.slice().reverse().map(item=>`<option value="${esc(item.id)}" ${c?.id===item.id?'selected':''}>${esc(item.id)} · v${item.planNo} · ${esc(checkReportInfo(item).label)}</option>`).join('')}</select></div>`:''}
       ${c?`<div class="actions" style="margin-top:12px"><button class="small" data-action="next-check" data-testid="next-check">按生效 v${state.knownPublishedNo} 开始下一次检查</button></div>`:`<p class="small-text muted" style="margin-top:8px">本版第 2 周计划为 <strong>${p.weeks[1]} 万元</strong>。选择本次使用的报表，核对实绩和覆盖范围。</p>`}
-      <form id="report-form" class="select-row"><div class="form-field"><label for="report-select">${c?'本次实绩来源':'选择本期实绩资料'}</label>
-      <select id="report-select" data-testid="report-select" ${c?'disabled':''}><option value="">请选择本次实绩</option>${['complete','incomplete','open','mismatch','two-periods'].map(key=>`<option value="${key}" ${c?.report===key?'selected':''}>${esc(reportInfo(key).label)}</option>`).join('')}</select></div>${!c?'<button class="primary" type="submit" data-testid="compare-report">选定并分析</button>':''}</form>
-      ${c?`<div class="comparison-metrics"><div><span>冻结版阶段计划</span><strong data-testid="check-plan-values">${plans.map(format).join(' / ')}<small>万元 · 第 ${actuals.length===2?'1、2':'2'} 周</small></strong></div><div><span>${info.actualLabel}</span><strong data-testid="check-actual-values">${actuals.map(format).join(' / ')}<small>万元 · ${info.coverage}</small></strong></div><div><span>${pending?'整体偏差':'可比偏差'}</span><strong data-testid="check-percentages">${pending?'待核':percentages.map(signed).join(' / ')}<small>${pending?info.status:actuals.length===2?'按两个原期间分别比较':actuals[0]===plans[0]?'与计划持平':(actuals[0]<plans[0]?'低于计划 ':'高于计划 ')+format(Math.abs(actuals[0]-plans[0]))+' 万元'}</small></strong></div></div>
+      ${c?`<div class="actual-selected"><small>本次选用的原凭证</small><strong>${esc(info.label)}</strong></div>`:reportChoices(p)}
+      ${c?`<div class="comparison-metrics"><div><span>冻结版阶段计划</span><strong data-testid="check-plan-values">${plans.map(format).join(' / ')}<small>万元 · 第 ${actuals.length===2?'1、2':'2'} 周</small></strong></div><div><span>${esc(info.actualLabel)}</span><strong data-testid="check-actual-values">${actuals.length?actuals.map(format).join(' / '):'待核'}<small>${actuals.length?'万元 · ':''}${esc(info.coverage)}</small></strong></div><div><span>${pending?'整体偏差':'可比偏差'}</span><strong data-testid="check-percentages">${pending?'待核':percentages.map(signed).join(' / ')}<small>${pending?info.status:actuals.length===2?'按两个原期间分别比较':actuals[0]===plans[0]?'与计划持平':(actuals[0]<plans[0]?'低于计划 ':'高于计划 ')+format(Math.abs(actuals[0]-plans[0]))+' 万元'}</small></strong></div></div>
       <div class="note ${pending?'warning':''}" data-testid="comparison-result">${esc(info.reason)}</div>
       ${pending?'':caseCard(c,p,percentages)}
-      <details class="details"><summary>本次检查的证据与准确引用</summary><div class="details-body"><dl><dt>检查记录</dt><dd>${esc(c.id)}</dd><dt>计划与检查点</dt><dd>${esc(p.id)}/v${p.no} · ${esc(c.goalId||'G-TOTAL')} · ${esc(c.checkpointId||'CP-202701-W2-TOTAL')}</dd><dt>总目标与策略</dt><dd>${esc(p.gsa)} · 新品增长与平台活动</dd><dt>原始报表</dt><dd data-testid="check-source-ref">${esc(c.sourceRef||info.ref)}</dd><dt>截至时间</dt><dd>${info.cutoff}</dd></dl></div></details>`:''}
+      <details class="details"><summary>本次检查的证据与准确引用</summary><div class="details-body"><dl><dt>检查记录</dt><dd>${esc(c.id)}</dd><dt>计划与检查点</dt><dd>${esc(p.id)}/v${p.no} · ${esc(c.goalId||'G-TOTAL')} · ${esc(c.checkpointId||'CP-202701-W2-TOTAL')}</dd><dt>总目标与策略</dt><dd>${esc(p.gsa)} · 新品增长与平台活动</dd><dt>原始报表</dt><dd data-testid="check-source-ref">${esc(c.sourceRef||info.ref)}</dd><dt>截至时间</dt><dd>${esc(info.cutoff)}</dd></dl>${sourceExcerpt(c,info)}</div></details>`:''}
       </div></section><aside class="card"><div class="card-head"><h2>Case 提示规则</h2></div><div class="card-body"><div class="threshold-row"><span>${c?'下一次检查':'本次检查'}</span><select id="threshold-select" data-testid="threshold-select" aria-label="Case 提示阈值"><option value="configured" ${state.threshold==='configured'?'selected':''}>启用提示</option><option value="none" ${state.threshold==='none'?'selected':''}>不设阈值</option></select></div>
       <p class="small-text muted" style="margin:14px 0 4px">${c?'本记录使用的阈值':'当前示例阈值'}</p><div class="mini-stat"><span>不利偏差幅度</span><strong>${savedThreshold==='configured'?'≥ 10%':'未设置'}</strong></div><div class="mini-stat"><span>连续偏低</span><strong>${savedThreshold==='configured'?'≥ 2 期':'未设置'}</strong></div>
       <p class="small-text muted" style="margin-top:12px">可比实绩达到任一条件，提示负责人核对已有事项。继续观察、续接或另建由负责人选择。</p><button class="inline-button" data-action="show-reference" style="margin-top:12px">查看计划引用</button></div></aside></div>`;
@@ -1180,17 +1647,19 @@
   function applyTheme(){document.documentElement.dataset.theme=state.ui.theme;$('theme-toggle').setAttribute('aria-label',state.ui.theme==='light'?'切换为深色':'切换为浅色');$('theme-icon').innerHTML=state.ui.theme==='light'?'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 15A9 9 0 0 1 9 4a9 9 0 1 0 11 11Z"/></svg>':'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 1v2m0 18v2M1 12h2m18 0h2M4 4l2 2m12 12 2 2M4 20l2-2M18 6l2-2"/></svg>';}
   function updateSidebar(){const mobile=innerWidth<=760,sidebar=$('sidebar'),host=$('sidebar-host'),dialog=$('sidebar-dialog');if(mobile){host.hidden=true;if(sidebar.parentElement!==dialog)dialog.append(sidebar);if(state.ui.sidebarOpen&&!dialog.open)dialog.showModal();if(!state.ui.sidebarOpen&&dialog.open)dialog.close();}else{if(dialog.open)dialog.close();if(sidebar.parentElement!==host)host.append(sidebar);host.hidden=!state.ui.sidebarOpen;}$('sidebar-toggle').setAttribute('aria-expanded',String(state.ui.sidebarOpen));$('sidebar-toggle').setAttribute('aria-label',state.ui.sidebarOpen?'收起侧栏':'展开侧栏');if(mobile)$('sidebar-toggle').setAttribute('aria-haspopup','dialog');else $('sidebar-toggle').removeAttribute('aria-haspopup');}
   function closeSidebar(){state.ui.sidebarOpen=false;updateSidebar();$('sidebar-toggle').focus({preventScroll:true});persist();}
-  function render(){captureInput();persist();applyTheme();$('entry-sample').value=state.ui.entrySample||'ready';$('scenario').value=state.scenario;$('lost-label').hidden=state.scenario!=='lost';$('lost-outcome').value=state.lostOutcome;$('lost-outcome').disabled=!!state.operation;$('workspace').innerHTML=pageHead()+(isSales()?state.tab==='follow'?follow():state.tab==='review'?reviewPage():plan():legacyPage())+`<p class="content-note">交互原型 · 合成经营资料与模拟 Agent${memoryOnly?' · 浏览器存储不可用，当前仅内存演示':''}</p>`;const log=$('chat-log');if(log)log.scrollTop=log.scrollHeight;updateSidebar();}
+  function render(){captureInput();trackSplitSave();persist();applyTheme();$('entry-sample').value=state.ui.entrySample||'ready';$('scenario').value=state.scenario;$('lost-label').hidden=state.scenario!=='lost';$('lost-outcome').value=state.lostOutcome;$('lost-outcome').disabled=!!state.operation;$('workspace').innerHTML=pageHead()+(isSales()?state.tab==='follow'?follow():state.tab==='review'?reviewPage():plan():legacyPage())+`<p class="content-note">交互原型 · 合成经营资料与模拟 Agent${memoryOnly?' · 浏览器存储不可用，当前仅内存演示':''}</p>`;const log=$('chat-log');if(log)log.scrollTop=log.scrollHeight;updateSidebar();}
   function exportVersion(){const option=selectedVersion();if(sourceUnavailable(option)!=='available'){notify('原准确来源尚不可读取，不能改用其他版本导出。');return;}if(option.kind==='plan'&&!verifiedPublications().some(pub=>pub.no===option.pub.no)){notify('此拆解版尚未核实，不能作为正式表导出。');return;}const info=goalInfo();const body='<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>'+esc(info.title+' · '+option.label)+'</title><style>body{font:14px/1.7 system-ui,sans-serif;max-width:1000px;margin:40px auto;padding:0 24px;color:#222}h1{font-size:24px}h2{font-size:18px}dt{font-weight:600;color:#555}dd{margin:4px 0 14px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:9px;text-align:left}.mono{font-family:monospace}.small-text{font-size:12px}</style><h1>'+esc(info.title)+'</h1><p>'+esc(option.label)+' · 准确引用 '+esc(versionRef(option))+'</p><p>本导出为合成演示资料。新总 GSA 的计划 A 不是行动授权，旧 GSA 的原实际授权记录按原口径保留。</p>'+versionBody(option)+'</html>';const blob=new Blob([body],{type:'text/html;charset=utf-8'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=(isSales()?'retail-202701':'east-repurchase-2026q4')+'-'+option.key+'.html';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);notify('已导出 '+versionRef(option)+' 的准确合成 HTML，未切换当前生效版。');}
   function openDialog(title,body,footer=''){$('detail-dialog').classList.remove('aux-dialog');if(!$('detail-dialog').open)dialogInvoker=document.activeElement;$('dialog-content').innerHTML=`<div class="dialog-head"><h2 id="dialog-title">${title}</h2><button class="ghost small" data-dialog-close aria-label="关闭弹窗">✕</button></div><div class="dialog-body">${body}</div>${footer?`<div class="dialog-footer">${footer}</div>`:''}`;$('detail-dialog').showModal();const focus=$('detail-dialog').querySelector('[autofocus],input,textarea,button');focus?.focus();}
   function closeDialog(){if($('detail-dialog').open)$('detail-dialog').close();if(dialogInvoker?.isConnected)dialogInvoker.focus();}
   function addAgent(text){state.messages.push({role:'agent',text});}
-  function sendMessage(text){
+  function sendMessage(text,keepComposer=false){
     text = text.trim();
     if(!text || !state.editingDraft || state.operation)return;
     if(!state.gsaConfirmed){notify('请先确认总目标 GSA。');return;}
-    state.ui.draftInput='';
-    if($('chat-input'))$('chat-input').value='';
+    if(!keepComposer){
+      state.ui.draftInput='';
+      if($('chat-input'))$('chat-input').value='';
+    }
     state.messages.push({role:'user',text});
     const restores = /恢复原(?:来|有|始|定)?(?:的)?(?:上市|活动|新品|周)?(?:排期|计划|节奏|档期|时间)|撤销延期/.test(text);
     const delays = /(?:新品(?:上市)?(?:活动)?|上市(?:活动)?).{0,12}(?:延后|推迟|延期|后移|推后|延迟).{0,7}(?:两|二|2)\s*(?:个)?周/.test(text);
@@ -1198,7 +1667,7 @@
     const initialRequest = !state.generated;
     if(initialRequest){
       state.generated=true;
-      addAgent('草稿采用已带入的零售样例。正式目标 120 万，可达测算 112 万。按样例中的分配，四行共 115 万，商品负责人另留 5 万。预计新品非活动期贡献 5 万，平台额外贡献 3 万。'+(hasConflict()?'渠道与商品计划有两处交叉值不同，请先核对双方依据。':'可切换渠道、品类和周计划核对同一份明细。'));
+      addAgent('草稿采用已带入的零售样例。正式目标 120 万，可达测算 112 万。样例经营资料给出的候选分配为四行共 115 万，另建议为新品上市预留 5 万、由商品负责人负责，供你核对。预计新品非活动期贡献 5 万，平台额外贡献 3 万。'+(hasConflict()?'渠道与商品计划有两处交叉值不同，请先核对双方依据。':'可切换渠道、品类和周计划核对同一份明细。'));
     }
     if(!changedBudget && (restores || delays)){
       const nextDelayed = !restores;
@@ -1209,6 +1678,9 @@
       }else{addAgent(nextDelayed?'当前草稿已采用延期两周的排期。':'当前草稿已采用原上市排期。');}
     }else if(!initialRequest || changedBudget || !/拆解|渠道|品类|周计划|责任分配/.test(text)){
       addAgent(initialRequest?'右表先呈现本次合成案例的基准方案。你的其他自由输入已留在对话里，尚未据此计算或改动经营数字。':'已保留你的原话。这一试用支持新品上市后移两周及恢复原排期；其他要求尚未改动草稿。');
+    }
+    if(initialRequest && /预留|留出/.test(text) && text!==firstSplitRequest){
+      addAgent('你的预留要求已留在原话中。本合成案例展示的是材料里的 5 万预留方案，尚未按自定义金额重新分配；用途和责任人可在右表编辑。');
     }
     if(initialRequest){clearTimeout(toastTimer);$('toast').hidden=true;}
     render();
@@ -1243,7 +1715,8 @@
   function query(){const op=state.operation;if(!op||op.status!=='unknown')return;op.queries++;if(op.receipt==='accepted'){op.status='accepted';op.lastQuery='accepted';state.knownPublishedNo=op.versionNo;state.editingDraft=false;render();notify('已找到原操作保存的 v'+op.versionNo+'，没有新增发布版本。');}else if(op.receipt==='not-executed'){op.status='not-executed';op.lastQuery='not-executed';render();notify('服务端已确认原请求未提交且无在途写入，可以明确重试同一编号与内容。');}else{op.lastQuery='unknown';render();notify(op.receipt==='not-found'?'未查到回执不证明原操作未执行。保留原操作，继续待核。':'结果仍未知。保留原操作与草稿，继续待核。');}}
   function retry(){const op=state.operation;if(!op||op.status!=='not-executed')return;op.attempts++;op.receipt='accepted';op.status='accepted';op.versionNo=completePublish(op).no;state.knownPublishedNo=op.versionNo;state.editingDraft=false;render();notify('原发布意图已完成，同一操作只形成一个正式版本。');}
   function reviewPublish(){
-    if(!canPublish())return;
+    if(!canPublish()){updateSplitIndicators();notify(splitSaveStatus()==='saved'?'请先处理表中的发布校验问题。':'请先核对当前草稿的保存状态。');return;}
+    splitPreviewBasis=splitPreviewStamp();
     const no=state.published.length+1,draft=draftPlanContents();
     const allocated=draft.allocations.reduce((sum,row)=>sum+row.amount,0);
     openDialog('核对并发布目标拆解表',`<div class="review-line"><span>将发布的正式版</span><strong data-testid="publish-parent">目标拆解表 v${no} · 总 GSA v${draftParentVersion()}</strong></div>
@@ -1255,8 +1728,8 @@
       <p class="boundary">确认后各目标行和检查点固定在本版，可用于阶段跟进。项目方案和行动授权在各自入口办理。</p>`,
       `<button data-dialog-close>返回草稿</button><button class="primary" data-action="confirm-publish" data-testid="confirm-publish">确认发布 v${no}</button>`);
   }
-  function showReserve(){openDialog('核对预留用途与责任人',`<p class="small-text muted">预留 5 万属于目标分配，单独列示。缺少用途或责任人时不能发布。</p><form id="reserve-form" style="margin-top:15px"><div class="form-field"><label for="reserve-purpose">预留用途</label><input id="reserve-purpose" data-testid="reserve-purpose" value="${esc(state.reservePurpose)}"></div><div class="form-field" style="margin-top:12px"><label for="reserve-owner">责任人</label><input id="reserve-owner" data-testid="reserve-owner" value="${esc(state.reserveOwner)}"></div><div class="actions" style="margin-top:18px;justify-content:flex-end"><button class="primary" type="submit" data-testid="save-reserve">保存到草稿</button></div></form>`);}
-  function showGap(){const editable=state.editingDraft&&!state.operation;openDialog('测算缺口与补足策略',`<div class="review-line"><span>正式目标 − 可达测算</span><strong>120 − 112 = 8 万</strong></div><div class="review-line"><span>新品非活动期增量</span><strong>预计 5 万</strong></div><div class="review-line"><span>平台额外增量</span><strong>预计 3 万</strong></div><p class="small-text muted" style="margin-top:13px">新品按非活动期范围测算，平台增量仅计活动额外贡献，两者不重复。预期贡献不是已实现结果。Agent 自主选择方法并说明证据，Host 只核对发布契约。</p>${editable?`<form id="gap-form" style="margin-top:16px"><label style="display:flex;gap:8px;align-items:flex-start;font-size:12px"><input type="checkbox" id="gap-present" data-testid="gap-present" ${state.gapStrategy?'checked':''}><span>草稿已包含上述补缺策略、贡献及范围依据</span></label><div class="actions" style="justify-content:flex-end;margin-top:16px"><button class="primary" type="submit" data-testid="save-gap">保存到草稿</button></div></form>`:''}`);}
+  function showReserve(){if(!isSales()||!state.editingDraft||state.operation)return;openDialog('核对预留用途与责任人',`<p class="small-text muted">预留 5 万属于目标分配，单独列示。缺少用途或责任人时不能发布。</p><form id="reserve-form" style="margin-top:15px"><div class="form-field"><label for="reserve-purpose">预留用途</label><input id="reserve-purpose" data-testid="reserve-purpose" value="${esc(state.reservePurpose)}"></div><div class="form-field" style="margin-top:12px"><label for="reserve-owner">责任人</label><input id="reserve-owner" data-testid="reserve-owner" value="${esc(state.reserveOwner)}"></div><p class="small-text muted" role="status" data-testid="reserve-save-state">${splitStatusText()}</p><div class="actions" style="margin-top:18px;justify-content:flex-end"><button class="primary" type="submit" data-testid="save-reserve">完成</button></div></form>`);}
+  function showGap(){const editable=state.editingDraft&&!state.operation;openDialog('测算缺口与补足策略',`<div class="review-line"><span>正式目标 − 可达测算</span><strong>120 − 112 = 8 万</strong></div><div class="review-line"><span>新品非活动期增量</span><strong>预计 5 万</strong></div><div class="review-line"><span>平台额外增量</span><strong>预计 3 万</strong></div><p class="small-text muted" style="margin-top:13px">新品按非活动期范围测算，平台增量仅计活动额外贡献，两者不重复。预期贡献不是已实现结果。Agent 自主选择方法并说明证据，Host 只核对发布契约。</p>${editable?`<form id="gap-form" style="margin-top:16px"><label style="display:flex;gap:8px;align-items:flex-start;font-size:12px"><input type="checkbox" id="gap-present" data-testid="gap-present" ${state.gapStrategy?'checked':''}><span>草稿已包含上述补缺策略、贡献及范围依据</span></label><div class="actions" style="justify-content:flex-end;margin-top:16px"><button class="primary" type="submit" data-testid="save-gap">完成</button></div></form>`:''}`);}
   function reference(){const p=state.tab==='follow'?checkPlan():currentPublished();openDialog('下游引用准确的发布版',`<p class="small-text muted">${p?'本期正式版已固定。':'本原型展示计划发布后的引用形式。'}项目任务与 Case 各自记录准确版本及子目标，不随新草稿自动切换。</p><div style="margin-top:12px"><div class="review-line"><span>总目标</span><strong>${esc(p?.gsa||gsaRef(draftParentVersion())||"尚无已确认 GSA")}</strong></div><div class="review-line"><span>拆解计划</span><strong>GDT-retail-202701 / v${p?.no||1}</strong></div><div class="review-line"><span>本次汇总目标 / 检查点</span><strong>G-TOTAL / CP-202701-W2-TOTAL</strong></div><div class="review-line"><span>下游采用状态</span><strong>尚未办理行动授权</strong></div></div><p class="boundary">子目标引用示例为本表 G-01（线下 × 羽绒服），与本次总目标汇总检查分别记录。若只调整子目标检查点，修订拆解表即可。触及总目标 G、S 或上层 A 时须重新核对总目标 GSA。历史检查保留原版。</p>`);}
   function timeline(){
     const values = state.delayed?[20,25,40,30]:[25,30,35,25];
@@ -1267,6 +1740,25 @@
   }
   function evidence(){openDialog('本次草稿采用的示例依据',`<div class="info-list"><div><h3>我情 · 可比经营数据 r2</h3><p>门店与渠道覆盖一致的净销售额、商品可售节奏。示例测算可达 112 万。</p></div><div><h3>行情与敌情 · 已获准材料</h3><p>活动日历与竞品公开促销观察仅作为外部假设。资料不足时说明影响，不强制凑齐三类材料。</p></div><div><h3>增量与经营约束</h3><p>新品与平台活动按不重叠范围估算 5 万、3 万。需要后续实绩验证，不能把数学对平当成因果成立。</p></div></div><p class="boundary">所有内容均为虚构资料。Demo 不执行预测算法或真实工具，正式产品沿统一 Pi 接入在权限内自主选择方法。</p>`);}
   function handleAction(action,source){
+    if(['suggest-delay','suggest-restore'].includes(action)&&$('chat-input')?.value.trim()){
+      $('chat-input').focus();notify('已保留你当前未发送的要求。');return;
+    }
+    if(action==='edit-split-request'){
+      const box=$('chat-input');
+      if(box){if(!box.value)box.value=firstSplitRequest;state.ui.draftInput=box.value;persist();box.focus();}
+      return;
+    }
+    if(action==='simulate-draft-save-failure'){
+      state.ui.splitFailNext=true;persist();notify('下一次目标拆解草稿保存将模拟一次失败。');return;
+    }
+    if(action==='retry-draft-save'){
+      if(isSales() && splitSaveStatus()==='failed'){
+        state.ui.splitSaveError=null;
+        trackSplitSave();updateSplitIndicators();
+      }
+      return;
+    }
+
     if(action==='polish-plan'||action==='undo-polish-plan'){applyPlanPolish(source,action==='undo-polish-plan');return;}
     if(action==='plan-advice-inline'){recommendInline();return;}
     if(action==='plan-advice-row'||action==='plan-advice-add'){recommendEditor(source,action==='plan-advice-add');return;}
@@ -1349,6 +1841,18 @@
     if(action==='original-project-preview'){openAux('原目标项目入口 · 预览','<p class="small-text">原已采用目标 G-retail-202701/v1 的 G+S 可沿既有准入发起项目，无需先发布新拆解表。本入口只预览准确原引用与使用范围，不在这里创建第二套项目系统或办理行动授权。</p><dl class="version-source-grid"><dt>原目标</dt><dd>G-retail-202701/v1 · 2027年1月净销售额120万元</dd><dt>具体策略</dt><dd>S1 新品增长与平台活动</dd><dt>已有项目</dt><dd>P-007 · 可优先回原项目方案</dd></dl><button class="small" data-action="project-detail">查看原项目方案</button>');return;}
     if(action==='confirm-handoff'){confirmHandoff(source?.dataset.planNo,source?.dataset.lineId);return;}
     if(action==='handoff-detail'){handoffDetail(source?.dataset.handoffId);return;}
+
+    if(action==='use-saved-report'){
+      const receipt=availableReceipts().find(r=>r.ref===source.dataset.reportRef);
+      if(receipt)recordReceipt(receipt);
+      return;
+    }
+    if(action==='fill-report-example'){
+      const draft=activeReportDraft(),kind=source.dataset.example;
+      if(draft)changeReportText(draft,reportSample(kind),'试填样例 · '+({clear:'完整周报',missing:'未注截止的周报',ambiguous:'双截止时间周报'}[kind]));
+      return;
+    }
+
     if(action==='begin-follow'){
       if(!state.knownPublishedNo)return;
       state.activeCheckId=null;
@@ -1356,17 +1860,19 @@
       state.report=null;
       state.tab='follow';
       render();
-      $('report-select')?.focus({preventScroll:true});
+      document.querySelector('[data-testid="use-report-complete"]')?.focus({preventScroll:true});
       return;
     }
     if(action==='tab-review'){state.tab='review';render();return;}
-    if(action==='draft-next-cycle'){const selected=state.ui.reviewSelected||[];if(!selected.length){notify('先选定要带入的复盘结论，Agent 再据此起草。');return;}const conclusions=selected.map(id=>id==='new-product'?{kind:'hypothesis',title:'继续观察重点门店新品陈列试点（待验证假设）',source:'Case C-014 / ACT-01/r1；原Case进行中、执行反馈待整理',scope:'仅重点直营门店；策略有效性与扩范围均待验证'}:{title:'供货延后时重排阶段计划',source:state.knownPublishedNo?'GDT-retail-202701/v'+state.knownPublishedNo:'当前草稿假设，尚无发布证据',scope:'同类供货约束，未实施情形保持假设'});state.ui.nextCycleDraft={period:'2027年2月',reviewGsaRef:gsaRef(),conclusions};render();notify('已按负责人所选结论起草下一期，原证据与适用范围保留，未采用或发布新目标。');return;}
+    if(action==='review-agent-draft'||action==='draft-next-cycle'||action.startsWith('review-item-')){
+      handlePeriodReview(action,source);return;
+    }
     if(action==='toggle-theme'){captureInput();state.ui.theme=state.ui.theme==='light'?'dark':'light';applyTheme();persist();return;}
     if(action==='toggle-sidebar'){state.ui.sidebarOpen=!state.ui.sidebarOpen;updateSidebar();if(state.ui.sidebarOpen&&innerWidth<=760)$('sidebar-dialog').querySelector('.mobile-close')?.focus();persist();return;}
     if(action==='close-sidebar'){closeSidebar();return;}
     if(action==='toggle-primary'){primaryOpen=!primaryOpen;$('primary-links').hidden=!primaryOpen;source?.setAttribute('aria-expanded',String(primaryOpen));return;}
     if(action==='toggle-projects'){projectsOpen=!projectsOpen;$('project-space').hidden=!projectsOpen;source?.setAttribute('aria-expanded',String(projectsOpen));return;}
-    
+
     if(action==='main-goals'){
       captureInput();
       if(innerWidth<=760 && state.ui.sidebarOpen) closeSidebar();
@@ -1377,12 +1883,61 @@
     }
     if(action==='help'){openAux('目标管理整合原型说明','<p>主线采用 A 的 GSA 首表、左侧 Agent／右侧拆解表、阶段跟进及到期复盘。顶部四个辅助入口随时可用，不要求先发布新拆解表。</p><p>侧栏中的目标管理是独立工作区。可在当前目标旁切换目标；需要跟进偏差时，可从检查记录续接关联 Case。</p>');return;}
     if(action.startsWith('existing-')){openAux('原有产品入口','<p>这里保留 main 的原有导航位置。完整战略、项目、资产或设置在原产品办理，本整合原型仅演示目标管理主线及四个辅助入口，不创建或授权其他真实业务。</p>');return;}
-    switch(action){case'confirm-gsa':if(!isSales()||state.gsaConfirmed)return;state.ui.gsaHistory=[makeGsaPlan(1,gsaDraftActions(),'首次确认本期总 GSA',[],new Date().toISOString())];state.gsaConfirmed=true;state.tab='plan';render();notify('总目标 GSA v1 已确认，开始与 Agent 拆解。');$('chat-input')?.focus();break;case'suggest-initial':$('chat-input').value='按渠道、品类拆解目标，并结合新品与平台活动安排周计划。预留 5 万用于新品上市，由商品负责人承担。';$('chat-input').focus();break;case'suggest-delay':$('chat-input').value='新品延后两周，活动预算不变，请更新受影响的周计划。';$('chat-input').focus();break;case'save-draft':if(state.generated&&!state.operation&&state.editingDraft){state.saveCount++;persist();notify('草稿 r'+state.draftRevision+' 已保存。'+(hasConflict()?'交叉冲突与双方依据原样保留。':'尚未形成正式发布版。'));}break;case'review-publish':reviewPublish();break;case'confirm-publish':closeDialog();publish();break;case'query-publish':query();break;case'retry-publish':retry();break;case'tab-plan':state.tab='plan';render();break;case'tab-follow':if(state.knownPublishedNo){state.tab='follow';render();}break;case'edit-reserve':showReserve();break;case'show-gap':showGap();break;case'show-reference':reference();break;case'show-timeline':timeline();break;case'show-evidence':evidence();break;case'revise':state.editingDraft=true;state.operation=null;state.draftRevision++;state.tab='plan';addAgent('已在总 GSA v'+draftParentVersion()+' 下建立新的拆解草稿，旧发布版及其引用保持原样。微小计划调整可只修订拆解表；若触及 G、S、上层 A，应先重新确认 GSA。');render();notify('已另起拆解修订草稿，可继续提出调整。');break;case'continue-case':if(selectedCheck())selectedCheck().caseChoice='existing';render();notify('已选择续接已有 Case，准确计划与实绩引用已带入演示承接卡。');break;case'new-case':openDialog('确认另建 Case 草稿',`<p class="small-text">已有同一问题的 Case C-014。若本次确有独立决策问题，可另建草稿，并保留与原事项的关联。</p><p class="boundary">这里只模拟负责人明确选择，不启动行动，也不产生真实 Case。</p>`,`<button data-dialog-close>返回已有事项</button><button class="primary" data-action="confirm-new-case" data-testid="confirm-new-case">明确另建 Case 草稿</button>`);break;case'confirm-new-case':closeDialog();if(selectedCheck()){
+    switch(action){case'confirm-gsa':if(!isSales()||state.gsaConfirmed)return;state.ui.gsaHistory=[makeGsaPlan(1,gsaDraftActions(),'首次确认本期总 GSA',[],new Date().toISOString())];state.gsaConfirmed=true;state.tab='plan';render();notify('总目标 GSA v1 已确认，开始与 Agent 拆解。');$('chat-input')?.focus();break;case'suggest-initial':if(!state.generated)sendMessage(firstSplitRequest,true);break;case'suggest-delay':$('chat-input').value='新品延后两周，活动预算不变，请更新受影响的周计划。';$('chat-input').focus();break;case'review-publish':reviewPublish();break;case'confirm-publish':{
+      const fresh=canPublish() && splitPreviewBasis===splitPreviewStamp();
+      splitPreviewBasis=null;
+      closeDialog();
+      if(!fresh){updateSplitIndicators();notify('草稿或总 GSA 已变化，请重新核对已保存的最新草稿。');break;}
+      publish();break;}case'query-publish':query();break;case'retry-publish':retry();break;case'tab-plan':state.tab='plan';render();break;case'tab-follow':if(state.knownPublishedNo){state.tab='follow';render();}break;case'edit-reserve':showReserve();break;case'show-gap':showGap();break;case'show-reference':reference();break;case'show-timeline':timeline();break;case'show-evidence':evidence();break;case'revise':state.editingDraft=true;state.operation=null;state.draftRevision++;state.tab='plan';addAgent('已在总 GSA v'+draftParentVersion()+' 下建立新的拆解草稿，旧发布版及其引用保持原样。微小计划调整可只修订拆解表；若触及 G、S、上层 A，应先重新确认 GSA。');render();notify('已另起拆解修订草稿，可继续提出调整。');break;case'continue-case':if(selectedCheck())selectedCheck().caseChoice='existing';render();notify('已选择续接已有 Case，准确计划与实绩引用已带入演示承接卡。');break;case'new-case':openDialog('确认另建 Case 草稿',`<p class="small-text">已有同一问题的 Case C-014。若本次确有独立决策问题，可另建草稿，并保留与原事项的关联。</p><p class="boundary">这里只模拟负责人明确选择，不启动行动，也不产生真实 Case。</p>`,`<button data-dialog-close>返回已有事项</button><button class="primary" data-action="confirm-new-case" data-testid="confirm-new-case">明确另建 Case 草稿</button>`);break;case'confirm-new-case':closeDialog();if(selectedCheck()){
       const number=15+state.checkHistory.filter(item=>item.caseChoice==='new').length;
       selectedCheck().caseChoice='new';selectedCheck().caseId='C-'+String(number).padStart(3,'0');
     }render();notify('已模拟建立独立 Case 草稿，后续取舍与行动由负责人承接。');break;case'next-check':state.activeCheckId=null;state.nextCheckPlanNo=state.knownPublishedNo;state.report=null;render();notify('已明确选用当前生效 v'+state.knownPublishedNo+' 开始下一次检查，历史检查保持原版。');break;case'observe':if(selectedCheck()){selectedCheck().caseChoice='observe';render();}notify('本次检查和提示已保留，负责人选择继续观察，没有创建 Case。');break;}}
+
+  document.addEventListener('toggle',event=>{
+    if(event.target.id==='actual-composer'){
+      const d=activeReportDraft();if(d){d.open=event.target.open;persist();}
+    }
+  },true);
+  document.addEventListener('submit',event=>{if(event.target.id==='new-actual-form'){event.preventDefault();submitNewReceipt();}});
+  document.addEventListener('input',event=>{
+    const d=activeReportDraft();if(!d)return;
+    if(event.target.id==='actual-text')changeReportText(d,event.target.value,'');
+    if(event.target.id==='actual-manual'){d.manual=event.target.value;d.choice='';if($('actual-choice'))$('actual-choice').value='';persist();}
+  });
+  document.addEventListener('change',async event=>{
+    const d=activeReportDraft();if(!d)return;
+    if(event.target.id==='actual-choice'){
+      d.choice=event.target.value;d.manual='';if($('actual-manual'))$('actual-manual').value='';persist();return;
+    }
+    if(event.target.id!=='actual-file')return;
+    const element=event.target,file=element.files?.[0];
+    element.value='';if(!file)return;
+    const originalText=d.text, request=Symbol();element.actualRead=request;
+    const applicable=()=>element.isConnected && activeReportDraft()===d && originalText===d.text && element.actualRead===request;
+    try{
+      if(file.size>48000)throw Error('报表过大。请截取本次相关的 12,000 字以内原文。');
+      const text=new TextDecoder('utf-8',{fatal:true}).decode(await file.arrayBuffer());
+      if(!text.trim()||text.includes('\0')||text.length>12000)throw Error('请选择不超过 12,000 字的 UTF-8 文本报表。');
+      if(applicable())changeReportText(d,text,file.name);
+    }catch(e){if(applicable())$('actual-error').textContent=e.message||'无法读取文件，可粘贴报表原文。';}
+  });
+
   document.addEventListener('click',event=>{const close=event.target.closest('[data-dialog-close]');if(close){closeDialog();return;}const button=event.target.closest('[data-action]');if(button&&!button.disabled&&!(button.hasAttribute('data-plan-advice')&&event.detail>1))handleAction(button.dataset.action,button);});
-  document.addEventListener('submit',event=>{if(event.target.id==='chat-form'){event.preventDefault();sendMessage($('chat-input').value);}if(event.target.id==='align-form'){event.preventDefault();const value=Number($('aligned-value').value),basis=$('alignment-basis').value.trim();state.alignmentDraftValue=$('aligned-value').value;state.alignmentDraftBasis=basis;if(![45,50].includes(value)||!basis){state.alignmentError='本演示请采用双方已确认的 45 万或 50 万完整方案，并填写双方确认依据。正式产品由 Agent 核对完整明细，不能只改一个交叉值。';render();$('aligned-value')?.focus();return;}state.aligned=true;state.alignedValue=value;state.alignmentBasis=basis;state.alignmentError='';state.draftRevision++;addAgent('已依据双方确认采用 '+value+' 万方案的完整明细，同时展示受影响的另一个交叉单元，重新汇总各视图合计仍为 120 万。冲突没有转成预留，可继续核对后发布。');render();notify('双方确认依据与受影响明细已保存，交叉项重新校验通过。');}if(event.target.id==='reserve-form'){event.preventDefault();state.reservePurpose=$('reserve-purpose').value.trim();state.reserveOwner=$('reserve-owner').value.trim();state.draftRevision++;closeDialog();render();notify(state.reservePurpose&&state.reserveOwner?'预留用途与责任人已更新。':'草稿已保存，预留字段待补，发布保持停用。');}if(event.target.id==='gap-form'){event.preventDefault();state.gapStrategy=$('gap-present').checked;state.draftRevision++;closeDialog();render();notify(state.gapStrategy?'补缺策略已保留在草稿中。':'草稿已保存，补缺策略待补，不能发布。');}if(event.target.id==='report-form'){event.preventDefault();if(selectedCheck())return;const report=$('report-select').value;if(!report){notify('请选定本次使用的实绩资料。');$('report-select').focus();return;}const plan=checkPlan();if(!plan)return;state.report=report;const comparison=comparisonFor(report,plan),trigger=triggerFor(report,state.threshold,comparison.percentages);const check={id:'CHECK-'+String(state.checkHistory.length+1).padStart(3,'0'),report,planNo:plan.no,parentGsaRef:plan.gsa,goalId:'G-TOTAL',checkpointId:'CP-202701-W2-TOTAL',caseChoice:null,threshold:state.threshold,comparison,trigger,sourceRef:reportInfo(report).ref};state.checkHistory.push(check);state.activeCheckId=check.id;state.nextCheckPlanNo=null;render();notify(reportInfo(report).status?'本次检查已保存 · '+reportInfo(report).status:'已保存本次检查与原计划、实绩引用。');}});
+
+  function editSplitField(key,value){
+    if(!isSales()||!state.generated||!state.editingDraft||state.operation||state[key]===value)return;
+    state[key]=value;state.draftRevision++;render();
+    updateSplitIndicators();
+  }
+  document.addEventListener('input',event=>{
+    if(event.target.id==='reserve-purpose')editSplitField('reservePurpose',event.target.value);
+    if(event.target.id==='reserve-owner')editSplitField('reserveOwner',event.target.value);
+  });
+  document.addEventListener('change',event=>{
+    if(event.target.id==='gap-present')editSplitField('gapStrategy',event.target.checked);
+  });
+
+  document.addEventListener('submit',event=>{if(event.target.id==='chat-form'){event.preventDefault();sendMessage($('chat-input').value);}if(event.target.id==='align-form'){event.preventDefault();const value=Number($('aligned-value').value),basis=$('alignment-basis').value.trim();state.alignmentDraftValue=$('aligned-value').value;state.alignmentDraftBasis=basis;if(![45,50].includes(value)||!basis){state.alignmentError='本演示请采用双方已确认的 45 万或 50 万完整方案，并填写双方确认依据。正式产品由 Agent 核对完整明细，不能只改一个交叉值。';render();$('aligned-value')?.focus();return;}state.aligned=true;state.alignedValue=value;state.alignmentBasis=basis;state.alignmentError='';state.draftRevision++;addAgent('已依据双方确认采用 '+value+' 万方案的完整明细，同时展示受影响的另一个交叉单元，重新汇总各视图合计仍为 120 万。冲突没有转成预留，可继续核对后发布。');render();notify('双方确认依据与受影响明细已保存，交叉项重新校验通过。');}if(['reserve-form','gap-form'].includes(event.target.id)){event.preventDefault();closeDialog();return;}});
   document.addEventListener('submit',event=>{if(event.target.id==='proactive-case-form'){event.preventDefault();const title=$('case-title').value.trim();if(!title){notify('事项名称仍需说明。');return;}const duplicate=caseRecords().find(c=>c.title===title&&['进行中','草稿待确认'].includes(c.status));if(duplicate){caseDetail(duplicate.id);notify('已有同一事项，优先打开原 Case，没有另建。');return;}const c={id:'C-DEMO-'+(state.ui.newCases.length+1),title,goal:'sales',goalVersion:'原目标 v1 · G/S',strategy:'S1 新品增长与平台活动',period:'2027 年 1 月',scope:'零售事业部重点试点门店',status:'草稿待确认',year:'2027',basis:'负责人明确建立重点试点；原目标 G-retail-202701/v1；尚未授权行动',historical:false};state.ui.newCases.push(c);persist();caseDetail(c.id);notify('已明确建立合成 Case 草稿，未创建任务或行动授权。');}if(event.target.id==='handoff-preview-form'){event.preventDefault();previewHandoff($('handoff-plan').value,$('handoff-line').value);}});
 
   document.addEventListener('change',event=>{
@@ -1418,6 +1973,28 @@
     if(event.target.id==='gsa-editor')event.preventDefault();
   });
   document.addEventListener('input',event=>{if(event.target.id==='chat-input'&&isSales()){state.ui.draftInput=event.target.value;persist();}});
+
+  document.addEventListener('input',event=>{
+    const key=event.target.dataset.reviewEdit;if(!key||!isSales()||state.tab!=='review')return;
+    const item=periodReview(reviewBaseline())?.items.find(x=>x.key===key);
+    if(item&&!item.discarded&&typeof item.buffer==='string'){
+      const field=event.target.dataset.reviewField;if(!['buffer','scopeBuffer','pendingBuffer'].includes(field))return;
+      item[field]=event.target.value;persist();
+      document.querySelector('[data-testid="review-save-'+CSS.escape(key)+'"]').disabled=!reviewEditReady(item);
+    }
+  });
+  document.addEventListener('change',event=>{
+    if(event.target.id==='source-access'&&isSales()&&state.tab==='review'){queueMicrotask(render);return;}
+    const key=event.target.dataset.reviewPick;if(!key||!isSales()||state.tab!=='review')return;
+    const work=periodReview(reviewBaseline()),item=work?.items.find(x=>x.key===key);
+    if(!item||item.discarded||!reviewItemReadable(item))return;
+    item.selected=event.target.checked;
+    const picked=selectedReviewItems(work);
+    state.ui.reviewSelected=picked.map(x=>x.key);persist();
+    document.querySelector('[data-testid="review-selection-count"]').textContent='已选 '+picked.length+' 条';
+    document.querySelector('[data-testid="draft-next-cycle"]').disabled=!picked.length||picked.some(i=>typeof i.buffer==='string');
+  });
+
   document.addEventListener('change',event=>{if(event.target.id==='version-select'){state.ui.versionSelections[state.ui.selectedGoal]=event.target.value;persist();versions();}if(event.target.id==='source-access'){const option=selectedVersion();if(typeof state.ui.sourceAccess!=='object')state.ui.sourceAccess={};state.ui.sourceAccess[state.ui.selectedGoal+'/'+option.key]=event.target.value;persist();versions();}if(event.target.id==='case-year'){state.ui.caseYear=event.target.value;persist();decisions();}if(event.target.name==='review-conclusion'){state.ui.reviewSelected=[...document.querySelectorAll('input[name="review-conclusion"]:checked')].map(input=>input.value);persist();}});
   document.addEventListener('change',event=>{if(event.target.id==='scenario'){resetEntryExample(event.target.value);render();notify('已切换当前样例的合成发布场景。');}if(event.target.id==='lost-outcome'&&!state.operation){state.lostOutcome=event.target.value;persist();}if(event.target.id==='check-history'){state.activeCheckId=event.target.value||null;const check=selectedCheck();state.report=check?.report||null;state.nextCheckPlanNo=null;render();notify('已打开所选历史检查，计划版本、实绩与 Case 选择保持原样。');}if(event.target.id==='threshold-select'){state.threshold=event.target.value;render();notify((selectedCheck()?'下次检查的配置已更新，本记录阈值与触发理由保持原样。':state.threshold==='none'?'未配置阈值，阶段比较仍可使用。':'已使用示例阈值，任一条件达到就提示 Case。'));}});
   $('sidebar-dialog').addEventListener('cancel',event=>{event.preventDefault();closeSidebar();});

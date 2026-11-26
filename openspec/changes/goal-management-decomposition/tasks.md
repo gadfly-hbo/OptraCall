@@ -38,9 +38,9 @@
 - [x] E1 已验证 schema 4 兼容升级、拆解快照外置文件与分页预算（`limit`/`offset`）、`--disable-goal-decomposition` 安全回退（已有数据只读、写路由与 Agent 工具均返回 403）、企业范围权限撤销操作期阻断（读/导出/承接）及旧目标/native 原件保全。证据见 [goal-decomposition-full.test.ts](../../../tests/goal-decomposition-full.test.ts) 与 [result.md](result.md)。
 - [x] E2 已执行 `npm run check:agent-sessions`（PASS）、`npm run build`（`tsc --noEmit` + Vite + `stamp-build` PASS）、39 个受影响与下游回归测试文件共 **229/229 PASS**（0 fail，含真实 Host→Pi 1.4.0→合成 Provider→`forecast.py`、策略发布/讨论、Case/Project/Teach/权限及 UI）以及真实 Chromium Playwright E2E **7/7 PASS（0 pageerrors）**。说明：全仓 470 个测试文件的单进程 `npm run check` 受云端 2 vCPU 10 分钟单命令上限截断，完整全仓 CI 待 PM 建 PR 后由 GitHub Actions 执行。
 - [x] E3 已由独立非作者只读 Subagent（`f941ace1291e0273ef9246689e6d9580`）完成完整候选复核，检出 6 项 P0 与 8 项 P1，全部修复并经非作者二次复核确认 **PASS（0 P0, 0 P1 剩余）**；`spec.md` 与 `ui-demo-integrated.html` 指纹及 `package.json`/`package-lock.json` 均保持原样未改。四原则专项终检与 §7.3 三个原型缺口关闭记录见 [result.md](result.md)。
-- [ ] E4 已推送任务分支 `work/antigravity/issue-136-goal-management` 并于 Issue #136 提交交接回执；待 Codex PM 验收、开 PR、跑完整 CI 及获授权合并 `main`。运行采用与用户产品验收另行分别记录。
+- [x] E4 原交接分支经 PM 验收，PR 检查 `check` 成功，已合并到 `main@b7c0085`。原 [Issue #136](https://github.com/gadfly-hbo/OptraCall/issues/136) 已关闭。[PR #137](https://github.com/gadfly-hbo/OptraCall/pull/137)
 
-发现的新问题先对应以上验收。直接阻塞或本次回归在有效范围内修复，独立功能或权限扩大补适用决定，其余记录后继续原任务。每项真实完成立即勾选并链接证据。当前 E4 待 PM 接管合并与 CI 完成后勾选。
+发现的新问题先对应以上验收。直接阻塞或本次回归在有效范围内修复，独立功能或权限扩大补适用决定，其余记录后继续原任务。每项真实完成立即勾选并链接证据。本轮试用增量见 F 清单。
 
 
 ## F 试用修正 · 目标管理入口与总 GSA
@@ -64,3 +64,5 @@
 - [ ] F12 到期复盘。Agent 先用本期结账、检查与 Case 起草，负责人可改写、舍弃、勾选。验证原证据和适用范围、末版目标、证据不足留待验证，下一期只引用选中项的最终文字；空选、取消与生成草案均不自动发布。
 
 F9–F12 以真实产品的测试与运行记录勾验。已确认的方案、可点击原型的验证以及正式产品工程验收分别记录。
+
+**四项交互验证。** [本次工作区 Demo](ui-demo-journey.html) 的 SHA-256 为 `7b1d3031768b2ad13b39850c35879deb601c7beca7ca134eff262d40e92cab0a`。桌面 1440 × 900、手机 390 × 844 合计八条路径、96 项浏览器断言通过，脚本错误为 0。独立复核另验金额或单位冲突、部分门店未报、保存失败恢复、复盘补入新增检查与变更适用范围。新版交互待负责人查看。正式产品任务按 F9–F12 保留。
