@@ -202,14 +202,14 @@ export function parsePlannedActions(v: unknown, requireNonEmpty: boolean): GsaPl
     seen.add(id);
     return {
       id,
-      summary: reqText(item.summary, 2000, 'invalid_gsa_planned_actions'),
+      summary: requireNonEmpty?reqText(item.summary,2000,'invalid_gsa_planned_actions'):(typeof item.summary==='string'&&item.summary.length<=2000?item.summary:fail('invalid_gsa_planned_actions',400)),
       ...(optText(item.checkpoint, 300) ? { checkpoint: optText(item.checkpoint, 300) } : {}),
       ...(optText(item.observationBasis, 1000) ? { observationBasis: optText(item.observationBasis, 1000) } : {}),
     };
   });
 }
 
-export function parseStageCheckpoints(v: unknown): GsaStageCheckpoint[] {
+export function parseStageCheckpoints(v: unknown, allowIncomplete=false): GsaStageCheckpoint[] {
   if (v === undefined) return [];
   if (!Array.isArray(v) || v.length > 50) fail('invalid_gsa_stage_checkpoints', 400);
   const seen = new Set<string>();
@@ -220,7 +220,7 @@ export function parseStageCheckpoints(v: unknown): GsaStageCheckpoint[] {
     seen.add(id);
     return {
       id,
-      label: reqText(item.label, 300, 'invalid_gsa_stage_checkpoints'),
+      label:allowIncomplete?(optText(item.label,300)??''):reqText(item.label,300,'invalid_gsa_stage_checkpoints'),
       ...(optText(item.targetDate, 100) ? { targetDate: optText(item.targetDate, 100) } : {}),
       ...(optText(item.observationBasis, 1000) ? { observationBasis: optText(item.observationBasis, 1000) } : {}),
     };

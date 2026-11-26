@@ -1417,7 +1417,11 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         const review = ws.reviews.find(r => r.reviewId === handoff?.sourceReviewId);
         if (!handoff || !review || discussionHash(handoff.targetScope) !== discussionHash(owner.scope)) throw new StrategyDiscussionFault('next_cycle_source_unavailable', 403);
         await validateStrategyGoal(strategyGoals.read(review.lastEffectiveFormalTarget.goalRef), undefined, cfg);
-        return {scope:owner.scope, nextCycle:handoff, sourcePeriod:review.period, reviewedGoal:review.lastEffectiveFormalTarget};
+        const selectedRefs=new Set(handoff.selectedConclusions.map(c=>c.sourceRef));
+        const evidenceChecks=ws.checks.filter(c=>review.preservedCheckIds.includes(c.checkId)&&(selectedRefs.has(c.checkId)||selectedRefs.has(c.actualSource.ref)));
+        const closingEvidence=review.closingReport&&selectedRefs.has(review.actualSourceRef)?{ref:review.actualSourceRef,period:review.period,text:review.closingReport}:undefined;
+        return {scope:owner.scope,nextCycle:handoff,sourcePeriod:review.period,reviewedGoal:review.lastEffectiveFormalTarget,
+          sourceEvidence:{checks:evidenceChecks,...(closingEvidence?{closing:closingEvidence}:{}),references:[...selectedRefs].filter(ref=>!evidenceChecks.some(c=>c.checkId===ref||c.actualSource.ref===ref)&&ref!==closingEvidence?.ref)}};
       }
       if (owner.goalRef) {
         const {goal, saved} = strategyGoals.estimateOwnerContext(owner.draftId, owner.scope, owner.goalRef, writing);

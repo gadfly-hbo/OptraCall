@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
@@ -14,7 +14,7 @@ import { runtimeEnvironment } from '../scripts/runtime-process.ts';
 import { makeNormalDraftPayload } from './fixtures/goal-decomposition-draft.ts';
 
 const root = await mkdtemp(path.join(os.tmpdir(), 'goal-browser-'));
-let child, browser, base, faultHost;
+let child, browser, base, faultHost, page;
 async function startHost(port = 0) {
   child = spawn(process.execPath, ['scripts/host-entry.mjs', '--port=' + port,
     '--ui-root=' + path.resolve('dist'), '--data-root=' + path.join(root, 'data'),
@@ -68,7 +68,7 @@ try {
   const conflict = await seed('西区交叉冲突', true);
   const lost = await seed('南区发布失答');
   browser = await chromium.launch({headless:true, ...(process.env.OPTRACALL_CHROMIUM ? {executablePath:process.env.OPTRACALL_CHROMIUM} : {})});
-  const page = await browser.newPage({viewport:{width:1440,height:900}});
+  page = await browser.newPage({viewport:{width:1440,height:900}});
   page.setDefaultTimeout(12000);
   const errors = [], writes = [], reads = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -85,6 +85,7 @@ try {
     await btn('切换目标').click();
     await page.getByRole('dialog',{name:'切换目标'}).getByRole('listitem').filter({hasText:target.title}).click();
     await page.getByRole('heading',{name:target.title,exact:true}).waitFor();
+    await page.getByRole('navigation',{name:'目标管理三阶段流程'}).getByRole('button').first().click();
   };
   const ws = target => api(target.route + '/workspace?goalVersion=1');
   const preview = async () => {
@@ -104,18 +105,19 @@ try {
   const estimateField = page.getByRole('spinbutton',{name:'同口径可达测算值'});
   const beforeEdit = await ws(normal);
   await estimateField.fill('111');
-  await btn('核对并发布').click();
-  await page.getByText(/请先点击「保存草稿」/).waitFor();
-  assert.equal((await ws(normal)).draft.revision,beforeEdit.draft.revision);
-  assert.equal(writes.filter(p => p === normal.route + '/decomposition/draft').length,0);
-  await estimateField.fill('112');
-  await btn('保存草稿').click();
+  assert.ok(await btn('核对并发布').isDisabled());
   await page.getByRole('heading',{name:/实时拆解表.*rev 2/}).waitFor();
+  assert.equal((await ws(normal)).draft.estimate.estimatedValue,111);
+  assert.equal(writes.filter(p => p === normal.route + '/decomposition/draft').length,1);
+  await estimateField.fill('112');
+  await page.getByRole('heading',{name:/实时拆解表.*rev 3/}).waitFor();
+  const writesBeforePreview = writes.filter(route=>!route.endsWith('/publish-preview')).length;
   const original = await ws(normal);
   await btn('返回修改草稿',await preview()).click();
   assert.equal((await ws(normal)).draft.contentSha256,original.draft.contentSha256);
   assert.equal((await ws(normal)).draft.revision,original.draft.revision);
   assert.equal((await ws(normal)).publications.length,0);
+  assert.equal(writes.filter(route=>!route.endsWith('/publish-preview')).length,writesBeforePreview,'readonly preview and cancel must never save');
   await btn('确认发布 v1',await preview()).click();
   await page.getByText('拆解正式版 v1 生效中',{exact:true}).waitFor();
   const normalPublication = await published(normal);
@@ -240,9 +242,7 @@ try {
   assert.equal(source.basis,undefined);
   assert.equal(savedActuals[0].input.actualPeriods[0].actualValue,null);
   await page.keyboard.press('Escape');
-  const stored = page.getByLabel('选定本期已保存的实绩');
-  await stored.selectOption(savedActuals[0].actualId);
-  await btn('用选定实绩核对').click();
+  await btn('用这份核对').click();
   await analysisDialog.waitFor();
   assert.equal((await ws(normal)).submittedActuals.length,1);
   await page.keyboard.press('Escape');
@@ -260,8 +260,9 @@ try {
   await btn('添加阶段检查点').click();
   await page.getByLabel('阶段检查点 1 名称').fill('月度门店盘点');
   await page.getByLabel('阶段检查点 1 观察依据').fill('已结账净销售日报');
+  await page.getByLabel('GSA 修订原因').fill('多月目标未达，负责人核准本周期修订');
   const confirmResponse = page.waitForResponse(r => new URL(r.url()).pathname === normal.route + '/gsa-plan/confirm');
-  await btn('确认 GSA，开始拆解').click();
+  await btn('确认更新 GSA 计划 v2').click();
   const confirmed = await confirmResponse;
   assert.ok(confirmed.ok(), 'selected v2 GSA failed: ' + await confirmed.text());
   const revisedWorkspace = await api(normal.route + '/workspace?goalVersion=2');
@@ -271,6 +272,7 @@ try {
   await btn('版本与来源').click();
   await btn('查看此版',versionDialog.getByRole('listitem').filter({hasText:normal.title + ' · v1'})).click();
   await page.getByText('历史只读版本 v1',{exact:true}).waitFor();
+  await page.getByRole('navigation',{name:'目标管理三阶段流程'}).getByRole('button').first().click();
   const officialCell = page.locator('.gm-metric-card').filter({hasText:'正式目标值（固定权威）'});
   await officialCell.getByText('120万元',{exact:true}).waitFor();
   assert.ok(await btn('保存草稿').isDisabled());
@@ -334,6 +336,9 @@ try {
   assert.equal((await ws(retry)).publications.length,0);
   assert.deepEqual(errors,[]);
   console.log('PASS unknown / HTTP 404 stays locked and retryable proof only enables explicit retry');
+} catch(error) {
+  if(page){await page.screenshot({path:'.local/issue138/legacy-failure.png',fullPage:true});await writeFile('.local/issue138/legacy-failure.txt',await page.locator('body').innerText());}
+  throw error;
 } finally {
   await browser?.close();
   await faultHost?.close();

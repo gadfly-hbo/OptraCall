@@ -170,7 +170,38 @@ provider.setResponder(async (ctx) => {
   }
   if (action === "goal-decomposition") {
     const { activeGsaPlan: plan } = context.roleContext.decompositionContext;
-    const draft = makeNormalDraftPayload(plan);
+    const existing =
+      context.roleContext.decompositionContext.activeDecompositionDraft;
+    const draft = makeNormalDraftPayload(plan, {
+      expectedDraftRevision: existing?.revision ?? 0,
+    });
+    const marker = "\n人工改动\n";
+    if (text.includes(marker)) {
+      const edits = JSON.parse(
+        text.slice(text.indexOf(marker) + marker.length),
+      );
+      for (const key of [
+        "estimate",
+        "rows",
+        "reserves",
+        "gapStrategies",
+        "views",
+        "timePlan",
+        "notes",
+      ])
+        if (existing[key] !== undefined)
+          draft[key] = structuredClone(existing[key]);
+      for (const change of edits.changes) {
+        const keys = change.path
+          .split("/")
+          .slice(1)
+          .map((key) => key.replace(/~1/g, "/").replace(/~0/g, "~"));
+        let target = draft;
+        for (const key of keys.slice(0, -1)) target = target[key];
+        if (change.after === undefined) delete target[keys.at(-1)];
+        else target[keys.at(-1)] = change.after;
+      }
+    }
     const { operationId, ...payload } = draft;
     return {
       calls: [
@@ -296,6 +327,41 @@ try {
   );
   results.push("F10 failed save retained input and retry saved");
 
+  const concurrentBase = await api(normal.route + "/workspace");
+  await page.route(
+    "**/decomposition/draft",
+    async (route) => {
+      const remote = makeNormalDraftPayload(concurrentBase.activeGsaPlan, {
+        expectedDraftRevision: concurrentBase.draft.revision,
+      });
+      remote.rows[0].responsible = "并发写入的负责人";
+      await api(normal.route + "/decomposition/draft", "POST", remote);
+      await route.continue();
+    },
+    { times: 1 },
+  );
+  await page.getByRole("spinbutton", { name: "同口径可达测算值" }).fill("111");
+  await button("请 Agent 合并保留的改稿").waitFor();
+  await button("同步最新草稿").click();
+  assert.equal(
+    await page
+      .getByRole("spinbutton", { name: "同口径可达测算值" })
+      .inputValue(),
+    "111",
+  );
+  await button("请 Agent 合并保留的改稿").click();
+  const merged = await waitFor(
+    () => api(normal.route + "/workspace"),
+    (ws) =>
+      ws.draft.estimate.estimatedValue === 111 &&
+      ws.draft.rows[0].responsible === "并发写入的负责人",
+    "reconciliation must preserve both independent edits",
+  );
+  assert.ok(merged.draft.revision > concurrentBase.draft.revision);
+  results.push(
+    "F10 stale save rejected, local edits retained and Agent reconciled against latest draft",
+  );
+
   const choose = async (item) => {
     await button("切换目标").click();
     await page
@@ -308,6 +374,38 @@ try {
       .waitFor();
   };
   await choose(candidate);
+  await button("保存 GSA 候选").click();
+  await page
+    .getByText("GSA 候选已保存，正式版继续以已确认版本为准。", { exact: true })
+    .waitFor();
+  assert.equal((await api(candidate.route + "/workspace")).gsaPlans.length, 0);
+  await button("＋ 添加计划 A").click();
+  await button("＋ 添加计划 A").click();
+  await page
+    .getByRole("textbox", { name: "计划 A 3 内容", exact: true })
+    .fill("第三行人工内容须保留");
+  await button("移除").nth(1).click();
+  await button("＋ 添加计划 A").click();
+  await button("让 Agent 推荐计划 A").last().click();
+  await waitFor(
+    () =>
+      page
+        .getByRole("textbox", { name: "计划 A 3 内容", exact: true })
+        .inputValue(),
+    (value) => value.includes("新品陈列"),
+    "new empty row should receive its own suggestion",
+  );
+  assert.equal(
+    await page
+      .getByRole("textbox", { name: "计划 A 2 内容", exact: true })
+      .inputValue(),
+    "第三行人工内容须保留",
+  );
+  await button("移除").last().click();
+  await button("移除").last().click();
+  results.push(
+    "F3 partial GSA saved and F4 removed/re-added rows cannot overwrite another manual row",
+  );
   await button("让 Agent 推荐计划 A").click();
   await waitFor(
     () =>
@@ -385,6 +483,39 @@ try {
   await button("确认 GSA，开始拆解").click();
   await button("按此要求起草").waitFor();
   assert.equal((await api(candidate.route + "/workspace")).draft, null);
+  await button("调整总 GSA / 计划 A").click();
+  await page
+    .getByRole("textbox", { name: "计划 A 1 内容", exact: true })
+    .fill(notes + "；补充供货复核");
+  await page
+    .getByRole("textbox", { name: "GSA 修订原因", exact: true })
+    .fill("补充供货风险检查");
+  let gsaWrites = 0;
+  await page.route(
+    "**/gsa-plan/confirm",
+    async (route) => {
+      gsaWrites++;
+      const response = await route.fetch();
+      assert.equal(response.status(), 201);
+      await route.abort();
+    },
+    { times: 1 },
+  );
+  await button("确认更新 GSA 计划 v2").click();
+  await page.getByRole("region", { name: "原 GSA 确认回执" }).waitFor();
+  await button("按此要求起草").waitFor();
+  assert.equal(gsaWrites, 1);
+  assert.equal((await api(candidate.route + "/workspace")).gsaPlans.length, 2);
+  assert.equal(
+    await page.evaluate(
+      (id) => localStorage.getItem("optracall.goal.pendingGsa.v1:" + id),
+      candidate.goal.goalId,
+    ),
+    null,
+  );
+  results.push(
+    "F3 lost GSA revision response recovered by original confirmation receipt with one write",
+  );
   const composer = page.getByRole("textbox", {
     name: "向目标管理 Agent提问",
     exact: true,
@@ -439,6 +570,7 @@ try {
   );
   assert.equal(assessed.checks[0].overallPending, false);
   await page.keyboard.press("Escape");
+  await page.getByText(/本次粘贴报表 · 2027-01-07 · 零售事业部/).waitFor();
   await button("用这份核对").click();
   await page.getByRole("dialog", { name: "Agent 核对实绩" }).waitFor();
   await page.keyboard.press("Escape");
@@ -465,6 +597,49 @@ try {
       res.draft.conclusions[0]?.summary === "负责人改写后保留的结论" &&
       res.draft.conclusions[0].selected,
     "review edits should save",
+  );
+  await page.route("**/review-draft", (route) => route.abort(), { times: 1 });
+  await page
+    .getByRole("textbox", { name: "结论摘要", exact: true })
+    .first()
+    .fill("负责人保存失败后仍须保留的结论");
+  await button("重试保存复盘草稿").waitFor();
+  const remoteReview = await api(
+    candidate.route + "/review-draft?period=2027-01",
+  );
+  await api(candidate.route + "/review-draft", "POST", {
+    ...remoteReview.draft,
+    expectedRevision: remoteReview.draft.revision,
+    conclusions: remoteReview.draft.conclusions.map((c, index) =>
+      index === 0 ? { ...c, summary: "另一端的修改", selected: false } : c,
+    ),
+  });
+  await page.reload();
+  await page.getByRole("region", { name: "复盘保存冲突对照" }).waitFor();
+  assert.equal(
+    await page
+      .getByRole("textbox", { name: "结论摘要", exact: true })
+      .first()
+      .inputValue(),
+    "负责人保存失败后仍须保留的结论",
+  );
+  assert.equal(
+    await page
+      .getByRole("checkbox", { name: "带入下一期" })
+      .first()
+      .isChecked(),
+    true,
+  );
+  await button("已核对，保留本地取舍并合入远端新增结论").click();
+  await waitFor(
+    () => api(candidate.route + "/review-draft?period=2027-01"),
+    (res) =>
+      res.draft.conclusions[0].summary === "负责人保存失败后仍须保留的结论" &&
+      res.draft.conclusions[0].selected,
+    "explicit review conflict resolution should preserve final local wording and selection",
+  );
+  results.push(
+    "F12 failed review save and concurrent remote revision keep local edits across reload",
   );
   await page
     .getByRole("navigation", { name: "目标管理三阶段流程" })
@@ -505,7 +680,7 @@ try {
       .getByRole("textbox", { name: "结论摘要", exact: true })
       .first()
       .inputValue(),
-    "负责人改写后保留的结论",
+    "负责人保存失败后仍须保留的结论",
   );
   assert.equal(
     await page
@@ -534,7 +709,7 @@ try {
       .getByRole("textbox", { name: "结论摘要", exact: true })
       .first()
       .inputValue(),
-    "负责人改写后保留的结论",
+    "负责人保存失败后仍须保留的结论",
   );
   await button("用选中结论起草下一期").click();
   const next = await waitFor(
@@ -545,7 +720,7 @@ try {
   assert.equal(next.nextCycleDrafts[0].selectedConclusions.length, 1);
   assert.equal(
     next.nextCycleDrafts[0].selectedConclusions[0].summary,
-    "负责人改写后保留的结论",
+    "负责人保存失败后仍须保留的结论",
   );
   assert.equal(next.publications.length, 1);
   results.push(

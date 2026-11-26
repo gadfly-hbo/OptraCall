@@ -731,6 +731,7 @@ export interface DecompositionCycleReview {
   lastEffectiveFormalTarget: { goalRef: GoalRef; gsaPlanVersion?: number; value: number; unit: string };
   actualFinalValue: number | null;
   actualSourceRef: string;
+  closingReport?:string;
   varianceValue: number | null;
   outcomeSummary: string;
   preservedCheckIds: string[];
@@ -752,6 +753,7 @@ export interface DecompositionCycleReviewInput {
   period: string;
   actualFinalValue: number | null;
   actualSourceRef: string;
+  closingReport?:string;
   conclusions: {
     id: string;
     title: string;

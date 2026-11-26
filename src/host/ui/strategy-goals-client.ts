@@ -211,3 +211,5 @@ export const recordStrategyReturn = (goalId: string, input: StrategyReturnInput)
 
 export const readReviewDraft=(goalId:string,period:string)=>request<{draft:import('../strategy-goal-decomposition-types.ts').GoalReviewDraft}>(`${goalPath(goalId)}/review-draft?period=${encodeURIComponent(period)}`);
 export const saveReviewDraft=(goalId:string,input:import('../strategy-goal-decomposition-types.ts').GoalReviewDraft & {expectedRevision:number})=>request<{draft:import('../strategy-goal-decomposition-types.ts').GoalReviewDraft}>(`${goalPath(goalId)}/review-draft`,'POST',input);
+
+export const readGsaConfirmation=(goalId:string,operationId:string)=>request<{found:false}|{found:true;goal:GoalVersion;gsaPlan:GsaPlanVersion}>(`${goalPath(goalId)}/gsa-plan/operations/${encodeURIComponent(operationId)}`);

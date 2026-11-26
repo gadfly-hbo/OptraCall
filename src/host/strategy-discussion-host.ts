@@ -657,12 +657,12 @@ export function createStrategyDiscussionHost(options:{readDecompositionWorkspace
      if (action === 'goal-read-context') return payload({evidence,request,firstPlan:plans[0],lastEffectivePlan:plans.at(-1),checks,caseDraftIntents:ws.caseDraftIntents});
      if (action !== 'goal-propose-review' || !Array.isArray(input.conclusions) || input.conclusions.length>30) fail('role_action_unavailable',403);
      const reviewedCases=object(evidence)&&object(evidence.reviewContext)&&Array.isArray(evidence.reviewContext.cases)?evidence.reviewContext.cases:[];
-     const allowed = new Set([request.actualSourceRef,...reviewedCases.map((c:any)=>c.case.id),...checks.flatMap(c=>[c.checkId,c.actualSource.ref,...(c.caseCandidates??[]).map(x=>x.caseId),...(c.caseChoice?.kind==='continue-existing'?[c.caseChoice.caseId]:[])])].filter(Boolean));
+     const allowed = new Set([request.actualSourceRef,...reviewedCases.flatMap((c:any)=>[c.case.id,`${c.case.id}@${c.case.revision}`]),...checks.flatMap(c=>[c.checkId,c.actualSource.ref,...(c.caseCandidates??[]).map(x=>x.caseId),...(c.caseChoice?.kind==='continue-existing'?[c.caseChoice.caseId]:[])])].filter(Boolean));
      const conclusions = input.conclusions.map((item:any,index:number)=>{
       const sourceRef=assistanceText(item.sourceRef,500);
       if(!allowed.has(sourceRef)) fail('goal_review_evidence_unavailable',403);
       const check=checks.find(c=>c.checkId===sourceRef||c.actualSource.ref===sourceRef);
-      const originalScope=check?.actualSource.basis?.scope??(object(evidence)&&object(evidence.goal)&&object(evidence.goal.scope)?String(evidence.goal.scope.name):'');
+      const originalScope=check?.actualSource.basis?.scope??assistanceText(item.originalScope,500);
       if(!originalScope)fail('goal_review_evidence_unavailable',403);
       return {id:`${context.requestId}:${index}`,sourceRef,title:assistanceText(item.title,300),summary:assistanceText(item.summary,4000),
        originalScope,applicableScope:assistanceText(item.applicableScope,500),

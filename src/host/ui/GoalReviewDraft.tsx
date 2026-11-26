@@ -42,6 +42,7 @@ export function GoalReviewDraft({
   }, [goal.goalId, workspace]);
   const [draft, setDraft] = useState<ReviewDraft>();
   const [dirty, setDirty] = useState(false);
+  const [conflict, setConflict] = useState<ReviewDraft>();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -72,9 +73,15 @@ export function GoalReviewDraft({
           cached =
             JSON.parse(sessionStorage.getItem(storage) ?? "null") ?? undefined;
         } catch {}
-        const restored = cached?.revision === saved.revision ? cached : saved;
+        const restored = cached ?? saved;
         setDraft(restored);
         setDirty(restored !== saved);
+        if (cached && cached.revision !== saved.revision) {
+          setConflict(saved);
+          setError(
+            "远端复盘已有新修订，本地改稿、舍弃和勾选已保留，请核对两份内容。",
+          );
+        }
       })
       .catch((f) => {
         if (alive.current) setError(api.goalError(f));
@@ -85,7 +92,7 @@ export function GoalReviewDraft({
   }, [goal.goalId, period, storage]);
   function update(next: ReviewDraft) {
     revisionSerial.current++;
-    setError("");
+    if (!conflict) setError("");
     setDraft(next);
     setDirty(true);
     try {
@@ -103,7 +110,19 @@ export function GoalReviewDraft({
         ...value,
         expectedRevision: value.revision,
       });
-      if (!alive.current) return;
+      if (!alive.current) {
+        try {
+          const cached = JSON.parse(
+            sessionStorage.getItem(storage) ?? "null",
+          ) as ReviewDraft | null;
+          if (cached?.revision === value.revision)
+            sessionStorage.setItem(
+              storage,
+              JSON.stringify({ ...cached, revision: saved.revision }),
+            );
+        } catch {}
+        return;
+      }
       setDraft((latest) =>
         latest
           ? {
@@ -116,10 +135,25 @@ export function GoalReviewDraft({
             }
           : saved,
       );
+      setConflict(undefined);
       setDirty(serial !== revisionSerial.current);
       if (serial === revisionSerial.current) sessionStorage.removeItem(storage);
+      else if (current.current)
+        sessionStorage.setItem(
+          storage,
+          JSON.stringify({ ...current.current, revision: saved.revision }),
+        );
     } catch (f) {
       if (alive.current) setError(api.goalError(f));
+      if (
+        f instanceof api.StrategyGoalsRequestError &&
+        f.code === "review_draft_conflict"
+      ) {
+        try {
+          const remote = await api.readReviewDraft(goal.goalId, period);
+          if (alive.current) setConflict(remote.draft);
+        } catch {}
+      }
     } finally {
       inFlight.current = false;
       if (alive.current) setSaving(false);
@@ -212,6 +246,7 @@ export function GoalReviewDraft({
         period,
         actualFinalValue: draft.actualFinalValue,
         actualSourceRef: draft.actualSourceRef,
+        ...(draft.closingReport ? { closingReport: draft.closingReport } : {}),
         conclusions: draft.conclusions.filter((c) => !c.discarded),
       });
       await onSaved();
@@ -299,6 +334,57 @@ export function GoalReviewDraft({
             重试保存复盘草稿
           </button>
         </div>
+      )}
+      {conflict && (
+        <section className="gm-card" aria-label="复盘保存冲突对照">
+          <strong>核对本地与远端复盘</strong>
+          <p>本地改稿保留在原框。远端新增结论会一起带入，原证据继续保留。</p>
+          <details>
+            <summary>查看远端内容</summary>
+            {conflict.conclusions.map((c) => (
+              <p key={c.id}>
+                {c.title} · {c.summary} ·{" "}
+                {c.discarded ? "已舍弃" : c.selected ? "已选入下期" : "未选"}
+              </p>
+            ))}
+          </details>
+          <button
+            className="secondary-button"
+            disabled={disabled || saving}
+            onClick={() => {
+              const local = current.current;
+              if (!local) return;
+              try {
+                sessionStorage.setItem(
+                  storage + ".conflict",
+                  JSON.stringify(local),
+                );
+              } catch {
+                setError(
+                  "本地备份保存失败，原改稿仍在原框，请恢复存储后重试。",
+                );
+                return;
+              }
+              const ids = new Set(local.conclusions.map((c) => c.id));
+              const merged = {
+                ...local,
+                revision: conflict.revision,
+                evidenceKeys: [
+                  ...new Set([...local.evidenceKeys, ...conflict.evidenceKeys]),
+                ],
+                conclusions: [
+                  ...local.conclusions,
+                  ...conflict.conclusions.filter((c) => !ids.has(c.id)),
+                ],
+              };
+              setConflict(undefined);
+              setError("");
+              update(merged);
+            }}
+          >
+            已核对，保留本地取舍并合入远端新增结论
+          </button>
+        </section>
       )}
       {notice && <p role="status">{notice}</p>}
       {draft.conclusions.map((c) => (

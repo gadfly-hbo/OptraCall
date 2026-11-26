@@ -454,3 +454,182 @@ test("F3 a new GSA cannot silently replace a decomposition based on the old plan
   );
   assert.equal(adopted.draft.gsaPlanVersion, 2);
 });
+
+test("F3 an original GSA confirmation can be read after a lost response and later revision", async (t) => {
+  const host = await startTestHost();
+  t.after(() => host.close());
+  const { route, confirmation } = await seed(host);
+  const first = await json(
+    await host.request(
+      route + "/gsa-plan/operations/" + confirmation.operationId,
+    ),
+  );
+  assert.equal(first.found, true);
+  assert.equal(first.gsaPlan.planVersion, 1);
+  await json(
+    await host.request(route + "/gsa-plan/confirm", "POST", {
+      ...confirmation,
+      operationId: randomUUID(),
+      expectedPlanVersion: 1,
+      expectedAdoptedVersion: 1,
+      plannedActions: [
+        { ...confirmation.plannedActions[0], summary: "新版检查" },
+      ],
+      supersedesReason: "修订检查",
+    }),
+    201,
+  );
+  const recovered = await json(
+    await host.request(
+      route + "/gsa-plan/operations/" + confirmation.operationId,
+    ),
+  );
+  assert.equal(recovered.gsaPlan.planVersion, 1);
+  const replay = await json(
+    await host.request(route + "/gsa-plan/confirm", "POST", confirmation),
+    201,
+  );
+  assert.equal(replay.replayed, true);
+  assert.equal(
+    (await json(await host.request(route + "/workspace"))).gsaPlans.length,
+    2,
+  );
+});
+
+test(
+  "F12 preserves a selected closing receipt and its original scope into the next-cycle Agent context",
+  { timeout: 60_000 },
+  async (t) => {
+    const provider = await startToolProvider();
+    t.after(() => provider.close());
+    const host = await startTestHost();
+    t.after(() => host.close());
+    await json(
+      await host.request("/api/configuration", "PUT", {
+        name: "合成复盘",
+        provider: "openai-compatible",
+        baseUrl: provider.baseUrl,
+        model: "synthetic-review",
+        apiKey: "synthetic-key",
+      }),
+    );
+    const { goal, route } = await seed(host);
+    const report =
+      "数据截至 2027-01-31，华东三家门店本期净销售额 12 万元，其余门店待补。";
+    let nextContext: any;
+    provider.setResponder((ctx) => {
+      const text = providerMessageText(
+        ctx.messages.filter((m) => m.role === "user").at(-1)?.content,
+      );
+      const context = JSON.parse(text.split("\n\n用户本轮原话：")[0]);
+      if (context.owner.role === "goal-draft") {
+        nextContext = context;
+        return { text: "收到选定结论、原凭证和适用范围。" };
+      }
+      return ctx.recentToolResults.length
+        ? { text: "仅支持华东三家门店，扩大范围需验证。" }
+        : {
+            calls: [
+              {
+                name: "strategy_goals",
+                arguments: {
+                  action: "goal-propose-review",
+                  conclusions: [
+                    {
+                      sourceRef: "closing-east",
+                      title: "门店试点待验证",
+                      summary: "三家门店的结果需验证后再推广。",
+                      originalScope: "华东三家门店",
+                      applicableScope: "全国零售事业部",
+                      evidenceMature: true,
+                      causalVerified: false,
+                      targetScopeSameAsOriginal: false,
+                    },
+                  ],
+                },
+              },
+            ],
+          };
+    });
+    const role =
+      "/api/business-role?owner=" +
+      encodeURIComponent(
+        JSON.stringify({
+          role: "goal",
+          goalId: goal.goalId,
+          version: 1,
+          analysisVariant: "goal-review",
+        }),
+      );
+    await json(
+      await host.request(role + "&action=messages", "POST", {
+        requestId: randomUUID(),
+        text: "起草复盘",
+        expectedRevision: 0,
+        reviewRequest: {
+          period: "2027-01",
+          actualFinalValue: null,
+          actualSourceRef: "closing-east",
+          closingReport: report,
+        },
+      }),
+      202,
+    );
+    let detail: any;
+    for (let tries = 0; tries < 150; tries++) {
+      detail = await json(await host.request(role));
+      if (detail.discussion.lastRun.status === "completed") break;
+      await new Promise((resolve) => setTimeout(resolve, 40));
+    }
+    const conclusion = detail.reviewSuggestions[0].conclusions[0];
+    assert.equal(conclusion.originalScope, "华东三家门店");
+    assert.equal(conclusion.targetScopeSameAsOriginal, false);
+    const { review } = await json(
+      await host.request(route + "/cycle-reviews", "POST", {
+        operationId: randomUUID(),
+        period: "2027-01",
+        actualFinalValue: null,
+        actualSourceRef: "closing-east",
+        closingReport: report,
+        conclusions: [conclusion],
+      }),
+      201,
+    );
+    assert.equal(review.closingReport, report);
+    assert.equal(review.conclusions[0].classification, "hypothesis-unverified");
+    const { nextCycleDraft } = await json(
+      await host.request(route + "/next-cycle-draft", "POST", {
+        operationId: randomUUID(),
+        reviewId: review.reviewId,
+        nextPeriod: "2027-02",
+        selectedConclusionIds: [conclusion.id],
+      }),
+      201,
+    );
+    const nextRole =
+      "/api/business-role?owner=" +
+      encodeURIComponent(
+        JSON.stringify({
+          role: "goal-draft",
+          draftId: nextCycleDraft.draftId,
+          scope: goal.scope,
+          nextCycleSourceGoalId: goal.goalId,
+        }),
+      );
+    await json(
+      await host.request(nextRole + "&action=messages", "POST", {
+        requestId: randomUUID(),
+        text: "按选定结论起草下一期",
+        expectedRevision: 0,
+      }),
+      202,
+    );
+    for (let tries = 0; tries < 150 && !nextContext; tries++)
+      await new Promise((resolve) => setTimeout(resolve, 40));
+    assert.equal(nextContext.roleContext.sourceEvidence.closing.text, report);
+    assert.equal(
+      nextContext.roleContext.nextCycle.selectedConclusions[0].originalScope,
+      "华东三家门店",
+    );
+  },
+);

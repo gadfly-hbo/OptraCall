@@ -378,7 +378,7 @@ export function StrategyGoalsPage({ teachReview,onReturnReview,clearTeachReview,
   const [loading, setLoading] = useState(true), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const {stage,area}=management;
   const view = stage === 'bsc' || stage === 'history' ? stage : 'gsa';
-  const [perspective, setPerspective] = useState<'all' | GoalPerspective>('all'), [selectedId, setSelectedId] = useState(()=>localStorage.getItem('optracall.goal.selectedId')??''), [selectedVersion, setSelectedVersion] = useState<number | null>(()=>{const raw=localStorage.getItem('optracall.goal.selectedVersion');return raw&&Number.isSafeInteger(Number(raw))?Number(raw):null;});
+  const [perspective, setPerspective] = useState<'all' | GoalPerspective>('all'), [selectedId, setSelectedId] = useState(()=>{try{return localStorage.getItem('optracall.goal.selectedId')??'';}catch{return '';}}), [selectedVersion, setSelectedVersion] = useState<number | null>(()=>{try{const raw=localStorage.getItem('optracall.goal.selectedVersion');return raw&&Number.isSafeInteger(Number(raw))&&Number(raw)>0?Number(raw):null;}catch{return null;}});
   const [editor, setEditor] = useState<'create' | 'revise' | 'adopt' | 'relation' | 'feedback' | null>(null), [relationEditor, setRelationEditor] = useState<GoalRelation | undefined>();
   const [editorGoal, setEditorGoal] = useState<{ value: GoalVersion; record: StrategyGoalRecord } | null>(null);
   const [editorSources, setEditorSources] = useState<GoalFeedbackSource[]>([]);

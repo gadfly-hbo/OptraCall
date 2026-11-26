@@ -229,6 +229,14 @@ export function createStrategyGoalRoutes(options: {
       }) };
     }
 
+    const gsaOperation=/^\/api\/strategy\/goals\/([a-f0-9-]+)\/gsa-plan\/operations\/([a-f0-9-]+)$/.exec(pathname);
+    if(gsaOperation&&method==='GET'){
+      await checkGoalCurrentAccess(gsaOperation[1]!);
+      const result=store.readGsaConfirmation(gsaOperation[1]!,gsaOperation[2]!);
+      if(result.found)await options.validateGoal?.(result.goal);
+      return {body:result};
+    }
+
     const goalAction = /^\/api\/strategy\/goals\/([a-f0-9-]+)\/(workspace|reconcile-formal|gsa-plan\/confirm|gsa-plan\/draft|gsa-plans|decomposition\/draft|decomposition\/align|decomposition\/publish-preview|decomposition\/publish|decomposition\/publications|decomposition\/threshold|decomposition\/actuals|decomposition\/checks|decomposition\/handoffs\/preview|decomposition\/handoffs|case-draft-intents|cycle-reviews|review-draft|next-cycle-draft|return-to-strategy)$/.exec(pathname);
     if (goalAction) {
       const goalId = goalAction[1]!;

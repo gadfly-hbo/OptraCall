@@ -870,7 +870,7 @@ export class StrategyGoalsStore {
     this.assertDecompositionWritable();
     const id = uuid(goalId);
     const plannedActions = raw.plannedActions === undefined ? [] : parsePlannedActions(raw.plannedActions, false);
-    const stageCheckpoints = parseStageCheckpoints(raw.stageCheckpoints);
+    const stageCheckpoints = parseStageCheckpoints(raw.stageCheckpoints,true);
     const preConfirmEstimate = raw.preConfirmEstimate === undefined ? undefined : parseReachabilityEstimate(raw.preConfirmEstimate);
     return this.withLock(index => {
       const goal = index.goals.find(g => g.id === id);
@@ -905,6 +905,17 @@ export class StrategyGoalsStore {
     const found = plans.find(p => p.planVersion === planVersion);
     if (!found) fail('gsa_plan_not_found', 404);
     return found;
+  }
+
+  readGsaConfirmation(goalId:string,operationId:string) {
+    const id=uuid(goalId),opId=reqUuid(operationId),index=this.load();
+    if(!index.goals.some(g=>g.id===id))fail('strategy_goal_not_found',404);
+    const operation=index.gsaPlanOperations?.[opId];
+    if(!operation||operation.goalId!==id)return {found:false as const};
+    const goal=index.goals.find(g=>g.id===id)!.versions.find(v=>v.version===operation.goalVersion);
+    const gsaPlan=index.gsaPlans?.[id]?.find(p=>p.planVersion===operation.planVersion);
+    if(!goal||!gsaPlan)fail('strategy_goal_operation_conflict',409);
+    return structuredClone({found:true as const,goal,gsaPlan});
   }
 
   /** Atomically confirms G + S + Planned A in a single lock (GM02/GM09). Never creates Tasks/Cases/Board authorizations. */
@@ -2178,7 +2189,7 @@ export class StrategyGoalsStore {
   saveReviewDraft(goalId:string,input:GoalReviewDraft & {expectedRevision:number}):GoalReviewDraft {
     this.assertDecompositionWritable();
     const id=uuid(goalId),period=reqText(input.period,100);
-    if(!Number.isSafeInteger(input.expectedRevision)||input.expectedRevision<0||!Array.isArray(input.conclusions)||input.conclusions.length>100||
+    if(!Number.isSafeInteger(input.expectedRevision)||input.expectedRevision<0||!Array.isArray(input.conclusions)||input.conclusions.length>100||input.conclusions.some(c=>!object(c))||
        !Array.isArray(input.evidenceKeys)||input.evidenceKeys.length>500||!(input.actualFinalValue===null||typeof input.actualFinalValue==='number'&&Number.isFinite(input.actualFinalValue)))fail('invalid_cycle_review',400);
     const conclusions=input.conclusions.map(c=>({...classifyReviewConclusion(c),discarded:c.discarded===true,selected:c.selected===true&&c.discarded!==true}));
     if(new Set(conclusions.map(c=>c.id)).size!==conclusions.length)fail('duplicate_review_conclusion',400);
@@ -2216,6 +2227,7 @@ export class StrategyGoalsStore {
     const actualSourceRef = actualFinalValue === null
       ? (input.actualSourceRef?.trim() ? reqText(input.actualSourceRef, 500) : '待补实绩凭证')
       : reqText(input.actualSourceRef, 500);
+    const closingReport=input.closingReport?.trim()?reqText(input.closingReport,MAX_GOAL_ACTUAL_REPORT_CHARS):undefined;
     const conclusions = (input.conclusions ?? []).map(classifyReviewConclusion);
     if (new Set(conclusions.map(c => c.id)).size !== conclusions.length) fail('duplicate_review_conclusion', 400);
 
@@ -2265,6 +2277,7 @@ export class StrategyGoalsStore {
         },
         actualFinalValue,
         actualSourceRef,
+        ...(closingReport?{closingReport}:{}),
         varianceValue,
         outcomeSummary,
         preservedCheckIds: (index.progressChecks?.[id] ?? []).filter(c => periodPlans.some(plan => plan.planId === c.gsaPlanId && plan.planVersion === c.gsaPlanVersion)).map(c => c.checkId),
