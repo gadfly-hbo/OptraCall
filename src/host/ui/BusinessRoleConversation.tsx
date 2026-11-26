@@ -185,7 +185,7 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,open
       if(!fresh)throw Error('原建议已不可读。');
       onGoalDraft(fresh.draft,fresh.source);
     })}>带入目标表单 · {item.draft.title}</button>)}
-    {readOnly ? <p className="sg-muted">Case 已关闭，可阅读原对话。</p> : <>
+    {readOnly ? <p className="sg-muted">{owner.role==='case'?'Case 已关闭，可阅读原对话。':'当前版本只读，可阅读原对话。'}</p> : <>
       <form className="strategy-discussion-composer role-composer" onSubmit={event => {event.preventDefault(); void send();}}>
         <label className="role-question" htmlFor={inputId}>{prompt}</label>
         <textarea id={inputId} aria-label={'向'+title+'提问'} rows={3} value={text} disabled={Boolean(pending)}

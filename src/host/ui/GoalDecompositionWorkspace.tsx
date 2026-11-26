@@ -226,9 +226,10 @@ export function GoalDecompositionWorkspace({
   useEffect(()=>{try{sessionStorage.setItem('optracall.goal.stage:'+record.id,stage);}catch{}},[record.id,stage]);
   const [analysisDialogOpen,setAnalysisDialogOpen]=useState(false);
   const [analysisRunning,setAnalysisRunning]=useState(false);
-  const [analysisTurn,setAnalysisTurn]=useState<import('./BusinessRoleConversation.tsx').BusinessRoleRequest>();
+  const [analysisTurn,setAnalysisTurn]=useState<{kind:'actual'|'next-cycle';ownerId:string;request:import('./BusinessRoleConversation.tsx').BusinessRoleRequest}>();
   const [analysisRequest, setAnalysisRequest] = useState<{kind:'actual'|'next-cycle'; id:string} | null>(null);
   const [editingGsa, setEditingGsa] = useState(false);
+  const editingGsaRef=useRef(editingGsa);editingGsaRef.current=editingGsa;
   const [gsaRecovery,setGsaRecovery]=useState(()=>readPendingGsa(record.id));
   const [recoveredGsa,setRecoveredGsa]=useState<GsaPlanVersion|null>(null);
   const gsaAutoChecked=useRef<string|null>(null);
@@ -380,8 +381,10 @@ export function GoalDecompositionWorkspace({
       if(firstWorkspaceRead.current){firstWorkspaceRead.current=false;if(!ws.activeGsaPlan)setStage('plan');}
       if (ws.activeGsaPlan) {
         const editable=ws.gsaDraft?.goalVersion===goalVersion ? ws.gsaDraft : ws.activeGsaPlan;
-        setPlannedActions(editable.plannedActions.length ? structuredClone(editable.plannedActions) : [{ id: 'act-1', summary: '', checkpoint: '' }]);
-        setStageCheckpoints(structuredClone(editable.stageCheckpoints));
+        if(forceResetDraft||!editingGsaRef.current){
+          setPlannedActions(editable.plannedActions.length ? structuredClone(editable.plannedActions) : [{ id: 'act-1', summary: '', checkpoint: '' }]);
+          setStageCheckpoints(structuredClone(editable.stageCheckpoints));
+        }
         if (forceResetDraft || !draftDirtyRef.current) {
           const visibleGoal = ws.goal.versions.find(v => v.version === goalVersion);
           if (!visibleGoal) throw new Error('找不到所选目标准确版本。');
@@ -1000,7 +1003,7 @@ export function GoalDecompositionWorkspace({
     setAnalysisDialogOpen(true);
     if(analysisRunning&&analysisRequest?.kind==='actual'&&analysisRequest.id===actualId)return;
     setAnalysisRequest({kind:'actual',id:actualId});
-    setAnalysisTurn({id:crypto.randomUUID(),text:'请对照已明确选定的实绩与准确冻结计划核验指标、单位、范围、期间、数值及成熟度。报表没有手填截至日期时从原文提取数据截至日期与原句，缺失或冲突保持待核。用 goal-assess-actual 保存本次结果。'});
+    setAnalysisTurn({kind:'actual',ownerId:actualId,request:{id:crypto.randomUUID(),text:'请对照已明确选定的实绩与准确冻结计划核验指标、单位、范围、期间、数值及成熟度。报表没有手填截至日期时从原文提取数据截至日期与原句，缺失或冲突保持待核。用 goal-assess-actual 保存本次结果。'}});
   };
   // --- Stage 2: Follow-up Checks ---
   const handleSaveThreshold = async () => {
@@ -1191,6 +1194,7 @@ export function GoalDecompositionWorkspace({
         selectedConclusionIds: conclusionIds,
       });
       setAnalysisDialogOpen(true);setAnalysisRequest({kind: 'next-cycle', id: res.nextCycleDraft.draftId});
+      setAnalysisTurn({kind:'next-cycle',ownerId:res.nextCycleDraft.draftId,request:{id:crypto.randomUUID(),text:'请根据负责人选定的复盘结论、原证据和适用范围起草下一期目标草案。范围扩大仍保持待验证，不自动采用、发布或创建 Case。'}});
       setNotice(`已向 Agent 提供所选 ${conclusionIds.length} 条结论及原依据，等待起草下一期目标。`);
       await loadWorkspace();
     } catch (fault) {
@@ -1666,7 +1670,7 @@ export function GoalDecompositionWorkspace({
                   <h3>目标拆解 Agent</h3>
                   <p className="sg-muted">自动读写本目标拆解草稿与固定技能脚本；不会自行正式发布。</p>
                 </div>
-                <button type="button" className="text-button" disabled={mutationsLocked} onClick={() => setEditingGsa(true)}>
+                <button type="button" className="text-button" disabled={mutationsLocked||draftDirty||draftSaveState==='saving'} onClick={() => setEditingGsa(true)}>
                   调整总 GSA / 计划 A
                 </button>
               </div>
@@ -2433,12 +2437,12 @@ export function GoalDecompositionWorkspace({
 
       {stage === 'followup' && workspace?.submittedActuals?.map(actual => {
         const checked = workspace.checks.find(c => c.operationId === actual.actualId);
-        return <p key={actual.actualId}><button disabled={mutationsLocked} className="text-button" onClick={() => setAnalysisRequest({kind:'actual', id:actual.actualId})}>
+        return <p key={actual.actualId}><button className="text-button" onClick={() => {setAnalysisTurn(undefined);setAnalysisDialogOpen(true);setAnalysisRequest({kind:'actual', id:actual.actualId});}}>
           {actual.input.actualSource.label} · {checked ? '查看 Agent 核对' : '待 Agent 核对'}
         </button>{checked?.assessmentNote}</p>;
       })}
       {stage === 'review' && workspace?.nextCycleDrafts.map(draft => <p key={draft.draftId}>
-        <button disabled={mutationsLocked} className="text-button" onClick={() => setAnalysisRequest({kind:'next-cycle', id:draft.draftId})}>
+        <button className="text-button" onClick={() => {setAnalysisTurn(undefined);setAnalysisDialogOpen(true);setAnalysisRequest({kind:'next-cycle', id:draft.draftId});}}>
           {draft.nextPeriod} · 查看起草对话
         </button></p>)}
       {analysisOwner && <CaseDialog active={analysisDialogOpen} title={selectedActual ? 'Agent 核对实绩' : 'Agent 起草下一期目标'} busy={false}
@@ -2447,10 +2451,8 @@ export function GoalDecompositionWorkspace({
           <p>{selectedActual.input.actualSource.ref} · 截至 {selectedActual.input.actualSource.cutoffAt||'待 Agent 从原文核对'}</p>
           {selectedActual.input.actualSource.reportText && <pre>{selectedActual.input.actualSource.reportText}</pre>}
         </details>}
-        <BusinessRoleConversation owner={analysisOwner} onRunning={setAnalysisRunning} request={selectedActual?analysisTurn:undefined} readOnly={mutationsLocked} showInlineTitle={false}
-          openingPrompt={selectedActual ? undefined :
-            '请按负责人选定的复盘结论、原证据和适用范围，用 propose-goal 起草下一期可编辑目标。保留尚待验证的假设。'}
-          onSettled={() => void loadWorkspace(true)} onGoalDraft={selectedCycle ? onGoalDraftSuggestion : undefined} />
+        <BusinessRoleConversation owner={analysisOwner} onRunning={setAnalysisRunning} request={analysisRequest&&analysisTurn?.kind===analysisRequest.kind&&analysisTurn.ownerId===analysisRequest.id?analysisTurn.request:undefined} readOnly={mutationsLocked} showInlineTitle={false}
+          onSettled={() => void loadWorkspace()} onGoalDraft={selectedCycle ? onGoalDraftSuggestion : undefined} />
       </CaseDialog>}
 
       {/* Read-Only Publish Preview Modal (GM06 / UI03) */}

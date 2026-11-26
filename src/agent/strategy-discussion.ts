@@ -235,11 +235,11 @@ export const goalDecompositionTool = {
 export const goalPlanTool = {
   name: 'strategy_goals', label: '计划 A 建议',
   description: '按当前准确 G/S 和本行原文提供可编辑计划。推荐补空项，优化保留全部数值、期限、范围、否定及证据限制。观察依据没有可用来源时留空。仅建议，无采用或发布权限。',
-  parameters: Type.Object({action:Type.Literal('goal-propose-plan'),summary:Type.String({maxLength:4000}),checkpoint:Type.String({maxLength:2000}),observationBasis:Type.String({maxLength:2000}),note:Type.Optional(Type.String({maxLength:1000}))}, exact),
+  parameters: Type.Object({action:Type.Literal('goal-propose-plan'),summary:Type.String({maxLength:2000}),checkpoint:Type.String({maxLength:300}),observationBasis:Type.String({maxLength:1000}),note:Type.Optional(Type.String({maxLength:1000}))}, exact),
 };
 
 export const goalReviewTool = {
   name:'strategy_goals', label:'复盘结论草拟',
   description:'goal-read-context 读取本期正式 GSA、阶段检查、结账凭证及相关 Case，goal-propose-review 返回带原证据与原范围的可编辑结论。sourceRef 只引用提供的证据身份，因果未知或扩范围标待验证。',
-  parameters:Type.Object({action:Type.Union([Type.Literal('goal-read-context'),Type.Literal('goal-propose-review')]),conclusions:Type.Optional(Type.Array(Type.Object({sourceRef:nonblank(500),title:nonblank(300),summary:nonblank(4000),originalScope:nonblank(500),applicableScope:nonblank(500),evidenceMature:Type.Boolean(),causalVerified:Type.Boolean(),targetScopeSameAsOriginal:Type.Boolean()},exact),{maxItems:30}))},exact),
+  parameters:Type.Object({action:Type.Union([Type.Literal('goal-read-context'),Type.Literal('goal-propose-review')]),conclusions:Type.Optional(Type.Array(Type.Object({sourceRef:nonblank(500),title:nonblank(300),summary:nonblank(2000),originalScope:nonblank(500),applicableScope:nonblank(500),evidenceMature:Type.Boolean(),causalVerified:Type.Boolean(),targetScopeSameAsOriginal:Type.Boolean()},exact),{maxItems:30}))},exact),
 };

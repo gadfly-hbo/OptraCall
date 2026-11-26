@@ -641,7 +641,7 @@ export function createStrategyDiscussionHost(options:{readDecompositionWorkspace
      const request = o.pendingInput?.requestId === context.requestId ? o.pendingInput.planRequest : undefined;
      if (!request) fail('goal_plan_request_required',409);
      return payload({claim:'editable-plan-suggestion',requestId:context.requestId,rowId:request.row.id,
-      plan:{id:request.row.id,summary:assistanceText(input.summary,4000,true),checkpoint:assistanceText(input.checkpoint,2000,true),observationBasis:assistanceText(input.observationBasis,2000,true)},
+      plan:{id:request.row.id,summary:assistanceText(input.summary,2000,true),checkpoint:assistanceText(input.checkpoint,300,true),observationBasis:assistanceText(input.observationBasis,1000,true)},
       ...(input.note === undefined ? {} : {note:assistanceText(input.note,1000,true)})});
     }
     if (owner.analysisVariant === 'goal-review') {
@@ -664,7 +664,7 @@ export function createStrategyDiscussionHost(options:{readDecompositionWorkspace
       const check=checks.find(c=>c.checkId===sourceRef||c.actualSource.ref===sourceRef);
       const originalScope=check?.actualSource.basis?.scope??assistanceText(item.originalScope,500);
       if(!originalScope)fail('goal_review_evidence_unavailable',403);
-      return {id:`${context.requestId}:${index}`,sourceRef,title:assistanceText(item.title,300),summary:assistanceText(item.summary,4000),
+      return {id:`${context.requestId}:${index}`,sourceRef,title:assistanceText(item.title,300),summary:assistanceText(item.summary,2000),
        originalScope,applicableScope:assistanceText(item.applicableScope,500),
        evidenceMature:item.evidenceMature===true,causalVerified:item.causalVerified===true,targetScopeSameAsOriginal:item.targetScopeSameAsOriginal===true&&item.applicableScope===originalScope};
      });

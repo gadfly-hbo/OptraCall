@@ -214,7 +214,7 @@ try {
   console.log('PASS delayed previous-goal response cannot replace the visible version and source');
 
   await choose(normal);
-  const followup = () => page.getByRole('button',{name:/阶段跟进/}).click();
+  const followup = () => page.getByRole('navigation',{name:'目标管理三阶段流程'}).getByRole('button',{name:/阶段跟进/}).click();
   await followup();
   const actual = page.getByLabel('实绩报表原文', {exact:true});
   const reportText = '门店周报 r2\n实绩 88 万元，部分门店尚未结账。';
@@ -285,7 +285,7 @@ try {
     body:JSON.stringify({expectedGoalVersion:1,configured:true,magnitudePct:19})});
   assert.equal(stale.status,409,'a stale v1 form must not update the v2 threshold');
   assert.deepEqual((await api(normal.route+'/workspace?goalVersion=2')).threshold,revisedWorkspace.threshold);
-  await page.getByRole('button',{name:/到期复盘/}).click();
+  await page.getByRole('navigation',{name:'目标管理三阶段流程'}).getByRole('button',{name:/到期复盘/}).click();
   assert.ok(await btn('保存到期复盘记录').isDisabled());
   console.log('PASS exact v2 GSA confirmation and v1 historical read-only target');
   assert.deepEqual(errors,[]);

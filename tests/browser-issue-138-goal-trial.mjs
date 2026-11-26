@@ -726,7 +726,17 @@ try {
   results.push(
     "F12 edits, discard and selection retained, new checks merged, selected final wording handed on",
   );
+  const nextOwner={role:'goal-draft',draftId:next.nextCycleDrafts[0].draftId,scope:next.nextCycleDrafts[0].targetScope,nextCycleSourceGoalId:candidate.goal.goalId};
+  const nextRoute='/api/business-role?owner='+encodeURIComponent(JSON.stringify(nextOwner));
+  const completedNext=await waitFor(()=>api(nextRoute),value=>value.discussion?.lastRun?.status==='completed','explicit next-cycle drafting should settle');
   await page.keyboard.press("Escape");
+  await page.getByRole('button',{name:/查看起草对话$/}).click();
+  await page.getByRole('dialog',{name:'Agent 起草下一期目标'}).waitFor();
+  const inspectedNext=await api(nextRoute);
+  assert.equal(inspectedNext.discussion.lastRun.id,completedNext.discussion.lastRun.id);
+  assert.equal(inspectedNext.discussion.revision,completedNext.discussion.revision);
+  await page.keyboard.press('Escape');
+  results.push('F12 reopening the saved drafting conversation is readonly and starts no new run');
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({
     path: path.join(evidence, "review-mobile.png"),
