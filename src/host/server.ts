@@ -1203,7 +1203,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     });
   }
   let strategyMapImports: ReturnType<typeof createStrategyMapImportService> | undefined;
-  async function readDecompositionWorkspace(goalId: string, version: number, cfg?: Readonly<RuntimeModelConfiguration>) {
+  async function readDecompositionWorkspace(goalId: string, version: number|undefined, cfg?: Readonly<RuntimeModelConfiguration>) {
     const ws = strategyGoals.getGoalWorkspace(goalId, version);
     const access = createGoalDecompositionAccess({
       store: strategyGoals,
@@ -1417,7 +1417,11 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         const review = ws.reviews.find(r => r.reviewId === handoff?.sourceReviewId);
         if (!handoff || !review || discussionHash(handoff.targetScope) !== discussionHash(owner.scope)) throw new StrategyDiscussionFault('next_cycle_source_unavailable', 403);
         await validateStrategyGoal(strategyGoals.read(review.lastEffectiveFormalTarget.goalRef), undefined, cfg);
-        return {scope:owner.scope, nextCycle:handoff, sourcePeriod:review.period, reviewedGoal:review.lastEffectiveFormalTarget};
+        const selectedRefs=new Set(handoff.selectedConclusions.map(c=>c.sourceRef));
+        const evidenceChecks=ws.checks.filter(c=>review.preservedCheckIds.includes(c.checkId)&&(selectedRefs.has(c.checkId)||selectedRefs.has(c.actualSource.ref)));
+        const closingEvidence=review.closingReport&&selectedRefs.has(review.actualSourceRef)?{ref:review.actualSourceRef,period:review.period,text:review.closingReport}:undefined;
+        return {scope:owner.scope,nextCycle:handoff,sourcePeriod:review.period,reviewedGoal:review.lastEffectiveFormalTarget,
+          sourceEvidence:{checks:evidenceChecks,...(closingEvidence?{closing:closingEvidence}:{}),references:[...selectedRefs].filter(ref=>!evidenceChecks.some(c=>c.checkId===ref||c.actualSource.ref===ref)&&ref!==closingEvidence?.ref)}};
       }
       if (owner.goalRef) {
         const {goal, saved} = strategyGoals.estimateOwnerContext(owner.draftId, owner.scope, owner.goalRef, writing);
@@ -1483,6 +1487,35 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     }
     const goal=strategyGoals.read({goalId:owner.goalId,version:owner.version});
     const upstream = await qualifiedRoleGoalSources(goal, cfg, localRead);
+    if(owner.role==='goal'&&owner.analysisVariant==='goal-review') {
+      const ws=await readDecompositionWorkspace(owner.goalId,undefined,cfg);
+      const rights:string[]=[];
+      for(const plan of ws.gsaPlans){
+        await validateStrategyGoal(strategyGoals.read(plan.goal),undefined,cfg);
+        rights.push(`review-plan/${plan.planId}/${plan.planVersion}/${plan.contentSha256}`);
+      }
+      const caseIds=new Set<string>();
+      for(const plan of ws.gsaPlans)for(const strategy of plan.strategies){
+        const caseId=cases.caseForGoalStrategy(plan.goal,strategy);if(caseId)caseIds.add(caseId);
+      }
+      for(const check of ws.checks){
+        rights.push(`review-check/${check.checkId}/${check.publicationId}`);
+        if(check.caseChoice?.kind==='continue-existing')caseIds.add(check.caseChoice.caseId);
+      }
+      const relatedCases=[];
+      for(const caseId of caseIds){
+        const binding=cases.getGoalBinding(caseId);
+        if(binding?.primary.goalId!==owner.goalId)continue;
+        await validateStrategyGoal(strategyGoals.read(binding.primary),undefined,cfg);
+        const issues=[];
+        for(const issue of cases.listDecisionIssues(caseId)){
+          const material=await caseDecisions.issueModelContext(caseId,issue.id,qualifyIssueReply({caseId,issueId:issue.id},cfg));
+          issues.push(material);rights.push(...material.sourceRights);
+        }
+        relatedCases.push({case:cases.getCase(caseId),binding,issues});rights.push(`review-case/${caseId}`);
+      }
+      return {goal,upstream,reviewContext:{gsaPlans:ws.gsaPlans,checks:ws.checks,cases:relatedCases},sourceRights:rights};
+    }
     if(owner.teachReview) {
       const ref=owner.teachReview;
       const deny=():never=>{throw new StrategyDiscussionFault('teach_review_source_unavailable',403);};

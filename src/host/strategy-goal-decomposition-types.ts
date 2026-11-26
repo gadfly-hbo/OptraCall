@@ -286,6 +286,7 @@ export interface DecompositionDraft {
 }
 
 export interface DecompositionDraftInput {
+  reviewedPreviousPlanVersion?:number;
   operationId?: string;
   gsaPlanId: string;
   gsaPlanVersion: number;
@@ -572,6 +573,7 @@ export interface DecompositionProgressCheck {
     ref: string;
     label: string;
     cutoffAt: string;
+    cutoffQuote?:string;
     coverageNote?: string;
     reportText?: string;
     basis?: ProgressEvidenceBasis;
@@ -607,6 +609,7 @@ export interface DecompositionProgressCheckInput {
     ref: string;
     label: string;
     cutoffAt: string;
+    cutoffQuote?:string;
     coverageNote?: string;
     reportText?: string;
     basis?: ProgressEvidenceBasis;
@@ -625,6 +628,7 @@ export interface SubmittedGoalActual {
   goalVersion: number;
   input: GoalActualInput;
   submittedAt: string;
+  assessment?:{status:'needs-cutoff';note:string};
 }
 
 export interface DecompositionCaseDraftIntent {
@@ -706,6 +710,7 @@ export interface DecompositionProjectHandoffInput {
 }
 
 export interface CycleReviewConclusion {
+  originalScope?:string;
   id: string;
   title: string;
   summary: string;
@@ -726,6 +731,7 @@ export interface DecompositionCycleReview {
   lastEffectiveFormalTarget: { goalRef: GoalRef; gsaPlanVersion?: number; value: number; unit: string };
   actualFinalValue: number | null;
   actualSourceRef: string;
+  closingReport?:string;
   varianceValue: number | null;
   outcomeSummary: string;
   preservedCheckIds: string[];
@@ -733,17 +739,28 @@ export interface DecompositionCycleReview {
   recordedAt: string;
 }
 
+export interface GoalReviewDraft {
+  period:string;
+  revision:number;
+  actualFinalValue:number|null;
+  actualSourceRef:string;
+  closingReport?:string;
+  evidenceKeys:string[];
+  conclusions:(CycleReviewConclusion & {discarded:boolean;selected:boolean})[];
+}
 export interface DecompositionCycleReviewInput {
   operationId: string;
   period: string;
   actualFinalValue: number | null;
   actualSourceRef: string;
+  closingReport?:string;
   conclusions: {
     id: string;
     title: string;
     summary: string;
     sourceRef: string;
     applicableScope: string;
+    originalScope?:string;
     evidenceMature: boolean;
     causalVerified: boolean;
     targetScopeSameAsOriginal?: boolean;

@@ -229,7 +229,15 @@ export function createStrategyGoalRoutes(options: {
       }) };
     }
 
-    const goalAction = /^\/api\/strategy\/goals\/([a-f0-9-]+)\/(workspace|reconcile-formal|gsa-plan\/confirm|gsa-plan\/draft|gsa-plans|decomposition\/draft|decomposition\/align|decomposition\/publish-preview|decomposition\/publish|decomposition\/publications|decomposition\/threshold|decomposition\/actuals|decomposition\/checks|decomposition\/handoffs\/preview|decomposition\/handoffs|case-draft-intents|cycle-reviews|next-cycle-draft|return-to-strategy)$/.exec(pathname);
+    const gsaOperation=/^\/api\/strategy\/goals\/([a-f0-9-]+)\/gsa-plan\/operations\/([a-f0-9-]+)$/.exec(pathname);
+    if(gsaOperation&&method==='GET'){
+      await checkGoalCurrentAccess(gsaOperation[1]!);
+      const result=store.readGsaConfirmation(gsaOperation[1]!,gsaOperation[2]!);
+      if(result.found)await options.validateGoal?.(result.goal);
+      return {body:result};
+    }
+
+    const goalAction = /^\/api\/strategy\/goals\/([a-f0-9-]+)\/(workspace|reconcile-formal|gsa-plan\/confirm|gsa-plan\/draft|gsa-plans|decomposition\/draft|decomposition\/align|decomposition\/publish-preview|decomposition\/publish|decomposition\/publications|decomposition\/threshold|decomposition\/actuals|decomposition\/checks|decomposition\/handoffs\/preview|decomposition\/handoffs|case-draft-intents|cycle-reviews|review-draft|next-cycle-draft|return-to-strategy)$/.exec(pathname);
     if (goalAction) {
       const goalId = goalAction[1]!;
       const sub = goalAction[2]!;
@@ -507,6 +515,20 @@ export function createStrategyGoalRoutes(options: {
         };
       }
 
+      if(sub==='review-draft'&&(method==='GET'||method==='POST')) {
+        const read=async()=>{
+          await checkGoalCurrentAccess(goalId);
+          const ws=store.getGoalWorkspace(goalId);
+          const selectedPeriod=method==='GET'?searchParams?.get('period'):input.period;
+          const existing=typeof selectedPeriod==='string'?store.readReviewDraft(goalId,selectedPeriod):null;
+          const evidenceChecks=ws.checks.filter(c=>existing?.conclusions.some(row=>row.sourceRef===c.checkId||row.sourceRef===c.actualSource.ref));
+          await validateReviewEvidence(goalId,evidenceChecks.map(c=>c.checkId));
+          for(const plan of ws.gsaPlans.filter(p=>p.formalTarget.period===selectedPeriod))await options.validateGoal?.(store.read(plan.goal));
+          await authorizeWorkspace(goalId,ws);
+          return {draft:method==='GET'?store.readReviewDraft(goalId,searchParams?.get('period')??''):store.saveReviewDraft(goalId,input as unknown as import('./strategy-goal-decomposition-types.ts').GoalReviewDraft & {expectedRevision:number})};
+        };
+        return {body:method==='GET'?await read():await write(read)};
+      }
       if (sub === 'cycle-reviews' && method === 'POST') {
         return {
           status: 201,

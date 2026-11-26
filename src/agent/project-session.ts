@@ -2,7 +2,7 @@ import { taskSourceDeliveryType, taskSourceDeliveryDetails, tracksTaskSource } f
 import { packageIdentity } from './skill-catalog.ts';
 import { taskPurpose, approvedTaskSkills } from '../host/task-assignment.ts';
 import {goalContextSourceTool} from './goal-context-source.ts';
-import { strategyDiscussionTool, projectDiscussionSourceTool, editableGoalTool, goalEstimateTool, goalDecompositionTool, explainGoalProposalError, STRATEGY_DISCUSSION_ACTIONS } from './strategy-discussion.ts';
+import { strategyDiscussionTool, projectDiscussionSourceTool, editableGoalTool, goalEstimateTool, goalDecompositionTool, goalPlanTool, goalReviewTool, explainGoalProposalError, STRATEGY_DISCUSSION_ACTIONS } from './strategy-discussion.ts';
 import { methodIssueTool } from './method-issue.ts';
 import { quotedDecisionTool } from './quoted-decisions.ts';
 import type { AnalysisDeliveryReceipt } from '../host/analysis-delivery.ts';
@@ -792,8 +792,12 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
           ? editableGoalTool
           : variant === 'goal-estimate'
             ? goalEstimateTool
-            : variant === 'goal-decomposition'
-              ? goalDecompositionTool
+            : variant === 'goal-plan'
+              ? goalPlanTool
+              : variant === 'goal-review'
+                ? goalReviewTool
+                : variant === 'goal-decomposition'
+                  ? goalDecompositionTool
               : strategyDiscussionTool;
       return [{
         ...baseTool,

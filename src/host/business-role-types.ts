@@ -5,8 +5,8 @@ export type TeachReviewRef = { caseId:string; issueId:string; choiceId:string; r
 export type TeachReviewOwner = {role:'goal'|'strategy';goalId:string;version:number;teachReview:TeachReviewRef};
 export type BusinessRoleOwner =
   | {role:'strategy'; goalId:string; version:number; teachReview:TeachReviewRef}
-  | {role: 'goal'; teachReview?:TeachReviewRef; caseSource?:CaseCreationSource; goalId: string; version: number; actualId?:string; analysisVariant?: 'goal-decomposition'}
-  | {role: 'goal-draft'; goalRef?: GoalRef; caseSource?:CaseCreationSource; draftId: string; scope: GoalScope; nextCycleSourceGoalId?:string; strategyChoice?: {discussionId:string;version:number}; analysisVariant?: 'goal-estimate'}
+  | {role: 'goal'; teachReview?:TeachReviewRef; caseSource?:CaseCreationSource; goalId: string; version: number; actualId?:string; analysisVariant?: 'goal-decomposition' | 'goal-plan' | 'goal-review'}
+  | {role: 'goal-draft'; goalRef?: GoalRef; caseSource?:CaseCreationSource; draftId: string; scope: GoalScope; nextCycleSourceGoalId?:string; strategyChoice?: {discussionId:string;version:number}; analysisVariant?: 'goal-estimate' | 'goal-plan'}
   | {role: 'case'; caseId: string; itemId: string}
   | {role: 'project'; projectId: string; issue?: { caseId: string; issueId: string }};
 
@@ -26,8 +26,12 @@ const responsibilities = {
   case: '围绕当前 Case 的这个独立决策事项，联系其 G 与具体策略、准确方案版本、先前取舍、缺证、已授权行动、实际反馈。比较约束、代价、替代解释及改判条件。同一事项追加新判断，缺少实际保留待反馈。责任人的取舍、授权和实际行动分别留据。需要复盘时建议用户从原项目创建 Teach Task。',
   project: '本项目即使尚无 Task，也可与用户讨论工作委托、可交付成果和需要协作的资料。可建议用户打开需求、分析、计划、决策、执行或反馈 Task 表单。项目共用约定按需沿已确认版；只有用户明确创建或确认才表示保存。按需查获准的准确文件、原生回复及原引用，说明哪些成果实际读到。经营取舍类综合说清先解决什么、约束与因果假设、依据及什么证据会改判，再回原 Case 事项交由负责人决定。',
 };
-export function businessRoleSystemPrompt(role: keyof typeof businessRoleNames, analysisVariant?: 'goal-estimate' | 'goal-decomposition'): string[] {
-  const analysisExtra = analysisVariant === 'goal-estimate'
+export function businessRoleSystemPrompt(role: keyof typeof businessRoleNames, analysisVariant?: 'goal-estimate' | 'goal-plan' | 'goal-decomposition' | 'goal-review'): string[] {
+  const analysisExtra = analysisVariant === 'goal-plan'
+    ? ['当前仅协助填写计划 A。根据当前准确 G/S、期间、责任范围及 planRequest 原文字段，自主组织行动、阶段检查点、观察依据，用 goal-propose-plan 返回本行三项建议。推荐只补空项，优化保留用户数额、单位、期限、范围、先后关系、否定与禁用资料。无可用凭证时 observationBasis 留空并解释待补项，不声称已核实。不得采用、发布、派人或授权。']
+    : analysisVariant === 'goal-review'
+      ? ['当前为到期复盘草拟。用 goal-read-context 核对本期最后生效的正式 GSA、已选结账材料、阶段检查及相关 Case。自主起草带 sourceRef、originalScope、applicableScope、证据成熟度和待验证点的结论，用 goal-propose-review 返回候选。保留历史检查原口径，初始承诺只作备忘。未知因果不标已验证，扩范围为待验证假设。草拟不创建 Case、不授权、不发布。']
+      : analysisVariant === 'goal-estimate'
     ? ['当前为确认前总目标可达测算变体：可自主选择已核定技能（goal-read-skill / goal-run-script）完成情景测算，并通过 goal-save-estimate 保存确认前测算草稿。不得提前采用或发布正式目标。TargetForecast 仅适用于净支付 GMV、月份与情景推演，不强加到全部目标。']
     : analysisVariant === 'goal-decomposition'
       ? ['当前为已确认总 GSA 下的目标拆解变体：先核对当前准确 GSA 计划版（goal-read-context），按经营实际自主选择分析方法与已核定技能（goal-read-skill / goal-run-script），形成分别保留正式值／测算值／差额、不重复相加的多视图贡献分配、明确用途与责任人的预留、不重叠补缺策略与时间计划，通过 goal-save-decomposition-draft 保存草稿。同口径交叉冲突须如实呈现双方数值与原依据，由双方负责人协商确认后再重汇总，不得擅自裁决或用预留冲抵。拆解工具只保存草稿，正式发布、采用与行动授权由负责人完成。']

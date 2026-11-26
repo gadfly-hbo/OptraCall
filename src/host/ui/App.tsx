@@ -159,13 +159,18 @@ function writeRejectedSend(projectId: string, taskId: string, record: RejectedSe
 export function App() {
   const [dbConnectionsOpen, setDbConnectionsOpen] = useState(false), [dbConnectionsProjectId, setDbConnectionsProjectId] = useState<string>();
   const [projects, setProjects] = useState<ClientProject[]>([]), [activeId, setActiveId] = useState<string>(), [activeTaskId, setActiveTaskId] = useState<string>(), [ui, setUI] = useState<Record<string, TaskUI>>({});
-  const [view, setViewState] = useState<AppView>(() => new URL(window.location.href).searchParams.has('studio') ? 'studio' : new URL(window.location.href).searchParams.has('project') ? 'chat' : 'cases');
+  const [view, setViewState] = useState<AppView>(() => new URL(window.location.href).searchParams.has('management')?'goals':new URL(window.location.href).searchParams.has('studio') ? 'studio' : new URL(window.location.href).searchParams.has('project') ? 'chat' : 'cases');
   const inSettings = ['settings', 'personal-materials', 'web-search-settings', 'automatic-action-settings', 'skill-settings', 'connection-settings', 'capability-plans', 'usage-context-settings', 'model-pack-settings'].includes(view);
   const [capabilityMounted, setCapabilityMounted] = useState<CapabilityView[]>([]);
   const capabilityReturn = useRef<Partial<Record<CapabilityView, { view: AppView; projectId?: string; taskId?: string; url: string }>>>({});
   const lastWorkspace = useRef<'chat' | 'decision' | 'cases' | 'projects' | 'studio' | 'goals'>('cases'), settingsReturnView = useRef<Exclude<AppView, SettingsView>>('chat');
-  const [goalMounted, setGoalMounted] = useState(false);
-  const [management,setManagement] = useState<ManagementRoute>({area:'strategy',stage:'co-create'});
+  const [goalMounted, setGoalMounted] = useState(()=>new URL(window.location.href).searchParams.has('management'));
+  const [management,setManagement] = useState<ManagementRoute>(()=>new URL(window.location.href).searchParams.get('management')==='gsa'?{area:'gsa',stage:'goals'}:{area:'strategy',stage:'co-create'});
+  useEffect(()=>{
+    const url=new URL(window.location.href);
+    if(view==='goals')url.searchParams.set('management',management.area);else url.searchParams.delete('management');
+    window.history.replaceState(null,'',url);
+  },[view,management.area]);
   const [planProjectId, setPlanProjectId] = useState<string>(), [mountedPlans, setMountedPlans] = useState<string[]>([]);
   const [taskIntent, setTaskIntent] = useState<TaskCreateIntent>();
   const openProjectPlan = (project: ClientProject) => { setPlanProjectId(project.id); setMountedPlans(previous => previous.includes(project.id) ? previous : [...previous, project.id]); setHelpOpen(false); setView('project-plan'); if (window.innerWidth <= 760) setSidebarOpen(false); };
