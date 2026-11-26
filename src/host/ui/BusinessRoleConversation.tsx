@@ -110,6 +110,30 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,open
     },controller.signal,base+'&action=events').catch(f=>{if(!controller.signal.aborted)onError(f);});
     return ()=>controller.abort();
   },[id,base,load]);
+  // Runtime settlement may precede the business owner's persisted receipt.
+  // Re-read that exact external request for a bounded window; never replay it.
+  const receiptReads=useRef({requestId:'',attempts:0});
+  useEffect(()=>{
+    const originalId=pending?.requestId;
+    const terminal=view?.discussion?.lastRun;
+    if(!originalId||!view||busy||view.busy||sessionStorage.getItem(storage+'.keep.'+originalId)!=='1'||
+       terminal?.id===originalId&&['failed','cancelled'].includes(terminal.status))return;
+    if(receiptReads.current.requestId!==originalId)receiptReads.current={requestId:originalId,attempts:0};
+    const budget=receiptReads.current;
+    const controller=new AbortController();
+    let timer:ReturnType<typeof setTimeout>|undefined;
+    const schedule=()=>{
+      if(controller.signal.aborted||pendingRef.current?.requestId!==originalId||budget.attempts>=8)return;
+      timer=setTimeout(()=>{
+        budget.attempts++;
+        void load(controller.signal).then(next=>{
+          if(!controller.signal.aborted&&pendingRef.current?.requestId===originalId&&!next?.busy)schedule();
+        }).catch(f=>{if(!controller.signal.aborted)onError(f);});
+      },Math.min(250*2**budget.attempts,2000));
+    };
+    schedule();
+    return ()=>{controller.abort();if(timer)clearTimeout(timer);};
+  },[pending?.requestId,view?.busy,view?.discussion?.lastRun?.id,view?.discussion?.lastRun?.status,busy,load,storage]);
   async function send(){
     if(readOnly||busy||!text.trim()||!view||pendingRef.current)return;
     const input={requestId:crypto.randomUUID(),text:text.trim(),expectedRevision:view.discussion?.revision??0,...(retryOf?{replacePendingRequestId:retryOf}:{})};

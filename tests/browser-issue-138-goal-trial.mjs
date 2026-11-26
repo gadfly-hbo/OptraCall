@@ -666,6 +666,32 @@ try {
     comparability: "comparable",
     actualPeriods: [{ periodId: "W2", actualValue: 29 }],
   });
+  const reviewOwner={role:'goal',goalId:candidate.goal.goalId,version:candidate.goal.version,analysisVariant:'goal-review'};
+  const reviewRoute='/api/business-role?owner='+encodeURIComponent(JSON.stringify(reviewOwner));
+  const firstReviewRun=(await api(reviewRoute)).discussion.lastRun.id;
+  let delayedReviewRun, delayedReviewReads=0, reviewReleaseAt=0;
+  const reviewMessages=[];
+  const observeReviewMessage=request=>{
+    const url=new URL(request.url());
+    if(url.pathname==='/api/business-role'&&url.searchParams.get('action')==='messages'&&
+       url.searchParams.get('owner')===JSON.stringify(reviewOwner))reviewMessages.push(request.postDataJSON());
+  };
+  page.on('request',observeReviewMessage);
+  await page.route('**/api/business-role?**',async route=>{
+    const url=new URL(route.request().url());
+    if(route.request().method()!=='GET'||url.searchParams.has('action')||url.searchParams.get('owner')!==JSON.stringify(reviewOwner))return route.continue();
+    const response=await route.fetch();
+    const detail=await response.json();
+    if(!detail.busy&&detail.discussion?.lastRun?.id!==firstReviewRun&&detail.discussion?.lastRun?.status==='completed'){
+      delayedReviewRun=detail.discussion.lastRun.id;
+      reviewReleaseAt||=Date.now()+1200;
+      if(Date.now()<reviewReleaseAt){
+        delayedReviewReads++;
+        return route.fulfill({response,json:{...detail,discussion:{...detail.discussion,lastRun:{...detail.discussion.lastRun,status:'unknown'}}}});
+      }
+    }
+    return route.fulfill({response,json:detail});
+  });
   await page
     .getByRole("navigation", { name: "目标管理三阶段流程" })
     .getByRole("button", { name: /到期复盘/ })
@@ -675,6 +701,13 @@ try {
     (count) => count === 2,
     "new check should be added automatically on return",
   );
+  assert.ok(delayedReviewReads>0,'the completed run must first be observed before its business receipt is projected');
+  assert.equal(reviewMessages.length,1,'receipt recovery must not send another model request');
+  assert.equal(reviewMessages[0].requestId,delayedReviewRun);
+  assert.equal((await api(reviewRoute)).discussion.lastRun.id,delayedReviewRun);
+  page.off('request',observeReviewMessage);
+  await page.unroute('**/api/business-role?**');
+  results.push('F12 delayed terminal receipt recovered by readonly original-request reads without another model run');
   assert.equal(
     await page
       .getByRole("textbox", { name: "结论摘要", exact: true })

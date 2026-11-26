@@ -327,6 +327,8 @@ UI04 的“执行承接”同时提供旧真实记录回看与按新正式表承
 
 总 GSA 确认以浏览器保存的原编号及原内容承接失答，Host 提供准确原回执的只读查询。明确重试沿用同一意图，已有回执优先返回原版本。拆解保存保留原编辑基线，CAS 冲突后继续保留本地稿并允许负责人明确交 Agent 合并。复盘保存冲突展示双方内容，负责人可保留本地取舍并合入远端新增结论。已保存的原提交、正式复盘结账原文和阶段检查保持各自来源，下一期只带选中结论对应的原证据。
 
+模型完成事件早于业务回执时，界面仅对当前 owner 的原请求有限次数只读回读，不重新发送模型请求。仍未知时保留原输入和待核状态，切换归属或取消后停止该观察，不推断完成。
+
 本次确认材料仅修改 `openspec/changes/goal-management-decomposition/`，讨论稿保持原确认内容。
 
 后续实施的拟定范围为 `src/host/strategy-goals-*`、相关 `business-role-*`／`strategy-discussion-host.ts`／`management-documents.ts`、目标与战略发布 UI／client、准确引用消费者 `project-plan-*` 与 Case 适配器、`src/agent/project-session.ts`／`src/agent/strategy-discussion.ts` 工具 schema 和必要自有薄适配、`src/host/server.ts` 最小接线、受影响测试和本目录记录。GM01 仅纳入必需的 `strategy-initiative-types.ts`／`strategy-initiative-publications.ts` 候选及发布 Host 契约，为正式值提供明确结构或确认后的准确值引用，不从既有 `goals:string[]` 猜值。公共会话改动仅在真实缺口确认后最小补齐，并回归全部消费者。不得借路径清单授权无关重构。
