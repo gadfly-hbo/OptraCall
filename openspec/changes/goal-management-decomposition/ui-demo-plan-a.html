@@ -124,6 +124,9 @@
     .plan-advice-row{margin:2px 0 8px}.plan-advice-add-actions{display:flex;gap:7px;flex-wrap:wrap}
     @media(max-width:600px){.plan-advice-inline{align-items:flex-start}.plan-advice-inline small{flex-basis:100%}}
 
+    .plan-polish-btn{color:var(--accent);border-color:var(--accent-soft);background:var(--accent-wash)}
+    .gsa-editor-row .plan-polish-btn,.gsa-editor-row .plan-undo-btn{margin:2px 0 8px 4px}
+    .plan-polish-issue{display:block;flex-basis:100%;color:var(--ink);font-size:12px}.plan-polish-btn[hidden],.plan-undo-btn[hidden],.plan-polish-issue[hidden]{display:none}
   </style>
 </head>
 <body>
@@ -358,9 +361,9 @@
     return clone(state.ui.gsaInitialActions||defaultGsaActions());
   }
   function gsaDraftIssues(){
-    return gsaDraftActions().flatMap((row,i)=>gsaColumns.filter(f=>!row[f.key].trim()).map(f=>{
+    return gsaDraftActions().flatMap((row,i)=>gsaColumns.filter(f=>!row[f.key].trim()||(f.key==='basis'&&currentPolishIssue(row,null))).map(f=>{
       const inline=entryCandidate() && i===0;
-      return {id:inline?'entry-'+f.key:'gsa-'+f.key+'-'+(i+1),inEditor:!inline,label:(inline?'':'第 '+(i+1)+' 项 · ')+f.label};
+      return {id:inline?'entry-'+f.key:'gsa-'+f.key+'-'+(i+1),inEditor:!inline,label:(inline?'':'第 '+(i+1)+' 项 · ')+f.label+(f.key==='basis'&&currentPolishIssue(row,null)?'（需补允许使用的依据）':'')};
     }));
   }
   function makeGsaPlan(version,actions,reason,changes,confirmedAt){
@@ -407,10 +410,12 @@
       ${plan.changes.length?`<h3 class="aux-section-title">相对 v${version-1} 的差异</h3><ul class="gsa-changes">${plan.changes.map(text=>`<li>${esc(text)}</li>`).join('')}</ul>`:''}</div>`;
   }
   function openGsaEditor(issue){
+    editorPolishUndo.clear();
     if(!isSales()||gsaLocked())return;
     const base=gsaVersion(),saved=state.ui.gsaRevisionDraft;
     const draft=base && saved?.base===base?saved:null;
     editingGsa={base,actions:clone(draft?.actions||gsaPlan(base)?.actions||gsaDraftActions()),reason:draft?.reason||''};
+    editorPolishIssues=clone(base?(draft?.polishIssues||{}):(state.ui.polishIssues||{}));
     drawGsaEditor();
     if(issue?.id)$(issue.id)?.focus();
   }
@@ -430,7 +435,7 @@
     const source=`<section class="gsa-editor-source" aria-label="正式战略来源"><strong>${linked?'已承接正式战略':'本期候选待承接的正式战略'}</strong>
       <p>战略发布 S-2027 v3 · G-2027-01<br>G · 2027 年 1 月净销售额 120 万元<br>S1 · 新品增长与平台活动共同补足增量</p>
       <details><summary>如何修改战略目标或策略</summary><p>在「战略选择」修订并发布新版本，再回目标管理核对并承接新版本。${linked?'本次编辑沿用上述发布版。':'请在本期 GSA 表点击「承接战略发布版 G 和 S」。'}</p></details></section>`;
-    const rows=actions.map((row,i)=>`<fieldset data-gsa-row="${esc(row.id)}" class="gsa-editor-row"><legend>第 ${i+1} 项计划 A</legend><button type="button" class="small plan-advice-row" data-plan-advice data-action="plan-advice-row" data-row-index="${i}" data-testid="plan-a-recommend-row-${i+1}">让 Agent 推荐本项计划 A</button>
+    const rows=actions.map((row,i)=>`<fieldset data-gsa-row="${esc(row.id)}" class="gsa-editor-row"><legend>第 ${i+1} 项计划 A</legend><button type="button" class="small plan-advice-row" data-plan-advice data-action="plan-advice-row" data-row-index="${i}" data-testid="plan-a-recommend-row-${i+1}">让 Agent 推荐本项计划 A</button>${polishButtons(row,i)}
       ${gsaColumns.map(f=>`<label for="gsa-${f.key}-${i+1}">${f.label}<input maxlength="600" id="gsa-${f.key}-${i+1}" data-testid="gsa-${f.key}-${i+1}" data-gsa-field="${f.key}" value="${esc(row[f.key])}"></label>`).join('')}
       ${actions.length>1?`<button type="button" class="small ghost" data-action="gsa-remove-row" data-row="${esc(row.id)}">移除此项</button>`:''}</fieldset>`).join('');
     openDialog(title,`<form id="gsa-editor" data-testid="gsa-editor">${source}<h3 class="aux-section-title">本期管理计划</h3><p class="small-text muted plan-advice-editor-help" data-testid="plan-a-editor-hint">${adviceHint(!!adviceContext())}</p>${rows}
@@ -445,7 +450,7 @@
     if(draft)syncAdviceEditor(draft.actions);
     if(!draft?.base)return;
     const changes=changeList(gsaPlan(draft.base).actions,draft.actions);
-    const missing=draft.actions.some(row=>gsaColumns.some(f=>!row[f.key]));
+    const missing=draft.actions.some(row=>currentPolishIssue(row,0)||gsaColumns.some(f=>!row[f.key]));
     const note=!changes.length?'当前内容与生效版一致。':missing?'请补齐每项计划的行动、阶段检查点及观察依据。':!draft.reason?'请填写修订原因。':'确认后形成新版本。';
     $('gsa-editor-changes').innerHTML=`<strong>与生效版 v${draft.base} 的差异</strong>${changes.length?`<ul class="gsa-changes">${changes.map(v=>`<li>${esc(v)}</li>`).join('')}</ul>`:''}<p class="small-text muted">${note}</p>`;
     document.querySelector('[data-testid="gsa-confirm-revision"]').disabled=!changes.length||missing||!draft.reason||gsaLocked();
@@ -455,6 +460,7 @@
     const draft=gsaReadEditor();
     if(!draft || !isSales() || gsaLocked() || draft.base!==gsaVersion())return;
     if(!draft.base){
+      state.ui.polishIssues=polishDraftIssues(draft.actions);
       state.ui.gsaInitialActions=clone(draft.actions);
       if(entryCandidate()){
         const first=draft.actions[0],f=entryFields();
@@ -465,14 +471,14 @@
       const changes=changeList(previous.actions,draft.actions);
       if(!changes.length)return;
       if(confirm){
-        if(!draft.reason||draft.actions.some(row=>gsaColumns.some(f=>!row[f.key])))return;
+        if(!draft.reason||draft.actions.some(row=>currentPolishIssue(row,0)||gsaColumns.some(f=>!row[f.key])))return;
         const next=makeGsaPlan(draft.base+1,draft.actions,draft.reason,changes,new Date().toISOString());
         state.ui.gsaHistory=[...clone(gsaHistory()),next];
         delete state.ui.gsaRevisionDraft;
         state.ui.versionSelections={...state.ui.versionSelections,sales:'gsa-v'+next.version};
         state.tab='plan';
         if(typeof onGsaRevision==='function')onGsaRevision(draft.base,next.version);
-      }else state.ui.gsaRevisionDraft=clone(draft);
+      }else state.ui.gsaRevisionDraft={...clone(draft),polishIssues:polishDraftIssues(draft.actions)};
     }
     editingGsa=null;closeDialog();render();
     notify(!draft.base?'本期计划已保存到 GSA 草稿，仍待确认。':confirm?'总 GSA v'+(draft.base+1)+' 已确认，既有版本可在「版本与来源」查看。':'已保存修订草稿，当前仍使用总 GSA v'+draft.base+'。');
@@ -509,7 +515,7 @@
     return gaps.length>0 && (gaps.length<gsaColumns.length || !!nextAdviceTheme(others));
   }
   function adviceHint(ready){
-    return ready?'合成 Agent 根据本期 G 和 S 推荐。已有内容会保留，建议可直接编辑。':'先在本期 GSA 表承接战略发布版 G 和 S，再让 Agent 推荐计划。';
+    return ready?'模拟 Agent 参考本期 G 和 S。推荐只补空项。先写几个关键词，也可一键优化本行并撤销。':'先在本期 GSA 表承接战略发布版 G 和 S，再让 Agent 推荐计划。';
   }
   function inlineAdviceInfo(rows){
     const ready=!!adviceContext(),first=rows[0],adding=adviceEmpty(first).length===0;
@@ -520,15 +526,16 @@
   function adviceInlineControls(rows){
     const info=inlineAdviceInfo(rows);
     return `<div class="plan-advice-inline"><button type="button" class="small plan-advice-trigger" data-plan-advice data-action="plan-advice-inline" data-testid="plan-a-recommend-inline" aria-describedby="plan-a-inline-hint" ${info.allowed?'':'disabled'}>${info.label}</button>
-      <small id="plan-a-inline-hint" data-testid="plan-a-inline-hint">${info.hint}</small></div>`;
+      ${entryCandidate()?polishButtons(rows[0],null):''}<small id="plan-a-inline-hint" data-testid="plan-a-inline-hint">${info.hint}</small></div>`;
   }
   function syncAdviceInline(){
     const button=document.querySelector('[data-testid="plan-a-recommend-inline"]');
     if(!button)return;
-    const info=inlineAdviceInfo(gsaDraftActions());
+    const rows=gsaDraftActions(),info=inlineAdviceInfo(rows);
     button.disabled=!info.allowed;
     button.textContent=info.label;
     $('plan-a-inline-hint').textContent=info.hint;
+    if(entryCandidate())syncPolishButtons(rows[0],null);
   }
   function syncAdviceEditor(rows){
     const ready=!!adviceContext(),form=$('gsa-editor');
@@ -537,6 +544,7 @@
       const row=rows[i];
       b.disabled=!ready || !rowCanTakeAdvice(row,rows.filter((_,j)=>i!==j));
       b.textContent=adviceEmpty(row).length?'让 Agent 推荐本项计划 A':'本项已填齐';
+      syncPolishButtons(row,i);
     });
     const add=form.querySelector('[data-action="plan-advice-add"]');
     if(add){add.disabled=!ready||!nextAdviceTheme(rows);add.title=ready&&!nextAdviceTheme(rows)?'本示例的不同计划建议已覆盖，可手工添加。':'';}
@@ -633,6 +641,225 @@
     for(const f of adviceEmpty(row))$('gsa-'+f.key+'-'+(index+1)).value=result[f.key];
     updateGsaEditor();
     notify('已补齐本项计划的空白字段，可继续修改。');
+  }
+
+
+  const inlinePolishUndo=new WeakMap(),editorPolishUndo=new Map();
+  const polishKeys=['action','checkpoint','basis'];
+  let editorPolishIssues={};
+  function polishDraftIssues(actions){
+    return Object.fromEntries(actions.filter(row=>currentPolishIssue(row,0)).map(row=>[row.id,editorPolishIssues[row.id]]));
+  }
+  function currentPolishIssue(row,index){
+    const issue=(index===null?state.ui.polishIssues:editorPolishIssues)?.[row.id];
+    if(!issue)return '';
+    // Evaluate the whole current input, including after deletion and IME edits. Only flagged rows use this check.
+    const supplied=polishParts(row.basis).flatMap(text=>text.split(/但是|但(?=可|使|用|采|以|凭)/))
+      .some(text=>text.trim()&&! /^(?:也|请|仅|只|暂|仍|同时)?(?:不|禁止|勿|排除|免做|不得|避免|拒绝|无须|无需|未明确|待定|待补|待明确|依据待)/.test(text.trim()));
+    return supplied?'':issue;
+  }
+  function setPolishIssue(row,index,issue){
+    const issues=index===null?(state.ui.polishIssues??={}):editorPolishIssues;
+    if(issue)issues[row.id]=issue;else delete issues[row.id];
+  }
+  function polishIssueHint(issue){return issue?'观察依据待补：'+issue+'。请填写允许使用的依据。':'';}
+  function polishRecord(row,index){
+    if(index===null)return inlinePolishUndo.get(state.ui);
+    return editorPolishUndo.get(row.id);
+  }
+  function rememberPolishEdit(input){
+    const row=input.closest('[data-gsa-row]');
+    const record=row?editorPolishUndo.get(row.dataset.gsaRow):input.dataset.entryField?inlinePolishUndo.get(state.ui):null;
+    const key=input.dataset.gsaField||input.dataset.entryField;
+    if(record)record.edited.add(key);
+
+  }
+  function polishState(row,index){
+    const hasText=polishKeys.some(key=>row[key]?.trim()),record=polishRecord(row,index);
+    const current=record && polishKeys.every(key=>!record.edited.has(key)&&row[key]===record.after[key]);
+    return {show:hasText,can:hasText&&!!adviceContext()&&!current,undo:!!record};
+  }
+  function polishButtons(row,index){
+    const status=polishState(row,index),suffix=index===null?'inline':'row-'+(index+1);
+    const location=index===null?'inline':String(index);
+    return `<button type="button" class="small plan-polish-btn" data-plan-advice data-action="polish-plan" data-polish-at="${location}" data-testid="plan-a-polish-${suffix}" ${status.show?'':'hidden'} ${status.can?'':'disabled'}>Agent 一键优化计划</button>
+      <button type="button" class="small ghost plan-undo-btn" data-action="undo-polish-plan" data-polish-at="${location}" data-testid="plan-a-undo-${suffix}" ${status.undo?'':'hidden'}>撤销本次优化</button><small class="plan-polish-issue" role="status" data-testid="plan-a-evidence-issue-${suffix}" ${currentPolishIssue(row,index)?'':'hidden'}>${esc(polishIssueHint(currentPolishIssue(row,index)))}</small>`;
+  }
+  function syncPolishButtons(row,index){
+    const suffix=index===null?'inline':'row-'+(index+1),button=document.querySelector('[data-testid="plan-a-polish-'+suffix+'"]');
+    if(!button)return;
+    const inputs=polishKeys.map(k=>index===null?$('entry-'+k):$('gsa-'+k+'-'+(index+1)));
+    const actual={...row};
+    for(const [i,k] of polishKeys.entries())if(inputs[i])actual[k]=inputs[i].value;
+    const status=polishState(actual,index),issue=currentPolishIssue(actual,index);
+    const notice=document.querySelector('[data-testid="plan-a-evidence-issue-'+suffix+'"]');
+    notice.hidden=!issue;notice.textContent=polishIssueHint(issue);
+    const recommend=document.querySelector('[data-testid="plan-a-recommend-'+suffix+'"]');
+    if(issue&&recommend){recommend.disabled=true;recommend.title='请先补充允许使用的观察依据。';}
+    else if(recommend)recommend.removeAttribute('title');
+    button.hidden=!status.show;button.disabled=!status.can;
+    document.querySelector('[data-testid="plan-a-undo-'+suffix+'"]').hidden=!status.undo;
+  }
+
+  // Locally simulated language support. Match affirmative work, keeping restrictions in the original sentence.
+  const polishActivities=[
+    [/回访|走访|续约|访谈|访客|客户跟进|联系客户|联系会员/,'列出本次要联系的对象，登记需要跟进的问题','逐项核对联系记录与待跟进问题','本次联系记录及后续反馈'],
+    [/盘点|查库存|库存|缺货|补货|补货单|断货/,'核对账面数量与现场记录，标出需复核的条目','核查盘点范围、账实差异和待处理条目','相同范围的库存台账与盘点记录'],
+    [/陈列|摆货|摆放|货架|陈设/,'按陈列要求逐项核对陈列位置，登记需调整的项目','对照陈列要求核查完成项和未完成项','对应门店的陈列清单与现场记录'],
+    [/退款|退货|结账|对账|核销/,'按原有口径核对交易记录，单列差异项','逐笔复核归属及尚未解释的差异','相同口径的交易明细与核对记录'],
+    [/培训|带教|演练/,'整理要覆盖的内容，记录需要再讲解的环节','对照安排核查实际覆盖内容和待复习项目','本次培训内容清单与练习记录'],
+    [/活动|促销|转化|投放/,'列出涉及的环节及待验证的变化','按约定范围核对各环节记录，标出待验证项','同一范围的活动安排与过程记录'],
+    [/签收|交接|验收|交付/,'逐项列出交付内容与待核差异','逐项核对交付清单与对应记录，标出差异','对应的交接清单与原始记录'],
+    [/反馈|投诉|工单/,'整理反馈事项，分别标记待核与待跟进的问题','对照原始问题复核处理进度与待办项','原始反馈及对应的处理记录'],
+    [/温度|温控|冷链/,'记录观察对象和测量条件，标出需复核的读数','核查原始读数及异常项的复核情况','同一对象的测量记录与复核备注']
+  ];
+  const polishRestrict=/(?:仅|只|禁止|不得|不要|不再|不含|不计|不做|不看|不用|不追加|不新增|不纳入|不扩|不涉及|不超过|不低于|不早于|不晚于|不能|不可|排除|除外|限于|勿)/;
+  const polishTime=/(?:周[一二三四五六日末]|星期|月底|月末|月初|季末|月[\d一二三四五六七八九十]+日|本周|下周|每周|第.{1,4}周|[\d一二三四五六七八九十]+[号天日]|\d[-/.]\d|之前|以后|截至|截止|节前|节后)/;
+  function polishParts(text){return String(text||'').trim().split(/[；;。！？\n]+|(?<!\d)[，,]|[，,](?!\d)/).map(x=>x.trim()).filter(Boolean);}
+  function polishText(text){
+    return String(text||'').trim().replace(/^(?:我打算|我准备|我的计划是)(?=.)/,'')
+      .replace(/看(?:一?下|一看)/g,'查看').replace(/盘(?:一?下|一盘)/g,'盘点')
+      .replace(/核(?:对一下|一下)/g,'核对').replace(/做个(?=盘点|记录|登记|回访)/g,'进行')
+      .replace(/列(?:个|一下)(?=清单|名单)/g,'列出').trim()||String(text||'').trim();
+  }
+  function polishJoin(original,core,detail){
+    const end=text=>/[。！？!?；;.]$/.test(text)?text:text+'。';
+    const sentence=core?end(core):'',full=sentence+(detail?end(detail):'');
+    // Never truncate the user's original, even if a late qualifier fills the entire input.
+    if(full.length<=600)return full;
+    if(sentence && sentence.length<=600)return sentence;
+    if(original)return original;
+    return end(detail||'逐项核对本行已有安排并记录待确认项');
+  }
+  function formPlanPolish(original,context){
+    const action=polishText(original.action),checkpoint=polishText(original.checkpoint),basis=polishText(original.basis);
+    const all=[action,checkpoint,basis].filter(Boolean),parts=all.flatMap(polishParts);
+    const preferred=parts.filter(x=>/^(?:只|仅|限于)/.test(x));
+    const pos=[...preferred,...parts].map(x=>x.split(/(?:禁止|不得|不要|不|免做|免于|无需|无须|暂停|暂缓|取消|跳过|停止|排除|避免|勿)/)[0]).filter(Boolean);
+    const activity=pos.map(x=>polishActivities.find(a=>a[0].test(x))).find(Boolean);
+    const restricted=parts.some(x=>polishRestrict.test(x)),timed=parts.some(x=>polishTime.test(x));
+    const subject=action||checkpoint||basis;
+    const focus=subject.length<=60?'「'+subject.replace(/[。；;]+$/,'')+'」':'本行已列明的事项';
+    const genericAction=action?'列明需要完成的事项，记录待处理问题':'围绕'+focus+'列明本期要落实的事项';
+    const genericCheck='对照'+(action?focus:'本行约定')+'逐项核查完成情况与待处理问题';
+    const planningOnly=parts.some(x=>/(?:只|仅)(?:拟定|拟订|编写|整理|准备|设计|起草|讨论|梳理|制定).*(?:方案|预案|计划|草案)|(?:暂不|不)(?:实际)?(?:实施|执行|上线|落地)/.test(x));
+    const noRecord=parts.some(x=>/(?:不得|不要|不作|不做|不|勿|禁止|免于)(?:再|另行|留存|做)?(?:保留|登记|记录|拍照|保存|留痕)/.test(x));
+    let actionDetail=activity?activity[1]:genericAction;
+    let cpDetail=activity?activity[2]:genericCheck;
+    let evidence=activity?activity[3]:'与'+focus+'对应的原始工作记录';
+    if(context.strategy.includes('新品')&&pos.some(x=>/新品/.test(x))&&activity?.[0].test('陈列')){
+      cpDetail='按本项新品范围核查陈列位置，区分已落实与待调整的项目';
+    }
+    if(!restricted && pos.some(x=>/销售贡献|销售额|成交额|销售增量/.test(x)))
+      cpDetail+='，涉及销售贡献时按本期'+context.metric+'口径核对';
+    if(planningOnly){actionDetail='在草案中列明适用范围和待确认事项';cpDetail='核对草案是否覆盖所列事项及约束';evidence='本项草案及其审阅意见';}
+    if(noRecord){
+      actionDetail='按原文限定的方式落实本项安排';
+      cpDetail='在原有约束内复核本项安排是否落实';
+      evidence='允许使用的现有信息';
+    }
+    // A single field often contains the action, deadline, permitted evidence and exclusions.
+    // Carry whole qualifying clauses across fields so thresholds, dates and negations keep their meaning.
+    const sourceNoun=/(?:日报|周报|月报|报表|清单|记录|凭证|照片|截图|图像|数据|流水|台账|回执|日志|小票|签字|签收单|口头确认|口述|当面确认|口头反馈|POS|CRM|ERP|表格)/i;
+    const sourceClause=x=>/^(?:(?:观察)?依据[：:]|(?:证据|来源)[：:]|以.+(?:为准|为据|为依据)|凭.+(?:记录|清单))/.test(x) ||
+      (sourceNoun.test(x) && /(?:用|参考|对照|根据|为准|依据|为证|为据|仅看|只看|接受|采信|认可|允许|不看|不查|不取|不采|不调|不得|排除|不留|不拍|不能|禁止)/.test(x));
+    const sources=[...new Set(parts.filter(sourceClause))];
+    const forbidden=x=>/^(?:也|请|同时)?(?:不|禁止|勿|排除|免做|不得|避免|拒绝|无须|无需)/.test(x);
+    const deniedSources=sources.filter(forbidden),permittedSources=sources.filter(x=>!forbidden(x));
+    const noPositiveSource=deniedSources.length>0&&!permittedSources.length &&
+      (!basis||polishParts(basis).every(x=>forbidden(x)||!sourceNoun.test(x)));
+    const oralSource=permittedSources.some(x=>/口头|口述|当面确认/.test(x));
+    const outsideBasis=sources.filter(x=>!polishParts(basis).includes(x));
+    const mixedWork=x=>! /^(?:不|禁|免|勿|拒)/.test(x) && /(?:日报|周报|表|清单|记录|凭证|小票|回执|台账|流水|截图|照片|签字单)(?:来|去|逐项|逐笔)?(?:复核|核对|盘点|核验|检查|验收|排查).+/.test(x);
+    const actionClauses=input=>polishParts(input).filter(x=>!sourceClause(x)||mixedWork(x));
+    const limitedSource=deniedSources.length>0||permittedSources.some(x=>/(?:只|仅|限于)/.test(x));
+    const onlyMaterial=pos.find(x=>/^(?:只|仅)(?:整理|编写|拟定|起草|梳理|准备|制定).+/.test(x));
+    if(onlyMaterial){
+      const item=onlyMaterial.replace(/^(?:只|仅)(?:整理|编写|拟定|起草|梳理|准备|制定)/,'');
+      actionDetail='按原范围梳理'+item+'，标出尚待完善的条目';
+      cpDetail='逐项核对'+item+'的覆盖情况，列出待补内容';
+      evidence='本次整理的'+item;
+    }
+    if(limitedSource){
+      actionDetail=noPositiveSource?'先明确可用依据，再逐项核对原定安排':'按本行指定的依据逐项核对，无法验证的事项保留待核';
+      cpDetail='用本行限定的依据核查'+(pos.some(x=>/新品陈列/.test(x))?'新品陈列要求':'原定事项')+'，区分已有依据和仍待核实的项目';
+    }
+    const preserveAll=noPositiveSource||all.some(x=>x.length>420)||sources.join('，').length+(basis||'').length>450;
+    const actionSource=action||[checkpoint,basis].find(field=>actionClauses(field).some(x=>/陈列|补货|回访|复购|盘点|联系|整理|推动|落实|排查|收集|订货|核对|盘查|举办|搭建|梳理|尝试|核验|安排/.test(x)))||'';
+    const workParts=actionClauses(actionSource);
+    const work=preserveAll||workParts.length===polishParts(actionSource).length?actionSource:workParts.join('，');
+    const givenScope=work.match(/^([^，,；;。]+(?:家门店|家店|个门店|个试点|片区|区域))([，,；;])/);
+    const actionCore=givenScope&&!/^(?:在|仅|只|限|排除|除|不)/.test(work)?'在'+work:work;
+    if(!actionCore && !activity && (basis||sources.length)){
+      const allowed=sources.find(x=>/^(?:仅|只)(?:能|可)?(?:能|可)?(?:用|看|以|凭|参考|对照)/.test(x));
+      const named=allowed?.replace(/^(?:仅|只)(?:能|可)?(?:能|可)?(?:用|看|以|凭|参考|对照)/,'').replace(/(?:为准|为据|为依据)$/,'');
+      const material=named&&named.length<=45?'「'+named+'」':'本行允许使用的资料';
+      const subject=context.strategy.includes('新品')&&context.strategy.includes('活动')?'本期新品或平台活动':'本期策略';
+      actionDetail='核查'+material+'中是否有与'+subject+'相符的条目，能对应的逐项核对，其余列为待核';
+      cpDetail='复核已匹配的条目与本期策略是否相符，单列资料无法验证的部分';
+    }
+    const actionLine=actionCore||(activity?(restricted?'在原定范围内，':'')+actionDetail:'');
+    const timeClause=[...actionClauses(checkpoint),...workParts].find(x=>polishTime.test(x));
+    let timing=timed?'按本行给定的时间安排':'在'+context.period+'阶段检查时';
+    if(timeClause && timeClause.length<=120){
+      const deadline=timeClause.match(/^(?:在)?((?:(?:本|下|上)?周[一二三四五六日天末]|星期[一二三四五六日天]|月[初末底]|(?:\d{4}年)?\d{1,2}月\d{1,2}[日号]|\d{4}-\d{2}-\d{2})(?:之前|之后|以前|以后|前|后|当日|当天|以内|内)?)(?=完成|复核|核对|检查|落实|安排|盘点|收集|进行|复盘|[，,]|$)/);
+      timing=deadline?deadline[1]:'按「'+timeClause+'」的约定';
+    }
+    const actualChecks=actionClauses(checkpoint);
+    const cpCore=preserveAll||actualChecks.length===polishParts(checkpoint).length?checkpoint:actualChecks.join('，');
+    const cpSentence=cpCore||timing+'，'+cpDetail;
+    const supplied=basis||sources.join('，');
+    let basisCore=supplied
+      ?(/^[^，,。；;]{1,45}(?:记录|表|凭证|照片|清单|台账|流水|回执|日志|截图|周报|小票|签字单)$/.test(supplied)&&!polishRestrict.test(supplied)&&! /^(?:用|查|看|以|按|对照|参考|依据|核对|核查|比对|保留|建议)/.test(supplied)?'对照'+supplied:supplied)
+      :'建议以'+evidence+'为依据';
+    if(noPositiveSource){
+      basisCore='依据待明确；'+(basis?[basis,...outsideBasis].join('，'):deniedSources.join('，'));
+    }else if(basis && outsideBasis.length){
+      const limit=outsideBasis.join('，');
+      basisCore=/(?:只|仅|不|禁|排除)/.test(limit)?limit+'。核对原填依据是否在允许范围内：「'+basis+'」':basisCore+'。按本行约定，'+limit;
+    }
+    return {
+      action:polishJoin(original.action,actionLine,actionCore||!activity?actionDetail:noRecord?'核对执行要求是否符合原有限制':'注明各项的处理状态'),
+      checkpoint:polishJoin(original.checkpoint,cpSentence,cpCore?cpDetail:''),
+      unresolved:noPositiveSource?deniedSources.join('，'):'',
+      basis:noPositiveSource?original.basis:polishJoin(original.basis,basisCore,oralSource?'口头确认未能说明的部分列为待核':limitedSource?'凭证不能证明的部分列为待核':noRecord?'核查时遵守本行的信息留存限制':'标明记录对应的事项，保留可回查的出处')
+    };
+  }
+  function applyPlanPolish(source,undo){
+    const index=source.dataset.polishAt==='inline'?null:Number(source.dataset.polishAt);
+    const ctx=adviceContext();
+    if(!ctx || (index===null&&(!entryCandidate()||state.gsaConfirmed)))return;
+    const draft=index===null?null:rawAdviceEditor();
+    if(index!==null && (!draft||draft.base!==gsaVersion()))return;
+    const row=index===null?gsaDraftActions()[0]:draft.actions[index];
+    if(!row)return;
+    const ledger=index===null?inlinePolishUndo:editorPolishUndo,recordKey=index===null?state.ui:row.id,prior=ledger.get(recordKey);
+    let values={},kept=0;
+    if(undo){
+      if(!prior)return;
+      for(const k of polishKeys){
+        if(!prior.edited.has(k)&&row[k]===prior.after[k])values[k]=prior.before[k];
+        else{values[k]=row[k];kept++;}
+      }
+      if(!prior.edited.has('basis') && row.basis===prior.after.basis)setPolishIssue(row,index,prior.beforeIssue);
+      ledger.delete(recordKey);
+    }else{
+      if(!polishState(row,index).can)return;
+      const original={...row};
+      // Reapplying after a manual edit should not polish the previous simulated additions again.
+      for(const k of polishKeys)if(prior&&!prior.edited.has(k)&&row[k]===prior.after[k])original[k]=prior.source[k];
+      values=formPlanPolish(original,ctx);
+      if(polishKeys.every(k=>row[k]===values[k])&&currentPolishIssue(row,index)===(values.unresolved||'')){notify('本行已保留完整，无需调整。');return;}
+      ledger.set(recordKey,{before:{...row},beforeIssue:currentPolishIssue(row,index),source:original,after:values,edited:new Set()});
+      setPolishIssue(row,index,values.unresolved);
+    }
+    for(const k of polishKeys){
+      const input=index===null?$('entry-'+k):$('gsa-'+k+'-'+(index+1));
+      input.value=values[k];
+      if(index===null)entryFields()[k]=values[k];
+    }
+    if(index===null){persist();updateEntryReadiness();}else updateGsaEditor();
+    notify(undo?(kept?'已撤销本次优化，保留后来手改的字段。':'已撤销本次优化，恢复原先填写。'):values.unresolved?'已优化行动与检查点。请补充允许使用的观察依据。':'已参考'+ctx.period+'的 G 和 S 优化本行，可继续修改。');
   }
 
   function entryCandidate(){
@@ -1040,6 +1267,7 @@
   }
   function evidence(){openDialog('本次草稿采用的示例依据',`<div class="info-list"><div><h3>我情 · 可比经营数据 r2</h3><p>门店与渠道覆盖一致的净销售额、商品可售节奏。示例测算可达 112 万。</p></div><div><h3>行情与敌情 · 已获准材料</h3><p>活动日历与竞品公开促销观察仅作为外部假设。资料不足时说明影响，不强制凑齐三类材料。</p></div><div><h3>增量与经营约束</h3><p>新品与平台活动按不重叠范围估算 5 万、3 万。需要后续实绩验证，不能把数学对平当成因果成立。</p></div></div><p class="boundary">所有内容均为虚构资料。Demo 不执行预测算法或真实工具，正式产品沿统一 Pi 接入在权限内自主选择方法。</p>`);}
   function handleAction(action,source){
+    if(action==='polish-plan'||action==='undo-polish-plan'){applyPlanPolish(source,action==='undo-polish-plan');return;}
     if(action==='plan-advice-inline'){recommendInline();return;}
     if(action==='plan-advice-row'||action==='plan-advice-add'){recommendEditor(source,action==='plan-advice-add');return;}
 
@@ -1161,6 +1389,7 @@
     if(event.target.id==='entry-sample')startEntryExample(event.target.value);
   });
   document.addEventListener('input',event=>{
+    rememberPolishEdit(event.target);
     const key=event.target.dataset.entryField;
     if(!entryCandidate() || !isSales() || !entryInputs.some(f=>f.key===key))return;
     entryFields()[key]=event.target.value;
