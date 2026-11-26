@@ -1,3 +1,4 @@
+import { GoalFigures } from "./GoalJourneyViews.tsx";
 import { useEffect, useRef, useState } from "react";
 import type { GoalVersion } from "../strategy-goals-types.ts";
 import type {
@@ -42,6 +43,8 @@ export function GoalReviewDraft({
     };
   }, [goal.goalId, workspace]);
   const [draft, setDraft] = useState<ReviewDraft>();
+  const [closingOpen,setClosingOpen]=useState<boolean|null>(null);
+  const [editing,setEditing]=useState<{id:string;title:string;summary:string;applicableScope:string}|null>(null);
   const [dirty, setDirty] = useState(false);
   const [conflict, setConflict] = useState<ReviewDraft>();
   const [saving, setSaving] = useState(false);
@@ -291,13 +294,13 @@ export function GoalReviewDraft({
     }
   };
   return (
-    <div className="gm-card" aria-label="Agent 复盘草稿">
-      <strong>Agent 先拟复盘结论</strong>
-      <p>
-        本期末版 GSA v{lastPlan?.planVersion} · {lastPlan?.formalTarget.value}
-        {lastPlan?.formalTarget.unit}。期初 {plans[0]?.formalTarget.value}
-        {plans[0]?.formalTarget.unit} 留作备忘。
-      </p>
+    <div className="gj-review-draft" aria-label="Agent 复盘草稿">
+      <GoalFigures items={[
+        {label:'最后生效正式目标',value:lastPlan?`${lastPlan.formalTarget.value}${lastPlan.formalTarget.unit}`:'待核',note:`本期 GSA v${lastPlan?.planVersion??'待核'}`},
+        {label:'期初承诺 · 仅作备忘',value:plans[0]?`${plans[0].formalTarget.value}${plans[0].formalTarget.unit}`:'待核',note:'保留原承诺，不改写历史检查'},
+        {label:'期末结账实绩',value:draft.actualFinalValue==null?'待补':`${draft.actualFinalValue}${lastPlan?.formalTarget.unit??''}`,note:draft.actualFinalValue==null||!lastPlan?'结账凭证待补':`与末版目标差额 ${Number((draft.actualFinalValue-lastPlan.formalTarget.value).toFixed(4))}${lastPlan.formalTarget.unit}`}]}/>
+
+      <details className="gj-details" open={closingOpen??(!draft.actualSourceRef&&!draft.closingReport)} onToggle={event=>setClosingOpen(event.currentTarget.open)}><summary>查看或补充期末结账资料</summary>
       <div className="gm-form-grid">
         <label className="case-field">
           期末结账实绩
@@ -341,10 +344,7 @@ export function GoalReviewDraft({
           />
         </label>
       </div>
-      <p role="status">
-        {saving ? "正在保存复盘草稿…" : dirty ? "改稿待保存" : "复盘草稿已保存"}
-        {running ? " · Agent 正在起草…" : ""}
-      </p>
+      </details><div className="gj-section-heading"><div><h3>Agent 复盘结论</h3><p>核对原证据与适用范围，再选定要带入下一期的结论。</p></div><div className="gj-review-state"><strong>已选 {selected.length} 项</strong><small role="status">{saving?"正在保存…":dirty?"改稿待保存":"草稿已保存"}{running?" · Agent 正在起草…":""}</small></div></div>
       {error && (
         <div role="alert">
           <p>{error}</p>
@@ -411,104 +411,33 @@ export function GoalReviewDraft({
         </section>
       )}
       {notice && <p role="status">{notice}</p>}
-      {draft.conclusions.map((c) => (
-        <article
-          className="gm-card"
-          key={c.id}
-          aria-label={`复盘结论 ${c.title}`}
-        >
-          <p>
-            原证据 {c.sourceRef} · 原范围 {c.originalScope ?? c.applicableScope}
-          </p>
-          {c.discarded ? (
-            <>
-              <p>已舍弃 · {c.title}</p>
-              <button
-                className="text-button"
-                disabled={disabled}
-                onClick={() => setConclusion(c.id, { discarded: false })}
-              >
-                恢复此结论
-              </button>
-            </>
-          ) : (
-            <>
-              <label className="case-field">
-                结论标题
-                <input
-                  className="gm-input"
-                  value={c.title}
-                  disabled={disabled}
-                  onChange={(e) =>
-                    setConclusion(c.id, { title: e.target.value })
-                  }
-                />
-              </label>
-              <label className="case-field">
-                结论摘要
-                <textarea
-                  className="gm-input"
-                  value={c.summary}
-                  disabled={disabled}
-                  onChange={(e) =>
-                    setConclusion(c.id, { summary: e.target.value })
-                  }
-                />
-              </label>
-              <label className="case-field">
-                适用范围
-                <input
-                  className="gm-input"
-                  value={c.applicableScope}
-                  disabled={disabled}
-                  onChange={(e) =>
-                    setConclusion(c.id, { applicableScope: e.target.value })
-                  }
-                />
-              </label>
-              <p>
-                {c.classification === "confirmed-evidence"
-                  ? "已核验结论"
-                  : "待验证假设"}
-              </p>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={c.selected}
-                  disabled={disabled}
-                  onChange={(e) =>
-                    setConclusion(c.id, { selected: e.target.checked })
-                  }
-                />{" "}
-                带入下一期
-              </label>
-              <button
-                className="text-button"
-                disabled={disabled}
-                onClick={() =>
-                  setConclusion(c.id, { discarded: true, selected: false })
-                }
-              >
-                舍弃此结论
-              </button>
-            </>
-          )}
-        </article>
-      ))}
+      {draft.conclusions.filter(c=>!c.discarded).map(c=><article className="gj-conclusion" key={c.id} aria-label={`复盘结论 ${c.title}`}>
+        <div className="gj-section-heading"><h4>{c.title}</h4><span className={`sg-badge ${c.classification==='confirmed-evidence'?'':'pending'}`}>{c.classification==='confirmed-evidence'?'已核验结论':'待验证假设'}</span></div>
+        {editing?.id===c.id?<div className="gj-conclusion-editor">
+          <label className="case-field">结论标题<input className="gm-input" value={editing.title} disabled={disabled} onChange={e=>setEditing({...editing,title:e.target.value})}/></label>
+          <label className="case-field">结论摘要<textarea className="gm-input" value={editing.summary} disabled={disabled} onChange={e=>setEditing({...editing,summary:e.target.value})}/></label>
+          <label className="case-field">适用范围<input className="gm-input" value={editing.applicableScope} disabled={disabled} onChange={e=>setEditing({...editing,applicableScope:e.target.value})}/></label>
+          <div className="sg-row"><button className="secondary-button" disabled={disabled||!editing.title.trim()||!editing.summary.trim()||!editing.applicableScope.trim()} onClick={()=>{setConclusion(c.id,{title:editing.title,summary:editing.summary,applicableScope:editing.applicableScope});setEditing(null);}}>保存这项修改</button><button className="text-button" onClick={()=>setEditing(null)}>取消修改</button></div>
+        </div>:<><p>{c.summary}</p><p className="sg-muted">适用范围 · {c.applicableScope}</p></>}
+        <details className="gj-details"><summary>查看原证据与原范围</summary><p>原证据 {c.sourceRef}</p><p>原范围 {c.originalScope??c.applicableScope}</p></details>
+        <div className="gj-conclusion-actions"><label className="gm-checkbox"><input type="checkbox" checked={c.selected} disabled={disabled||Boolean(editing)} onChange={e=>setConclusion(c.id,{selected:e.target.checked})}/>带入下一期</label><div className="sg-row"><button className="text-button" disabled={disabled||Boolean(editing)} onClick={()=>setEditing({id:c.id,title:c.title,summary:c.summary,applicableScope:c.applicableScope})}>修改结论</button><button className="text-button" disabled={disabled||Boolean(editing)} onClick={()=>setConclusion(c.id,{discarded:true,selected:false})}>舍弃此结论</button></div></div>
+      </article>)}
+      {!draft.conclusions.some(c=>!c.discarded)&&<p className="gj-empty">{running?'Agent 正在根据结账材料与阶段记录整理结论…':'结论尚未形成，可补充结账资料或查看下方 Agent 对话。'}</p>}
+      {draft.conclusions.some(c=>c.discarded)&&<details className="gj-details"><summary>已舍弃的结论 ({draft.conclusions.filter(c=>c.discarded).length})</summary>{draft.conclusions.filter(c=>c.discarded).map(c=><div className="gj-conclusion" key={c.id}><strong>{c.title}</strong><p>{c.summary}</p><p className="sg-muted">{c.sourceRef} · {c.originalScope??c.applicableScope}</p><button className="text-button" disabled={disabled} onClick={()=>setConclusion(c.id,{discarded:false})}>恢复此结论</button></div>)}</details>}
       <div className="sg-row">
         <button
           className="secondary-button"
-          disabled={disabled || saving || dirty}
+          disabled={disabled || saving || dirty || Boolean(editing)}
           onClick={() => void record(false)}
         >
           保存到期复盘记录
         </button>
         <button
           className="primary-button"
-          disabled={disabled || saving || dirty || !selected.length}
+          disabled={disabled || saving || dirty || Boolean(editing) || !selected.length}
           onClick={() => void record(true)}
         >
-          用选中结论起草下一期
+          用选中结论起草下一期（{selected.length}）
         </button>
       </div>
       {request && (
