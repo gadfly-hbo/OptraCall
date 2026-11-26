@@ -24,7 +24,7 @@ test('goal draft uses the scoped native Pi role, retains replies across close, a
   const api = (action:string) => route+'&action='+action;
   provider.setResponder(ctx => {
     const system = ctx.messages.filter(m => ['developer','system'].includes(m.role)).map(m=>providerMessageText(m.content)).join(' ');
-    assert.match(system,/目标管理 Agent/); assert.match(system,/1\.3\.0/);
+    assert.match(system,/目标管理 Agent/); assert.match(system,/1\.3\.1/);
     assert.ok(ctx.messages.some(m=>m.role==='user'&&providerMessageText(m.content).includes('测试个人范围')));
     return {text:'GSA_DRAFT_REPLY'};
   });
@@ -148,7 +148,7 @@ test('a handed strategy version reaches the Goal system turn, whose native edita
   await req('/api/strategy/discussions','POST',{operationId:id,title:'季度预约取舍',usageContext:{kind:'personal',background:'原范围'}},201);
   provider.setResponder(ctx=>{
     const system=ctx.messages.filter(m=>m.role==='developer'||m.role==='system').map(m=>providerMessageText(m.content)).join(' ');
-    assert.match(system,/战略选择 Agent · 角色系统提示词 v1.3.0/);
+    assert.match(system,/战略选择 Agent · 角色系统提示词 v1.3.1/);
     return {text:'NATIVE_STRATEGY_OPTION：比较预约与延时'};
   });
   await req(strategy+'/messages','POST',{requestId:randomUUID(),text:'比较经营方向',expectedRevision:1},202);
@@ -164,7 +164,7 @@ test('a handed strategy version reaches the Goal system turn, whose native edita
   const draft={title:'安排两周预约观察',outcome:'能核对预约需求',perspective:'personal',measurement:{kind:'deliverable',criterion:'逐日留下新增预约数'},baseline:{state:'pending',description:'起始记录待核'},responsible:'门店负责人',strategies:['在同一服务窗口记录预约变化']};
   provider.setResponder(ctx=>{
     const system=ctx.messages.filter(m=>m.role==='developer'||m.role==='system').map(m=>providerMessageText(m.content)).join(' ');
-    assert.match(system,/目标管理 Agent · 角色系统提示词 v1.3.0/);
+    assert.match(system,/目标管理 Agent · 角色系统提示词 v1.3.1/);
     const users=ctx.messages.filter(m=>m.role==='user').map(m=>providerMessageText(m.content)).join(' ');
     assert.match(users,/NATIVE_STRATEGY_OPTION/);assert.match(users,/先核预约/);
     if(!ctx.recentToolResults.length)return {calls:[{name:'strategy_goals',arguments:{action:'propose-goal',draft}}]};

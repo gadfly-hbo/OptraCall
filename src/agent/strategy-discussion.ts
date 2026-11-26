@@ -1,4 +1,5 @@
 import { strategyMapDraftSchema } from './strategy-map-schema.ts';
+import { decompositionDraftFields, reachabilityEstimateSchema } from './goal-decomposition-schema.ts';
 import { Type } from 'typebox';
 export type StrategyDiscussionAction = 'read-goals' | 'find-sources' | 'read-source' | 'read-import-source' | 'propose-map-draft' | 'propose-goal' | 'adopt-goal' | 'operation' | 'public-search' | 'read-map' | 'save-map' | 'initiative-files' | 'initiative-read-file' | 'initiative-read-kickoff' | 'initiative-save-kickoff' | 'initiative-save-candidate' | 'initiative-save-verification' | 'initiative-read-candidate' | 'initiative-propose-revision' | 'initiative-read-skill' | 'goal-read-context' | 'goal-read-skill' | 'goal-run-script' | 'goal-save-estimate' | 'goal-save-decomposition-draft' | 'goal-analyze-progress' | 'goal-assess-actual' | 'goal-propose-plan' | 'goal-propose-review';
 export type StrategyDiscussionToolContext = { requestId:string; sessionId:string; toolCallId:string; signal:AbortSignal; assertCurrent():void; originalUserText:string; userQuoteEligible:boolean; goalBasis?:import('../host/strategy-goals-types.ts').GoalBasis; importSourceIds?:string[]; selectedImportPages?:Record<string,number[]>; importMode?:'review-draft'; draftGroupId?:string; supersedesDraftEntryId?:string; targetMapRef?:{mapId:string;version:number}; registerCleanup?:(cleanup:(options:{retryFailed?:boolean})=>Promise<void>)=>void };
@@ -172,7 +173,7 @@ export const goalEstimateTool = {
     script: Type.Optional(nonblank(100)),
     command: Type.Optional(nonblank(60)),
     scriptInput: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
-    estimate: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+    estimate: Type.Optional(reachabilityEstimateSchema),
     draft: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
   }, exact),
 };
@@ -184,7 +185,7 @@ export const goalDecompositionTool = {
     'goal-read-context 读取当前已确认总 GSA 计划版、拆解草稿、最新校验问题及已发布版概要。',
     'goal-read-skill 读取 Host 固定的已核定技能（target-forecast / roi-forecast / coupon-forecast / data-analysis）原文与参考资料。',
     'goal-run-script 以结构化 JSON 输入运行已核定技能脚本，获得可复算引擎版本与输入摘要；不可传任意命令或文件路径。',
-    'goal-save-decomposition-draft 按准确 gsaPlanId / gsaPlanVersion / gsaPlanSha256 与 expectedDraftRevision 保存目标拆解草稿，并即时返回 Host 确定性校验结果（金额对平、预留用途与责任人、同口径交叉冲突、补缺覆盖等）。测算填写实据覆盖的 scope，量化目标还须保留 sapMetric（id、version、metricName）；不同范围或不同指标定义继续标待核。本工具仅保存草稿，不发布、不采用、不授权执行。',
+    'goal-save-decomposition-draft 使用本工具声明的嵌套字段契约；estimate、rows 等放在顶层，不包入 draft。先读取上下文的 saveContract、首次 draftInputTemplate 或已有 draft，沿准确 GSA 身份和 expectedDraftRevision 保存。测算填写实际覆盖的 scope；仅原 goal.measurement.kind=quantitative 时保留其 sapMetric，其他情况省略，不编造 SAP ID。无适用脚本可保留显式算式、假设和限制，不伪造运行回执。本工具仅保存草稿，返回发布校验问题，不发布、不采用、不授权执行。格式错误未保存且未运行发布校验，未点名区块不能称已核。',
     '实绩专属对话按已提交凭证判断覆盖、指标与成熟度，goal-assess-actual 写入该证据的核对结果。comparability 取 comparable、partial-missing、observing 或 incomparable，并用 assessmentNote 说明依据。实绩提供报告原文时按资料提取 observation 的原文逐字引句 quote、实际数值 actualValue、指标 metric（沿计划定义或 SAP ID@版本）、unit、scope 和 periodId，以及覆盖 coverage 和成熟度 maturity；证据不足保持待核。',
     '报表未手填截止时间时，先从原文提取数据截至日期到 observation.cutoffAt，并逐字保留 cutoffQuote。导出、制表、发布日期不能当数据截止时间。日期缺失或冲突时 cutoffState 取 missing/conflict，说明具体待补项，保留凭证待核。',
     'goal-analyze-progress 只读读取指定正式拆解版与阶段检查记录，辅助可比性与偏差说明。',
@@ -205,17 +206,7 @@ export const goalDecompositionTool = {
     script: Type.Optional(nonblank(100)),
     command: Type.Optional(nonblank(60)),
     scriptInput: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
-    gsaPlanId: Type.Optional(nonblank(120)),
-    gsaPlanVersion: Type.Optional(Type.Integer({ minimum: 1 })),
-    gsaPlanSha256: Type.Optional(Type.String({ pattern: '^[a-f0-9]{64}$' })),
-    expectedDraftRevision: Type.Optional(Type.Integer({ minimum: 0 })),
-    estimate: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
-    rows: Type.Optional(Type.Array(Type.Record(Type.String(), Type.Unknown()), { maxItems: 200 })),
-    reserves: Type.Optional(Type.Array(Type.Record(Type.String(), Type.Unknown()), { maxItems: 50 })),
-    gapStrategies: Type.Optional(Type.Array(Type.Record(Type.String(), Type.Unknown()), { maxItems: 50 })),
-    views: Type.Optional(Type.Array(Type.Record(Type.String(), Type.Unknown()), { maxItems: 20 })),
-    timePlan: Type.Optional(Type.Array(Type.Record(Type.String(), Type.Unknown()), { maxItems: 400 })),
-    notes: Type.Optional(Type.String({ maxLength: 4000 })),
+    ...Type.Partial(Type.Object(decompositionDraftFields)).properties,
     publicationVersion: Type.Optional(Type.Integer({ minimum: 1 })),
     comparability: Type.Optional(Type.Union(['comparable','partial-missing','observing','incomparable'].map(value => Type.Literal(value)))),
     assessmentNote: Type.Optional(nonblank(1000)),

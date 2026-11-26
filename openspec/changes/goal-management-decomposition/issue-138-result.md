@@ -145,3 +145,39 @@
 截图提交时已完成本地九项返工和独立 UI 验收，G9 待用户确认；该时点未提交／推送 Git、创建 PR、合并或更新 MacBook。
 
 用户于 2026-11-26 明确“确认，提交 Git，并推进 PR／CI／合并”，G9 已完成。再次 fetch 核对 `origin/main` 仍为 `15bff578c5b5b1d1f8db566144024de087c5e942`，产品／测试和独立复核的 candidate-3 摘要一致；本次只补确认与交付记录。按授权推送工作分支、创建关联 PR、核对实际 head 完整 CI、squash 合并并确认 main push CI；实际远端 SHA、CI 链接和结案回执统一补在同一 [#138](https://github.com/gadfly-hbo/OptraCall/issues/138)，不预先宣布完成。设备更新由用户后续安排。
+
+## Agent 拆解草稿保存契约修正（DC01–DC05）
+
+2026-11-26，上一 UI 返工已由 PR #140 合入 `main@051aff0fc7438262bad962988b9f8834f04799d8`，PR 与 main CI 均通过，原回执见 [#138](https://github.com/gadfly-hbo/OptraCall/issues/138#issuecomment-7189024609)。用户随后反馈 Agent 八次猜字段仍保存失败，重新开放并[领取本次修正](https://github.com/gadfly-hbo/OptraCall/issues/138#issuecomment-7189559113)。本轮未取得原始八次 payload，只复现已核实的契约缺失；不将其余未点名区块视为已核，不公开用户业务原文或身份。
+
+### 原因与修正
+
+原 `strategy_goals` 将 estimate／rows／预留／补缺／视图／时间计划声明为通用对象，模型看不到 Host 所需字段。工具现共享 `goal-decomposition-schema.ts` 中的完整持久化结构，确认前测算同用一份 estimate schema；首次读取提供准确 GSA 身份、正式值、范围及已绑定 SAP 的模板，测算／差额仍为 null。已有草稿不再生成空模板，沿原稿与最新 CAS 修订，不复制整个草稿挤占工具容量。
+
+保存格式失败现在指出字段，明确未保存和发布校验 `not-run`。首次接线测试发现仅附 Error.details 会被原 Runtime 安全过滤，已复用原 `safe-tool-error-v1` 的 message/issues 通道提供限定字段反馈；没有修改公共 Runtime、SDK 或创建重试循环。Agent 收到后自主纠错。缺口算式仍为正式值减测算值；未知或反推达标条件不能伪装为独立测算以抹平缺口。SAP 是否必需按原 measurement 绑定判断，不能由“有数值”或 manual-exception 一词推定；没有实际脚本执行不填回执。
+
+### 验证与保留结果
+
+证据位于本轮工作树 `.local/draft-contract/`，永久回归为 `tests/goal-decomposition-contract.test.ts`。
+
+| 检查 | 实际结果 |
+| --- | --- |
+| 修复前原生工具 RED | `red.log`：2 tests / 2 FAIL。合成 Provider 只用实际收到的 schema 和上下文，不预置完整私有 Host 草稿，确实无法完成首存。 |
+| 首次接线 | `green-1.log`：首存通过，纠错失败；查明安全通道未暴露错误详情。修复为复用原安全契约后 `green-2.log` 两条通过。原失败保留。 |
+| 目标管理定向回归 | `targeted-1.log`：core、full、当时四条新增测试，合计 25 PASS / 0 FAIL，覆盖脚本、金额、加权比率、里程碑、SAP、交叉冲突、失答、CAS 和版本边界。 |
+| 最终契约专项 | `contract-final-2.log`：5 PASS / 0 FAIL。实际 Host→官方 Pi→合成 Provider 首存、SDK 字段拒绝后纠正、Host 差额拒绝后纠正、未知保留与无自动发布；已绑定 SAP 不丢失，错误版本仍阻止发布。 |
+| 夹具失败 | `contract-final.log` 中新 SAP 测试误用进程夹具不存在的 root 属性，未到产品路径；改用其 dataRoot 后通过。该 FAIL 不伪装成产品 RED。 |
+| 类型／依赖／Demo | typecheck PASS；high audit PASS，保留 2 项既有 moderate，不升级依赖。批准 Demo 仍为 `7b1d3031768b2ad13b39850c35879deb601c7beca7ca134eff262d40e92cab0a`，未改前端。 |
+| 最终增量／构建 | `candidate-4-targeted.log`：四文件 30 PASS；仅补两项安全整数上限后的 `candidate-5-contract.log`：5 PASS。`candidate-5-build.log` 类型与真实构建 PASS。 |
+| 最终非作者复核 | `/root/draft_contract_review` 对固定 candidate-5 的 DC01–DC05 与四原则 PASS，无剩余必修项。独立定向 26 PASS（修正前身份）、固定最终候选专项和独立探针 11 PASS；101 个有界变体无剩余已扫描的根路径诊断缺口。运行前后候选摘要一致。 |
+| 完整适用检查 | `fullcheck-1.log`：3334 tests / 3136 PASS / 2 FAIL / 196 条件 SKIP，保留原 FAIL。沿前次已核定的任务级 subreaper 回收本测试的孤儿进程，不改产品或测试行为；会话边界检查 PASS。两项失败来自旧会话测试仍要求提示词 1.3.0，导致合成 Provider 拒绝回复，分别停在 accepted／未收到完成回执。只将三处精确版本预期更新至本次实际 1.3.1 后，原 native/归属/关闭/采用断言保持，`role-version-regression.log` 4 PASS，后续四文件 30 PASS。原完整命令在 tests 阶段退出，构建已单独按最终候选通过。准确 head 全量 CI 另按交付回执核定，不把局部复验改称原全量通过。 |
+
+完整检查启动后补充了重复行 ID 的准确报错路径、SAP 模板专项及复核发现的格式边界；最终受影响专项均独立通过，原完整检查结果按实际运行范围记录，交付的准确 head 另由 CI 核验。完整日志、固定产品/测试摘要、各次失败与独立结果的哈希见[本次证据索引](assets/issue-138-draft-contract-checks.json)。
+
+非作者复核发现并关闭了两项 P2：可空文字只有空格时 schema 与 parser 不一致，及维度键的长度/空白约束未被 Record 携带；另关闭安全整数上限的 P3。已显式补约束、精确字段反馈、动态维度键脱敏和永久反例。原失败、修订期间读取到混合候选的独立探针失败均保留；后者不当作固定候选的 native RED/PASS。Host 新安全错误不回显输入值和动态键，官方 Pi 的 schema 错误仍按其既有合同回显已提交参数，不能扩大宣称所有错误均无参数回显。
+
+### 四原则与交付边界
+
+Host 只提供输入契约、准确上下文、原存储／权限／发布校验和可纠正的安全错误；方法、算式、技能选择和错误修正仍由 Agent 自主决定。复用官方 Pi 1.4.0 的原生 schema 校验、工具调用与续接，沿 Interface v3 与原 goal/goal-draft owner，不新增调度、会话、依赖或 SDK 改写。用户只需表达业务要求、补真正缺失的事实并决定发布，无须提供 Host schema、编造 SAP 或重录已有草稿。已保存和可发布分开，经营授权未放宽。
+
+本轮仅工程合成验证，不代表真实供应商模型的专业预测能力通过。用户原文中的待核基线、分母、负责人、贡献与日历来源继续待业务核对；没有改动正式业务数据或更新 MacBook／Mac mini。非作者已完成本地增量复核；PR 实际 head CI、授权 squash 和 main push CI 后在同一 #138 回填实际提交及结案状态，不能以本地 PASS 提前结案。回退可 revert 本次提交恢复旧工具契约，已有草稿字段与存储格式不迁移、不回写旧文件。

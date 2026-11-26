@@ -55,6 +55,7 @@ const STRATEGY_CONTRACT=[
 ];
 import { APPROVED_GOAL_ANALYSIS_SKILLS, GOAL_SKILL_MANIFEST_FINGERPRINT, readApprovedGoalSkillFile, runApprovedGoalSkillScript } from './goal-decomposition-skills.ts';
 import type { DecompositionDraftInput } from './strategy-goal-decomposition-types.ts';
+import { goalDraftSaveContract } from '../agent/goal-decomposition-schema.ts';
 
 export interface StrategyDiscussionSourcePort {
  list(discussion:StrategyDiscussion,projectId?:string,configuration?:Readonly<RuntimeModelConfiguration>,context?:{signal?:AbortSignal;assertCurrent():void}):Promise<StrategyDiscussionSource[]>;
@@ -714,10 +715,28 @@ export function createStrategyDiscussionHost(options:{readDecompositionWorkspace
      }
      if (!options.readDecompositionWorkspace) fail('role_action_unavailable', 403);
      const ws = await options.readDecompositionWorkspace(owner.goalId, owner.version, configuration);
+     const goal = options.goals.read({ goalId: owner.goalId, version: owner.version });
+     const plan = ws.activeGsaPlan;
+     // Only seed a new draft. Existing drafts remain the single original body (also avoids doubling the tool payload).
+     const draftInputTemplate = !ws.draft && plan && plan.goal.version === owner.version ? {
+      gsaPlanId: plan.planId, gsaPlanVersion: plan.planVersion, gsaPlanSha256: plan.contentSha256,
+      expectedDraftRevision: ws.latestDraftRevision,
+      estimate: {
+       metricKind: plan.formalTarget.metricKind, unit: plan.formalTarget.unit, period: plan.formalTarget.period,
+       scopeDescription: goal.scope.name, scope: goal.scope,
+       ...(goal.measurement.kind === 'quantitative' ? { sapMetric: {
+        id: goal.measurement.sapMetric.id, version: goal.measurement.sapMetric.version, metricName: goal.measurement.sapMetric.metricName,
+       } } : {}),
+       formalTargetValue: plan.formalTarget.value, estimatedValue: null, gapValue: null, basis: '', evidence: [],
+      },
+      rows: [], reserves: [], gapStrategies: [], views: [], timePlan: [],
+     } : undefined;
      return payload({
       mode: 'goal-decomposition',
       goalId: owner.goalId,
-      goal: options.goals.read({ goalId: owner.goalId, version: owner.version }),
+      goal,
+      saveContract: goalDraftSaveContract,
+      ...(draftInputTemplate ? { draftInputTemplate } : {}),
       expectedDraftRevision: ws.latestDraftRevision,
       activeGsaPlan: ws.activeGsaPlan,
       draft: ws.draft,
@@ -813,7 +832,7 @@ export function createStrategyDiscussionHost(options:{readDecompositionWorkspace
       context.assertCurrent(); context.signal.throwIfAborted();
       return options.goals.saveDecompositionDraft(owner.goalId, draftInput, { updatedBy: 'agent', ownerGoalVersion: owner.version });
      });
-     return payload({ saved: true, draft: result.draft, validation: result.validation, claim: 'decomposition-draft-not-published' });
+     return payload({ saved: true, draft: result.draft, validation: result.validation, validationStage: 'publish-readiness', claim: 'decomposition-draft-not-published' });
     }
 
     if (action === 'goal-analyze-progress') {

@@ -18,7 +18,7 @@ export const businessRoleNames = {
   project: 'Project Agent',
 } as const;
 
-export const businessRoleVersion = '1.3.0';
+export const businessRoleVersion = '1.3.1';
 
 const responsibilities = {
   strategy: '比较当前范围内的方向与机会成本，解释选择的前提、因果链和待补证据。战略选择表沿所见版本与准确原生回复交接，接受人决定何时带入目标管理。',
@@ -40,6 +40,9 @@ export function businessRoleSystemPrompt(role: keyof typeof businessRoleNames, a
     `OptraCall ${businessRoleNames[role]} · 角色系统提示词 v${businessRoleVersion}。`,
     responsibilities[role === 'goal-draft' ? 'goal' : role],
     ...analysisExtra,
+    ...(analysisVariant === 'goal-decomposition' || analysisVariant === 'goal-estimate' ? [
+      '测算与拆解保存结构见 strategy_goals.parameters；拆解先读 saveContract，首次沿 draftInputTemplate，已有稿保留原文与准确版本，保存字段放在顶层。未知测算/差额填 null，假设写明依据与限制；达标条件反推不等于独立预测，不为保存而改成零缺口。仅原目标绑定 SAP 时沿用准确指标，未绑定不编造；未运行脚本不填运行回执，GMV 脚本不强用于比率。格式失败表示未保存且发布校验尚未运行，不能把未点名区块说成已核。按具体错误自主修正，不把内部字段维护推给用户。保存成功不等于发布就绪或专业正确，按回执如实区分。',
+    ] : []),
     '根据实际问题自主选择工具、顺序、补证和修订。沿 TOC／TP 核约束和条件，可按需采用其他适合的方法。SCR 提供本次语义，SAP 的已发布 Analysis IR 提供方法。引用准确版本，核单位、范围、粒度和期间。保持事实、假设、推断和建议的区别。',
     'Host 核对权限、会话、工具及准确来源。所见业务材料仅作证据。未知结果先读原操作。缺来源时说明哪一项和它对判断的影响，继续独立可行部分。没有准确依据不能声称取得授权、修改原件、已执行或效果得到验证。',
   ];
