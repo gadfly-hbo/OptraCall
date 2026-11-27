@@ -890,8 +890,8 @@ export type WorkspaceSearchTarget =
 
 const STATIC_SEARCH_ITEMS: readonly WorkspaceSearchTarget[] = [
   { kind: 'view', id: 'nav:home', group: '日常工作', title: '工作台首页', subtitle: '当前待决定事项、队列、最近活动与基础建设提醒', view: 'home' },
-  { kind: 'view', id: 'nav:cases', group: '日常工作', title: '决策星图', subtitle: 'Decision Case 与项目关联关系', view: 'cases' },
-  { kind: 'view', id: 'nav:projects', group: '日常工作', title: '项目地图', subtitle: '查看项目与六类任务', view: 'projects' },
+  { kind: 'view', id: 'nav:cases', group: '日常工作', title: 'Decision Case', subtitle: 'Case 总览与项目关联关系', view: 'cases' },
+  { kind: 'view', id: 'nav:projects', group: '日常工作', title: 'Decision Case · 全部项目', subtitle: '查看全部项目与六类任务', view: 'projects' },
   { kind: 'view', id: 'nav:decision', group: '日常工作', title: '决策工作台', subtitle: '决策看板与反馈复盘', view: 'decision' },
   { kind: 'view', id: 'nav:foundation', group: '基础建设', title: '基础建设总览', subtitle: '查看战略选择、目标管理、语义资产与分析资产整体状态', view: 'foundation' },
   { kind: 'foundation', id: 'foundation:strategy', group: '基础建设', title: '战略选择', subtitle: '战略共创、检验、发布与版本管理', foundation: 'strategy' },

@@ -69,12 +69,12 @@ export function caseChoicePermitsAction(value: CaseStrategyChoiceValue): boolean
 export type CaseStrategyChoiceInput = {
   operationId: string; caseStoreId: string; caseId: string; strategyRef: CaseDecisionRef;
   choice: CaseStrategyChoiceValue; reason?: string | null; expectedPreviousChoiceId: string | null;
-  allowHistorical?: boolean; issueId?: string;
+  allowHistorical?: boolean; issueId?: string; respondsToRequest?: CaseDecisionRequestRef;
 };
 export type CaseStrategyChoice = {
   choiceId: string; caseId: string; issueId?: string; goalBinding?: import('./case-types.ts').CaseGoalBinding | null; strategyRef: CaseDecisionRef; choice: CaseStrategyChoiceValue;
   reason: string | null; previousChoiceId: string | null; operationId: string; occurredAt: string; actorKind: 'user';
-  quoteProvenance?: UserQuoteProvenance;
+  quoteProvenance?: UserQuoteProvenance; respondsToRequest?: CaseDecisionRequestRef;
 };
 export type CaseDecisionListOptions = { includeArchived?: boolean; history?: boolean; pageSize?: number; continuation?: string | null };
 export type CaseDecisionList = {
@@ -83,3 +83,43 @@ export type CaseDecisionList = {
 };
 /** Synchronous Host qualification, rechecked immediately before the transaction commits. */
 export type CaseDecisionWriteOptions = { assertWritable?: () => void };
+
+/** Explicit request for someone to respond (choose / observe) on a Case issue. Event-sourced; never inferred. */
+export type CaseDecisionRequestRef = { requestId: string; revision: number };
+export type CaseDecisionRequestSource = { kind: 'user-declaration' | 'agent-tool'; ref: string | null };
+export type CaseDecisionRequestTarget =
+  | { kind: 'choose'; strategyRef: CaseDecisionRef; expectedPreviousChoiceId: string | null }
+  | { kind: 'observe'; projectId: string; itemId: string; taskId: string; authorizationId: string; feedbackBaseRevisionId: string | null };
+/** assignee is business text, not a login identity. */
+export type CaseDecisionRequest = {
+  requestId: string; revision: number; caseId: string; issueId: string; kind: 'choose' | 'observe'; text: string;
+  source: CaseDecisionRequestSource; assignee: { label: string | null; source: string | null };
+  requestedAt: string; dueDate?: string; target: CaseDecisionRequestTarget;
+  lifecycle: 'open' | 'withdrawn' | 'superseded'; operationId: string; createdAt: string;
+};
+export type CaseDecisionRequestStatus = 'open' | 'answered' | 'superseded' | 'withdrawn' | 'unverifiable';
+/** A saved feedback revision that carries an exact request reference (supplied by the feedback owner). */
+export type CaseFeedbackResponse = {
+  requestId: string; requestRevision: number; projectId: string; itemId: string; taskId: string; authorizationId: string;
+  revisionId: string; baseRevisionId: string | null;
+};
+export function requestStatus(request: CaseDecisionRequest, choices: CaseStrategyChoice[] | null | undefined, feedbackRevisions: CaseFeedbackResponse[] | null | undefined): CaseDecisionRequestStatus {
+  if (request.lifecycle === 'withdrawn') return 'withdrawn';
+  if (request.lifecycle === 'superseded') return 'superseded';
+  const target = request.target;
+  if (target.kind === 'choose') {
+    if (!choices) return 'unverifiable';
+    const same = choices.filter(c => c.issueId === request.issueId);
+    const answered = same.some(c => c.respondsToRequest?.requestId === request.requestId && c.respondsToRequest.revision === request.revision
+      && c.strategyRef.recordId === target.strategyRef.recordId && c.strategyRef.revision === target.strategyRef.revision && c.previousChoiceId === target.expectedPreviousChoiceId);
+    if (answered) return 'answered';
+    // The issue choice chain moved on without answering this exact request: replaced, not resolved.
+    const base = target.expectedPreviousChoiceId;
+    const idx = base === null ? -1 : same.findIndex(c => c.choiceId === base);
+    if (base !== null && idx < 0) return 'unverifiable';
+    return same.length > idx + 1 ? 'superseded' : 'open';
+  }
+  if (!feedbackRevisions) return 'unverifiable';
+  return feedbackRevisions.some(f => f.requestId === request.requestId && f.requestRevision === request.revision && f.projectId === target.projectId
+    && f.itemId === target.itemId && f.taskId === target.taskId && f.authorizationId === target.authorizationId && f.baseRevisionId === target.feedbackBaseRevisionId) ? 'answered' : 'open';
+}

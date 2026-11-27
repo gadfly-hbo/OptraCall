@@ -1,3 +1,4 @@
+import { HomeDailyQuickPanel } from './HomeDailyQuickPanel.tsx';
 import type { ClientProject } from './project-types.ts';
 import { useWorkspaceDeskData } from './use-workspace-desk-data.ts';
 import {
@@ -27,7 +28,7 @@ export interface WorkspaceHomeProps {
   refreshToken: number;
   preferredCaseId?: string;
   onCreateCase: () => void;
-  onOpenCase: (caseId: string) => void;
+  onOpenCase: (caseId: string, issueId?: string) => void;
   onOpenStarMap: () => void;
   onOpenProjectMap: () => void;
   onOpenDecisionBoard: () => void;
@@ -117,6 +118,7 @@ export function WorkspaceHome({
   return (
     <div className="workspace-home-scroll">
       <section className="desk-home" role="region" aria-label="工作台首页">
+        <HomeDailyQuickPanel refreshToken={refreshToken} onOpenCase={(caseId: string, issueId?: string) => onOpenCase(caseId, issueId)} onCreateCase={onCreateCase} onOpenAllProjects={onOpenProjectMap} />
         <header className="dh-head">
           <div>
             <p className="dh-date"><time dateTime={dateInfo.iso}>{dateInfo.text}</time></p>

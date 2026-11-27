@@ -65,10 +65,14 @@ export function parseCaseDecisionGovernance(value: unknown): CaseDecisionGoverna
   if (!hasReference && value.reference !== undefined) fail('invalid_case_decision_governance');
   return { operationId: caseDecisionId(value.operationId), caseStoreId: caseDecisionId(value.caseStoreId), caseId: caseDecisionId(value.caseId), recordId: caseDecisionId(value.recordId), expectedRevision: caseDecisionRevision(value.expectedRevision), action: value.action as CaseDecisionGovernanceInput['action'], ...(hasReference ? { reference: parseCaseDecisionReference(value.reference) } : {}) };
 }
+export function parseCaseDecisionRequestRef(value: unknown): { requestId: string; revision: number } {
+  caseDecisionFields(value, ['requestId', 'revision'], ['requestId', 'revision']);
+  return { requestId: caseDecisionId(value.requestId), revision: caseDecisionRevision(value.revision) };
+}
 export function parseCaseStrategyChoice(value: unknown): CaseStrategyChoiceInput & { reason: string | null; allowHistorical: boolean } {
-  caseDecisionFields(value, ['operationId', 'caseStoreId', 'caseId', 'strategyRef', 'choice', 'reason', 'expectedPreviousChoiceId', 'allowHistorical', 'issueId'], ['operationId', 'caseStoreId', 'caseId', 'strategyRef', 'choice', 'expectedPreviousChoiceId']);
+  caseDecisionFields(value, ['operationId', 'caseStoreId', 'caseId', 'strategyRef', 'choice', 'reason', 'expectedPreviousChoiceId', 'allowHistorical', 'issueId', 'respondsToRequest'], ['operationId', 'caseStoreId', 'caseId', 'strategyRef', 'choice', 'expectedPreviousChoiceId']);
   if (!['trial', 'gather_evidence', 'defer', 'reject', 'no_action', 'continue', 'adjust', 'stop_considering'].includes(String(value.choice)) || value.allowHistorical !== undefined && typeof value.allowHistorical !== 'boolean') fail('invalid_case_strategy_choice');
-  return { operationId: caseDecisionId(value.operationId), caseStoreId: caseDecisionId(value.caseStoreId), caseId: caseDecisionId(value.caseId), strategyRef: parseCaseDecisionRef(value.strategyRef), ...(value.issueId !== undefined ? { issueId: caseDecisionId(value.issueId) } : {}), choice: value.choice as CaseStrategyChoiceValue, reason: value.reason == null ? null : caseDecisionText(value.reason, 4000), expectedPreviousChoiceId: value.expectedPreviousChoiceId === null ? null : caseDecisionId(value.expectedPreviousChoiceId), allowHistorical: value.allowHistorical === true };
+  return { operationId: caseDecisionId(value.operationId), caseStoreId: caseDecisionId(value.caseStoreId), caseId: caseDecisionId(value.caseId), strategyRef: parseCaseDecisionRef(value.strategyRef), ...(value.issueId !== undefined ? { issueId: caseDecisionId(value.issueId) } : {}), choice: value.choice as CaseStrategyChoiceValue, reason: value.reason == null ? null : caseDecisionText(value.reason, 4000), expectedPreviousChoiceId: value.expectedPreviousChoiceId === null ? null : caseDecisionId(value.expectedPreviousChoiceId), allowHistorical: value.allowHistorical === true, ...(value.respondsToRequest !== undefined ? { respondsToRequest: parseCaseDecisionRequestRef(value.respondsToRequest) } : {}) };
 }
 export function parseCaseDecisionPayload(kind: CaseDecisionKind, value: unknown): CaseDecisionPayload {
   const title = object(value) ? caseDecisionText(value.title, 240, true) : fail();

@@ -103,8 +103,16 @@ function feedbackInput(input: Record<string, unknown>): SaveFeedbackInput {
     if (typeof input[key] !== 'string') throw new BoardRouteError(400, 'invalid_feedback', messages.invalid_feedback!.message);
     return input[key];
   };
+  let respondsToRequest: SaveFeedbackInput['respondsToRequest'];
+  if (input.respondsToRequest !== undefined) {
+    const r = input.respondsToRequest as Record<string, unknown> | null;
+    if (!r || typeof r !== 'object' || typeof r.requestId !== 'string' || !projectIdPattern.test(r.requestId) || typeof r.authorizationId !== 'string' || !projectIdPattern.test(r.authorizationId) || typeof r.revision !== 'number' || !Number.isSafeInteger(r.revision) || r.revision < 1) {
+      throw new BoardRouteError(400, 'invalid_feedback', messages.invalid_feedback!.message);
+    }
+    respondsToRequest = { requestId: r.requestId, revision: r.revision, authorizationId: r.authorizationId };
+  }
   return { operationId: input.operationId, expectedLatestRevisionId: input.expectedLatestRevisionId, adopted: input.adopted,
-    outcome: content('outcome'), metricDelta: content('metricDelta'), review: content('review'), score, effect: effect as FeedbackEffect };
+    outcome: content('outcome'), metricDelta: content('metricDelta'), review: content('review'), score, effect: effect as FeedbackEffect, ...(respondsToRequest ? { respondsToRequest } : {}) };
 }
 
 /** Host-owned HTTP transport calls these handlers; the plugin never binds a port itself. */

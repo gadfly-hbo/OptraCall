@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { parseUserQuoteProvenance, type UserQuoteProvenance } from '../../../../src/agent/quoted-decisions.ts';
 import type { BoardActionAuthorization, BoardActionAuthorizationInput, BoardAuthorizationSource, BoardArrangeAction, BoardArrangeActionsInput, BoardArrangementReceipt } from '../types.ts';
-import { EVIDENCE_CONFIDENCE, PRIORITIES, EVIDENCE_LEVELS, type ConfirmReportConclusionsInput, type ConfirmedConclusionRecord, type ConfirmedReviewClaim, type ConfirmedReviewEvidence, type ReportConfirmationReceipt, type ReportConfirmationSource, type BoardItemRecord, type BoardTaskRecord, type Evidence, type EvidenceLevel, type ExtractionConfiguration, type ExtractionRecord, type FeedbackEffect, type NormalizedItem, type Priority, type ReportRecord, type SaveFeedbackInput, type TaskFeedbackRevision } from '../types.ts';
+import { EVIDENCE_CONFIDENCE, PRIORITIES, EVIDENCE_LEVELS, type ConfirmReportConclusionsInput, type ConfirmedConclusionRecord, type ConfirmedReviewClaim, type ConfirmedReviewEvidence, type ReportConfirmationReceipt, type ReportConfirmationSource, type BoardItemRecord, type BoardTaskRecord, type Evidence, type EvidenceLevel, type ExtractionConfiguration, type ExtractionRecord, type FeedbackEffect, type NormalizedItem, type Priority, type ReportRecord, type SaveFeedbackInput, type TaskFeedbackRevision, type FeedbackRequestResponseRef } from '../types.ts';
 
 export class DecisionBoardFault extends Error {
   readonly code: string;
@@ -173,9 +173,10 @@ const extraction = (row: Record<string, unknown>): ExtractionRecord => {
   return { ...value, configuration: JSON.parse(String(row.configuration_json)) as ExtractionConfiguration, truncated: Number(row.truncated) === 1 };
 };
 const feedback = (row: Record<string, unknown>): TaskFeedbackRevision => {
-  const record = strip(camel(row), ['quoteProvenanceJson']) as unknown as TaskFeedbackRevision;
+  const record = strip(camel(row), ['quoteProvenanceJson', 'respondsToRequestJson']) as unknown as TaskFeedbackRevision;
   return { ...record, adopted: Number(row.adopted) === 1, createdAt: record.legacyCreatedAt ?? record.savedAt, updatedAt: record.legacyUpdatedAt ?? record.savedAt,
-    ...(row.quote_provenance_json == null ? {} : { quoteProvenance: parseUserQuoteProvenance(JSON.parse(String(row.quote_provenance_json))) }) };
+    ...(row.quote_provenance_json == null ? {} : { quoteProvenance: parseUserQuoteProvenance(JSON.parse(String(row.quote_provenance_json))) }),
+    ...(row.responds_to_request_json == null ? {} : { respondsToRequest: JSON.parse(String(row.responds_to_request_json)) as FeedbackRequestResponseRef }) };
 };
 
 function text(value: unknown, max: number, required = false): string {
@@ -262,7 +263,13 @@ function feedbackInput(taskId: string, input: SaveFeedbackInput) {
   };
   // This fixed object order is the canonical payload; absent optional fields
   // normalize to the same explicit values as the corresponding UI controls.
-  return { taskId, operationId, expectedLatestRevisionId, adopted: input.adopted, outcome: bounded(input.outcome, 4000), metricDelta: bounded(input.metricDelta, 1000), review: bounded(input.review, 4000), score, effect: effect as FeedbackEffect };
+  let respondsToRequest: FeedbackRequestResponseRef | undefined;
+  if (input.respondsToRequest !== undefined) {
+    const r = input.respondsToRequest;
+    if (!r || typeof r !== 'object' || !Number.isSafeInteger(r.revision) || r.revision < 1) fail('invalid_feedback');
+    respondsToRequest = { requestId: uuid(r.requestId), revision: r.revision, authorizationId: uuid(r.authorizationId) };
+  }
+  return { taskId, operationId, expectedLatestRevisionId, adopted: input.adopted, outcome: bounded(input.outcome, 4000), metricDelta: bounded(input.metricDelta, 1000), review: bounded(input.review, 4000), score, effect: effect as FeedbackEffect, ...(respondsToRequest ? { respondsToRequest } : {}) };
 }
 
 function confirmationInput(input: ConfirmReportConclusionsInput) {
@@ -660,8 +667,16 @@ export function createDecisionBoardStore(options: { root: string }) {
       const latest = database().prepare('SELECT revision_id,revision_number FROM feedback_revisions WHERE task_id=? ORDER BY revision_number DESC LIMIT 1').get(taskId);
       if ((latest?.revision_id ?? null) !== clean.expectedLatestRevisionId) fail('feedback_revision_conflict');
       const revisionId = randomUUID();
-      database().prepare(`INSERT INTO feedback_revisions (revision_id,task_id,revision_number,operation_id,request_sha256,adopted,outcome,metric_delta,review,score,effect,saved_at,origin,legacy_created_at,legacy_updated_at,quote_provenance_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'user-save',NULL,NULL,?)`)
-        .run(revisionId, taskId, Number(latest?.revision_number ?? 0) + 1, clean.operationId, digest, clean.adopted ? 1 : 0, clean.outcome, clean.metricDelta, clean.review, clean.score, clean.effect, now(), clean.quoteProvenance ? JSON.stringify(clean.quoteProvenance) : null);
+      const cols = database().prepare('PRAGMA table_info(feedback_revisions)').all() as { name: string }[];
+      if (clean.respondsToRequest && !cols.some(c => c.name === 'responds_to_request_json')) database().exec('ALTER TABLE feedback_revisions ADD COLUMN responds_to_request_json TEXT;');
+      const hasResp = clean.respondsToRequest || cols.some(c => c.name === 'responds_to_request_json');
+      if (hasResp) {
+        database().prepare(`INSERT INTO feedback_revisions (revision_id,task_id,revision_number,operation_id,request_sha256,adopted,outcome,metric_delta,review,score,effect,saved_at,origin,legacy_created_at,legacy_updated_at,quote_provenance_json,responds_to_request_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'user-save',NULL,NULL,?,?)`)
+          .run(revisionId, taskId, Number(latest?.revision_number ?? 0) + 1, clean.operationId, digest, clean.adopted ? 1 : 0, clean.outcome, clean.metricDelta, clean.review, clean.score, clean.effect, now(), clean.quoteProvenance ? JSON.stringify(clean.quoteProvenance) : null, clean.respondsToRequest ? JSON.stringify(clean.respondsToRequest) : null);
+      } else {
+        database().prepare(`INSERT INTO feedback_revisions (revision_id,task_id,revision_number,operation_id,request_sha256,adopted,outcome,metric_delta,review,score,effect,saved_at,origin,legacy_created_at,legacy_updated_at,quote_provenance_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'user-save',NULL,NULL,?)`)
+          .run(revisionId, taskId, Number(latest?.revision_number ?? 0) + 1, clean.operationId, digest, clean.adopted ? 1 : 0, clean.outcome, clean.metricDelta, clean.review, clean.score, clean.effect, now(), clean.quoteProvenance ? JSON.stringify(clean.quoteProvenance) : null);
+      }
       writes = true;
       return getFeedbackRevision(revisionId)!;
     }, false, () => { if (writes) options?.assertWritable?.(); });

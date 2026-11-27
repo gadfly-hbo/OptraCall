@@ -13,6 +13,14 @@ export function createCaseDecisionRoutes(service: CaseDecisionService) {
       if (method === 'GET') return { body: { issues: service.issueList(caseId) } };
       if (method === 'POST') return { status: 201, body: { issue: await service.createIssue(caseId, input as Record<string, unknown>) } };
     }
+    if (action === 'issue-edges') {
+      if (method === 'GET') return { body: { edges: service.issueEdges(caseId, searchParams.get('includeRemoved') === 'true') } };
+      if (method === 'POST') return { status: 201, body: { edge: await service.saveIssueEdge(caseId, input as Record<string, unknown>) } };
+    }
+    if (action === 'requests') {
+      if (method === 'GET') return { body: { requests: service.decisionRequests(caseId) } };
+      if (method === 'POST') return { status: 201, body: { request: await service.saveDecisionRequest(caseId, input as Record<string, unknown>) } };
+    }
     const issue = /^issues\/([a-f0-9-]+)(?:\/(sources|reply|plans|authorize|review))?$/.exec(action ?? '');
     if (issue) {
       const id = issue[1]!, sub = issue[2];

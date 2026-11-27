@@ -6,11 +6,14 @@ import type { CaseRecord } from '../case-types.ts';
 import type { TaskCreateIntent } from '../task-assignment.ts';
 import type { ClientProject } from './project-types.ts';
 import { BusinessRoleConversation } from './BusinessRoleConversation.tsx';
+import { CaseIssueTreeSidebar } from './CaseIssueTreeSidebar.tsx';
+import { appendCarryOverFragment, listWorkspaceDrafts, readWorkspaceDraft, saveWorkspaceDraft } from './workspace-daily-client.ts';
+import type { CarryOverFragmentPayload, IssueDraftPayload, WorkspaceDraftRecord } from '../workspace-draft-store.ts';
 import { CaseFormError, caseError, useOperationId } from './CaseDialogs.tsx';
 import { caseIssues, caseIssueSources, caseIssueTimeline, createCaseIssue, readCaseDecisions, inspectIssueReply, saveCaseStrategyChoice, writeCaseIssue } from './case-decisions-client.ts';
 
 type IssueRef = { caseId: string; issueId: string };
-type Props = { onTeachReview?(owner:TeachReviewOwner):void; initialIssueId?: string; record: CaseRecord; projects: ClientProject[]; onChange(): void; onBoard?(target?: import('./FeedbackContextPanel.tsx').FeedbackReviewStart): void; onOpenProject?(project: ClientProject, issue: IssueRef): void; onCreate(project: ClientProject, intent: TaskCreateIntent): void };
+type Props = { onTeachReview?(owner:TeachReviewOwner):void; initialIssueId?: string; onSelectIssue?: (issueId: string) => void; record: CaseRecord; projects: ClientProject[]; onChange(): void; onBoard?(target?: import('./FeedbackContextPanel.tsx').FeedbackReviewStart): void; onOpenProject?(project: ClientProject, issue: IssueRef): void; onCreate(project: ClientProject, intent: TaskCreateIntent): void };
 const choiceName: Record<CaseStrategyChoiceValue, string> = { trial: '试行', adjust: '调整', continue: '继续', defer: '暂缓', no_action: '本次不行动', gather_evidence: '补证', reject: '不采用', stop_considering: '停止考虑' };
 
 export function CaseIssuePanel({ children, ...props }: Props & { children?: ReactNode }) {
@@ -18,6 +21,10 @@ export function CaseIssuePanel({ children, ...props }: Props & { children?: Reac
   const [issues, setIssues] = useState<CaseDecisionIssue[]>(), [selected, setSelected] = useState('');
   const [title, setTitle] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
+  const [fragments, setFragments] = useState<WorkspaceDraftRecord<CarryOverFragmentPayload>[]>([]);
+  const [issueDraftText, setIssueDraftText] = useState('');
+  const [issueDraftRev, setIssueDraftRev] = useState(0);
+  const [draftNotice, setDraftNotice] = useState('');
   const conversationId = useId();
   const issueSelectId = useId(), newIssueId = useId();
   const operation = useOperationId();
@@ -33,6 +40,19 @@ export function CaseIssuePanel({ children, ...props }: Props & { children?: Reac
     }, e => { if (active) setError(caseError(e)); });
     return () => { active = false; };
   }, [record.id, record.revision, initialIssueId]);
+  useEffect(() => { if (selected) props.onSelectIssue?.(selected); }, [selected]);
+  useEffect(() => {
+    let active = true;
+    const draftKey = `issue:${record.id}:${selected || 'none'}`;
+    void listWorkspaceDrafts<CarryOverFragmentPayload>('carry-over').then(({ drafts }) => {
+      if (active) setFragments(drafts.filter(d => d.payload.targetCaseId === record.id && (!d.payload.targetIssueId || d.payload.targetIssueId === selected)));
+    }, () => {});
+    void readWorkspaceDraft<IssueDraftPayload>('issue-draft', draftKey).then(
+      ({ draft }) => { if (active) { setIssueDraftText(draft.payload.text); setIssueDraftRev(draft.revision); } },
+      () => { if (active) { setIssueDraftText(''); setIssueDraftRev(0); } },
+    );
+    return () => { active = false; };
+  }, [record.id, selected]);
   async function add() {
     setBusy(true); setError('');
     try {
@@ -57,6 +77,31 @@ export function CaseIssuePanel({ children, ...props }: Props & { children?: Reac
           {!selected && <option value="">选择独立决策事项</option>}
           {issues.map(i => <option key={i.id} value={i.id}>{i.title}</option>)}
         </select>
+      </div>}
+      {!!issues?.length && <CaseIssueTreeSidebar record={record} issues={issues} selectedIssueId={selected} onSelectIssue={id => setSelected(id)} onChanged={props.onChange} />}
+      {fragments.length > 0 && <div className="case-carry-over-banner" role="region" aria-label="待带入片段">
+        <strong>待带入片段（{fragments.length}，不会自动覆盖既有草稿或发送）</strong>
+        {fragments.map(frag => <article key={frag.id} className="case-carry-over-item">
+          <p>{frag.payload.originalText}</p>
+          <details><summary>来源：{frag.payload.origin.label}</summary><p className="case-help">原文：{frag.payload.originalText}{frag.payload.origin.ref ? ` · 引用 ${frag.payload.origin.ref}` : ''}</p></details>
+          {!closed && <button type="button" className="secondary-button" onClick={async () => {
+            try {
+              const res = await appendCarryOverFragment({ fragmentId: frag.id, issueDraftId: `issue:${record.id}:${selected || 'none'}`, caseId: record.id, issueId: selected || null, expectedDraftRevision: issueDraftRev });
+              setIssueDraftText(res.draft.payload.text); setIssueDraftRev(res.draft.revision); setFragments(old => old.map(f => f.id === res.fragment.id ? res.fragment : f));
+              setDraftNotice(res.alreadyAppended ? '此片段已追加过，未重复写入。' : '已追加到事项草稿，原文与来处仍保留。');
+            } catch (e) { setError(caseError(e)); }
+          }}>{frag.payload.appendedAt ? '已追加（再次点击不重复）' : '追加到事项草稿'}</button>}
+        </article>)}
+        {issueDraftText && <div className="case-issue-draft-box">
+          <label>事项持久草稿（手动确认后再发给 Agent）<textarea rows={2} value={issueDraftText} onChange={e => setIssueDraftText(e.target.value)} /></label>
+          <button type="button" className="text-button" onClick={async () => {
+            try {
+              const res = await saveWorkspaceDraft<IssueDraftPayload>('issue-draft', `issue:${record.id}:${selected || 'none'}`, issueDraftRev, { caseId: record.id, issueId: selected || null, text: issueDraftText, appendedFragmentIds: fragments.filter(f => f.payload.appendedAt).map(f => f.id) });
+              setIssueDraftRev(res.draft.revision); setDraftNotice('事项草稿已保存。');
+            } catch (e) { setError(caseError(e)); }
+          }}>保存草稿</button>
+        </div>}
+        {draftNotice && <p className="case-notice" role="status">{draftNotice}</p>}
       </div>}
       <div id={conversationId} hidden={!open}>
         {selected && <BusinessRoleConversation owner={{ role:'case', caseId:record.id, itemId:selected }} readOnly={closed} showInlineTitle={false}/>}

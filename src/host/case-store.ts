@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { CaseStoreError } from './case-types.ts';
 export { CaseStoreError } from './case-types.ts';
-import type { CaseDecisionIssue, CaseIssueEdge, CaseIssueEdgeSource, CaseIssueReview, CaseIssueReply, CaseDecisionDraftInput, CaseDecisionGovernanceInput, CaseDecisionOrigin, CaseDecisionRevision, CaseDecisionList, CaseDecisionListOptions, CaseDecisionWriteOptions, CaseStrategyChoice, CaseStrategyChoiceInput } from './case-decision-types.ts';
+import type { CaseDecisionIssue, CaseIssueEdge, CaseIssueEdgeSource, CaseIssueReview, CaseIssueReply, CaseDecisionDraftInput, CaseDecisionGovernanceInput, CaseDecisionOrigin, CaseDecisionRevision, CaseDecisionList, CaseDecisionListOptions, CaseDecisionWriteOptions, CaseStrategyChoice, CaseStrategyChoiceInput, CaseDecisionRequest, CaseDecisionRequestSource, CaseDecisionRequestTarget } from './case-decision-types.ts';
 import { parseCaseDecisionDraft, parseCaseDecisionGovernance, parseCaseDecisionOrigin, parseCaseStrategyChoice } from './case-decision-validation.ts';
 import { parseUserQuoteProvenance, type UserQuoteProvenance } from '../agent/quoted-decisions.ts';
 import type { CaseRelationList, CaseRelationListOptions, CaseRelationRevision, CaseRelationWriteInput, CaseRelationSource } from './case-relation-types.ts';
@@ -774,7 +774,8 @@ export class CaseStore {
       explanation: input.explanation == null ? '' : text(input.explanation, 1000, true),
       source: { kind: source.kind, ref: source.ref == null ? null : text(source.ref, 400, true, true, true) },
     };
-    return this.operation('case_update', { ...clean, action: `issue-edge-${action}` }, clean.caseId, null, () => {
+    const request = { ...clean, op: 'issue-edge' };
+    return this.operation('case_update', request, clean.caseId, null, () => {
       const before = this.activeCase(clean.caseId, clean.expectedRevision), createdAt = now();
       const all = this.listIssueEdges(before.id, { includeRemoved: true });
       let previous: CaseIssueEdge | undefined;
@@ -799,6 +800,80 @@ export class CaseStore {
       return edge;
     }, { decisions: true });
   }
+  /** Explicit decision requests are append-only Case events (changes.decisionRequest); the latest revision per requestId is current. */
+  listDecisionRequests(caseId: string, options: { includeHistory?: boolean } = {}): CaseDecisionRequest[] {
+    this.getCase(caseId);
+    const rows: CaseDecisionRequest[] = [], latest = new Map<string, CaseDecisionRequest>();
+    for (const event of this.getEvents('case', caseId)) {
+      const request = event.changes.decisionRequest?.after as CaseDecisionRequest | undefined;
+      if (!request) continue;
+      rows.push(request); latest.set(request.requestId, request);
+    }
+    return options.includeHistory ? rows : [...latest.values()];
+  }
+  saveDecisionRequest(input: Mutation & { requestId?: string; action?: 'save' | 'withdraw' | 'supersede'; issueId?: string; kind?: 'choose' | 'observe'; text?: string; source: CaseDecisionRequestSource;
+    assignee?: { label?: string | null; source?: string | null }; requestedAt?: string; dueDate?: string | null; target?: CaseDecisionRequestTarget; expectedRequestRevision: number }): CaseDecisionRequest {
+    const action = input.action === 'withdraw' || input.action === 'supersede' ? input.action : 'save';
+    const source = input.source;
+    if (!source || (source.kind !== 'user-declaration' && source.kind !== 'agent-tool')) fail('invalid_case_decision_request_source');
+    const optional = (value: unknown, max: number) => value == null || value === '' ? null : text(value, max, true, true);
+    const dueDate = input.dueDate == null ? undefined : (typeof input.dueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(input.dueDate) && !Number.isNaN(Date.parse(input.dueDate)) ? input.dueDate : fail('invalid_case_decision_request'));
+    let target: CaseDecisionRequestTarget | undefined;
+    if (input.target) {
+      const t = input.target as Record<string, unknown>;
+      if (t.kind === 'choose') {
+        const ref = t.strategyRef as CaseDecisionRequestTarget & { type?: string; caseStoreId?: string; caseId?: string; recordId?: string; revision?: number } | undefined;
+        if (!ref || ref.type !== 'case-decision') return fail('invalid_case_decision_request');
+        target = { kind: 'choose', strategyRef: { type: 'case-decision', caseStoreId: uuid(ref.caseStoreId), caseId: uuid(ref.caseId), recordId: uuid(ref.recordId), revision: revision(ref.revision) },
+          expectedPreviousChoiceId: t.expectedPreviousChoiceId === null ? null : uuid(t.expectedPreviousChoiceId) };
+      } else if (t.kind === 'observe') {
+        target = { kind: 'observe', projectId: uuid(t.projectId), itemId: uuid(t.itemId), taskId: uuid(t.taskId), authorizationId: uuid(t.authorizationId),
+          feedbackBaseRevisionId: t.feedbackBaseRevisionId === null ? null : uuid(t.feedbackBaseRevisionId) };
+      } else fail('invalid_case_decision_request');
+    }
+    const clean = {
+      operationId: uuid(input.operationId), caseId: uuid(input.caseId), expectedRevision: revision(input.expectedRevision), action,
+      expectedRequestRevision: revision(input.expectedRequestRevision, true), ...(input.requestId ? { requestId: uuid(input.requestId) } : {}),
+      ...(input.issueId ? { issueId: uuid(input.issueId) } : {}), ...(input.kind ? { kind: input.kind } : {}),
+      ...(input.text !== undefined ? { text: text(input.text, 4000, true, true) } : {}),
+      ...(dueDate ? { dueDate } : {}), ...(target ? { target } : {}),
+      assignee: { label: optional(input.assignee?.label, 120), source: optional(input.assignee?.source, 400) },
+      ...(input.requestedAt ? { requestedAt: text(input.requestedAt, 40, true, true) } : {}),
+      source: { kind: source.kind, ref: source.ref == null ? null : text(source.ref, 400, true, true, true) },
+    };
+    if (clean.kind !== undefined && clean.kind !== 'choose' && clean.kind !== 'observe') fail('invalid_case_decision_request');
+    const request = { ...clean, op: `decision-request-${action}` };
+    return this.operation('case_update', request, clean.caseId, null, () => {
+      const before = this.activeCase(clean.caseId, clean.expectedRevision), createdAt = now();
+      let previous: CaseDecisionRequest | undefined;
+      if (clean.requestId) {
+        previous = this.listDecisionRequests(before.id).find(r => r.requestId === clean.requestId);
+        if (!previous) fail('case_decision_request_not_found', 404);
+        if (previous.revision !== clean.expectedRequestRevision) fail('case_decision_request_conflict', 409);
+        if (previous.lifecycle !== 'open') fail('case_decision_request_closed', 409);
+      } else if (clean.expectedRequestRevision !== 0 || action !== 'save') fail('case_decision_request_conflict', 409);
+      const kind = previous?.kind ?? clean.kind, issueId = previous?.issueId ?? clean.issueId, nextTarget = clean.target ?? previous?.target, body = clean.text ?? previous?.text;
+      if (!kind || !issueId || !nextTarget || !body || nextTarget.kind !== kind) return fail('invalid_case_decision_request');
+      if (clean.kind && previous && clean.kind !== previous.kind || clean.issueId && previous && clean.issueId !== previous.issueId) fail('case_decision_request_conflict', 409);
+      this.getDecisionIssue(before.id, issueId);
+      if (action === 'save' && nextTarget.kind === 'choose') {
+        const ref = nextTarget.strategyRef;
+        if (ref.caseId !== before.id) fail('case_decision_scope_mismatch', 409);
+        if (this.getDecision(before.id, ref.recordId, ref.revision).kind !== 'strategy') fail('case_choice_requires_strategy');
+      }
+      const assignee = action === 'save' ? clean.assignee : previous?.assignee ?? clean.assignee;
+      const request: CaseDecisionRequest = {
+        requestId: previous?.requestId ?? randomUUID(), revision: (previous?.revision ?? 0) + 1, caseId: before.id, issueId, kind, text: body,
+        source: clean.source, assignee: previous && action !== 'save' ? previous.assignee : assignee, requestedAt: previous?.requestedAt ?? clean.requestedAt ?? createdAt,
+        ...((action === 'save' ? clean.dueDate : previous?.dueDate) ? { dueDate: (action === 'save' ? clean.dueDate : previous?.dueDate)! } : {}),
+        target: nextTarget, lifecycle: action === 'withdraw' ? 'withdrawn' : action === 'supersede' ? 'superseded' : 'open', operationId: clean.operationId, createdAt,
+      };
+      const after = { ...before, revision: before.revision + 1, updatedAt: createdAt };
+      this.put('cases', 'id', after);
+      this.event('case', before.id, after.revision, 'case_updated', clean.operationId, { decisionRequest: { before: previous ?? null, after: request } }, createdAt);
+      return request;
+    }, { decisions: true });
+  }
   saveIssueReview(input: Omit<CaseIssueReview, 'createdAt'> & { expectedRevision: number }, observedAuthorizationId?: string): CaseIssueReview {
     const clean = { ...input, judgement: text(input.judgement, 4000, true, true), nextStep: text(input.nextStep, 4000, true, true), observation: text(input.observation, 4000, true, true) };
     const request = { ...clean, action: 'review-decision-round' };
@@ -819,10 +894,10 @@ export class CaseStore {
   private strategyChoiceEvent(caseId: string, event: WorkEvent): CaseStrategyChoice {
       try {
         const after = event.changes.choice?.after as Record<string, unknown>, before = event.changes.choice?.before as Record<string, unknown> | null;
-        const parsed = parseCaseStrategyChoice({ operationId: event.operationId, caseStoreId: this.decisionStoreId(), caseId, strategyRef: after.strategyRef, choice: after.choice, reason: after.reason, issueId: after.issueId, expectedPreviousChoiceId: before?.choiceId ?? null });
+        const parsed = parseCaseStrategyChoice({ operationId: event.operationId, caseStoreId: this.decisionStoreId(), caseId, strategyRef: after.strategyRef, choice: after.choice, reason: after.reason, issueId: after.issueId, respondsToRequest: after.respondsToRequest, expectedPreviousChoiceId: before?.choiceId ?? null });
         if (event.actorKind !== 'user' || parsed.strategyRef.caseId !== caseId || parsed.strategyRef.caseStoreId !== parsed.caseStoreId) fail('corrupt_case_choice', 503);
         const quoteProvenance = after.quoteProvenance === undefined ? undefined : parseUserQuoteProvenance(after.quoteProvenance);
-        return { choiceId: event.id, caseId, ...(parsed.issueId ? { issueId: parsed.issueId, goalBinding: after.goalBinding as CaseGoalBinding | null } : {}), strategyRef: parsed.strategyRef, choice: parsed.choice, reason: parsed.reason, previousChoiceId: parsed.expectedPreviousChoiceId, operationId: event.operationId, occurredAt: event.occurredAt, actorKind: 'user', ...(quoteProvenance ? { quoteProvenance } : {}) };
+        return { choiceId: event.id, caseId, ...(parsed.issueId ? { issueId: parsed.issueId, goalBinding: after.goalBinding as CaseGoalBinding | null } : {}), ...(parsed.respondsToRequest ? { respondsToRequest: parsed.respondsToRequest } : {}), strategyRef: parsed.strategyRef, choice: parsed.choice, reason: parsed.reason, previousChoiceId: parsed.expectedPreviousChoiceId, operationId: event.operationId, occurredAt: event.occurredAt, actorKind: 'user', ...(quoteProvenance ? { quoteProvenance } : {}) };
       } catch { return fail('corrupt_case_choice', 503); }
   }
   getStrategyChoices(caseId: string): CaseStrategyChoice[] {
@@ -848,9 +923,9 @@ export class CaseStore {
       this.put('cases', 'id', core);
       const choiceId = this.event('case', core.id, core.revision, 'case_strategy_choice', clean.operationId, {
         choice: { before: previous ? { choiceId: previous.choiceId, strategyRef: previous.strategyRef, choice: previous.choice, reason: previous.reason } : null,
-          after: { ...ownership, strategyRef: target, choice: clean.choice, reason: clean.reason, ...(quoteProvenance ? { quoteProvenance } : {}) } },
+          after: { ...ownership, strategyRef: target, choice: clean.choice, reason: clean.reason, ...(clean.respondsToRequest ? { respondsToRequest: clean.respondsToRequest } : {}), ...(quoteProvenance ? { quoteProvenance } : {}) } },
       }, time);
-      return { choiceId, caseId: core.id, ...ownership, strategyRef: target, choice: clean.choice, reason: clean.reason, previousChoiceId: previous?.choiceId ?? null, operationId: clean.operationId, occurredAt: time, actorKind: 'user', ...(quoteProvenance ? { quoteProvenance } : {}) };
+      return { choiceId, caseId: core.id, ...ownership, strategyRef: target, choice: clean.choice, reason: clean.reason, previousChoiceId: previous?.choiceId ?? null, ...(clean.respondsToRequest ? { respondsToRequest: clean.respondsToRequest } : {}), operationId: clean.operationId, occurredAt: time, actorKind: 'user', ...(quoteProvenance ? { quoteProvenance } : {}) };
     }, { ...options, decisions: true });
   }
   private event(subjectType: 'case' | 'project', subjectId: string, revisionNumber: number, eventType: WorkEventType, operationId: string, delta: WorkEvent['changes'], time: string, note: Note | null = null, originCaseId: string | null = null) {

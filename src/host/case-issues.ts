@@ -5,6 +5,7 @@ import { caseChoicePermitsAction } from './case-decision-types.ts';
 import { CaseStoreError } from './case-types.ts';
 import { caseDecisionFields, caseDecisionId, caseDecisionRevision, caseDecisionText, parseCaseDecisionTarget } from './case-decision-validation.ts';
 import type { CaseDecisionRef, CaseDecisionRevision, CaseIssueReply, CaseIssueReview, CaseStrategyChoice } from './case-decision-types.ts';
+import { requestStatus } from './case-decision-types.ts';
 import type { CaseDecisionServiceDependencies } from './case-decision-service.ts';
 import { listTaskResultSources, ProjectTaskResultSourceError, type TaskBoundReportsOptions } from './project-task-result-sources.ts';
 import { createNativeSnapshotReadBudget, NativeSnapshotError } from './native-session-snapshot.ts';
@@ -365,5 +366,55 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
     });
   }
   return {verifyPriorProjectRoundRights, checkDoAuthorization, checkPlan, currentTeachRights, issueModelContext, issueTimeline, issueSources, inspectIssueReply, issueWrite, issueList: (caseId: string) => cases.listDecisionIssues(caseId),
+    issueEdges: (caseId: string, includeRemoved = false) => cases.listIssueEdges(caseId, { includeRemoved }),
+    saveIssueEdge: (caseId: string, input: Record<string, unknown>) => {
+      caseDecisionFields(input, ['operationId', 'expectedRevision', 'edgeId', 'fromIssueId', 'toIssueId', 'action', 'explanation', 'expectedEdgeRevision', 'source']);
+      if (input.action !== undefined && input.action !== 'save' && input.action !== 'remove') return fail('invalid_case_issue_edge', 400);
+      const src = input.source as { kind?: unknown; ref?: unknown } | undefined;
+      if (!src || (src.kind !== 'user-declaration' && src.kind !== 'adopted-candidate')) return fail('invalid_case_issue_edge_source', 400);
+      return deps.mutate(() => cases.saveIssueEdge({ caseId, operationId: caseDecisionId(input.operationId), expectedRevision: caseDecisionRevision(input.expectedRevision),
+        ...(input.edgeId !== undefined ? { edgeId: caseDecisionId(input.edgeId) } : {}), ...(input.fromIssueId !== undefined ? { fromIssueId: caseDecisionId(input.fromIssueId) } : {}),
+        ...(input.toIssueId !== undefined ? { toIssueId: caseDecisionId(input.toIssueId) } : {}), ...(input.action ? { action: input.action as 'save' | 'remove' } : {}),
+        ...(input.explanation !== undefined ? { explanation: caseDecisionText(input.explanation, 1000, true) } : {}),
+        expectedEdgeRevision: Number.isSafeInteger(input.expectedEdgeRevision) && Number(input.expectedEdgeRevision) >= 0 ? Number(input.expectedEdgeRevision) : fail('invalid_revision', 400),
+        source: { kind: src.kind as 'user-declaration' | 'adopted-candidate', ref: typeof src.ref === 'string' ? src.ref : null } }));
+    },
+    decisionRequests: (caseId: string) => {
+      const choices = cases.getStrategyChoices(caseId);
+      return cases.listDecisionRequests(caseId).map(request => {
+        if (request.target.kind === 'choose') return { ...request, status: requestStatus(request, choices, undefined) };
+        if (!deps.board) return { ...request, status: requestStatus(request, undefined, undefined) };
+        try {
+          const target = request.target;
+          const task = deps.board.getTask(target.taskId);
+          const item = deps.board.getItem(task.itemId);
+          const history = deps.board.listFeedbackHistory(target.taskId);
+          const responses = history.flatMap((rev, idx) => rev.respondsToRequest ? [{
+            requestId: rev.respondsToRequest.requestId, requestRevision: rev.respondsToRequest.revision,
+            projectId: item.projectId, itemId: item.id, taskId: task.id, authorizationId: rev.respondsToRequest.authorizationId,
+            revisionId: rev.revisionId, baseRevisionId: idx === 0 ? null : history[idx - 1]!.revisionId,
+          }] : []);
+          return { ...request, status: requestStatus(request, undefined, responses) };
+        } catch {
+          return { ...request, status: 'unverifiable' as const };
+        }
+      });
+    },
+    saveDecisionRequest: (caseId: string, input: Record<string, unknown>) => {
+      caseDecisionFields(input, ['operationId', 'expectedRevision', 'requestId', 'action', 'issueId', 'kind', 'text', 'source', 'assignee', 'requestedAt', 'dueDate', 'target', 'expectedRequestRevision']);
+      if (input.action !== undefined && input.action !== 'save' && input.action !== 'withdraw' && input.action !== 'supersede') return fail('invalid_case_decision_request', 400);
+      if (input.kind !== undefined && input.kind !== 'choose' && input.kind !== 'observe') return fail('invalid_case_decision_request', 400);
+      const src = input.source as { kind?: unknown; ref?: unknown } | undefined;
+      if (!src || (src.kind !== 'user-declaration' && src.kind !== 'agent-tool')) return fail('invalid_case_decision_request_source', 400);
+      const assignee = input.assignee as { label?: unknown; source?: unknown } | undefined;
+      return deps.mutate(() => cases.saveDecisionRequest({ caseId, operationId: caseDecisionId(input.operationId), expectedRevision: caseDecisionRevision(input.expectedRevision),
+        ...(input.requestId !== undefined ? { requestId: caseDecisionId(input.requestId) } : {}), ...(input.action ? { action: input.action as 'save' | 'withdraw' | 'supersede' } : {}),
+        ...(input.issueId !== undefined ? { issueId: caseDecisionId(input.issueId) } : {}), ...(input.kind ? { kind: input.kind as 'choose' | 'observe' } : {}),
+        ...(input.text !== undefined ? { text: caseDecisionText(input.text, 4000, true) } : {}), ...(input.requestedAt !== undefined ? { requestedAt: String(input.requestedAt) } : {}),
+        ...(input.dueDate !== undefined ? { dueDate: input.dueDate as string | null } : {}), ...(input.target !== undefined ? { target: input.target as never } : {}),
+        assignee: { label: typeof assignee?.label === 'string' ? assignee.label : null, source: typeof assignee?.source === 'string' ? assignee.source : null },
+        expectedRequestRevision: Number.isSafeInteger(input.expectedRequestRevision) && Number(input.expectedRequestRevision) >= 0 ? Number(input.expectedRequestRevision) : fail('invalid_revision', 400),
+        source: { kind: src.kind as 'user-declaration' | 'agent-tool', ref: typeof src.ref === 'string' ? src.ref : null } }));
+    },
     createIssue: (caseId: string, input: Record<string, unknown>) => deps.mutate(() => cases.createDecisionIssue({ caseId, operationId: caseDecisionId(input.operationId), expectedRevision: caseDecisionRevision(input.expectedRevision), title: caseDecisionText(input.title, 240, true) })) };
 }
