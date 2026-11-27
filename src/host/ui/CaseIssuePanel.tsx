@@ -11,10 +11,10 @@ import { CaseIssueTreeSidebar } from './CaseIssueTreeSidebar.tsx';
 import { listWorkspaceDrafts, readDecisionRequests, type CaseDecisionRequestView } from './workspace-daily-client.ts';
 import type { CarryOverFragmentPayload, WorkspaceDraftRecord } from '../workspace-draft-store.ts';
 import { CaseFormError, caseError, useOperationId } from './CaseDialogs.tsx';
-import { caseIssues, caseIssueSources, caseIssueTimeline, createCaseIssue, readCaseDecisions, inspectIssueReply, saveCaseStrategyChoice, writeCaseIssue } from './case-decisions-client.ts';
+import { caseIssues, caseIssueSources, caseIssueTimeline, createCaseIssue, readCaseDecisions, readCaseDecisionRevision, inspectIssueReply, saveCaseStrategyChoice, writeCaseIssue } from './case-decisions-client.ts';
 
 type IssueRef = { caseId: string; issueId: string };
-type Props = { onTeachReview?(owner:TeachReviewOwner):void; initialIssueId?: string; selectedIssueId?: string; onSelectIssue?: (issueId: string, intent?: 'explicit' | 'restore') => void; initialRequest?: {requestId:string;revision:number}; record: CaseRecord; projects: ClientProject[]; onChange(): void; onBoard?(target?: import('./FeedbackContextPanel.tsx').FeedbackReviewStart): void; onOpenProject?(project: ClientProject, issue: IssueRef): void; onCreate(project: ClientProject, intent: TaskCreateIntent): void };
+type Props = { onTeachReview?(owner:TeachReviewOwner):void; initialIssueId?: string; selectedIssueId?: string; onSelectIssue?: (issueId: string, intent?: 'explicit' | 'restore') => void; initialRequest?: {requestId:string;revision:number;issueId?:string}; record: CaseRecord; projects: ClientProject[]; onChange(): void; onBoard?(target?: import('./FeedbackContextPanel.tsx').FeedbackReviewStart): void; onOpenProject?(project: ClientProject, issue: IssueRef): void; onCreate(project: ClientProject, intent: TaskCreateIntent): void };
 const choiceName: Record<CaseStrategyChoiceValue, string> = { trial: '试行', adjust: '调整', continue: '继续', defer: '暂缓', no_action: '本次不行动', gather_evidence: '补证', reject: '不采用', stop_considering: '停止考虑' };
 
 export function CaseIssuePanel({ children, ...props }: Props & { children?: ReactNode }) {
@@ -63,6 +63,7 @@ export function CaseIssuePanel({ children, ...props }: Props & { children?: Reac
     }
     catch (e) { setError(caseError(e)); } finally { setBusy(false); }
   }
+  const requestIssueId = props.initialRequest?.issueId ?? props.initialIssueId ?? openRequests.find(request => request.requestId === props.initialRequest?.requestId && request.revision === props.initialRequest?.revision)?.issueId;
   return <>
     <section className="case-detail-text case-agent-entry">
       <div className="case-section-heading">
@@ -111,7 +112,7 @@ export function CaseIssuePanel({ children, ...props }: Props & { children?: Reac
     {children}
     <section className="case-detail-text"><h3>独立决策事项</h3>
       {issues?.length === 0 && <p>历史取舍可在持续工作记录中回看，所属事项待核。</p>}
-      {selected && <IssueWork openRequests={openRequests} key={selected} issueId={selected} {...props}/>}
+      {selected && <IssueWork openRequests={openRequests} key={selected} issueId={selected} {...props} initialRequest={props.initialRequest && requestIssueId === selected ? { ...props.initialRequest, issueId: selected } : undefined}/>}
     </section>
   </>;
 }
@@ -147,7 +148,9 @@ function RoundReview({ round, replies, disabled, inspect, submit }: {
   </details>;
 }
 
-function IssueWork({ openRequests = [], initialRequest, record, projects, onChange, onBoard, onOpenProject, onCreate, onTeachReview, issueId }: Props & { issueId: string; openRequests?: CaseDecisionRequestView[] }) {
+function IssueWork({ openRequests = [], initialRequest: requestEntry, initialIssueId, record, projects, onChange, onBoard, onOpenProject, onCreate, onTeachReview, issueId }: Props & { issueId: string; openRequests?: CaseDecisionRequestView[] }) {
+  const requestIssueId = requestEntry?.issueId ?? initialIssueId ?? openRequests.find(request => request.requestId === requestEntry?.requestId && request.revision === requestEntry?.revision)?.issueId;
+  const initialRequest = requestIssueId === issueId ? requestEntry : undefined;
   const [refresh,setRefresh] = useState(0);
   const [timeline,setTimeline] = useState<Awaited<ReturnType<typeof caseIssueTimeline>>>();
   const [sources,setSources] = useState<Awaited<ReturnType<typeof caseIssueSources>>>();
@@ -155,20 +158,43 @@ function IssueWork({ openRequests = [], initialRequest, record, projects, onChan
   const [projectId,setProjectId] = useState(''), [choice,setChoice] = useState<CaseStrategyChoiceValue>('trial'), [reason,setReason] = useState(''), [scope,setScope] = useState(''), [title,setTitle] = useState('');
   const [feedback,setFeedback] = useState('');
   const [responseKey,setResponseKey] = useState(initialRequest ? `${initialRequest.requestId}@${initialRequest.revision}` : '');
+  const [requestPlan,setRequestPlan] = useState<Awaited<ReturnType<typeof readCaseDecisionRevision>>>();
+  const [historicalConfirmed,setHistoricalConfirmed] = useState(false);
+  const planSelectionTouched = useRef(false);
   const [error,setError] = useState(''), [busy,setBusy] = useState(false), [writing,setWriting] = useState(false), lock = useRef(false), operation = useOperationId();
-  const current = timeline?.rounds.at(-1), project = projects.find(p => p.id === projectId) ?? projects.find(p => !p.archivedAt), plan = plans.find(p => p.recordId === planId), reply = sources?.replies.find(r => exactKey(r.source) === sourceId);
+  const planKey = (value: CaseDecisionRevision) => `${value.recordId}@${value.revision}`;
+  const availablePlans = requestPlan && !plans.some(value => planKey(value) === planKey(requestPlan.revision)) ? [...plans, requestPlan.revision] : plans;
+  const current = timeline?.rounds.at(-1), project = projects.find(p => p.id === projectId) ?? projects.find(p => !p.archivedAt), plan = availablePlans.find(p => planKey(p) === planId), reply = sources?.replies.find(r => exactKey(r.source) === sourceId);
   const feedbacks = current?.actions.flatMap(a => a.feedback) ?? [];
   const selectedFeedback = feedbacks.find(f => f.revisionId === feedback)?.revisionId ?? (feedbacks.length === 1 ? feedbacks[0]!.revisionId : '');
   const passive = !!current && !caseChoicePermitsAction(current.choice.choice);
+  const selectedRequest = openRequests.find(request => request.issueId === issueId && request.target.kind === 'choose' && (responseKey ? `${request.requestId}@${request.revision}` === responseKey : request.requestId === initialRequest?.requestId && request.revision === initialRequest?.revision));
+  const requestedStrategy = selectedRequest?.target.kind === 'choose' ? selectedRequest.target.strategyRef : undefined;
+  const historical = Boolean(plan && requestPlan && planKey(plan) === planKey(requestPlan.revision) && plan.revision !== requestPlan.current.revision);
+  useEffect(() => { planSelectionTouched.current = false; setHistoricalConfirmed(false); setResponseKey(initialRequest ? `${initialRequest.requestId}@${initialRequest.revision}` : ''); }, [issueId, initialRequest?.requestId, initialRequest?.revision]);
+  useEffect(() => { setHistoricalConfirmed(false); }, [planId, requestPlan]);
+  useEffect(() => {
+    let active = true;
+    setRequestPlan(undefined);
+    if (!requestedStrategy) return;
+    const target = requestedStrategy;
+    void readCaseDecisionRevision(record.id, target.recordId, target.revision).then(value => {
+      const exact = value.revision;
+      if (exact.caseId !== record.id || exact.caseStoreId !== target.caseStoreId || exact.recordId !== target.recordId || exact.revision !== target.revision || exact.kind !== 'strategy' || exact.issueId && exact.issueId !== issueId) throw Error('原请求的准确方案归属未能核对。');
+      if (value.current.lifecycle !== 'active') throw Error('原请求方案已归档，当前不可记录新取舍。');
+      if (active) setRequestPlan(value);
+    }).catch(failure => { if (active) setError(caseError(failure)); });
+    return () => { active = false; };
+  }, [record.id, issueId, requestedStrategy?.caseStoreId, requestedStrategy?.recordId, requestedStrategy?.revision, refresh]);
   useEffect(()=>{
-    if(!initialRequest)return;
+    if(!initialRequest || planSelectionTouched.current)return;
     const request=openRequests.find(r=>r.requestId===initialRequest.requestId&&r.revision===initialRequest.revision&&r.issueId===issueId);
     if(request?.target.kind==='choose'){
       const target=request.target;
-      const proposal=plans.find(p=>p.recordId===target.strategyRef.recordId&&p.revision===target.strategyRef.revision&&p.caseStoreId===target.strategyRef.caseStoreId);
-      if(proposal){setPlanId(proposal.recordId);setResponseKey(`${request.requestId}@${request.revision}`);}
+      const proposal=availablePlans.find(p=>p.recordId===target.strategyRef.recordId&&p.revision===target.strategyRef.revision&&p.caseStoreId===target.strategyRef.caseStoreId);
+      if(proposal){setPlanId(planKey(proposal));setResponseKey(`${request.requestId}@${request.revision}`);}
     }
-  },[initialRequest?.requestId,initialRequest?.revision,openRequests,plans,issueId]);
+  },[initialRequest?.requestId,initialRequest?.revision,openRequests,plans,requestPlan,issueId]);
   useEffect(() => {
     let active = true; setBusy(true); setError(''); setPreview('');
     void (async () => {
@@ -182,6 +208,11 @@ function IssueWork({ openRequests = [], initialRequest, record, projects, onChan
     })().catch(e => { if (active) { setError(caseError(e)); setTimeline(undefined); } }).finally(() => { if (active) setBusy(false); });
     return () => { active = false; };
   }, [record.id,record.revision,issueId,refresh]);
+  function selectPlan(value: string) {
+    planSelectionTouched.current = true; setHistoricalConfirmed(false); setPlanId(value);
+    const focused = openRequests.find(request => request.issueId === issueId && request.requestId === initialRequest?.requestId && request.revision === initialRequest?.revision);
+    setResponseKey(focused?.target.kind === 'choose' && value === `${focused.target.strategyRef.recordId}@${focused.target.strategyRef.revision}` ? `${focused.requestId}@${focused.revision}` : '');
+  }
   const disabled = busy || writing || !timeline || record.status === 'closed';
   async function save(action: string, fields: Record<string, unknown>, post: (id: string) => Promise<unknown>) {
     if (lock.current) return;
@@ -243,13 +274,14 @@ function IssueWork({ openRequests = [], initialRequest, record, projects, onChan
     <div className="case-inline-actions">{onOpenProject && project && <button onClick={() => onOpenProject(project, { caseId: record.id, issueId })}>回关联项目协作</button>}<button disabled={disabled || !project} onClick={() => task('plan')}>准备 Plan Task</button><button disabled={disabled || !project || !current} onClick={() => task('teach')}>准备 Teach Task</button></div>
     <details><summary>交接与依据</summary><label>准确 Task 原回复<select value={sourceId} onChange={e => { setSourceId(e.target.value); setPreview(''); }}><option value="">选择原条目</option>{sources?.replies.filter(r => r.type === 'plan').map(r => <option key={exactKey(r.source)} value={exactKey(r.source)}>{r.name} · {r.source.messageId}</option>)}</select></label>{!!sources?.limitations.length && <p>部分原条目暂不可读取。</p>}
       <button disabled={!reply} onClick={() => reply && void showSource(reply.source)}>核对原回复</button><button disabled={disabled || reply?.type !== 'plan'} onClick={() => reply && void write('plans',{ source: reply.source })}>将 Plan 候选交回事项</button></details>
-    <details open={Boolean(initialRequest)}><summary>记录本次取舍</summary><label>准确方案<select value={planId} onChange={e => {setPlanId(e.target.value);setResponseKey('');}}><option value="">选择方案版本</option>{plans.map(p => <option key={p.recordId} value={p.recordId}>{p.payload.title} v{p.revision}</option>)}</select></label>
+    <details open={Boolean(initialRequest)}><summary>记录本次取舍</summary><label>准确方案<select value={planId} onChange={event => selectPlan(event.target.value)}><option value="">选择方案版本</option>{availablePlans.map(p => <option key={planKey(p)} value={planKey(p)}>{p.payload.title} v{p.revision}{requestPlan && planKey(p) === planKey(requestPlan.revision) && p.revision !== requestPlan.current.revision ? `（原请求历史版本，当前活动 v${requestPlan.current.revision}）` : ''}</option>)}</select></label>
+      {historical && requestPlan && <label><input type="checkbox" checked={historicalConfirmed} disabled={disabled} onChange={event => setHistoricalConfirmed(event.target.checked)} />我确认按原请求的历史方案 v{plan?.revision} 记录本次取舍（当前活动 v{requestPlan.current.revision}）。</label>}
       <label>取舍<select value={choice} onChange={e => setChoice(e.target.value as CaseStrategyChoiceValue)}>{Object.entries(choiceName).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label><label>依据与理由<textarea value={reason} onChange={e => setReason(e.target.value)} /></label>
       {(() => {
         const matches = plan ? openRequests.filter(r => r.issueId === issueId && r.target.kind === 'choose' && r.target.strategyRef.caseStoreId === plan.caseStoreId && r.target.strategyRef.recordId === plan.recordId && r.target.strategyRef.revision === plan.revision && r.target.expectedPreviousChoiceId === (current?.choice.choiceId ?? null)) : [];
-        const matchReq = responseKey ? matches.find(r=>`${r.requestId}@${r.revision}`===responseKey) : !initialRequest&&matches.length===1 ? matches[0] : undefined;
+        const matchReq = (responseKey ? matches.find(r=>`${r.requestId}@${r.revision}`===responseKey) : undefined) ?? (!initialRequest&&matches.length===1 ? matches[0] : undefined);
         return <>{matches.length>1&&<label>回应哪一条原请求<select value={matchReq?`${matchReq.requestId}@${matchReq.revision}`:''} onChange={e=>setResponseKey(e.target.value)}><option value="">本次不关联请求</option>{matches.map(r=><option key={r.requestId} value={`${r.requestId}@${r.revision}`}>{r.text} · v{r.revision}</option>)}</select></label>}{initialRequest&&!matchReq&&<p role="status">原请求的准确版本或方案尚未核对，本次不会将其他请求当作已回应。</p>}{matchReq && <p className="case-notice" role="status">本次取舍将精确回应明确请求：{matchReq.text}（承担人：{matchReq.assignee.label ?? '未声明'}）</p>}
-        <button disabled={disabled || !plan || !reason.trim()} onClick={() => { if (!plan) return; const fields = { caseStoreId: plan.caseStoreId, strategyRef: { type: 'case-decision' as const, caseStoreId:plan.caseStoreId,caseId:record.id,recordId:plan.recordId,revision:plan.revision }, issueId, choice, reason, expectedPreviousChoiceId: current?.choice.choiceId ?? null, ...(matchReq ? { respondsToRequest: { requestId: matchReq.requestId, revision: matchReq.revision } } : {}) }; void save('choice',fields, operationId => saveCaseStrategyChoice(record.id,{...fields, operationId})); }}>确认取舍</button></>;
+        <button disabled={disabled || !plan || !reason.trim() || historical && !historicalConfirmed} onClick={() => { if (!plan || historical && !historicalConfirmed) return; const fields = { caseStoreId: plan.caseStoreId, strategyRef: { type: 'case-decision' as const, caseStoreId:plan.caseStoreId,caseId:record.id,recordId:plan.recordId,revision:plan.revision }, issueId, choice, reason, expectedPreviousChoiceId: current?.choice.choiceId ?? null, ...(historical ? { allowHistorical: true } : {}), ...(matchReq ? { respondsToRequest: { requestId: matchReq.requestId, revision: matchReq.revision } } : {}) }; void save('choice',fields, operationId => saveCaseStrategyChoice(record.id,{...fields, operationId})); }}>确认取舍</button></>;
       })()}</details>
     {current && !passive && !current.actions.length && !current.historyLimited && <details><summary>授权本次行动</summary><label>看板行动<input value={title} onChange={e => setTitle(e.target.value)}/></label><label>授权范围<textarea value={scope} onChange={e => setScope(e.target.value)}/></label><button disabled={disabled || !project || !title.trim() || !scope.trim()} onClick={() => project && void write('authorize',{ projectId:project.id, choiceId: current.choice.choiceId,title,scope })}>确认授权并进入看板</button></details>}
     {preview && <details open><summary>准确原回复</summary><p className="case-prose">{preview}</p></details>}<CaseFormError error={error}/>

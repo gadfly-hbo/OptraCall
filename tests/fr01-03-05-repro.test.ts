@@ -146,7 +146,7 @@ test('FR03-REPRO: Board saveFeedback with respondsToRequest reopens cleanly (sch
 
   // 3. Observe request on unlinked project or non-existent authorizationId MUST fail via service
   const service = createCaseIssueService({ cases, board, mutate: (fn: () => unknown) => fn() } as never);
-  assert.throws(() => service.saveDecisionRequest(record.id, {
+  await assert.rejects(() => service.saveDecisionRequest(record.id, {
     operationId: randomUUID(), expectedRevision: cases.getCase(record.id).revision, expectedRequestRevision: 0,
     issueId: issue.id, kind: 'observe', text: '假授权', source: { kind: 'user-declaration', ref: 'm2' },
     assignee: { label: '人', source: 'm2' },
