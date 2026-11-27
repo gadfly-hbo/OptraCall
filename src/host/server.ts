@@ -8,6 +8,7 @@ import type { ProjectTaskResultsContext, ProjectTaskResultsOptions } from './pro
 import { createStrategyChoices, strategyDocument } from './strategy-choice-versions.ts';
 import { renderVersionDocument, versionFileName, gsaVersionDocument, gsaPlanVersionDocument, decompositionPublicationDocument, type VersionDocument } from './management-documents.ts';
 import { GoalDecompositionError } from './strategy-goal-decomposition-validation.ts';
+import { checkpointPeriods, progressMetric } from './strategy-goal-progress.ts';
 import type {RuntimeModelConfiguration} from './config-store.ts';
 import {createStrategyDiscussionSources,StrategyDiscussionSourceFault} from './strategy-discussion-sources.ts';
 import {createStrategyDiscussionSourcePermissions} from './strategy-discussion-source-permissions.ts';
@@ -1572,9 +1573,22 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       if (actual.goalVersion !== owner.version) throw new StrategyDiscussionFault('goal_actual_version_mismatch', 409);
       const publication = await qualifyPlanEvidence(owner.goalId, actual.input.publicationVersion, cfg);
       const row = publication.snapshot.rows.find(r => r.rowId === actual.input.rowId);
+      const checkpoint = row ? publication.snapshot.frozenCheckpoints.find(c => c.checkpointId === actual.input.checkpointId && c.rowId === actual.input.rowId) : undefined;
+      const periodList = checkpoint ? checkpointPeriods(publication.snapshot.timePlan, checkpoint) : publication.snapshot.timePlan;
+      const targetPeriod = periodList.find(p => p.periodId === actual.input.actualPeriods[0]?.periodId);
+      const planned = checkpoint ?? targetPeriod;
+      const frozenGoal = strategyGoals.read({ goalId: owner.goalId, version: publication.snapshot.gsaPlan.goal.version });
+      const expectedBasis = {
+        metric: progressMetric(publication.snapshot, frozenGoal.measurement),
+        unit: planned?.unit ?? publication.snapshot.estimate.unit,
+        scope: row?.scopeLabel ?? publication.snapshot.estimate.scopeDescription,
+        periodId: targetPeriod?.periodId ?? actual.input.actualPeriods[0]?.periodId ?? '',
+        observationDate: checkpoint?.date ?? targetPeriod?.endDate ?? '',
+        planned: Boolean(planned && planned.status === 'planned' && planned.targetValue !== null),
+      };
       return { goal, actual, row, checkpoints:publication.snapshot.frozenCheckpoints.filter(c => c.rowId === actual.input.rowId),
         periods:publication.snapshot.timePlan.filter(p => actual.input.actualPeriods.some(a => a.periodId === p.periodId)),
-        definition:publication.snapshot.estimate, gsa:publication.snapshot.gsaPlan.goal, publicationVersion:publication.version };
+        definition:publication.snapshot.estimate, gsa:publication.snapshot.gsaPlan.goal, publicationVersion:publication.version, expectedBasis };
     }
     const decompositionContext = owner.analysisVariant === 'goal-decomposition'
       ? await (async () => {

@@ -1,0 +1,210 @@
+{
+  "schema": 1,
+  "issue": 148,
+  "candidate": "pm-closeout-3",
+  "base": "4132a39d336c22d46c5bc57ae9d9b544a7ebac5f",
+  "received": "736f44abd162fc7228d9c1843622bc18aa1a4b25",
+  "productAndTestSha256": {
+    "src/agent/strategy-discussion.ts": "e73b6e849ec723cae22ef8c6f4c7c65670b42cdffb80df19f9d852dcd89c84d5",
+    "src/host/goal-decomposition-access.ts": "609a03f34c6e4e215c48bd4724aaf7d895c07741b434c208452cfc5aee995fc0",
+    "src/host/server.ts": "07bc6f84bf8ca6879405ac1f4136ff5a2941cb7519aaea4a114bb040115b4912",
+    "src/host/strategy-goal-decomposition-types.ts": "7c9721bd96ca61335dd6e171563a582bea35dedb7f3e726691fbc62b492359e2",
+    "src/host/strategy-goal-progress.ts": "f994fc2eaeb17dd98fc307a6e28f0144e7f264da552bcf6747ffd11223e45dee",
+    "src/host/strategy-goals-store.ts": "30a2c8acc5be9220ba7db8c3953019e6b023d0ee4b23012c362897cdfdc645d8",
+    "src/host/ui/GoalDecompositionWorkspace.tsx": "e2cee4ae51182e9aadaf7b855c3ffba75772d8798d6eb6caad937513a51768c0",
+    "src/host/ui/goal-upstream-carryover.ts": "d669e44647d8a8684422ee1f3dddecd86c6f5e09d1563282511a4732243d5841",
+    "tests/browser-issue-148-carryover-recovery.mjs": "a1dddc54993677a79cf7695a9eaa23f406d864ebbf2ba8f289a49d38ac181260",
+    "tests/browser-issue-148-goal-trial.mjs": "151fd2775f31d664f12dcedaa4a5e92764dcef5925b11518683bce52fe1049c0",
+    "tests/issue-148-carryover-recovery.test.ts": "21c68114fce4bf93e8cf8c2db0b3553657b301f42cd2fbfa3c1e9015c40a5ea7",
+    "tests/issue-148-goal-trial-fixes.test.ts": "6810b21d0688305eca8de845f740b2beddb574437120e6aef522b207a2a30b63",
+    "tests/issue-148-scope-suggestion.test.ts": "77f45e323fda47f8be725b7d4f6920d87fe347d00f8c3dfc3120611d7e1a4901",
+    "tests/issue-148-unit-conversion-boundary.test.ts": "ecb856edc912affdbd4e937ea76479742029d1ec4923bacdecf829656d5f0838"
+  },
+  "proofs": [
+    {
+      "path": "/workspace/issue148-pm-closeout/units/red.log",
+      "result": "RED: 1 PASS / 3 FAIL",
+      "sha256": "877a77569dc41d3905779e4daa7fb2054b9d465b8122116b3010eaa48126b08c"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/units/compound-red.log",
+      "result": "RED: 3 PASS / 1 FAIL",
+      "sha256": "3cde2a1d272ec665945964a4fb828c6f2dc5012f8085bfd084e4a1e62b7f2bfc"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/units/boundaries-final-2.log",
+      "result": "PASS: 5 tests",
+      "sha256": "38190e0fa196e14dafd2bdc540011c9ca0454361baf3008cd06cc0de1e19ea5b"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/recovery/red-browser.log",
+      "result": "RED: actual UI conflict recovery blocked",
+      "sha256": "756273a1640420aeb4541d08ca52118a6211de2a3a2a91b868a291cacb31666c"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/recovery/host-native-tests-final.log",
+      "result": "PASS: 2 Host/native Pi tests",
+      "sha256": "bd6b071ef1172fc0344013c60045961b47accc3cfe2615323fd565879679a7cb"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/recovery/original-issue148-regression.log",
+      "result": "PASS: original 6 tests",
+      "sha256": "fd8d8b7c15bdaee7e104c2bbc6e289f98d584e053de7b22aeef3af775445cad2"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/recovery/green-browser-v3.log",
+      "result": "PASS: 8 browser scenarios",
+      "sha256": "1d140501760f90a2fbae417ae459dcccb0cffee697847194d30fc685d17671af"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/recovery/green-browser-v3-6a570472-5caf-487f-affe-0608f0e1537a/summary.json",
+      "result": "PASS: actual browser result index",
+      "sha256": "c8a81cbb9f60022549e0567fe74903381ed4ee4e3ee8f04ea41f63173f2249dc"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/recovery/candidate-build-v3.log",
+      "result": "PASS: build",
+      "sha256": "419432db9bb1718e3a65cad8736297ba75bcaa3908b8e73b021a1fe2564561ce"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/audit.log",
+      "result": "PASS: high audit; 2 existing moderate advisories",
+      "sha256": "25ecebe01f17aadef48d6217a655100aa0af0595b1d612f548bb54e13927377e"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/units/whitespace-red.log",
+      "result": "RED: 3 PASS / 1 FAIL",
+      "sha256": "5d6a5da504af8375e050a02152600601a9a33d30803c5e09cb6a6cb63eacdacb"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/units/quote-context-red.log",
+      "result": "RED: 2 PASS / 2 FAIL",
+      "sha256": "bc46ee6e94851f9d2718558e3f7383245a7fd5a1cb008c2c431466e6cb21a35f"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/units/numeric-token-red.log",
+      "result": "RED: 4 PASS / 1 FAIL",
+      "sha256": "d7046eea9b72ef9cebbbf84059924992bccac1f2ee68052d528242dad4c581d1"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/units/no-conversion-red.log",
+      "result": "RED: 5 PASS / 1 FAIL",
+      "sha256": "257283f91c18f6d7044629c2a612ac165e5d35a0cc60659a235f3d0c8d420254"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/units/numeric-token-final-green.log",
+      "result": "PASS: 7 tests, 0 FAIL, 0 SKIP; candidate3",
+      "sha256": "6c6d626df606d87941913b3660cc0f37045c7eb4434f2d74c05fdd3016779d64"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/final3-targeted.log",
+      "result": "PASS: 49 tests, 0 FAIL, 0 SKIP; candidate3",
+      "sha256": "d9e25fd0fa388f73706a77f49c15579ef7bc3425f290e9576cfa0ea0d19af91c"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/final3-store-regression.log",
+      "result": "PASS: 20 tests, 0 FAIL, 0 SKIP; candidate3",
+      "sha256": "ae0c9a7251dc9480163c804934b98446c64ee6b9ca39947fde7a8ae845b3c11d"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/final3-build.log",
+      "result": "PASS: candidate3 build",
+      "sha256": "91a0aea3c6df9e6e8b8e11cff870e99c0c7fe2f40a7966d5385f14cef4aeac7f"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/final3-typecheck.log",
+      "result": "PASS: candidate3 typecheck",
+      "sha256": "db5c96b645fff91890872e0b7343c2a3abf00454754bfc578fba7bbce5bbb99d"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/final3-session-boundary.log",
+      "result": "PASS: existing agent-session boundary, official archive check separate",
+      "sha256": "107e10d5c225b32308e0748a4172b55923c26b7d460ac459ca5ac310da3f7152"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/recovery/final-tuple-red-browser.log",
+      "result": "RED: mixed converted value/original unit before UI correction",
+      "sha256": "fd5d292b4afb7ac9ccd4a9855e9bd069b30d334fc0add508af4f4afaee26c8af"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/recovery/final-tuple-green-browser.log",
+      "result": "PASS: 9 browser scenarios, no runtime-exception listener in author script",
+      "sha256": "c82ee6357be7913ed703c4902ab49ac33aa76e9360fd6e4163bbf5d3519cb7a0"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/recovery/final-tuple-green-c0a0661e-de15-43b3-8159-a1b6fc8c5b76/summary.json",
+      "result": "PASS: actual author browser index",
+      "sha256": "885613de7f2229e1cd7fe74217baa0f0ed11a408f22905d131a6dfce13996756"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/final-review/candidate1-review.md",
+      "result": "FAIL: historical PM candidate1",
+      "sha256": "4b2d8a470f1291a5f96554d88476afc0e207d9db0fa451ecca9e3ab6181a3d40"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/final-review/candidate2-review.md",
+      "result": "FAIL: historical PM candidate2",
+      "sha256": "127d82b30324adca8ae99e76d5fb16b62f02bc721bb9da2404e32f1fdfe00a61"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/final-review/units-scope-v3/results.json",
+      "result": "PASS: 36/36 independent Store probes",
+      "sha256": "c1ed6dd120c6cc1d157b9edf40978a31b5f981bb106f33c4bd30b6851b56e151"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/final-review/units-scope-v3/results-extra.json",
+      "result": "RAW: 25 PASS / 1 old expected-reject mismatch; adjudication separate",
+      "sha256": "313efe9d50ff0b87e1a938b29334e655080bc411caae199ba40caa26ab561693"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/final-review/units-scope-v3/expectation-adjudication.json",
+      "result": "PASS adjudication: complete 2.7e5 yuan is valid 270000 yuan source, not a clipped number",
+      "sha256": "9459aaef01e9705408549884566318abfdc0856bab682c60e4fc0155e54ce429"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/final-review/no-conversion-v3/results.json",
+      "result": "PASS: 4 independent conversion-omission controls",
+      "sha256": "5ade1b98cce341a528927ecc29d5b1483337be29f7dfe147594b56f835628c1f"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/final-review/browser-v2/probe.log",
+      "result": "PASS: 5 independent browser cases; UI unchanged in candidate3",
+      "sha256": "8276961d66cda90ffe4062844b1f223da4aa43224382397a56c0a4eaee3c6ec4"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/final-review/candidate3-review.md",
+      "sha256": "61d288138156539b2f93dcd350090ffa0dc86238377c406510ecce3499443c9a",
+      "result": "PASS: independent code/affected engineering and four-principle review; record consistency checked separately"
+    }
+  ],
+  "fullCheck": {
+    "status": "PASS_PREVIOUS_CANDIDATE_ONLY",
+    "candidate": "0f862227a8289c5145ae78552822614b88a0b17d",
+    "path": "/workspace/issue148-pm-closeout/full-check.log",
+    "sha256": "a0a9f1430e28783b830a26b6e958885a255413e619a3b20b862f2ab6c85d1a62",
+    "command": "PATH=/workspace/scratch/issue136-node25-matched-bin:$PATH python3 /workspace/scratch/issue138-draft-contract/.local/draft-contract/run-with-reaper.py npm run check",
+    "tests": 3524,
+    "pass": 3328,
+    "fail": 0,
+    "skip": 196,
+    "exitCode": 0,
+    "note": "Frozen PM candidate1 only, not candidate3; task-local subreaper collects its own test descendants. Exact delivery head full CI remains pending."
+  },
+  "independentReview": {
+    "status": "PASS",
+    "root": "/workspace/issue148-pm-closeout/final-review",
+    "note": "Non-author code/engineering review PASS; final public-record consistency separately checked before commit.",
+    "report": "../issue-148-pm-review.md"
+  },
+  "limits": [
+    "Original provider quality was not rerun; official Pi uses isolated synthetic Provider.",
+    "No real business data, credentials or MacBook/Mac mini service changes.",
+    "Report issue #2 and unconfirmed configured:false remain pending.",
+    "Local evidence paths are not public uploaded attachments.",
+    "Historic failures remain separate from final candidate results."
+  ],
+  "exactHeadCI": {
+    "status": "PENDING_PR",
+    "note": "Full CI must match final pushed PR head. Local candidate1 full check is not final-head proof."
+  }
+}
