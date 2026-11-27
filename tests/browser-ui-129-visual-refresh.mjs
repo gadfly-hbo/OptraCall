@@ -377,8 +377,11 @@ async function checkHelp(page, width) {
 }
 
 async function shellScenarios(project, task) {
+  const { goals: [selectedGoal] } = await request('/api/strategy/goals');
+  const adoptedGoal = selectedGoal?.versions.find(version => version.version === selectedGoal.adoptedVersion);
+  assert.ok(adoptedGoal, 'Case fixtures must provide an adopted goal for the management workspace');
   const pages = [
-    ['项目地图', 'Project Map'], ['战略选择', '战略选择'], ['目标管理', '目标管理'],
+    ['项目地图', 'Project Map'], ['战略选择', '战略选择'], ['目标管理', adoptedGoal.title],
     ['语义资产', '语义资产'], ['分析资产', '分析资产'], ['决策星图', '决策星图'],
   ];
   for (const width of [1440, 1024, 390]) {
@@ -406,6 +409,12 @@ async function shellScenarios(project, task) {
       for (const [label, title] of pages) {
         await selectFromNavigation(page, label);
         await assertPageFits(page, title, width);
+        if (label === '目标管理') {
+          const stages = page.getByRole('navigation', { name: '目标管理三阶段流程', exact: true });
+          await stages.getByRole('button', { name: /目标拆解/ }).waitFor();
+          await stages.getByRole('button', { name: /阶段跟进/ }).waitFor();
+          await stages.getByRole('button', { name: /到期复盘/ }).waitFor();
+        }
       }
       await checkSettings(page, width);
       await checkHelp(page, width);

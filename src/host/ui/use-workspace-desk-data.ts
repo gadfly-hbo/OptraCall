@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { readBoard } from '../../../extensions/business-plugins/decision-board/ui/decision-board-client.ts';
 import type { CaseDetail, CaseProjectLink, CaseRecord } from '../case-types.ts';
 import type { StrategyGoalsIndex } from '../strategy-goals-types.ts';
@@ -38,7 +38,6 @@ export interface WorkspaceDeskDataOptions {
   preferredCaseId?: string;
   selectedEnterpriseId?: string;
   currentProjectId?: string;
-  onCasesLoaded?: (cases: CaseRecord[]) => void;
   onResolvedEnterpriseName?: (name: string | undefined) => void;
 }
 
@@ -66,23 +65,33 @@ const INITIAL_LOADING_FOUNDATIONS: Partial<Record<HomeFoundationId, HomeFoundati
   analysis: { state: 'ready', status: '读取中', detail: '正在核对建设状态…' },
 };
 
-interface SettledDeskCache {
-  enterpriseKey: string;
-  caseAccessState: HomeCaseAccessState;
-  caseAccessMessage?: string;
-  cases: CaseRecord[];
-  projectLinks: CaseProjectLink[];
-  focusDetail: CaseDetail | null;
-  goals: StrategyGoalsIndex | null;
-  boardActions: HomeBoardActionInput[];
-  enterprises: { id: string; name: string }[];
-  activeEnterpriseId: string;
-  enterpriseName?: string;
-  enterpriseUnselected: boolean;
-  foundations: Partial<Record<HomeFoundationId, HomeFoundationSnapshot>>;
-}
+type DeskSnapshot = Omit<WorkspaceDeskDataState, 'reload'>;
 
-let lastSettledDeskCache: SettledDeskCache | null = null;
+const PENDING_DESK: DeskSnapshot = {
+  loading: true,
+  caseAccessState: 'loading',
+  cases: [],
+  projectLinks: [],
+  focusDetail: null,
+  goals: null,
+  boardActions: [],
+  enterprises: [],
+  activeEnterpriseId: '',
+  enterpriseUnselected: false,
+  foundations: INITIAL_LOADING_FOUNDATIONS,
+};
+
+async function readCaseActionTaskIds(caseId: string, signal: AbortSignal) {
+  const taskIds = new Set<string>();
+  let continuation: string | null = null;
+  do {
+    signal.throwIfAborted();
+    const page = await readCaseDecisions(caseId, { includeArchived: false, continuation });
+    for (const taskId of collectCaseActionTaskIds(page.items)) taskIds.add(taskId);
+    continuation = page.continuation;
+  } while (continuation);
+  return { caseId, taskIds };
+}
 
 export function useWorkspaceDeskData({
   active,
@@ -90,47 +99,29 @@ export function useWorkspaceDeskData({
   preferredCaseId,
   selectedEnterpriseId,
   currentProjectId,
-  onCasesLoaded,
   onResolvedEnterpriseName,
 }: WorkspaceDeskDataOptions): WorkspaceDeskDataState {
-  const cacheKey = `${selectedEnterpriseId ?? ''}::${currentProjectId ?? ''}`;
-  const seeded = lastSettledDeskCache && lastSettledDeskCache.enterpriseKey === cacheKey ? lastSettledDeskCache : null;
-
-  const [loading, setLoading] = useState(true);
   const [manualReload, setManualReload] = useState(0);
-  const [caseAccessState, setCaseAccessState] = useState<HomeCaseAccessState>(seeded?.caseAccessState ?? 'empty');
-  const [caseAccessMessage, setCaseAccessMessage] = useState<string | undefined>(seeded?.caseAccessMessage);
-  const [cases, setCases] = useState<CaseRecord[]>(seeded?.cases ?? []);
-  const [projectLinks, setProjectLinks] = useState<CaseProjectLink[]>(seeded?.projectLinks ?? []);
-  const [focusDetail, setFocusDetail] = useState<CaseDetail | null>(seeded?.focusDetail ?? null);
-  const [goals, setGoals] = useState<StrategyGoalsIndex | null>(seeded?.goals ?? null);
-  const [boardActions, setBoardActions] = useState<HomeBoardActionInput[]>(seeded?.boardActions ?? []);
-  const [enterprises, setEnterprises] = useState<{ id: string; name: string }[]>(seeded?.enterprises ?? []);
-  const [activeEnterpriseId, setActiveEnterpriseId] = useState(seeded?.activeEnterpriseId ?? '');
-  const [enterpriseName, setEnterpriseName] = useState<string | undefined>(seeded?.enterpriseName);
-  const [enterpriseUnselected, setEnterpriseUnselected] = useState(seeded?.enterpriseUnselected ?? false);
-  const [foundations, setFoundations] = useState<Partial<Record<HomeFoundationId, HomeFoundationSnapshot>>>(
-    seeded?.foundations ?? INITIAL_LOADING_FOUNDATIONS,
-  );
-
-  const epochRef = useRef(0);
-  const onCasesLoadedRef = useRef(onCasesLoaded);
-  onCasesLoadedRef.current = onCasesLoaded;
+  // Only render data authorized by the current visit, refresh and enterprise selection.
+  const request = useMemo(() => ({
+    active, refreshToken, manualReload, preferredCaseId, selectedEnterpriseId, currentProjectId,
+  }), [active, refreshToken, manualReload, preferredCaseId, selectedEnterpriseId, currentProjectId]);
+  const [result, setResult] = useState<{ request: typeof request; data: DeskSnapshot }>();
   const onResolvedEnterpriseNameRef = useRef(onResolvedEnterpriseName);
   onResolvedEnterpriseNameRef.current = onResolvedEnterpriseName;
 
   useEffect(() => {
+    const { active, preferredCaseId, selectedEnterpriseId, currentProjectId } = request;
     if (!active) return;
-    const ticket = ++epochRef.current;
     const controller = new AbortController();
     const { signal } = controller;
-    setLoading(true);
+    onResolvedEnterpriseNameRef.current?.(undefined);
 
     void (async () => {
-      const isCurrent = () => !signal.aborted && epochRef.current === ticket;
+      const isCurrent = () => !signal.aborted;
       const nextFoundations: Partial<Record<HomeFoundationId, HomeFoundationSnapshot>> = {};
 
-      // 1. Read Cases (read-only). Clear searchable cases immediately if unauthorized or unavailable.
+      // Recheck Case access on every workspace visit and refresh.
       let loadedCases: CaseRecord[] = [];
       let loadedLinks: CaseProjectLink[] = [];
       let accessState: HomeCaseAccessState = 'empty';
@@ -155,6 +146,11 @@ export function useWorkspaceDeskData({
         const classified = classifyHttpFailure(error);
         accessState = classified.state;
         accessMessage = classified.message;
+      }
+
+      if (accessState === 'forbidden' || accessState === 'unavailable') {
+        // A slow asset or board read must not postpone a known Case permission failure.
+        setResult({ request, data: { ...PENDING_DESK, caseAccessState: accessState, caseAccessMessage: accessMessage } });
       }
 
       // 2. Read focused Case detail (read-only) when cases exist.
@@ -185,10 +181,7 @@ export function useWorkspaceDeskData({
         listInitiatives(signal),
         Promise.all([listStudioEnterprises(signal), listStudioSystems(signal)]),
         readBoard(),
-        Promise.allSettled(activeCasesForDecisions.map(async record => ({
-          caseId: record.id,
-          decisions: await readCaseDecisions(record.id),
-        }))),
+        Promise.allSettled(activeCasesForDecisions.map(record => readCaseActionTaskIds(record.id, signal))),
       ]);
       if (!isCurrent()) return;
 
@@ -198,14 +191,12 @@ export function useWorkspaceDeskData({
         if (caseDecisionsRes.status === 'fulfilled') {
           for (const entry of caseDecisionsRes.value) {
             if (entry.status === 'fulfilled') {
-              const ids = collectCaseActionTaskIds(entry.value.decisions.items);
-              if (ids.size > 0) taskIdsByCase.set(entry.value.caseId, ids);
+              taskIdsByCase.set(entry.value.caseId, entry.value.taskIds);
             }
           }
         }
         loadedBoardActions = extractHomeBoardActions({
           items: boardRes.value.items,
-          projectLinks: loadedLinks,
           caseDecisionTaskIdsByCase: taskIdsByCase,
         });
       }
@@ -297,11 +288,10 @@ export function useWorkspaceDeskData({
       }
 
       if (!isCurrent()) return;
-      if (accessState === 'forbidden' || accessState === 'unavailable') {
-        lastSettledDeskCache = null;
-      } else {
-        lastSettledDeskCache = {
-          enterpriseKey: `${selectedEnterpriseId ?? ''}::${currentProjectId ?? ''}`,
+      setResult({
+        request,
+        data: {
+          loading: false,
           caseAccessState: accessState,
           caseAccessMessage: accessMessage,
           cases: loadedCases,
@@ -314,42 +304,16 @@ export function useWorkspaceDeskData({
           enterpriseName: resolvedEnterpriseName,
           enterpriseUnselected: resolvedUnselected,
           foundations: nextFoundations,
-        };
-      }
-      setCaseAccessState(accessState);
-      setCaseAccessMessage(accessMessage);
-      setCases(loadedCases);
-      setProjectLinks(loadedLinks);
-      setFocusDetail(loadedDetail);
-      setGoals(loadedGoals);
-      setBoardActions(loadedBoardActions);
-      setEnterprises(resolvedEnterprises);
-      setActiveEnterpriseId(resolvedEnterpriseId);
-      setEnterpriseName(resolvedEnterpriseName);
-      setEnterpriseUnselected(resolvedUnselected);
-      setFoundations(nextFoundations);
-      onCasesLoadedRef.current?.(loadedCases);
+        },
+      });
       onResolvedEnterpriseNameRef.current?.(resolvedEnterpriseName);
-      setLoading(false);
     })();
 
     return () => { controller.abort(); };
-  }, [active, refreshToken, manualReload, preferredCaseId, selectedEnterpriseId, currentProjectId]);
+  }, [request]);
 
   return {
-    loading,
+    ...(result?.request === request ? result.data : PENDING_DESK),
     reload: () => setManualReload(value => value + 1),
-    caseAccessState,
-    caseAccessMessage,
-    cases,
-    projectLinks,
-    focusDetail,
-    goals,
-    boardActions,
-    enterprises,
-    activeEnterpriseId,
-    enterpriseName,
-    enterpriseUnselected,
-    foundations,
   };
 }

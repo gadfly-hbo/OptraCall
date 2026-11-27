@@ -17,7 +17,7 @@ export function resolveInitialWorkspaceView(locationHref: string): InitialWorksp
   return 'home';
 }
 
-export type HomeCaseAccessState = 'ready' | 'empty' | 'forbidden' | 'unavailable';
+export type HomeCaseAccessState = 'loading' | 'ready' | 'empty' | 'forbidden' | 'unavailable';
 
 export type HomeFoundationId = 'strategy' | 'goals' | 'semantic' | 'analysis';
 
@@ -44,12 +44,7 @@ export function resolveActiveStudioEnterprise(input: {
 }): { enterprise: { id: string; name: string } | null; unselected: boolean } {
   const { enterprises, selectedEnterpriseId, currentProjectId, projectAssignments } = input;
   if (!enterprises.length) return { enterprise: null, unselected: false };
-  // Explicit empty string means user selected "尚未明确企业" in a multi-enterprise directory.
-  if (selectedEnterpriseId === '') {
-    return enterprises.length === 1
-      ? { enterprise: enterprises[0]!, unselected: false }
-      : { enterprise: null, unselected: true };
-  }
+  if (selectedEnterpriseId === '') return { enterprise: null, unselected: true };
   if (selectedEnterpriseId) {
     const matched = enterprises.find(item => item.id === selectedEnterpriseId);
     if (matched) return { enterprise: matched, unselected: false };
@@ -59,7 +54,9 @@ export function resolveActiveStudioEnterprise(input: {
     const assigned = assignedId ? enterprises.find(item => item.id === assignedId) : undefined;
     if (assigned) return { enterprise: assigned, unselected: false };
   }
-  return { enterprise: enterprises[0]!, unselected: false };
+  return enterprises.length === 1
+    ? { enterprise: enterprises[0]!, unselected: false }
+    : { enterprise: null, unselected: true };
 }
 
 export function summarizeStudioFoundationSnapshots(input: {
@@ -201,6 +198,7 @@ export interface HomeBoardActionInput {
   itemId: string;
   projectId: string;
   caseId?: string;
+  referencedCaseIds?: readonly string[];
   title: string;
   owner: string;
   dueDate: string;
@@ -227,40 +225,26 @@ export function extractHomeBoardActions(input: {
       } | null;
     }[];
   }[];
-  projectLinks: readonly CaseProjectLink[];
   caseDecisionTaskIdsByCase?: ReadonlyMap<string, ReadonlySet<string>>;
 }): HomeBoardActionInput[] {
   const result: HomeBoardActionInput[] = [];
   for (const item of input.items) {
     if (item.status === 'dismissed') continue;
-    const projectCaseIds = input.projectLinks.filter(link => link.projectId === item.projectId).map(link => link.caseId);
     for (const task of item.tasks) {
       if (task.authorization?.decision === 'revoke') continue;
-      let resolvedCaseId: string | undefined;
-      if (task.authorization?.decision === 'authorize' && 'caseId' in task.authorization.source) {
-        resolvedCaseId = task.authorization.source.caseId;
-      } else if (input.caseDecisionTaskIdsByCase) {
-        for (const [caseId, taskSet] of input.caseDecisionTaskIdsByCase.entries()) {
-          if (taskSet.has(task.id)) {
-            resolvedCaseId = caseId;
-            break;
-          }
-        }
+      const source = task.authorization?.source;
+      const caseId = source && 'caseId' in source ? source.caseId : undefined;
+      const referencedCaseIds: string[] = [];
+      for (const [id, taskIds] of input.caseDecisionTaskIdsByCase ?? []) {
+        if (id !== caseId && taskIds.has(task.id)) referencedCaseIds.push(id);
       }
-      if (!resolvedCaseId && item.status === 'adopted' && projectCaseIds.length === 1) {
-        resolvedCaseId = projectCaseIds[0];
-      }
-      // Include authorized tasks, explicitly Case-linked tasks, or tasks under adopted board items.
-      const isAdoptedOrAuthorized =
-        item.status === 'adopted' ||
-        task.authorization?.decision === 'authorize' ||
-        Boolean(resolvedCaseId);
-      if (!isAdoptedOrAuthorized) continue;
+      if (item.status !== 'adopted' && !task.authorization && !referencedCaseIds.length) continue;
       result.push({
         id: task.id,
         itemId: task.itemId,
         projectId: item.projectId,
-        caseId: resolvedCaseId,
+        caseId,
+        referencedCaseIds,
         title: task.title,
         owner: task.owner?.trim() ?? '',
         dueDate: task.dueDate?.trim() ?? '',
@@ -270,6 +254,11 @@ export function extractHomeBoardActions(input: {
     }
   }
   return result;
+}
+
+function linkedCasesOfAction(action: HomeBoardActionInput): readonly string[] {
+  const referenced = action.referencedCaseIds ?? [];
+  return action.caseId ? [action.caseId, ...referenced] : referenced;
 }
 
 export function collectCaseActionTaskIds(decisions: readonly CaseDecisionRevision[]): Set<string> {
@@ -454,10 +443,10 @@ function activityTime(iso?: string | null): string {
   return shortDate(iso);
 }
 
-function caseTone(status: CaseStatus, hasInProgressAction: boolean): 'attention' | 'active' | 'review' {
+function caseTone(status: CaseStatus): 'attention' | 'active' | 'review' {
   if (status === 'awaiting_confirmation') return 'attention';
   if (status === 'observing') return 'review';
-  if (hasInProgressAction || status === 'analyzing') return 'active';
+  if (status === 'analyzing') return 'active';
   return 'attention';
 }
 
@@ -489,16 +478,17 @@ function findAvailableReport(detail: CaseDetail | null | undefined): CaseArtifac
 export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHomeModel {
   const activeProjects = input.projects.filter(project => !project.archivedAt);
   const projectMap = new Map(input.projects.map(project => [project.id, project]));
-  const caseMap = new Map(input.cases.map(record => [record.id, record]));
-  const activeCases = input.cases
+  const cases = input.caseAccessState === 'ready' ? input.cases : [];
+  const caseMap = new Map(cases.map(record => [record.id, record]));
+  const activeCases = cases
     .filter(item => item.status !== 'closed')
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  const preferredFocus = input.focusCaseId ? input.cases.find(item => item.id === input.focusCaseId) : undefined;
+  const preferredFocus = input.focusCaseId ? caseMap.get(input.focusCaseId) : undefined;
   const focusCase =
     (preferredFocus && preferredFocus.status !== 'closed' ? preferredFocus : undefined) ??
     activeCases[0] ??
     preferredFocus ??
-    input.cases[0] ??
+    cases[0] ??
     null;
 
   const focusDetail = input.focusDetail && focusCase && input.focusDetail.case.id === focusCase.id ? input.focusDetail : null;
@@ -510,21 +500,17 @@ export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHom
     .filter((item): item is ClientProject => Boolean(item));
   const linkedProject = focusProjects.find(project => !project.archivedAt) ?? focusProjects[0] ?? null;
 
-  const boardActions = input.boardActions ?? [];
-  const doingBoardActions = boardActions.filter(action => action.status === 'doing');
-  const projectsWithBoardActions = new Set(boardActions.map(action => action.projectId));
-  const inProgressProjectFallbacks = input.projects.filter(
-    project => !project.archivedAt && !projectsWithBoardActions.has(project.id) && project.work?.workStatus === 'in_progress',
-  );
-  const inProgressActions = doingBoardActions.length + inProgressProjectFallbacks.length;
+  const activeCaseIds = new Set(activeCases.map(record => record.id));
+  const boardActions = (input.boardActions ?? []).filter(action => {
+    const caseIds = linkedCasesOfAction(action);
+    return !caseIds.length || caseIds.some(id => activeCaseIds.has(id));
+  });
+  const inProgressActions = boardActions.filter(action => action.status === 'doing').length;
 
-  const focusActions = focusCase
-    ? boardActions.filter(
-        action =>
-          action.caseId === focusCase.id ||
-          (!action.caseId && focusProjects.some(project => project.id === action.projectId)),
-      )
-    : [];
+  const focusActions = !focusCase || focusCase.status === 'closed' ? [] : boardActions.filter(action => {
+    const caseIds = linkedCasesOfAction(action);
+    return caseIds.length ? caseIds.includes(focusCase.id) : focusLinks.some(link => link.projectId === action.projectId);
+  });
 
   // Resolve exact pinned goal version from goalBinding (never silently switching to latest).
   let goalText = '为眼前的问题确定一个可核对的目标';
@@ -545,14 +531,14 @@ export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHom
     if (exactVersion) {
       goalText = `${exactVersion.title}（v${exactVersion.version}）`;
       boundGoalOwner = exactVersion.responsible?.trim() || undefined;
-      strategyText = binding.strategy || exactVersion.strategies?.[0] || '已绑定目标，策略待补充';
+      strategyText = binding.strategy || '已关联目标版本，具体策略待核对';
     } else {
       goalText = `目标 ${binding.primary.goalId}（v${binding.primary.version}）`;
       strategyText = binding.strategy || '原目标版本暂未读到，保留准确引用';
     }
   } else if (focusCase) {
-    goalText = focusCase.description || '在 Case 中明确目标版本与口径';
-    strategyText = focusCase.judgement || '尚未填写当前判断与策略';
+    goalText = focusDetail ? '尚未关联目标版本' : '目标关联暂不可读';
+    strategyText = focusDetail ? '尚未关联具体策略' : '具体策略暂不可读';
   }
 
   const primaryReport = focusCase && focusCase.status !== 'closed' ? findAvailableReport(focusDetail) : undefined;
@@ -577,17 +563,19 @@ export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHom
   const activeArtifacts = focusDetail?.artifacts.filter(item => !item.unlinkedAt) ?? [];
   if (input.caseAccessState === 'forbidden' || input.caseAccessState === 'unavailable') {
     const label = input.caseAccessState === 'forbidden' ? 'Case 记录受权限限制' : 'Case 记录暂不可读取';
+    const facts = [
+      { text: '核对 Case 访问权限或存储状态', confirmed: false },
+      { text: '可访问执行项目保持就绪', confirmed: activeProjects.length > 0 },
+      { text: '按权限独立打开项目与任务', confirmed: activeProjects.some(p => p.tasks.length > 0) },
+    ];
+    const completedCount = facts.filter(fact => fact.confirmed).length;
     proof = {
       kind: 'readiness',
       caption: label,
-      completedCount: activeProjects.length > 0 ? 1 : 0,
+      completedCount,
       totalCount: 3,
-      portion: activeProjects.length > 0 ? 33 : 0,
-      facts: [
-        { text: '核对 Case 访问权限或存储状态', confirmed: false },
-        { text: '可访问执行项目保持就绪', confirmed: activeProjects.length > 0 },
-        { text: '按权限独立打开项目与任务', confirmed: activeProjects.some(p => p.tasks.length > 0) },
-      ],
+      portion: Math.round(100 * completedCount / facts.length),
+      facts,
       nextActionLabel: '打开项目地图继续工作',
       source: { kind: 'projects', label: '打开项目地图继续工作' },
     };
@@ -602,7 +590,7 @@ export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHom
     ].filter(group => group.count > 0);
     proof = {
       kind: 'grouped',
-      caption: '已关联行动进展',
+      caption: focusActions.some(action => !linkedCasesOfAction(action).length) ? '已关联行动进展（含项目行动）' : '已关联行动进展',
       total: focusActions.length,
       unit: '项行动',
       portion: Math.round(((doingCount + doneCount) / focusActions.length) * 100),
@@ -610,23 +598,27 @@ export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHom
       source: { kind: 'decision', label: '来源 · 决策看板行动记录' },
     };
   } else if (focusCase && focusProjects.length >= 2) {
-    const inProgressCount = focusProjects.filter(project => project.work?.workStatus === 'in_progress').length;
-    const completedCount = focusProjects.filter(project => project.work?.workStatus === 'completed').length;
-    const cancelledCount = focusProjects.filter(project => project.work?.workStatus === 'cancelled').length;
-    const pendingOrFeedbackCount = focusProjects.length - inProgressCount - completedCount - cancelledCount;
-    const bucketCandidates = [
-      { label: '执行中', count: inProgressCount, unit: '个' },
-      { label: '待推进 / 待反馈', count: pendingOrFeedbackCount, unit: '个' },
-      { label: '已完成', count: completedCount, unit: '个' },
-      { label: '已取消', count: cancelledCount, unit: '个' },
-    ].filter(bucket => bucket.count > 0);
+    const statusCounts = { in_progress: 0, not_started: 0, awaiting_feedback: 0, completed: 0, cancelled: 0, unset: 0, unavailable: 0 };
+    for (const project of focusProjects) {
+      const status = project.workUnavailable ? 'unavailable' : project.work?.workStatus ?? 'unset';
+      statusCounts[status]++;
+    }
+    const buckets = [
+      { label: '执行中', count: statusCounts.in_progress },
+      { label: '未开始', count: statusCounts.not_started },
+      { label: '待反馈', count: statusCounts.awaiting_feedback },
+      { label: '已完成', count: statusCounts.completed },
+      { label: '已取消', count: statusCounts.cancelled },
+      { label: '未设置', count: statusCounts.unset },
+      { label: '暂不可读', count: statusCounts.unavailable },
+    ];
     proof = {
       kind: 'grouped',
       caption: '关联项目工作状态',
       total: focusProjects.length,
       unit: '个项目',
-      portion: Math.round(((inProgressCount + completedCount) / focusProjects.length) * 100),
-      groups: bucketCandidates.length > 0 ? bucketCandidates : [{ label: '待推进 / 待反馈', count: focusProjects.length, unit: '个' }],
+      portion: Math.round(((statusCounts.in_progress + statusCounts.completed) / focusProjects.length) * 100),
+      groups: buckets.filter(bucket => bucket.count > 0).map(bucket => ({ ...bucket, unit: '个' })),
       source: { kind: 'projects', label: '来源 · 关联项目工作记录' },
     };
   } else if (focusCase && activeArtifacts.length >= 2) {
@@ -681,10 +673,7 @@ export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHom
   for (const record of orderedActiveCases.slice(0, 2)) {
     const links = input.projectLinks.filter(link => link.caseId === record.id);
     const linked = links.map(link => projectMap.get(link.projectId)).filter((item): item is ClientProject => Boolean(item));
-    const caseBoardActions = boardActions.filter(action => action.caseId === record.id && action.status !== 'done');
-    const hasInProgress =
-      caseBoardActions.some(action => action.status === 'doing') ||
-      linked.some(project => project.work?.workStatus === 'in_progress');
+    const caseBoardActions = boardActions.filter(action => linkedCasesOfAction(action).includes(record.id) && action.status !== 'done');
     const distinctAssignees = [
       ...new Set(
         linked
@@ -693,12 +682,11 @@ export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHom
           .filter((name): name is string => Boolean(name)),
       ),
     ];
-    const owner =
-      distinctAssignees.length === 1
-        ? distinctAssignees[0]!
-        : distinctAssignees.length > 1
-          ? `${distinctAssignees[0]} 等 ${distinctAssignees.length} 人`
-          : (record.id === focusCase?.id ? boundGoalOwner : undefined) || '待定';
+    let owner = record.id === focusCase?.id && boundGoalOwner ? `目标负责人 · ${boundGoalOwner}` : '待定';
+    if (distinctAssignees.length) {
+      const others = distinctAssignees.length > 1 ? ` 等 ${distinctAssignees.length} 人` : '';
+      owner = `项目负责人 · ${distinctAssignees[0]}${others}`;
+    }
     const nearestDue = caseBoardActions
       .map(action => action.dueDate)
       .filter(Boolean)
@@ -709,31 +697,33 @@ export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHom
       caseId: record.id,
       title: record.nextStep.trim() || '明确这件事的下一步',
       context: record.title,
-      statusLabel: hasInProgress && record.status !== 'awaiting_confirmation' ? '执行中' : CASE_STATUS_LABELS[record.status],
-      tone: caseTone(record.status, hasInProgress),
+      statusLabel: CASE_STATUS_LABELS[record.status],
+      tone: caseTone(record.status),
       owner,
-      dateLabel: nearestDue ? `期限 ${shortDate(nearestDue)}` : '期限待定',
+      dateLabel: nearestDue ? `行动期限 ${shortDate(nearestDue)}` : '期限待定',
     });
   }
 
   const pendingBoardActions = boardActions
-    .filter(action => action.status !== 'done' && (!action.caseId || caseMap.get(action.caseId)?.status !== 'closed'))
+    .filter(action => action.status !== 'done')
     .sort((a, b) => {
       if (a.status !== b.status) return a.status === 'doing' ? -1 : 1;
       return b.updatedAt.localeCompare(a.updatedAt);
     });
 
   for (const action of pendingBoardActions.slice(0, 2)) {
-    const actionCase = action.caseId ? caseMap.get(action.caseId) : undefined;
+    const actionCases = linkedCasesOfAction(action)
+      .map(id => caseMap.get(id))
+      .filter((record): record is CaseRecord => record !== undefined && record.status !== 'closed');
     const actionProject = projectMap.get(action.projectId);
     queue.push({
       kind: 'action',
       id: `action:${action.id}`,
       actionId: action.id,
       projectId: action.projectId,
-      caseId: action.caseId,
+      caseId: actionCases.length === 1 ? actionCases[0].id : undefined,
       title: action.title,
-      context: [actionCase?.title, actionProject?.name].filter(Boolean).join(' · ') || '决策看板行动',
+      context: [...actionCases.map(record => record.title), actionProject?.name].filter(Boolean).join(' · ') || '决策看板行动',
       statusLabel: action.status === 'doing' ? '执行中' : '待执行',
       tone: action.status === 'doing' ? 'active' : 'attention',
       owner: action.owner.trim() || '待定',
@@ -803,7 +793,7 @@ export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHom
   activityEntries.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
   const headline =
-    input.caseAccessState === 'forbidden'
+    input.caseAccessState === 'loading' ? '正在读取 Decision Case' : input.caseAccessState === 'forbidden'
       ? '当前身份暂无 Case 读取权限'
       : input.caseAccessState === 'unavailable'
         ? 'Decision Case 记录暂不可读取'
@@ -814,7 +804,7 @@ export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHom
           : '从第一个 Case 开始';
 
   const focusStatusLabel =
-    input.caseAccessState === 'forbidden'
+    input.caseAccessState === 'loading' ? '读取中' : input.caseAccessState === 'forbidden'
       ? '无权限读取'
       : input.caseAccessState === 'unavailable'
         ? '暂不可读'
@@ -822,12 +812,7 @@ export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHom
           ? CASE_STATUS_LABELS[focusCase.status]
           : '项目可独立开始';
 
-  const focusActionBadge =
-    focusActions.some(action => action.status === 'doing') || linkedProject?.work?.workStatus === 'in_progress'
-      ? '关联行动执行中'
-      : linkedProject?.work?.workStatus === 'awaiting_feedback'
-        ? '关联行动待反馈'
-        : undefined;
+  const focusActionBadge = focusActions.some(action => action.status === 'doing') ? '关联行动执行中' : undefined;
 
   return {
     caseAccessState: input.caseAccessState,
@@ -844,7 +829,7 @@ export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHom
     activities: activityEntries.slice(0, 3),
     counts: {
       activeCases: activeCases.length,
-      totalCases: input.cases.length,
+      totalCases: cases.length,
       activeProjects: activeProjects.length,
       totalProjects: input.projects.length,
       inProgressActions,

@@ -210,6 +210,36 @@ function buildEvidenceItems(
   return items.map((item, idx) => ({ ...item, index: idx + 1 }));
 }
 
+async function readLinkedReportCases(
+  projectId: string, taskId: string, report: DeskReportCandidate, signal: AbortSignal,
+): Promise<{ cases: CaseRecord[]; error?: string }> {
+  const status = await caseApi.status(signal);
+  if (status.state === 'uninitialized') return { cases: [] };
+  if (status.state !== 'ready') throw new Error('Case 记录暂不可读取。');
+  const index = await caseApi.list(signal);
+  const ids = new Set(index.projectLinks.filter(link => link.projectId === projectId).map(link => link.caseId));
+  const cases: CaseRecord[] = [];
+  let error: string | undefined;
+  for (const id of ids) {
+    signal.throwIfAborted();
+    try {
+      const detail = await caseApi.detail(id, signal);
+      if (detail.case.id !== id) throw new Error('Case 记录身份不匹配。');
+      const linked = detail.artifacts.some(artifact =>
+        artifact.caseId === id && artifact.projectId === projectId && artifact.taskId === taskId &&
+        !artifact.unlinkedAt && artifact.availability === 'available' &&
+        ((artifact.relativePath === report.relativePath && artifact.observedSha256 === report.sha256) ||
+          (artifact.adoptedVersion?.sourceRelativePath === report.relativePath &&
+            artifact.adoptedVersion.sourceSha256 === report.sha256))
+      );
+      if (linked) cases.push(detail.case);
+    } catch {
+      error = '部分 Case 暂不可读取。当前只显示已核对的关联。';
+    }
+  }
+  return { cases, error };
+}
+
 export function TaskReportDesk({
   projectId,
   projectName,
@@ -253,9 +283,12 @@ export function TaskReportDesk({
   }>();
   const [mobileOpen, setMobileOpen] = useState(Boolean(persistedState?.mobileDrawerOpen));
 
-  const [linkedCases, setLinkedCases] = useState<CaseRecord[]>();
-  const [caseBusy, setCaseBusy] = useState(false);
-  const [caseError, setCaseError] = useState('');
+  const [caseRefresh, setCaseRefresh] = useState(0);
+  const [caseResult, setCaseResult] = useState<{
+    key: string;
+    cases: CaseRecord[];
+    error?: string;
+  }>();
 
   const originTriggerRef = useRef<HTMLElement | null>(null);
   const defaultOpenTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -380,40 +413,30 @@ export function TaskReportDesk({
     evidenceItems.find(item => item.id === selectedSourceId) ??
     evidenceItems[0];
 
-  // 3. Automatically read the selected evidence item's exact bytes/declaration.
+  function readSource(source: DeskEvidenceItem) {
+    const ticket = ++sourceEpochRef.current;
+    setSourceReadState({ id: source.id, loading: true });
+    void source.read().then(text => {
+      if (sourceEpochRef.current === ticket) setSourceReadState({ id: source.id, loading: false, text });
+    }).catch(fault => {
+      if (sourceEpochRef.current === ticket) {
+        setSourceReadState({ id: source.id, loading: false, error: pdcApi.projectDataError(fault) });
+      }
+    });
+  }
+
   useEffect(() => {
     if (!activeSource) {
       setSourceReadState(undefined);
-      return;
-    }
-    const targetId = activeSource.id;
-    // Avoid re-triggering XLSX downloads automatically unless explicitly clicked.
-    if (activeSource.isXlsx) {
+    } else if (activeSource.isXlsx) {
       setSourceReadState({
-        id: targetId,
-        loading: false,
+        id: activeSource.id, loading: false,
         text: `固定 XLSX 数据文件（${activeSource.bytes?.toLocaleString() ?? 0} 字节）。点击下方按钮可按精确版本下载核对。`,
       });
-      return;
+    } else {
+      readSource(activeSource);
     }
-    const ticket = ++sourceEpochRef.current;
-    setSourceReadState({ id: targetId, loading: true });
-    void activeSource
-      .read()
-      .then(value => {
-        if (sourceEpochRef.current === ticket) {
-          setSourceReadState({ id: targetId, loading: false, text: value });
-        }
-      })
-      .catch(fault => {
-        if (sourceEpochRef.current === ticket) {
-          setSourceReadState({
-            id: targetId,
-            loading: false,
-            error: pdcApi.projectDataError(fault),
-          });
-        }
-      });
+    return () => { sourceEpochRef.current++; };
   }, [activeSource?.id, revision]);
 
   // 4. Synchronize mobile `<dialog>` modal state cleanly.
@@ -474,59 +497,34 @@ export function TaskReportDesk({
     syncPersisted({ mobileDrawerOpen: true });
   };
 
-  const verifyLinkedCases = async () => {
-    setCaseBusy(true);
-    setCaseError('');
-    setLinkedCases(undefined);
-    try {
-      if (!current?.sha256) {
-        setLinkedCases([]);
-        return;
-      }
-      const status = await caseApi.status();
-      if (status.state === 'uninitialized') {
-        setLinkedCases([]);
-        return;
-      }
-      if (status.state !== 'ready') throw new Error('Case 记录暂不可读取。');
-      const index = await caseApi.list();
-      const ids = [...new Set(index.projectLinks.filter(link => link.projectId === projectId).map(link => link.caseId))];
-      const matches: CaseRecord[] = [];
-      let partial = false;
-      for (const id of ids) {
-        try {
-          const details = await caseApi.detail(id);
-          if (details.case.id !== id) {
-            partial = true;
-            continue;
-          }
-          if (
-            details.artifacts.some(
-              artifact =>
-                artifact.caseId === id &&
-                artifact.projectId === projectId &&
-                artifact.taskId === taskId &&
-                !artifact.unlinkedAt &&
-                artifact.availability === 'available' &&
-                ((artifact.relativePath === current.relativePath && artifact.observedSha256 === current.sha256) ||
-                  (artifact.adoptedVersion?.sourceRelativePath === current.relativePath &&
-                    artifact.adoptedVersion.sourceSha256 === current.sha256)),
-            )
-          ) {
-            matches.push(details.case);
-          }
-        } catch {
-          partial = true;
-        }
-      }
-      setLinkedCases(matches);
-      if (partial) setCaseError('部分 Case 暂不可读取。当前只显示已核对的关联。');
-    } catch (fault) {
-      setCaseError(fault instanceof Error ? fault.message : 'Case 记录暂不可读取。');
-    } finally {
-      setCaseBusy(false);
+  const sourceFailed = Boolean(activeSource && sourceReadState?.id === activeSource.id && sourceReadState.error);
+  const caseLookupKey = JSON.stringify([projectId, taskId, currentKey, revision, caseRefresh]);
+  const caseLookup = caseResult?.key === caseLookupKey ? caseResult : undefined;
+  const linkedCases = caseLookup?.cases;
+  const caseError = caseLookup?.error;
+  const caseBusy = readerTab === 'cases' && !caseLookup;
+
+  useEffect(() => {
+    if (readerTab !== 'cases') return;
+    const controller = new AbortController();
+    const { signal } = controller;
+    setCaseResult(undefined);
+    if (!current?.sha256) {
+      setCaseResult({ key: caseLookupKey, cases: [] });
+      return;
     }
-  };
+    void readLinkedReportCases(projectId, taskId, current, signal).then(result => {
+      if (!signal.aborted) setCaseResult({ key: caseLookupKey, ...result });
+    }).catch(fault => {
+      if (!signal.aborted) {
+        setCaseResult({
+          key: caseLookupKey, cases: [],
+          error: fault instanceof Error ? fault.message : 'Case 记录暂不可读取。',
+        });
+      }
+    });
+    return () => controller.abort();
+  }, [readerTab, caseLookupKey]);
 
   const renderReaderBody = (mobile: boolean) => (
     <>
@@ -555,10 +553,7 @@ export function TaskReportDesk({
           <button
             type="button"
             aria-pressed={readerTab === 'cases'}
-            onClick={() => {
-              setReaderTab('cases');
-              if (linkedCases === undefined && !caseBusy) void verifyLinkedCases();
-            }}
+            onClick={() => setReaderTab('cases')}
           >
             关联 Case <small>{linkedCases ? linkedCases.length : '核对'}</small>
           </button>
@@ -598,8 +593,8 @@ export function TaskReportDesk({
                 {activeSource && (
                   <section className="pv-source-detail" aria-label="选中依据的原文及版本">
                     <div>
-                      <span className={`pv-evidence-state ${activeSource.needsReview || sourceReadState?.error ? 'needs-review' : ''}`}>
-                        {sourceReadState?.error ? '原件异常' : activeSource.statusLabel}
+                      <span className={`pv-evidence-state ${activeSource.needsReview || sourceFailed ? 'needs-review' : ''}`}>
+                        {sourceFailed ? '原件异常' : activeSource.statusLabel}
                       </span>
                       <small>依据 [{activeSource.index}]</small>
                     </div>
@@ -637,18 +632,15 @@ export function TaskReportDesk({
                         >
                           {sourceReadState?.id === activeSource.id ? sourceReadState.text : ''}
                         </pre>
-                        {activeSource.isXlsx && (
-                          <button
-                            type="button"
-                            className="secondary-button"
-                            onClick={() => { void activeSource.read(); }}
-                          >
-                            下载这份固定 XLSX 原件
-                          </button>
-                        )}
                       </>
                     )}
 
+                    {activeSource.isXlsx && (
+                      <button type="button" className="secondary-button"
+                        disabled={sourceReadState?.id === activeSource.id && sourceReadState.loading}
+                        onClick={() => readSource(activeSource)}
+                      >下载这份固定 XLSX 原件</button>
+                    )}
                     <details>
                       <summary>适用范围与限制</summary>
                       <p>{activeSource.limitText}</p>
@@ -664,7 +656,7 @@ export function TaskReportDesk({
               type="button"
               className="text-button"
               disabled={caseBusy}
-              onClick={() => { void verifyLinkedCases(); }}
+              onClick={() => setCaseRefresh(value => value + 1)}
             >
               {caseBusy ? '正在核对…' : '重新核对关联 Case'}
             </button>

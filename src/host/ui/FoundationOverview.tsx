@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import type { CaseRecord } from '../case-types.ts';
 import type { ClientProject } from './project-types.ts';
 import { useWorkspaceDeskData } from './use-workspace-desk-data.ts';
 import {
@@ -18,7 +17,6 @@ export interface FoundationOverviewProps {
   onResolvedEnterpriseName?: (name: string | undefined) => void;
   refreshToken: number;
   preferredCaseId?: string;
-  onCasesLoaded?: (cases: CaseRecord[]) => void;
   onOpenFoundation: (id: HomeFoundationId) => void;
   onOpenCase: (caseId: string) => void;
   onCreateCase: () => void;
@@ -73,7 +71,6 @@ export function FoundationOverview({
   onResolvedEnterpriseName,
   refreshToken,
   preferredCaseId,
-  onCasesLoaded,
   onOpenFoundation,
   onOpenCase,
   onCreateCase,
@@ -86,9 +83,19 @@ export function FoundationOverview({
     preferredCaseId,
     selectedEnterpriseId,
     currentProjectId,
-    onCasesLoaded,
     onResolvedEnterpriseName,
   });
+
+  if (desk.caseAccessState === 'loading') {
+    return (
+      <div className="workspace-home-scroll">
+        <section className="desk-home" aria-busy="true">
+          <p role="status">正在读取工作区记录…</p>
+          <button type="button" className="text-button" onClick={onOpenProjectMap}>打开项目地图</button>
+        </section>
+      </div>
+    );
+  }
 
   const model = buildWorkspaceHomeModel({
     caseAccessState: desk.caseAccessState,

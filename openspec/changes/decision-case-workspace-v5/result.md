@@ -78,3 +78,16 @@
 
 - 本次变更严格限于前端 UI 视图、只读聚合钩子与测试文件（新增 `FoundationOverview.tsx`、`TaskReportDesk.tsx`、`use-workspace-desk-data.ts`），**零持久化 schema 变更、零新增后端写接口、零依赖版本变动**。
 - 回退方式：直接回退本分支前端提交即可恢复旧界面入口；本机已有 Case、决策看板、项目、任务、报告、引用快照、目标、战略发布与 Studio 企业资产记录完全兼容，无任何数据迁移或回退损耗。
+
+## 7. PM 二审终审与集成
+
+接收 Antigravity 二审提交 `385ad95e4076a5c6873c1d0641a436e6e45df086` 后，PM 在独立分支修正了补测发现的问题。原候选 64 项 Chromium 验收全部通过；下列额外场景在原候选上复现，在 PM 集成分支上复验。[同单 PM 接手回执](https://github.com/gadfly-hbo/OptraCall/issues/142#issuecomment-7207623229)
+
+| 可观察场景 | PM 修订及复验依据 |
+| --- | --- |
+| 已获准的 Case 或项目在下一次读取中被拒绝，旧请求晚于新请求返回 | 每次打开搜索和首页时，按本轮读取结果决定可见范围。搜索在异步插入结果时保留用户已选中的同一条记录。独立进入任务后重载，继续使用当次入口。见 `tests/browser-issue-142-search-authorization.mjs`。 |
+| 多个 Case 共用项目，行动有明确归属，或只有项目进展 | 项目、Case 和看板行动按各自记录展示。关联行动按 Host 分页读完。用 `tests/workspace-home-action-scope.test.ts` 和 `tests/workspace-home-v5.test.ts` 核对归属、独立项目和权限状态。 |
+| 同一路径的报告 A、B 有不同 SHA，固定 XLSX 原件读取失败 | 切换版本时按当前项目、任务与报告版本核对关联 Case。原件读取失败时保留路径、SHA 和重试操作，成功后可按原标识读取。见 `tests/browser-workspace-report-recovery.mjs`。 |
+| 有已采用目标时进入目标管理 | #129 兼容脚本核对准确版本的目标名称及三个阶段入口，并继续检查各尺寸的导航、设置、帮助和焦点。见 `tests/browser-ui-129-visual-refresh.mjs`。 |
+
+新增工作均位于 React 读路径、视图状态及测试。写操作沿原业务入口执行。终审使用隔离 Host、合成资料和 Chromium。实际交付提交、非作者复核、PR 与主线两次 CI、工程结案以 [#142 的 PM 记录](https://github.com/gadfly-hbo/OptraCall/issues/142) 为准。设备更新和真实业务体验由用户安排。

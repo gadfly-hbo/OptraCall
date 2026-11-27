@@ -201,10 +201,11 @@ test('W01/W02: buildWorkspaceHomeModel pins exact goal version, separates Case v
   assert.match(model.goalSummary.goalText, /改善华东会员复购（旧版）/);
   assert.match(model.goalSummary.goalText, /v1/);
   assert.equal(model.goalSummary.strategyText, '优先验证缺货与首购结构');
-  // Active case count excludes closed; project action status tracked separately!
+  // A project in progress is not a Decision Board action.
   assert.equal(model.counts.activeCases, 1);
   assert.equal(model.counts.totalCases, 2);
-  assert.equal(model.counts.inProgressActions, 1);
+  assert.equal(model.counts.inProgressActions, 0);
+  assert.equal(model.focusActionBadge, undefined);
   // Queue has active case + available report review item (excludes closed case)
   assert.equal(model.queue.some(item => item.kind === 'case' && item.caseId === cClosed.id), false);
   const reportQueueItem = model.queue.find(item => item.kind === 'report');
@@ -474,4 +475,3 @@ test('R2 Finding 2 & 3: forbidden/unavailable Case states avoid empty-Case copy;
   assert.equal(closedModel.counts.activeCases, 0);
   assert.equal(closedModel.queue.length, 0);
 });
-

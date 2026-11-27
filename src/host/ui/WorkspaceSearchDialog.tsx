@@ -1,47 +1,47 @@
 import { useEffect, useRef, useState } from 'react';
+import * as caseClient from './case-client.ts';
+import { listProjects } from './runtime-client.ts';
 import type { CaseRecord } from '../case-types.ts';
 import type { ClientProject } from './project-types.ts';
 import { filterWorkspaceSearchItems, type WorkspaceSearchTarget } from './workspace-home-model.ts';
 
 export interface WorkspaceSearchDialogProps {
-  open: boolean;
-  projects: ClientProject[];
-  cases: CaseRecord[];
   onClose: () => void;
   onSelect: (target: WorkspaceSearchTarget) => void;
 }
 
-export function WorkspaceSearchDialog({ open, projects, cases, onClose, onSelect }: WorkspaceSearchDialogProps) {
+export function WorkspaceSearchDialog({ onClose, onSelect }: WorkspaceSearchDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedId, setSelectedId] = useState<string>();
 
-  const results = filterWorkspaceSearchItems({ query, projects, cases });
+  const [cases, setCases] = useState<CaseRecord[] | null>(null);
+  const [projects, setProjects] = useState<ClientProject[] | null>(null);
+  const results = filterWorkspaceSearchItems({ query, projects: projects ?? [], cases: cases ?? [] });
+  const selectedIndex = Math.max(0, results.findIndex(item => item.id === selectedId));
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    if (open && !dialog.open) {
-      setQuery('');
-      setSelectedIndex(0);
-      dialog.showModal();
-      requestAnimationFrame(() => inputRef.current?.focus());
-    } else if (!open && dialog.open) {
-      dialog.close();
-    }
-  }, [open]);
-
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [query]);
+    if (!dialog.open) dialog.showModal();
+    inputRef.current?.focus();
+    const controller = new AbortController();
+    const { signal } = controller;
+    void caseClient.status(signal)
+      .then(status => status.state === 'ready' ? caseClient.list(signal) : null)
+      .then(list => { if (!signal.aborted) setCases(list?.cases ?? []); })
+      .catch(() => { if (!signal.aborted) setCases([]); });
+    void listProjects(signal)
+      .then(records => { if (!signal.aborted) setProjects(records); })
+      .catch(() => { if (!signal.aborted) setProjects([]); });
+    return () => controller.abort();
+  }, []);
 
   const choose = (target: WorkspaceSearchTarget) => {
     onSelect(target);
     onClose();
   };
-
-  if (!open) return null;
 
   return (
     <dialog
@@ -64,14 +64,14 @@ export function WorkspaceSearchDialog({ open, projects, cases, onClose, onSelect
           type="search"
           placeholder="搜索模块、Case、项目、任务或设置（只读定位）"
           value={query}
-          onChange={event => setQuery(event.target.value)}
+          onChange={event => { setQuery(event.target.value); setSelectedId(undefined); }}
           onKeyDown={event => {
             if (event.key === 'ArrowDown') {
               event.preventDefault();
-              if (results.length) setSelectedIndex(index => (index + 1) % results.length);
+              if (results.length) setSelectedId(results[(selectedIndex + 1) % results.length]!.id);
             } else if (event.key === 'ArrowUp') {
               event.preventDefault();
-              if (results.length) setSelectedIndex(index => (index - 1 + results.length) % results.length);
+              if (results.length) setSelectedId(results[(selectedIndex - 1 + results.length) % results.length]!.id);
             } else if (event.key === 'Enter' && results[selectedIndex]) {
               event.preventDefault();
               choose(results[selectedIndex]!);
@@ -92,7 +92,7 @@ export function WorkspaceSearchDialog({ open, projects, cases, onClose, onSelect
                 type="button"
                 className="ws-search-item"
                 aria-selected={index === selectedIndex}
-                onMouseEnter={() => setSelectedIndex(index)}
+                onMouseEnter={() => setSelectedId(item.id)}
                 onClick={() => choose(item)}
               >
                 <span>
@@ -106,7 +106,7 @@ export function WorkspaceSearchDialog({ open, projects, cases, onClose, onSelect
         </ul>
       ) : (
         <div className="ws-search-empty" role="status">
-          <p>没有在当前获准范围内找到「{query}」。</p>
+          <p>{cases === null || projects === null ? '正在核对可读记录…' : `没有在当前获准范围内找到「${query}」。`}</p>
           <button type="button" className="secondary-button" onClick={onClose}>清空并退出搜索</button>
         </div>
       )}
