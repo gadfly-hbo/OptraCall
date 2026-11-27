@@ -14,6 +14,8 @@ export type WorkspaceDailyRoutesDeps = {
   board?: BoardStore;
   assertBoardItemReadable?: import('./case-decision-service.ts').CaseDecisionServiceDependencies['assertBoardItemReadable'];
   assertActiveProject?: (projectId: string) => Promise<void>;
+  checkPlan?: (reference: import('./case-decision-types.ts').CaseDecisionRef) => Promise<void>;
+  initializeCases?: () => Promise<void>;
   readGoal?: ReadGoalFn;
   adoptGoal: AdoptGoalFn;
   createCase: CreateCaseFn;
@@ -35,7 +37,7 @@ export function createWorkspaceDailyRoutes(deps: WorkspaceDailyRoutesDeps) {
         const choices = deps.cases.getStrategyChoices(record.id);
         const pendingOperations = deps.cases.listPendingProjectOperations(record.id);
         const requestStatuses = Object.fromEntries(await Promise.all(requests
-          .map(async request => [request.requestId, request.kind === 'observe' ? await observationRequestStatus(deps.cases, deps.board, request, deps.assertBoardItemReadable, deps.assertActiveProject) : chooseRequestStatus(deps.cases, request, choices)])));
+          .map(async request => [request.requestId, request.kind === 'observe' ? await observationRequestStatus(deps.cases, deps.board, request, deps.assertBoardItemReadable, deps.assertActiveProject) : await chooseRequestStatus(deps.cases, request, choices, deps.checkPlan)])));
         return { record, issues, requests, choices, requestStatuses, pendingOperations };
       }));
       return { body: projectHomePending({ storeState: 'ready', cases: entries }) };
@@ -101,6 +103,9 @@ export function createWorkspaceDailyRoutes(deps: WorkspaceDailyRoutesDeps) {
       ) {
         throw new WorkspaceDraftError('invalid_create_case_input', 400);
       }
+      // The explicit create action is the opt-in to Case storage. Reads remain
+      // side-effect free and unavailable existing stores are never reinitialized.
+      if(deps.cases.getStatus().state==='uninitialized')await deps.initializeCases?.();
       const result = await executeThreeBranchCaseCreate(
         { cases: deps.cases, drafts: deps.drafts, readGoal: deps.readGoal, adoptGoal: deps.adoptGoal, createCase: deps.createCase },
         {

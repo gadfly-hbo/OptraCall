@@ -195,6 +195,27 @@ async function run() {
     }
     assert.equal(await chrome.evalJs(`document.querySelector('${composerSelector}')?.value`),'原对话中尚未发送的输入');
     assert.equal(await chrome.evalJs(`Boolean(document.querySelector('.case-issue-draft-box'))`),false,'one editable composer owns the issue input');
+    // Continuing the same already-mounted issue refreshes new carry-over data.
+    await chrome.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+    await chrome.evalJs(`Array.from(document.querySelectorAll('nav.primary-nav button')).filter(b=>b.getClientRects().length).find(b=>b.textContent?.includes('工作台首页'))?.click()`);
+    await waitForText('待处理事项（1）');
+    await chrome.evalJs(`(()=>{const ta=document.querySelector('.home-daily-quick-input textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(ta,'同一事项的新首页续接');ta.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await new Promise(r=>setTimeout(r,200));
+    await chrome.evalJs(`Array.from(document.querySelectorAll('.home-daily-quick-input button')).find(b=>b.textContent?.trim()==='查找获准 Case')?.click()`);
+    for(let i=0;i<60;i++){if(await chrome.evalJs(`Boolean(document.querySelector('.home-daily-match-row select'))`))break;await new Promise(r=>setTimeout(r,100));}
+    await chrome.evalJs(`(()=>{const select=document.querySelector('.home-daily-match-row select');select.value='${c.id}';select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await chrome.evalJs(`Array.from(document.querySelectorAll('.home-daily-match-row button')).find(b=>b.textContent?.trim()==='带入所选事项')?.click()`);
+    await waitForText('待带入片段');
+    assert.ok((await chrome.evalJs('document.body.innerText')).includes('同一事项的新首页续接'),'same issue must read new fragment without a reload or issue switch');
+    await chrome.evalJs(`document.querySelector('.case-carry-over-banner button')?.click()`);
+    for(let i=0;i<60;i++){if(await chrome.evalJs(`document.querySelector('${composerSelector}')?.value.includes('同一事项的新首页续接')`))break;await new Promise(r=>setTimeout(r,100));}
+    const appended=await chrome.evalJs(`document.querySelector('${composerSelector}')?.value`);
+    assert.ok(appended.startsWith('原对话中尚未发送的输入'));
+    assert.equal(appended.split('同一事项的新首页续接').length-1,1);
+    await chrome.evalJs(`document.querySelector('.case-carry-over-banner button')?.click()`);
+    await new Promise(r=>setTimeout(r,150));
+    assert.equal(await chrome.evalJs(`document.querySelector('${composerSelector}')?.value`),appended);
+
     // A modal must keep keyboard focus in its visible controls.
     await chrome.evalJs(`document.querySelector('dialog[open] button')?.focus()`);
     for(let i=0;i<4;i++)await chrome.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});

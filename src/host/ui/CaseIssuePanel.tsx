@@ -52,7 +52,7 @@ export function CaseIssuePanel({ children, ...props }: Props & { children?: Reac
       if (active) setFragments(drafts.filter(d => d.payload.targetCaseId === record.id && (!d.payload.targetIssueId || d.payload.targetIssueId === selected)));
     }, () => {});
     return () => { active = false; };
-  }, [record.id, record.revision, selected]);
+  }, [record, selected]);
   async function add() {
     setBusy(true); setError('');
     try {

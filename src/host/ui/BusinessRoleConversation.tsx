@@ -96,7 +96,8 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,open
   }
   const lastAppendedRef = useRef<string>('');
   useEffect(() => {
-    if (!externalAppend || !externalAppend.text || lastAppendedRef.current === externalAppend.id) return;
+    if (!externalAppend || !externalAppend.text) return;
+    if(lastAppendedRef.current===externalAppend.id){if(!appending)onExternalAppended?.(externalAppend.id);return;}
     if(composerDraft){
       if(!draftReady||appending)return;
       setAppending(true);lastAppendedRef.current=externalAppend.id;

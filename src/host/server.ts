@@ -1881,6 +1881,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     board: boardStore,
     assertBoardItemReadable: item => conclusionHandoff.assertItemReadable(item),
     assertActiveProject: async projectId => { assertActive(await projects.get(projectId)); },
+    checkPlan: caseDecisions.checkPlan,
+    initializeCases: async () => { await caseRoutes({pathname:'/api/cases/storage/initialize',method:'POST',input:{}}); },
     readGoal: async ({ goalId, version }) => {
       const goal = strategyGoals.read({ goalId, version });
       await validateStrategyGoal(goal);

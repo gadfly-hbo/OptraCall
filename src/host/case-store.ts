@@ -871,12 +871,8 @@ export class CaseStore {
       this.getDecisionIssue(before.id, issueId);
       options?.assertWritable?.();
       if (action === 'save' && nextTarget.kind === 'choose') {
-        const ref = nextTarget.strategyRef;
-        if (ref.caseId !== before.id || ref.caseStoreId !== this.decisionStoreId()) fail('case_decision_scope_mismatch', 409);
-        const strategy = this.getDecision(before.id, ref.recordId, ref.revision);
-        if (strategy.kind !== 'strategy') fail('case_choice_requires_strategy');
-        if (this.getDecision(before.id, ref.recordId).lifecycle === 'archived') fail('case_decision_archived', 409);
-        if (strategy.issueId && strategy.issueId !== issueId) fail('case_issue_scope_mismatch', 409);
+        this.assertStrategyChoiceTarget({ caseStoreId: this.decisionStoreId(), caseId: before.id, issueId, strategyRef: nextTarget.strategyRef,
+          expectedPreviousChoiceId: nextTarget.expectedPreviousChoiceId, allowHistorical: true });
       }
       const assignee = { label: previous?.assignee.label ?? null, source: previous?.assignee.source ?? null,
         ...(action === 'save' ? clean.assignee : {}) };
@@ -928,22 +924,27 @@ export class CaseStore {
   getStrategyChoices(caseId: string): CaseStrategyChoice[] {
     return this.getEvents('case', caseId).filter(event => event.eventType === 'case_strategy_choice').map(event => this.strategyChoiceEvent(caseId, event));
   }
+  /** Read-only original choice admission, shared with requests without making a choice or receipt. */
+  assertStrategyChoiceTarget(input: Pick<CaseStrategyChoiceInput, 'caseStoreId' | 'caseId' | 'strategyRef' | 'issueId' | 'expectedPreviousChoiceId' | 'allowHistorical'>) {
+    this.decisionStoreId(input.caseStoreId);
+    const before = this.activeCase(input.caseId), target = input.strategyRef;
+    if (target.caseStoreId !== input.caseStoreId || target.caseId !== input.caseId) fail('case_decision_scope_mismatch', 409);
+    const exact = this.getDecision(input.caseId, target.recordId, target.revision), current = this.getDecision(input.caseId, target.recordId);
+    if (exact.kind !== 'strategy') fail('case_choice_requires_strategy');
+    if (current.lifecycle === 'archived') fail('case_decision_archived', 409);
+    if (input.issueId) this.getDecisionIssue(input.caseId, input.issueId);
+    if (exact.issueId && exact.issueId !== input.issueId) fail('case_issue_scope_mismatch', 409);
+    const previous = this.getStrategyChoices(input.caseId).filter(choice => input.issueId ? choice.issueId === input.issueId : !choice.issueId && choice.strategyRef.recordId === target.recordId).at(-1) ?? null;
+    if ((previous?.choiceId ?? null) !== input.expectedPreviousChoiceId) fail('case_choice_conflict', 409);
+    if (!input.allowHistorical && current.revision !== exact.revision) fail('case_decision_revision_conflict', 409);
+    return { before, exact, previous };
+  }
   chooseStrategy(input: CaseStrategyChoiceInput, options?: CaseDecisionWriteOptions & { quoteProvenance?: UserQuoteProvenance }): CaseStrategyChoice {
     const clean = parseCaseStrategyChoice(input);
     const quoteProvenance = options?.quoteProvenance === undefined ? undefined : parseUserQuoteProvenance(options.quoteProvenance);
     return this.operation('case_strategy_choice', { ...clean, ...(quoteProvenance ? { quoteProvenance } : {}) }, clean.caseId, null, () => {
-      this.decisionStoreId(clean.caseStoreId);
-      const before = this.activeCase(clean.caseId), target = clean.strategyRef;
-      if (target.caseStoreId !== clean.caseStoreId || target.caseId !== clean.caseId) fail('case_decision_scope_mismatch', 409);
-      const exact = this.getDecision(clean.caseId, target.recordId, target.revision), current = this.getDecision(clean.caseId, target.recordId);
-      if (exact.kind !== 'strategy') fail('case_choice_requires_strategy');
-      if (current.lifecycle === 'archived') fail('case_decision_archived', 409);
-      if (clean.issueId) this.getDecisionIssue(clean.caseId, clean.issueId);
-      if (exact.issueId && exact.issueId !== clean.issueId) fail('case_issue_scope_mismatch', 409);
+      const { before, previous } = this.assertStrategyChoiceTarget(clean), target = clean.strategyRef;
       const ownership = clean.issueId ? { issueId: clean.issueId, goalBinding: this.getGoalBinding(clean.caseId) } : {};
-      const previous = this.getStrategyChoices(clean.caseId).filter(choice => clean.issueId ? choice.issueId === clean.issueId : !choice.issueId && choice.strategyRef.recordId === target.recordId).at(-1) ?? null;
-      if ((previous?.choiceId ?? null) !== clean.expectedPreviousChoiceId) fail('case_choice_conflict', 409);
-      if (!clean.allowHistorical && current.revision !== exact.revision) fail('case_decision_revision_conflict', 409);
       const time = now(), core = { ...before, revision: before.revision + 1, updatedAt: time };
       this.put('cases', 'id', core);
       const choiceId = this.event('case', core.id, core.revision, 'case_strategy_choice', clean.operationId, {

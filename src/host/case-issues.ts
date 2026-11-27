@@ -3,7 +3,7 @@ import type { BoardActionAuthorization, TaskFeedbackRevision } from '../../exten
 import { quotedFeedbackMatches } from './quoted-feedback-origins.ts';
 import { caseChoicePermitsAction } from './case-decision-types.ts';
 import { CaseStoreError } from './case-types.ts';
-import { caseDecisionFields, caseDecisionId, caseDecisionRevision, caseDecisionText, parseCaseDecisionTarget } from './case-decision-validation.ts';
+import { caseDecisionFields, caseDecisionId, caseDecisionRevision, caseDecisionText, parseCaseDecisionRef, parseCaseDecisionTarget } from './case-decision-validation.ts';
 import type { CaseDecisionRef, CaseDecisionRevision, CaseIssueReply, CaseIssueReview, CaseStrategyChoice, CaseDecisionRequest, CaseFeedbackResponse } from './case-decision-types.ts';
 import { requestStatus } from './case-decision-types.ts';
 import type { CaseDecisionServiceDependencies } from './case-decision-service.ts';
@@ -67,7 +67,11 @@ export function observationAuthorizationMatches(cases: CaseDecisionServiceDepend
 }
 
 /** One request's read/authorization failure never changes another request's projection. */
-export function chooseRequestStatus(cases: CaseDecisionServiceDependencies['cases'], request: CaseDecisionRequest, choices = cases.getStrategyChoices(request.caseId)) {
+function planSources(strategy: CaseDecisionRevision): CaseIssueReply[] {
+  if (!strategy.issueId) return [];
+  return strategy.references.flatMap(ref => ref.relation === 'derived_from' && ref.target.type === 'source' && ref.target.source.type === 'native-reply' ? [ref.target.source] : []);
+}
+export async function chooseRequestStatus(cases: CaseDecisionServiceDependencies['cases'], request: CaseDecisionRequest, choices = cases.getStrategyChoices(request.caseId), checkPlan?: (reference: CaseDecisionRef) => Promise<void>) {
   if (request.lifecycle !== 'open') return requestStatus(request, choices, undefined);
   if (request.target.kind !== 'choose') return 'unverifiable' as const;
   try {
@@ -77,7 +81,15 @@ export function chooseRequestStatus(cases: CaseDecisionServiceDependencies['case
     if (strategy.kind !== 'strategy' || strategy.issueId && strategy.issueId !== request.issueId) return 'unverifiable' as const;
     const status = requestStatus(request, choices, undefined);
     if (status === 'answered') return status;
-    if (cases.getCase(request.caseId).status === 'closed' || cases.getDecision(request.caseId, ref.recordId).lifecycle === 'archived') return 'superseded' as const;
+    try { cases.assertStrategyChoiceTarget({ caseStoreId: ref.caseStoreId, caseId: request.caseId, issueId: request.issueId, strategyRef: ref, expectedPreviousChoiceId: request.target.expectedPreviousChoiceId, allowHistorical: true }); }
+    catch (error) {
+      const code = (error as { code?: string })?.code;
+      if (code === 'case_closed' || code === 'case_decision_archived') return 'superseded' as const;
+      if (code === 'case_choice_conflict') return status === 'unverifiable' ? status : 'superseded' as const;
+      return 'unverifiable' as const;
+    }
+    if (checkPlan) await checkPlan(ref);
+    else if (planSources(strategy).length) return 'unverifiable' as const;
     return status;
   } catch { return 'unverifiable' as const; }
 }
@@ -156,9 +168,7 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
   async function checkPlan(reference: CaseDecisionRef) {
     const strategy = cases.getDecision(reference.caseId, reference.recordId, reference.revision);
     if (!strategy.issueId) return;
-    for (const ref of strategy.references) {
-      if (ref.relation !== 'derived_from' || ref.target.type !== 'source' || ref.target.source.type !== 'native-reply') continue;
-      const source = ref.target.source;
+    for (const source of planSources(strategy)) {
       const actual = await readReply(strategy.caseId, strategy.issueId, source, 'plan');
       await deps.qualifyPlanReply?.(strategy.caseId, strategy.issueId, source, actual.requestId);
     }
@@ -456,7 +466,7 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
       if (section === 'issues') rows = cases.listDecisionIssues(caseId);
       else if (section === 'edges') rows = cases.listIssueEdges(caseId, { includeRemoved: true });
       else if (section === 'requests') rows = await Promise.all(cases.listDecisionRequests(caseId).filter(row => row.issueId === issueId)
-        .map(async row => ({ ...row, status: row.kind === 'observe' ? await observationRequestStatus(cases, deps.board, row, deps.assertBoardItemReadable, async projectId => { await linkedProject(caseId, projectId); }) : chooseRequestStatus(cases, row) })));
+        .map(async row => ({ ...row, status: row.kind === 'observe' ? await observationRequestStatus(cases, deps.board, row, deps.assertBoardItemReadable, async projectId => { await linkedProject(caseId, projectId); }) : await chooseRequestStatus(cases, row, undefined, checkPlan) })));
       else if (section === 'choices') rows = cases.getStrategyChoices(caseId).filter(row => row.issueId === issueId).map(row => ({ choiceId: row.choiceId, caseId, issueId, strategyRef: row.strategyRef, choice: row.choice, previousChoiceId: row.previousChoiceId, occurredAt: row.occurredAt, respondsToRequest: row.respondsToRequest }));
       else {
         if (!deps.board?.listActionAuthorizations) return fail('case_decision_board_unavailable', 503);
@@ -504,7 +514,7 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
     decisionRequests: async (caseId: string) => {
       const choices = cases.getStrategyChoices(caseId);
       return Promise.all(cases.listDecisionRequests(caseId).map(async request => {
-        if (request.target.kind === 'choose') return { ...request, status: chooseRequestStatus(cases, request, choices) };
+        if (request.target.kind === 'choose') return { ...request, status: await chooseRequestStatus(cases, request, choices, checkPlan) };
         return { ...request, status: await observationRequestStatus(cases, deps.board, request, deps.assertBoardItemReadable, async projectId => { await linkedProject(caseId, projectId); }) };
       }));
     },
@@ -524,6 +534,12 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
           options?.assertWritable?.();
           const previous = input.requestId === undefined ? undefined : cases.listDecisionRequests(caseId).find(r => r.requestId === caseDecisionId(input.requestId));
           const tgt = (input.target ?? previous?.target) as Record<string, unknown> | undefined;
+          if ((!input.action || input.action === 'save') && tgt?.kind === 'choose') {
+            const strategyRef = parseCaseDecisionRef(tgt.strategyRef);
+            cases.assertStrategyChoiceTarget({ caseStoreId: cases.getStatus().storeId!, caseId, issueId: previous?.issueId ?? caseDecisionId(input.issueId), strategyRef,
+              expectedPreviousChoiceId: tgt.expectedPreviousChoiceId === null ? null : caseDecisionId(tgt.expectedPreviousChoiceId), allowHistorical: true });
+            await checkPlan(strategyRef);
+          }
           if ((!input.action || input.action === 'save') && tgt?.kind === 'observe') {
             if (!deps.board) return fail('case_decision_board_unavailable', 503);
             const projId = caseDecisionId(tgt.projectId), itemId = caseDecisionId(tgt.itemId), taskId = caseDecisionId(tgt.taskId), authId = caseDecisionId(tgt.authorizationId);

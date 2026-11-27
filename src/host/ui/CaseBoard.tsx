@@ -147,8 +147,23 @@ export function CaseBoard({ visible = true, onPrepareCase, initialRequest, initi
     catch (failure) { if (failure instanceof api.CaseRequestError && failure.status === 403) { clearForbiddenList(); setListStale(false); setError('当前身份无权读取 Case，原内容、来源和操作入口已清除。'); } else { setListStale(true); setError(caseError(failure)); } }
     finally { setLoading(false); }
   };
-  useEffect(() => { let alive = true; void (async () => { try { const state = await api.status(); if (!alive) return; setStorage(state); if (state.state === 'ready') { const value = await api.list(); if (alive) { setData(value); setDataReady(true); } } } catch (failure) { if (alive) { if (failure instanceof api.CaseRequestError && failure.status === 403) { clearForbiddenList(); setError('当前身份无权读取 Case，原内容、来源和操作入口已清除。'); } else setError(caseError(failure)); } } finally { if (alive) setLoading(false); } })(); return () => { alive = false; }; }, []);
-  useEffect(() => { if (initialCaseId) { if (initialIssueId) updateView(initialCaseId, previous => ({ ...selectCaseBoardIssue(previous, initialIssueId, previous.activeIssueId === initialIssueId ? 'restore' : 'explicit'), ...(previous.activeIssueId !== initialIssueId || initialRequest ? { tab: 'overview' as const } : {}) })); if (selectedRef.current === initialCaseId) void readDetail(initialCaseId); setSelectedId(initialCaseId); } }, [initialCaseId, initialCaseSeq, initialIssueId, initialRequest?.requestId, initialRequest?.revision]);
+  useEffect(() => {
+    if (!visible) return;
+    let alive = true; setLoading(true); setError('');
+    void (async () => {
+      try {
+        const state = await api.status(); if (!alive) return; setStorage(state);
+        if (state.state === 'ready') { const value = await api.list(); if (alive) { setData(value); setDataReady(true); setListStale(false); } }
+      } catch (failure) {
+        if (alive) {
+          if (failure instanceof api.CaseRequestError && failure.status === 403) { clearForbiddenList(); setListStale(false); setError('当前身份无权读取 Case，原内容、来源和操作入口已清除。'); }
+          else { setListStale(true); setError(caseError(failure)); }
+        }
+      } finally { if (alive) setLoading(false); }
+    })();
+    return () => { alive = false; };
+  }, [visible, initialCaseSeq]);
+  useEffect(() => { if (initialCaseId) { if (initialIssueId) updateView(initialCaseId, previous => ({ ...selectCaseBoardIssue(previous, initialIssueId, previous.activeIssueId === initialIssueId ? 'restore' : 'explicit'), tab: 'overview' as const })); if (selectedRef.current === initialCaseId) void readDetail(initialCaseId); setSelectedId(initialCaseId); } }, [initialCaseId, initialCaseSeq, initialIssueId, initialRequest?.requestId, initialRequest?.revision]);
   useEffect(() => { if (selectedId) { setDetail(null); setEditing(null); setDetailStale(false); setDetailError(''); void readDetail(selectedId); void onProjectChange().catch(() => setDetailError('项目列表读取失败，请刷新核对项目工作信息。')); } }, [selectedId]);
   const afterSave = async (message = '已保存。') => { setNotice(message); onCaseChanged?.(); await Promise.all([refresh(), onProjectChange().catch(() => setError('记录已保存，但项目列表刷新失败，请重试刷新。')), selectedRef.current ? readDetail(selectedRef.current) : Promise.resolve()]); };
   const open = (record: CaseRecord) => { setSelectedId(record.id); setDetailError(''); };

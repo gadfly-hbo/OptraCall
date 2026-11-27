@@ -170,7 +170,7 @@ test('DW-FINAL-AUTH-01: an issue-specific strategy cannot create a choose reques
   const input = { ...f.chooseInput(), issueId: f.b.id, target: { kind: 'choose', strategyRef: { ...f.strategyRef, recordId: strategy.recordId, revision: strategy.revision }, expectedPreviousChoiceId: null } };
   await assert.rejects(f.service.saveDecisionRequest(f.record.id, input), { code: 'case_issue_scope_mismatch' });
   assert.equal(f.cases.getOperation(input.operationId), null);
-  assert.equal(chooseRequestStatus(f.cases, { ...input, caseId: f.record.id, lifecycle: 'open' } as never), 'unverifiable', 'historical mismatches do not become pending');
+  assert.equal(await chooseRequestStatus(f.cases, { ...input, caseId: f.record.id, lifecycle: 'open' } as never), 'unverifiable', 'historical mismatches do not become pending');
 });
 
 test('DW-FINAL-AUTH-02: observation requests require this task current exact feedback baseline', async t => {
@@ -267,4 +267,19 @@ test('DW-FINAL-LIFECYCLE-02: real project archive follows original Board feedbac
   const responded = await boardRoutes.routes({ method: 'POST' } as never, new URL(`http://localhost/api/decision-board/tasks/${action.taskId}/feedback`));
   assert.equal(responded!.status, 200, 'original feedback remains permitted for done Board task and closed Case');
   assert.equal((await service.decisionRequests(f.record.id)).find(row => row.requestId === waiting.requestId)!.status, 'answered');
+});
+
+test('DW-PLAN-REQUEST-02: new or revised choose requests require the exact current choice chain; withdrawal and receipt replay remain available', async t => {
+  const f = await fixture(t);
+  const invalid = { ...f.chooseInput(), target: { kind: 'choose', strategyRef: f.strategyRef, expectedPreviousChoiceId: randomUUID() } };
+  await assert.rejects(f.service.saveDecisionRequest(f.record.id, invalid), { code: 'case_choice_conflict' });
+  const input = f.chooseInput(), request = await f.service.saveDecisionRequest(f.record.id, input);
+  const choice = f.cases.chooseStrategy({ operationId: randomUUID(), caseStoreId: f.strategyRef.caseStoreId, caseId: f.record.id, issueId: f.a.id, strategyRef: f.strategyRef, choice: 'trial', expectedPreviousChoiceId: null });
+  await assert.rejects(f.service.saveDecisionRequest(f.record.id, f.chooseInput()), { code: 'case_choice_conflict' });
+  await assert.rejects(f.service.saveDecisionRequest(f.record.id, { operationId: randomUUID(), expectedRevision: f.rev(), requestId: request.requestId, expectedRequestRevision: request.revision, text: '旧链上修订请求', source: input.source }), { code: 'case_choice_conflict' });
+  assert.deepEqual(await f.service.saveDecisionRequest(f.record.id, input), request);
+  const withdrawn = await f.service.saveDecisionRequest(f.record.id, { operationId: randomUUID(), expectedRevision: f.rev(), requestId: request.requestId, expectedRequestRevision: request.revision, action: 'withdraw', source: input.source });
+  assert.equal(withdrawn.lifecycle, 'withdrawn');
+  const current = await f.service.saveDecisionRequest(f.record.id, { ...f.chooseInput(), target: { kind: 'choose', strategyRef: f.strategyRef, expectedPreviousChoiceId: choice.choiceId } });
+  assert.equal((await f.service.decisionRequests(f.record.id)).find(row => row.requestId === current.requestId)!.status, 'open');
 });
