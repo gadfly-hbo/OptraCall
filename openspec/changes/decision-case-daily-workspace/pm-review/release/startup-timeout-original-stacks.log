@@ -1,0 +1,17 @@
+source: 6bc7be2849d280e5e6a6e598ee6b7a68dd5e48eb
+original full run: .local/pm-second/full-check-release.log
+full log sha256: 8bc81e9594a7a78d7e0e2d76b5eda50444d831d8efea365e5c29633128547870
+
+test at tests/project-host.test.ts:442:1
+✖ projectSkillCatalog preserves SDK selection order for project-supplied optional skills (Project Plan contract) (10104.432002ms)
+  Error: Test Host startup timed out.
+      at Timeout._onTimeout (file:///workspace/OptraCall-issue149-final/tests/fixtures/host-process.ts:24:68)
+      at listOnTimeout (node:internal/timers:605:17)
+      at process.processTimers (node:internal/timers:541:7)
+
+test at tests/project-selected-methods-v020.test.ts:52:1
+✖ A07/A09: one confirmation carries exact selected versions through Host/Pi; actual Skill and SAP reads remain distinct from the Agent use declaration (10207.47138ms)
+  Error: Test Host startup timed out.
+      at Timeout._onTimeout (file:///workspace/OptraCall-issue149-final/tests/fixtures/host-process.ts:24:68)
+      at listOnTimeout (node:internal/timers:605:17)
+      at process.processTimers (node:internal/timers:541:7)

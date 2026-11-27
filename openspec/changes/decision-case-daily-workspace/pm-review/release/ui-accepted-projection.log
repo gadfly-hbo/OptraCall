@@ -1,0 +1,26 @@
+{
+  "head": "a571245698d432d39e3fbdbcfee423ebc06fd919",
+  "comparisonBase": "be1fd36ad449d89d2fc21655ccbbb61cf8b6bdbf",
+  "sourceTrees": [
+    {
+      "path": "src/host/ui",
+      "base": "2edf4a22ca850475160ffd8b605ca2cecb685876",
+      "head": "2edf4a22ca850475160ffd8b605ca2cecb685876"
+    },
+    {
+      "path": "extensions/business-plugins/decision-board/ui",
+      "base": "03179c558b74ae0f80d170da6c060f5a871b306b",
+      "head": "03179c558b74ae0f80d170da6c060f5a871b306b"
+    }
+  ],
+  "checks": [
+    "Exact UI source trees unchanged",
+    "Only eligible open request remains pending",
+    "Unanswered archived request retains original identity/text/source in unresolved",
+    "Answered history is not falsely reintroduced as pending/unresolved",
+    "Unverifiable stays unresolved",
+    "Original feedback editor rejects superseded request reference"
+  ],
+  "result": "PASS",
+  "browserEvidence": "Reused be1-bound 21-step UI evidence by exact source equivalence; no new-head browser rerun claimed"
+}

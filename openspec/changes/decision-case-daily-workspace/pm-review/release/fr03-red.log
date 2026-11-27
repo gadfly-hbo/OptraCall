@@ -1,0 +1,26 @@
+✖ FR03-REPRO: Board saveFeedback with respondsToRequest reopens cleanly (schema v6); forged caseStoreId/authorizationId rejected (86.766172ms)
+ℹ Error: Test "FR03-REPRO: Board saveFeedback with respondsToRequest reopens cleanly (schema v6); forged caseStoreId/authorizationId rejected" at tests/fr01-03-05-repro.test.ts:108:1 generated asynchronous activity after the test ended. This activity created the error "CaseStoreError: project_not_linked" and would have caused the test to fail, but instead triggered an unhandledRejection event.
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1587.108688
+
+✖ failing tests:
+
+test at tests/fr01-03-05-repro.test.ts:108:1
+✖ FR03-REPRO: Board saveFeedback with respondsToRequest reopens cleanly (schema v6); forged caseStoreId/authorizationId rejected (86.766172ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///workspace/OptraCall-issue149-check-followup/tests/fr01-03-05-repro.test.ts:149:10)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: { code: 'project_not_linked' },
+    operator: 'throws',
+    diff: 'simple'
+  }

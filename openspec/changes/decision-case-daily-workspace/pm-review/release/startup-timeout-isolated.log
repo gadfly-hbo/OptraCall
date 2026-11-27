@@ -1,0 +1,11 @@
+✔ projectSkillCatalog preserves SDK selection order for project-supplied optional skills (Project Plan contract) (2330.873013ms)
+✔ A07/A09: one confirmation carries exact selected versions through Host/Pi; actual Skill and SAP reads remain distinct from the Agent use declaration (3714.001347ms)
+ℹ /workspace/OptraCall-issue149-final/.local/overall-architecture-upgrade/development/selected-methods/actual-pi-B1hHF5
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7487.971188

@@ -1,0 +1,19 @@
+✔ a Case detail exposes its collaboration entry before any independent issue has been selected (31.563988ms)
+✔ M5 client explains case_decision_revision_conflict without replaying the user's request (119.149242ms)
+✔ M5 client explains case_choice_conflict without replaying the user's request (3.338873ms)
+✔ M5 client explains case_decision_archived without replaying the user's request (0.44571ms)
+✔ M5 client explains case_decisions_disabled without replaying the user's request (0.402534ms)
+✔ DW-PLAN-REQUEST-01: original checkPlan governs new writes and unanswered projections across real Project/Task/native/recipient loss (959.140247ms)
+✔ DW09/FUI-02: a selected open historical request loads its exact strategy revision and requires explicit historical confirmation (181.414064ms)
+✔ DW09/FUI-03: explicitly switching from request A to issue B restores B single-request matching (16.642492ms)
+✔ DW09/FUI-02: denied exact historical read never silently substitutes the latest version for the original request (5.350326ms)
+✔ DW09: current-version choices retain the normal one-request path without historical opt-in (5.631576ms)
+✔ DW09/FUI-02: unauthorized, archived or owner-mismatched original revisions cannot be used for a new choice (13.895483ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3444.639155
