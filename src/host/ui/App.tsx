@@ -65,6 +65,7 @@ import './case-board.css';
 import { ProjectNavigation } from './ProjectNavigation.tsx';
 import { RenameProjectDialog, TaskDialog } from './ProjectDialogs.tsx';
 import { TaskCapabilityList } from './TaskCapabilities.tsx';
+import { ServiceConnectionsSettings, TaskServiceConnections } from './ServiceConnections.tsx';
 import { TASK_CAPABILITIES, type TaskCapability, type TaskCapabilities } from '../task-capabilities.ts';
 import { bindProjectContext, answerInteraction, archiveTask as archiveDiskTask, restoreTask as restoreDiskTask, archiveProject, createTask as createDiskTask, createProject as createDiskProject, HostRequestError, listProjects, openTask, readConfigurations, readTask, renameProject, restoreProject, runCommand, saveDraft, saveReport, sendMessage, setTaskCapability, stopTask, observeTask, type TaskObservationState } from './runtime-client.ts';
 import { messageText, nativeMessageText, taskKey, type BrowserUIRequest, type BrowserUIResponse, type ClientProject, type ClientTask, type NativeMessage, type ProjectEvent, type PublicModelConfiguration, type SessionSnapshot } from './project-types.ts';
@@ -822,6 +823,19 @@ export function App() {
   };
   const respond = async (projectId: string, taskId: string, response: BrowserUIResponse) => { await answerInteraction(projectId, taskId, response); changeUI(taskKey(projectId, taskId), old => ({ ...old, uiRequests: (old.uiRequests ?? []).filter(request => request.id !== response.id), deferredRequestId: old.deferredRequestId === response.id ? undefined : old.deferredRequestId })); };
   const openSettings = (trigger?: HTMLButtonElement) => openSettingsView('settings', trigger);
+  const openTaskServiceConnections = () => {
+    if (!active || !activeTask) { openWorkspace('projects'); return; }
+    const key = taskKey(active.id, activeTask.id);
+    selectContext(active.id, activeTask.id);
+    // This explicit action opens account permissions; ordinary settings Back retains the report.
+    setTaskPanelByTask(previous => ({ ...previous, [key]: 'chat' }));
+    setView('chat');
+    requestAnimationFrame(() => {
+      const panel = document.querySelector<HTMLDetailsElement>('details.task-account-panel');
+      if (panel) panel.open = true;
+      textarea.current?.focus();
+    });
+  };
   const backFromSettings = () => {
     const target = settingsReturnView.current;
     setView(target);
@@ -1004,7 +1018,7 @@ export function App() {
     if (destination === 'plan') openProjectPlan(active);
     else if (destination === 'requirement') openTaskRequirements();
     else if (destination === 'reports' || destination === 'connections') openProjectSources();
-    else if (destination === 'permissions') { const panel = Array.from(document.querySelectorAll<HTMLDetailsElement>('details.harness-panel')).find(value => value.getClientRects().length > 0); if (panel) { panel.open = true; panel.scrollIntoView({ block: 'nearest' }); } else setGlobalNotice('本任务只读；原能力设置保留，恢复原任务后可核对启用。'); }
+    else if (destination === 'permissions') { const panel = Array.from(document.querySelectorAll<HTMLDetailsElement>('details.task-pi-capabilities')).find(value => value.getClientRects().length > 0); if (panel) { panel.open = true; panel.scrollIntoView({ block: 'nearest' }); } else setGlobalNotice('本任务只读；原能力设置保留，恢复原任务后可核对启用。'); }
     else openCapability(destination);
   };
   const showManagement = (route: ManagementRoute, source?:CaseCreationSource, review?:import('../business-role-types.ts').TeachReviewOwner) => {
@@ -1146,7 +1160,7 @@ export function App() {
         </div>
         </ConversationDrawer>
         <div className="task-workspace-tools">
-          {!archived && <><div className="report-action-row">{lastAssistant && !busy && <button className="secondary-button" type="button" onClick={async () => { const projectId = active.id, key = activeKey!; try { await saveReport(projectId, messageText(lastAssistant)); setFilesRevision(previous => previous + 1); changeUI(key, old => ({ ...old, notice: '这条回复已明确保存为 060_reports 中的最终报告。' })); } catch (error) { changeUI(key, old => ({ ...old, error: safeError(error) })); } }}>将最新回复保存为最终报告</button>}</div><details className="harness-panel"><summary>Pi 能力与命令</summary><p>可用工具：{current?.snapshot?.tools.join(' · ') || '执行任务或打开会话后显示'}</p><TaskCapabilityList key={activeKey} settings={activeTask} disabled={contextLocked || capabilityUpdating || !current?.connected} context="session" onChange={(capability, enabled) => { const key = activeKey!; void toggleTaskCapability(capability, enabled).catch(error => changeUI(key, old => ({ ...old, error: safeError(error) }))); }} /><p>Python 通过 bash 执行。默认从 020_clean 读取分析资料并保存过程文件；最终报告由 Pi 写入 060_reports，也可明确保存。目录用途约定不提供敏感数据隔离。</p><div>{['/tools', '/skills', '/session', '/tree', '/compact', '/reload'].map(command => <button className="text-button" type="button" key={command} disabled={contextLocked || !current?.connected} onClick={() => { void persistDraft(active.id, activeTask.id, command).catch(() => {}); textarea.current?.focus(); }}>{command}</button>)}</div></details></>}
+          {!archived && <><div className="report-action-row">{lastAssistant && !busy && <button className="secondary-button" type="button" onClick={async () => { const projectId = active.id, key = activeKey!; try { await saveReport(projectId, messageText(lastAssistant)); setFilesRevision(previous => previous + 1); changeUI(key, old => ({ ...old, notice: '这条回复已明确保存为 060_reports 中的最终报告。' })); } catch (error) { changeUI(key, old => ({ ...old, error: safeError(error) })); } }}>将最新回复保存为最终报告</button>}</div><details className="harness-panel task-account-panel"><summary>任务账号连接</summary><TaskServiceConnections key={`services-${activeKey}`} projectId={active.id} taskId={activeTask.id} bindings={activeTask.serviceConnections} unavailableReason={active.memberPackScoped ? '当前任务使用企业会员包的受限资源，个人账号连接不可用。' : current?.snapshot?.capabilities?.protectedExecution ? '当前任务采用受管执行环境，个人账号连接不可用。' : (current?.snapshot?.capabilities?.serviceConnections as { supported?: boolean; reason?: string } | undefined)?.supported === false ? (current?.snapshot?.capabilities?.serviceConnections as { reason?: string }).reason : undefined} disabled={contextLocked || capabilityUpdating} archived={archived} onSettings={() => openSettingsView('connection-settings')} onChanged={task => { updateTask(active.id, activeTask.id, () => task); void refreshTask(active.id, activeTask.id); }} /></details><details className="harness-panel task-pi-capabilities"><summary>Pi 能力与命令</summary><p>可用工具：{current?.snapshot?.tools.join(' · ') || '执行任务或打开会话后显示'}</p><TaskCapabilityList key={activeKey} settings={activeTask} disabled={contextLocked || capabilityUpdating || !current?.connected} context="session" onChange={(capability, enabled) => { const key = activeKey!; void toggleTaskCapability(capability, enabled).catch(error => changeUI(key, old => ({ ...old, error: safeError(error) }))); }} /><p>Python 通过 bash 执行。默认从 020_clean 读取分析资料并保存过程文件；最终报告由 Pi 写入 060_reports，也可明确保存。目录用途约定不提供敏感数据隔离。</p><div>{['/tools', '/skills', '/session', '/tree', '/compact', '/reload'].map(command => <button className="text-button" type="button" key={command} disabled={contextLocked || !current?.connected} onClick={() => { void persistDraft(active.id, activeTask.id, command).catch(() => {}); textarea.current?.focus(); }}>{command}</button>)}</div></details></>}
           {view !== 'studio' && <TaskAssignmentPanel key={activeKey} project={active} task={activeTask} busy={contextLocked || capabilityUpdating} onUpdated={task => updateTask(active.id, task.id, () => task)} onCreate={intent => showTaskDialog(active, document.activeElement as HTMLElement, intent)} />}
           {view !== 'studio' && <section ref={resultsPanel} tabIndex={-1} className="task-results" aria-label="结果与审查"><h2>结果与审查</h2><AutomaticActionLocalSwitch node="save" /><AutomaticActionLocalSwitch node="review" /><AutomaticActionLocalSwitch node="ir" /><AutomaticActionLocalSwitch node="case" /><AutomaticActionLocalSwitch node="assets" /><button type="button" className="text-button" onClick={() => openProjectPlan(active)}>项目需求与任务方案</button>
           <ReportCalculationReview projectId={active.id} taskId={activeTask.id} value={current?.snapshot?.capabilities?.reportCalculationReview} />
@@ -1237,7 +1251,7 @@ export function App() {
         </div>
         <div id="settings-automatic-panel" hidden={view !== 'automatic-action-settings'}>{view === 'automatic-action-settings' && <AutomaticActionSettingsPage active={!helpOpen} />}</div>
         <div id="settings-skill-panel" hidden={view !== 'skill-settings'}>{view === 'skill-settings' && <SkillCapabilitySettings active={!helpOpen} onProject={() => active ? openProjectPlan(active) : openWorkspace('projects')} onModelSettings={() => openSettingsView('settings')} />}</div>
-        <div id="settings-connections-panel" hidden={view !== 'connection-settings'}>{view === 'connection-settings' && <ConnectorCapabilitySettings onSharedConnections={() => { setDbConnectionsProjectId(undefined); setDbConnectionsOpen(true); }} onProjectSources={openProjectSources} onHelp={() => setHelpOpen(true)} />}</div>
+        <div id="settings-connections-panel" hidden={view !== 'connection-settings'}>{view === 'connection-settings' && <><ServiceConnectionsSettings onProject={openTaskServiceConnections} /><ConnectorCapabilitySettings onSharedConnections={() => { setDbConnectionsProjectId(undefined); setDbConnectionsOpen(true); }} onProjectSources={openProjectSources} onHelp={() => setHelpOpen(true)} /></>}</div>
         <div id="settings-model-pack-panel" hidden={view !== 'model-pack-settings'}>{view === 'model-pack-settings' && <ModelRegistryPage embedded onBack={backFromSettings} />}</div>
         <div id="settings-domain-pack-panel" hidden={view !== 'capability-plans'}>{view === 'capability-plans' && <CapabilityPlansSettings onOpenStudio={() => { setStudioMounted(true); setHelpOpen(false); setView('studio'); }} />}</div>
         </div></div>

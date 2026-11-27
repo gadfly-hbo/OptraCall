@@ -41,10 +41,15 @@ const projectAgentOwners = new Set([
   'tests/native-search-runtime.test.ts', // WEB01/02: loopback native-provider blocks and SDK continuation.
   'tests/model-pack-agent-flow.test.ts', // MP04/07: isolated real SDK/loopback provider proof; never product runtime ownership.
   'tests/deep-research-skill.test.ts', // DR03: isolated real SDK delegation through the shipped deep-research skill; never a product runtime owner.
+  'tests/service-connection-runtime.test.ts', // GG: original task tool/approval/cancellation and cleanup proof only.
 ]);
 const sdkConsumers = new Set(['src/agent/project-session.ts', 'src/agent/runtime.ts', 'src/agent/browser-ui-context.ts']);
 // Exact native tool/resource helpers, without session/runtime constructors.
 const toolSdkConsumers = new Map([
+  ['src/host/service-connection-oauth.ts', new Set(['PiMcpOAuthProvider', 'PiOAuthCallbackServer', 'authorizePiMcp', 'PiOAuthIssuerMismatchError', 'PiOAuthError'])], // Native public MCP OAuth flow/state; no model/session execution.
+  ['src/host/service-connection-mcp.ts', new Set(['McpClient', 'StreamableHttpTransport'])], // Preset account protocol clients, never model/session execution.
+  ['src/host/service-connection-google-transport.ts', new Set()], // Public native transport types only.
+  ['tests/service-connection-google.test.ts', new Set(['McpClient', 'ModelRuntime', 'createMcpExtension', 'DefaultResourceLoader', 'createAgentSession', 'SettingsManager', 'SessionManager'])], // Isolated actual Pi protocol/extension fixture, no product owner.
   ['tests/project-task-result-sources.test.ts', new Set(['SessionManager'])], // V020 A12: isolated public native-history builder only; no Agent/session execution owner.
   ['src/agent/skill-catalog.ts', new Set(['loadSkills', 'getAgentDir'])], // V020 A07: official SDK metadata only; no session, resource activation or Runtime constructor.
   ['tests/agent-candidate-sdk-proof.test.ts', new Set(['createAgentSession', 'createExtensionRuntime', 'ModelRuntime', 'SessionManager', 'SettingsManager', 'VERSION'])], // R1 isolated public-SDK persistence/composition probe only; exact symbols, no product owner.
@@ -81,6 +86,10 @@ const checkoutLoaders = new Set(['scripts/trial-launcher.mjs', 'tests/trial-laun
 // explicitly supplied isolated source projection. It is not an SDK entry point
 // or a product query path; all ordinary SDK/ProjectAgent import rules still apply.
 const engineeringStoreLoaders = new Set(['scripts/fourbase_l2/authority.mjs']);
+const browserFixtureLoaders = new Map([
+  ['tests/service-connections-browser.mjs', "import(process.env.OPTRACALL_PLAYWRIGHT_MODULE || 'playwright')"],
+  ['tests/service-connections-app-browser.mjs', "import(process.env.OPTRACALL_PLAYWRIGHT_MODULE || 'playwright')"],
+]);
 const sdkPackageName = '(?:(?:@earendil-works/|@mariozechner/)?pi-(?:coding-agent|agent-core|ai|codemode|mcp|tui|telemetry))';
 const sdkPackage = new RegExp(`^${sdkPackageName}(?:/|$)`);
 const installedSdkPackage = new RegExp(`(?:^|/)node_modules/${sdkPackageName}(?:/|$)`);
@@ -187,12 +196,14 @@ function inspectParsedSource(filePath, source, sourceFile) {
       // The trial updater intentionally resolves its own checked-out script.
       const expression = ref.loader?.getText(sourceFile) ?? '';
       const reviewedStoreLoad = engineeringStoreLoaders.has(file) && /^import\s*\(\s*pathToFileURL\s*\(\s*path\.join\s*\(\s*input\.sourceRoot\s*,\s*relative\s*\)\s*\)\s*\.href\s*\)$/.test(expression);
-      if (!checkoutLoaders.has(file) && !reviewedStoreLoad) fail(pos, 'non-literal module loading requires a reviewed entry point');
+      if (!checkoutLoaders.has(file) && !reviewedStoreLoad && browserFixtureLoaders.get(file) !== expression) fail(pos, 'non-literal module loading requires a reviewed entry point');
       return;
     }
     const target = canonicalSource(file, ref.source), names = ref.names;
     if ((sdkPackage.test(ref.source) || installedSdkPackage.test(ref.source.replaceAll('\\', '/'))) && file !== 'src/agent/sdk.ts') fail(pos, 'the SDK package is imported only by src/agent/sdk.ts');
-    if (file === 'src/agent/sdk.ts' && (sdkPackage.test(ref.source) || installedSdkPackage.test(ref.source.replaceAll('\\', '/'))) && ref.source !== '@earendil-works/pi-coding-agent' && !(ref.source === pinnedMcpPath && (!names.length || pinnedLoaderImport(node, ancestors)))) fail(pos, 'only the public SDK and pinned lazy MCP loader behind VERSION 1.4.0 are reviewed');
+    const publicMcpClient = ref.source === '@earendil-works/pi-mcp' && isExportDeclaration(node) && names.every(name => ['McpClient', 'StreamableHttpTransport'].includes(name));
+    const publicMcpOAuth = ref.source === '@earendil-works/pi-mcp/oauth' && isExportDeclaration(node) && names.every(name => ['McpOAuthProvider', 'OAuthCallbackServer', 'authorizeMcp', 'OAuthIssuerMismatchError', 'OAuthError'].includes(name));
+    if (file === 'src/agent/sdk.ts' && (sdkPackage.test(ref.source) || installedSdkPackage.test(ref.source.replaceAll('\\', '/'))) && ref.source !== '@earendil-works/pi-coding-agent' && !publicMcpClient && !publicMcpOAuth && !(ref.source === pinnedMcpPath && (!names.length || pinnedLoaderImport(node, ancestors)))) fail(pos, 'only the public SDK, reviewed public MCP clients/OAuth and pinned lazy MCP loader behind VERSION 1.4.0 are reviewed');
     if (target === 'src/agent/sdk.ts' && !sdkConsumers.has(file)) {
       const tools = toolSdkConsumers.get(file);
       if (tools ? names.some(name => !tools.has(name)) : !historyReaders.has(file) || names.some(name => name !== 'SessionManager')) fail(pos, 'SDK access requires an approved runtime or native-history reader');

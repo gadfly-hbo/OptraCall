@@ -1,3 +1,4 @@
+import { createServiceConnectionTools } from './service-connection-tools.ts';
 import { taskSourceDeliveryType, taskSourceDeliveryDetails, tracksTaskSource } from './task-source-delivery.ts';
 import { packageIdentity } from './skill-catalog.ts';
 import { taskPurpose, approvedTaskSkills } from '../host/task-assignment.ts';
@@ -106,7 +107,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
   // Resource lifetime state deliberately survives SDK extension reload/fork within this worker.
   const connectorDirectories = new Map<string, { digest?: string; frozen: boolean }>();
   const executionBindings = new Map<string, { manager: SessionManager; file: string; cwd: string; closed: boolean; reloadJournal?: boolean }>();
-  const personalRequests = new Map<string, { resolve: (result: unknown) => void; reject: (error: Error) => void }>();
+  const personalRequests = new Map<string, { resolve: (result: unknown) => void; reject: (error: Error) => void; requestId: string; sessionId: string; toolCallId: string; feature: string }>();
   function rejectPersonalRequests() { for (const pending of personalRequests.values()) pending.reject(new Error('personal_context_run_unavailable')); personalRequests.clear(); }
   function qualifyToolInvocation(target: AgentSession, ctx: ExtensionToolContext, signal: AbortSignal | undefined) {
     const invocationRun = run, invocationManager = target.sessionManager;
@@ -180,7 +181,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     return new Promise((resolve, reject) => {
       const cleanup = () => { personalRequests.delete(id); signal.removeEventListener('abort', abort); };
       const abort = () => { cleanup(); send({ kind: 'personal-context-cancel', id }); reject(new Error(errorCode)); };
-      personalRequests.set(id, { resolve: result => { cleanup(); resolve(result); }, reject: error => { cleanup(); reject(error); } });
+      personalRequests.set(id, { requestId: input.requestId, sessionId: input.sessionId, toolCallId: input.toolCallId, feature: input.feature, resolve: result => { cleanup(); resolve(result); }, reject: error => { cleanup(); reject(error); } });
       signal.addEventListener('abort', abort, { once: true });
       send({ kind: 'personal-context-request', id, ...input });
     });
@@ -589,7 +590,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
     const loadMcpConfig = !fixedInput() && !o.protectedExecution && !restrictedMemberPack ? await getSdkMcpConfigLoader() : undefined;
     const mcpExtension = loadMcpConfig ? createMcpExtension({ loadConfig: context => {
       const loaded = loadMcpConfig({ agentDir: getAgentDir(), cwd: context.cwd, projectTrusted: context.isProjectTrusted() });
-      const reserved = (name: string) => ['trade_area_mcp', 'weather_mcp'].includes(name.replace(/[^A-Za-z0-9_]/g, '_'));
+      const reserved = (name: string) => ['trade_area_mcp', 'weather_mcp', 'service_github', 'service_gmail', 'service_tencent', 'service_feishu'].includes(name.replace(/[^A-Za-z0-9_]/g, '_'));
       const rejected = loaded.servers.filter(entry => reserved(entry.name));
       return { ...loaded, servers: loaded.servers.filter(entry => !reserved(entry.name)), errors: [...loaded.errors, ...rejected.map(entry => `Reserved product MCP namespace rejected: ${entry.name}. Enable the task capability to use the product connector.`)] };
     } }) : undefined;
@@ -779,7 +780,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
         },
       });
     }
-    const scopeToolContexts = Boolean(o.goalContextSourceEnabled || strategyDiscussion() || strategyInitiative() || candidateAvailable || dbLinkAvailable || o.reportCalculationReviewEnabled || semanticSourceReader || (o.projectFilesEnabled || o.studioEnabled || o.personalContextEnabled || o.caseDecisionsEnabled || o.caseRelationsEnabled || o.experienceLearningEnabled || o.semanticContextEnabled || graphReader || sourceReader) && (!o.workspace || sourceReader) && (!o.protectedExecution || graphReader) && o.projectId && o.taskId);
+    const scopeToolContexts = Boolean(o.serviceConnectionsEnabled || o.goalContextSourceEnabled || strategyDiscussion() || strategyInitiative() || candidateAvailable || dbLinkAvailable || o.reportCalculationReviewEnabled || semanticSourceReader || (o.projectFilesEnabled || o.studioEnabled || o.personalContextEnabled || o.caseDecisionsEnabled || o.caseRelationsEnabled || o.experienceLearningEnabled || o.semanticContextEnabled || graphReader || sourceReader) && (!o.workspace || sourceReader) && (!o.protectedExecution || graphReader) && o.projectId && o.taskId);
     const createStrategyTools = (boundManager: SessionManager) => {
       if (!(strategyDiscussion() || strategyInitiative()) || !o.strategyDiscussionEnabled) return [];
       const variant = o.workspace?.discussionTools;
@@ -834,6 +835,19 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       const current=run,boundSessionId=boundManager.getSessionId();const assertCurrent=()=>{if(!current||run!==current||current.kind!=='prompt'||current.cancelled||closing||!signal||signal.aborted||manager!==boundManager||session?.sessionManager!==boundManager||ctx.sessionManager!==boundManager||!toolCallId.trim())throw new Error('goal_context_source_unavailable');};
       assertCurrent();const result=await requestHostTool({feature:'goal-context-source',action:'read',input,toolCallId,requestId:current!.id,sessionId:boundSessionId},signal!,'goal_context_source_unavailable');assertCurrent();recordSourceDelivery(boundManager,current!,goalContextSourceTool.name,toolCallId,(result as {details:unknown}).details);return result as {content:{type:'text';text:string}[];details:Record<string,unknown>};
     }}];
+    const createBoundServiceTools = (boundManager: SessionManager) => {
+      if (!o.serviceConnectionsEnabled || o.workspace || o.protectedExecution || restrictedMemberPack || o.memberPackExecutionScope || !o.projectId || !o.taskId) return [];
+      return createServiceConnectionTools(o.serviceBindings, async (input, signal, toolCallId, rawContext) => {
+        const invocationRun = run, boundSessionId = boundManager.getSessionId(), ctx = rawContext as ExtensionToolContext;
+        const assertCurrent = () => {
+          if (!invocationRun || run !== invocationRun || invocationRun.kind !== 'prompt' || invocationRun.cancelled || closing || signal.aborted || manager !== boundManager || session?.sessionManager !== boundManager || ctx?.sessionManager !== boundManager || !toolCallId.trim()) throw new Error('service_connection_run_unavailable');
+        };
+        assertCurrent();
+        const result = await requestHostTool({ feature: 'service-connections', action: 'call', input, toolCallId, requestId: invocationRun!.id, sessionId: boundSessionId }, signal, 'service_connection_run_unavailable');
+        assertCurrent();
+        return result as import('./service-connection-tools.ts').ServiceConnectionToolResult;
+      });
+    };
     const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd: targetCwd, agentDir, sessionManager, sessionStartEvent }) => {
       let parent: AgentSession;
       const contextAdapter = scopeToolContexts ? createToolContextAdapter((ctx, signal) => qualifyToolInvocation(parent, ctx, signal)) : undefined;
@@ -852,7 +866,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
               path.join(analysisAssetsDir, 'data-analysis', 'SKILL.md'),
             ]
           : undefined;
-      const customTools = [...createGoalContextTools(sessionManager), ...createStrategyTools(sessionManager), ...(simulationTools ?? []), ...(modelPackTools ?? []), ...createCandidateTools(sessionManager), ...createPersonalContextTools(sessionManager), ...createBoundDbLinkTools(sessionManager), ...(o.reportCalculationReviewEnabled ? [createReportReviewTool(() => parent)] : [])];
+      const customTools = [...createBoundServiceTools(sessionManager), ...createGoalContextTools(sessionManager), ...createStrategyTools(sessionManager), ...(simulationTools ?? []), ...(modelPackTools ?? []), ...createCandidateTools(sessionManager), ...createPersonalContextTools(sessionManager), ...createBoundDbLinkTools(sessionManager), ...(o.reportCalculationReviewEnabled ? [createReportReviewTool(() => parent)] : [])];
       const delegation = !fixedInput() && !o.workspace && !restrictedMemberPack && (!o.protectedExecution || ordinaryManaged());
       const searchGuidance: ExtensionFactory = pi => {
         pi.on('before_agent_start', event => {
@@ -1219,6 +1233,20 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       }
       else if (message.method === 'stop') { await stop(); result = { stopped: true }; }
       else if (message.method === 'drain') { await retireChildren(); await protectedTools?.drain(); result = { drained: true }; }
+      else if (message.method === 'service-connection-dialog') {
+        const input = message.input, pending = personalRequests.get(input?.hostRequestId), invocationRun = run;
+        const assertCurrent = () => {
+          if (!pending || pending.feature !== 'service-connections' || pending.requestId !== input.requestId || pending.sessionId !== input.sessionId || pending.toolCallId !== input.toolCallId || !invocationRun || invocationRun.kind !== 'prompt' || run !== invocationRun || invocationRun.cancelled || invocationRun.id !== input.requestId || closing || !options.serviceConnectionsEnabled || options.workspace || options.protectedExecution || options.memberPackWorkspaceRoot || options.memberPackExecutionScope || !session?.agent.signal || session.agent.signal.aborted || session.sessionManager.getSessionId() !== input.sessionId || personalRequests.get(input.hostRequestId) !== pending || !browserUI) throw new Error('service_connection_run_unavailable');
+        };
+        assertCurrent();
+        if (typeof input.title !== 'string' || input.title.length > 1000 || Buffer.byteLength(JSON.stringify(input), 'utf8') > 128 * 1024) throw new Error('service_connection_invalid_dialog');
+        const signal = session!.agent.signal!;
+        if (input.method === 'confirm' && typeof input.message === 'string') result = await browserUI!.context.confirm(input.title, input.message, { signal });
+        else if (input.method === 'input' && (input.placeholder === undefined || typeof input.placeholder === 'string')) result = await browserUI!.context.input(input.title, input.placeholder, { signal });
+        else if (input.method === 'select' && Array.isArray(input.options) && input.options.length <= 100 && input.options.every((option: unknown) => typeof option === 'string' && option.length <= 2000)) result = await browserUI!.context.select(input.title, input.options, { signal });
+        else throw new Error('service_connection_invalid_dialog');
+        assertCurrent();
+      }
       else if (message.method === 'ui-response') result = { accepted: browserUI?.respond(message.input as BrowserUIResponse) ?? false };
       else if (message.method === 'editor-state') {
         const text: unknown = message.input?.text;

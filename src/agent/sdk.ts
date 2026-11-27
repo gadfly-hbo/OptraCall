@@ -1,6 +1,12 @@
 // The product has one official SDK import surface. Sessions may run in separate
 // OS environments; their reasoning loop and persistence remain Pi's implementation.
 export * from '@earendil-works/pi-coding-agent';
+// The same pinned official Pi package's public standalone MCP client lets the
+// Host verify/connect an account without creating an extra analysis session.
+export { McpClient, StreamableHttpTransport } from '@earendil-works/pi-mcp';
+export type { McpTransport, AuthProvider, Tool as PiMcpTool, CallToolResult as PiMcpCallToolResult, McpClientOptions, StreamableHttpTransportOptions } from '@earendil-works/pi-mcp';
+export { McpOAuthProvider as PiMcpOAuthProvider, OAuthCallbackServer as PiOAuthCallbackServer, authorizeMcp as authorizePiMcp, OAuthIssuerMismatchError as PiOAuthIssuerMismatchError, OAuthError as PiOAuthError } from '@earendil-works/pi-mcp/oauth';
+export type { McpOAuthState as PiMcpOAuthState, McpOAuthStateStore as PiMcpOAuthStateStore, AuthorizationServerMetadata as PiAuthorizationServerMetadata } from '@earendil-works/pi-mcp/oauth';
 
 import { VERSION, type LoadedMcpConfig } from '@earendil-works/pi-coding-agent';
 

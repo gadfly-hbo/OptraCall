@@ -1,0 +1,81 @@
+.service-connections { min-width: 0; }
+.service-connections-intro { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin: 20px 0 16px; }
+.service-connections-intro h3 { margin: 0 0 5px; font-size: 15px; font-weight: 600; }
+.service-connections-intro p, .service-connections-note { color: var(--muted); font-size: 12px; line-height: 1.7; margin: 0; }
+.service-connections-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.service-connection-card { min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 18px; background: var(--surface); }
+.service-connection-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.service-connection-name { display: flex; gap: 10px; align-items: center; min-width: 0; }
+.service-connection-name h4 { font-size: 15px; font-weight: 600; margin: 0; }
+.service-connection-monogram { width: 32px; height: 32px; flex: 0 0 32px; border: 1px solid var(--line); border-radius: 8px; display: grid; place-items: center; color: var(--accent); background: var(--accent-wash); font-size: 12px; font-weight: 650; }
+.service-connection-state { display: flex; align-items: center; gap: 5px; font-size: 11px; line-height: 1.6; color: var(--muted); padding-top: 6px; text-align: right; }
+.service-connection-state::before { content: ''; width: 5px; height: 5px; flex: 0 0 5px; border-radius: 50%; background: currentColor; }
+.service-connection-state[data-state="verified"] { color: #28734e; }
+.service-connection-state[data-state="expired"], .service-connection-state[data-state="error"], .service-connection-state[data-state="unknown"], .service-connection-state[data-state="disconnecting"] { color: var(--warning); }
+.app[data-theme="dark"] .service-connection-state[data-state="verified"] { color: #9cd4b2; }
+.service-connection-description { font-size: 12px; color: var(--muted); line-height: 1.7; margin: 14px 0 12px; }
+.service-connection-account { font-size: 13px; font-weight: 550; overflow-wrap: anywhere; margin: 0 0 4px; }
+.service-connection-summary { font-size: 11px; color: var(--muted); overflow-wrap: anywhere; margin: 0 0 14px; line-height: 1.7; }
+.service-connection-actions { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+.service-connection-actions > button, .service-connection-actions > a { font-size: 11.5px; }
+.service-connection-actions .primary-button { width: auto; min-height: 32px; padding: 6px 11px; }
+.service-connection-actions .secondary-button { min-height: 30px; padding: 5px 9px; }
+.service-connection-danger { color: var(--error); }
+.service-connection-details { margin-top: 15px; padding-top: 11px; border-top: 1px solid var(--line); font-size: 11px; color: var(--muted); }
+.service-connection-details summary { cursor: pointer; }
+.service-connection-details dl { margin: 12px 0 0; display: grid; gap: 7px; }
+.service-connection-details dl > div { display: grid; grid-template-columns: 66px minmax(0, 1fr); gap: 8px; }
+.service-connection-details dt, .service-connection-details dd { margin: 0; overflow-wrap: anywhere; }
+.service-connection-details code { font-size: 10px; }
+.service-connections-note { margin-top: 14px; }
+.service-connection-notice { margin: 12px 0; border: 1px solid var(--line); border-radius: 7px; background: var(--subtle); color: var(--muted); padding: 10px 12px; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.service-connection-notice[data-tone="error"] { color: var(--error); background: var(--error-bg); }
+.service-connection-notice[data-tone="warning"] { color: var(--warning); background: var(--warning-bg); }
+.service-connection-notice p { margin: 5px 0 0; }
+.service-connection-dialog { width: min(570px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); padding: 24px; box-shadow: var(--shadow-md); }
+.service-connection-dialog::backdrop { background: #17132366; }
+.service-connection-dialog .dialog-heading { align-items: flex-start; gap: 12px; margin: 0 0 12px; }
+.service-connection-dialog h2 { font-size: 19px; font-weight: 600; margin: 0; }
+.service-connection-dialog > p, .service-connection-form > p { font-size: 12px; line-height: 1.7; color: var(--muted); margin: 0 0 16px; }
+.service-connection-dialog .icon-button { flex: 0 0 28px; }
+.service-connection-form { display: grid; gap: 15px; }
+.service-connection-form label { display: block; min-width: 0; font-size: 12px; }
+.service-connection-form input:not([type="radio"]):not([type="checkbox"]), .service-connection-form select { width: 100%; min-width: 0; margin-top: 6px; padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink); font-size: 13px; }
+.service-connection-form input::placeholder { color: var(--faint); }
+.service-connection-form .field-help { color: var(--muted); font-size: 11px; line-height: 1.6; margin: 5px 0 0; display: block; }
+.service-connection-scopes { border: 1px solid var(--line); border-radius: 8px; padding: 4px 12px; margin: 0; min-width: 0; }
+.service-connection-scopes legend { color: var(--muted); font-size: 11px; padding: 0 5px; }
+.service-connection-scopes label { display: flex; gap: 9px; align-items: flex-start; padding: 10px 0; }
+.service-connection-scopes label + label { border-top: 1px solid var(--line); }
+.service-connection-scopes input { margin: 3px 0 0; accent-color: var(--accent); }
+.service-connection-scopes strong { font-size: 12px; font-weight: 550; }
+.service-connection-scopes small { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); line-height: 1.6; }
+.service-connection-form details { font-size: 12px; color: var(--muted); }
+.service-connection-form details summary { cursor: pointer; }
+.service-connection-form details p { font-size: 11px; line-height: 1.7; margin: 10px 0; }
+.service-connection-form details label { margin-top: 12px; }
+.service-connection-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 9px; margin-top: 5px; }
+.service-connection-dialog-actions button, .service-connection-dialog-actions a { font-size: 12px; }
+.service-connection-dialog-actions .primary-button { width: auto; }
+.service-connection-authorization { display: grid; gap: 14px; }
+.service-connection-authorization a.primary-button { display: block; text-align: center; text-decoration: none; }
+.service-connection-authorization p { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.7; }
+.service-connection-authorization .service-connection-notice { margin: 0; }
+.task-service-connections { margin-top: 14px; }
+.task-service-connection-entry { border-top: 1px solid var(--line); padding: 10px 0; }
+.task-service-connection-entry:first-of-type { border-top: 0; }
+.task-service-connection-entry > .task-capability-row { padding: 0; border: 0; }
+.task-service-connection-entry .task-capability-row > span { min-width: 0; }
+.task-service-connection-entry small { overflow-wrap: anywhere; }
+.task-service-connection-entry .service-connection-actions { margin: 6px 0 0 25px; gap: 10px; }
+.task-service-connection-entry .text-button { padding: 0; }
+.task-service-connection-entry .service-connection-unavailable { color: var(--warning); }
+.task-service-connection-entry .service-connection-notice { margin: 8px 0 0 25px; font-size: 11px; }
+@media (max-width: 1000px) { .service-connections-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 600px) {
+  .service-connections-intro { flex-wrap: wrap; gap: 7px; }
+  .service-connection-card { padding: 16px; }
+  .service-connection-dialog { padding: 19px; }
+  .service-connection-dialog-actions > button { flex: 1 1 120px; }
+  .service-connection-state { font-size: 10px; }
+}

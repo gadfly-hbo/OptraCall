@@ -1,0 +1,734 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+  <title>GitHub、Gmail、腾讯邮箱与飞书 · OptraCall 交互演示 v0.2</title>
+  <style>
+    :root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: #1f1e28; background: #f6f5fa; font-synthesis: none; --canvas: #f6f5fa; --surface: #fff; --subtle: #f3f2f8; --ink: #1f1e28; --muted: #585668; --line: #e2e0ec; --accent: #6550c9; --accent-soft: #eeebfb; --warning: #8f560a; --warning-bg: #fff6e5; --error: #b32436; --error-bg: #fff1f2; --success: #246044; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-size: 14px; line-height: 1.6; }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; color: inherit; }
+    button:disabled { cursor: not-allowed; opacity: .5; }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 3px solid #795ac6; outline-offset: 3px; }
+    button { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 7px 12px; }
+    button:hover:not(:disabled) { background: var(--subtle); }
+    .primary-button { background: var(--accent); border-color: var(--accent); color: white; font-weight: 550; }
+    .primary-button:hover:not(:disabled) { background: #5742bb; }
+    .text-button { border-color: transparent; background: transparent; color: var(--accent); padding-inline: 4px; }
+    .danger-button { color: var(--error); }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { font-size: 22px; line-height: 1.35; margin-bottom: 7px; font-weight: 650; }
+    h2 { font-size: 18px; line-height: 1.4; margin-bottom: 6px; font-weight: 600; }
+    h3 { font-size: 15px; margin-bottom: 7px; font-weight: 600; }
+    p { margin-bottom: 12px; }
+    small { font-size: 12px; }
+    [hidden] { display: none !important; }
+    .muted { color: var(--muted); }
+    .demo-notice { position: sticky; top: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 10px max(20px, calc((100vw - 1296px) / 2)); background: #eeebfb; border-bottom: 1px solid #d8d0f4; font-size: 12px; }
+    .demo-notice strong { color: #4a369a; margin-right: 10px; white-space: nowrap; }
+    .demo-notice button { flex-shrink: 0; font-size: 12px; background: transparent; border-color: #c8bde8; }
+    .app-header { height: 66px; display: flex; align-items: center; justify-content: space-between; gap: 20px; max-width: 1296px; margin: auto; padding: 0 28px; border-bottom: 1px solid var(--line); }
+    .brand { font-size: 18px; letter-spacing: -.5px; font-weight: 650; }
+    .brand span { color: var(--accent); }
+    .view-tabs { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+    .view-tabs button { border: 0; background: transparent; padding: 5px 17px; font-size: 13px; }
+    .view-tabs button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+    main { max-width: 1296px; margin: auto; padding: 26px 28px 48px; }
+    .page-heading { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; margin-bottom: 22px; }
+    .page-heading p { margin: 0; color: var(--muted); font-size: 13px; }
+    .settings-layout { display: grid; grid-template-columns: 216px minmax(0, 1fr); gap: 22px; align-items: start; }
+    .settings-tabs { padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+    .settings-tabs p { color: var(--muted); font-size: 11px; font-weight: 650; padding: 8px 10px 4px; margin: 0; }
+    .settings-tabs span { display: block; padding: 8px 10px; font-size: 13px; border-radius: 6px; color: var(--muted); }
+    .settings-tabs .active { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
+    .settings-content { max-width: 780px; padding: 20px; min-width: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+    .section-intro { font-size: 13px; color: var(--muted); margin-bottom: 22px; }
+    .connection-section { padding: 20px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 16px; min-width: 0; }
+    .connection-heading, .row-between { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+    .service-name { display: flex; align-items: center; gap: 10px; }
+    .service-name h3 { margin: 0; font-size: 16px; }
+    .service-monogram { display: grid; place-items: center; width: 32px; height: 32px; background: var(--subtle); border: 1px solid var(--line); border-radius: 8px; font-size: 12px; font-weight: 650; }
+    .state-text { font-size: 12px; color: var(--muted); padding-top: 5px; white-space: nowrap; }
+    .state-text.connected { color: var(--success); }
+    .state-text.expired, .state-text.failed { color: var(--warning); }
+    .service-description { color: var(--muted); font-size: 13px; margin: 14px 0 12px; }
+    .account-name { font-weight: 600; margin: 0 0 5px; overflow-wrap: anywhere; }
+    .scope-summary { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+    .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
+    .actions button { font-size: 12px; }
+    .actions .text-button { margin-left: 2px; }
+    details { font-size: 12px; }
+    summary { cursor: pointer; color: var(--muted); }
+    .setup-details { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
+    details p { margin: 10px 0; }
+    .setup-fields { display: grid; gap: 10px; margin: 12px 0; }
+    label { display: block; }
+    input[type="text"], input[type="password"], select, textarea { width: 100%; color: var(--ink); background: var(--surface); border: 1px solid #cecbe0; border-radius: 6px; padding: 8px 10px; margin-top: 5px; min-width: 0; }
+    input[readonly] { background: var(--subtle); }
+    .field-help { display: block; color: var(--muted); font-size: 11px; margin-top: 5px; }
+    .notice { padding: 11px 13px; margin: 0 0 16px; border: 1px solid var(--line); border-radius: 7px; background: var(--subtle); font-size: 12px; overflow-wrap: anywhere; }
+    .notice.warning { background: var(--warning-bg); border-color: #ebd7b2; color: #74480e; }
+    .notice.error { background: var(--error-bg); border-color: #f0cdd2; color: var(--error); }
+    .notice.success { background: #eff7f2; border-color: #c9dfd1; color: #285e42; }
+    .existing-connections { border-top: 1px solid var(--line); padding-top: 16px; margin-top: 4px; }
+    .existing-connections p { margin: 7px 0 0; font-size: 12px; color: var(--muted); }
+    .task-layout { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(310px, 1fr); gap: 22px; align-items: start; }
+    .panel { border: 1px solid var(--line); border-radius: 10px; padding: 22px; background: var(--surface); min-width: 0; }
+    .project-crumb { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+    .task-heading { margin-bottom: 16px; }
+    .task-heading h2 { font-size: 18px; }
+    .task-heading p { font-size: 12px; color: var(--muted); margin: 0; }
+    .question-label { font-size: 13px; font-weight: 550; }
+    textarea { resize: vertical; min-height: 104px; line-height: 1.7; font-size: 13px; }
+    .composer-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 12px; }
+    .composer-actions small { margin-right: auto; color: var(--muted); }
+    .task-preview { border-top: 1px solid var(--line); margin-top: 22px; padding-top: 19px; }
+    .task-preview h3 { font-size: 13px; margin-bottom: 10px; }
+    .preview-message { border-left: 3px solid #cfc5ef; padding-left: 14px; }
+    .preview-message p { font-size: 13px; margin-bottom: 8px; }
+    .preview-message small { display: block; color: var(--muted); }
+    .task-capability-list { border: 1px solid var(--line); border-radius: 8px; padding: 2px 12px 10px; margin: 14px 0; min-width: 0; }
+    .task-capability-list legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
+    .task-capability-entry { border-top: 1px solid var(--line); padding: 12px 0; }
+    .task-capability-entry:first-of-type { border-top: 0; }
+    .task-capability-row { display: flex; align-items: flex-start; gap: 9px; }
+    .task-capability-row input { margin: 3px 0 0; width: 16px; height: 16px; flex: 0 0 16px; accent-color: var(--accent); }
+    .task-capability-row span { display: grid; gap: 3px; min-width: 0; }
+    .task-capability-row strong { font-size: 13px; font-weight: 550; }
+    .task-capability-row small { font-size: 11.5px; color: var(--muted); line-height: 1.6; overflow-wrap: anywhere; }
+    .task-capability-entry .actions { margin: 7px 0 0 25px; gap: 9px; }
+    .task-capability-entry .actions button { padding-block: 2px; font-size: 11px; }
+    .task-capability-entry .unavailable { color: var(--warning); }
+    .task-capability-help { font-size: 11px; color: var(--muted); margin: 10px 0 0; }
+    .send-example { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+    .send-example h3 { font-size: 13px; }
+    .send-example p { font-size: 12px; color: var(--muted); }
+    .send-example button { font-size: 12px; }
+    .scene-controls { margin-top: 24px; padding: 15px 18px; border: 1px dashed #cecbe0; border-radius: 8px; }
+    .scene-controls > summary { color: var(--muted); font-size: 12px; }
+    .scene-content { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 15px; }
+    .scene-content label { font-size: 12px; }
+    .scene-content .actions { grid-column: 1 / -1; }
+    .scene-content p { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 11px; }
+    .demo-footer { margin: 18px 0 0; font-size: 11px; color: var(--muted); }
+    dialog { width: min(540px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: 12px; padding: 24px; color: var(--ink); background: var(--surface); box-shadow: 0 16px 60px #20144226; max-height: calc(100dvh - 48px); overflow-y: auto; }
+    dialog::backdrop { background: #18132355; }
+    .dialog-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 14px; }
+    .dialog-heading h2 { font-size: 19px; margin: 0; }
+    .close-button { border: 0; padding: 0 5px; background: none; font-size: 21px; line-height: 1.2; }
+    dialog > p { font-size: 13px; color: var(--muted); }
+    .dialog-field { font-size: 13px; margin: 15px 0; }
+    .scope-options { border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin: 18px 0; }
+    .scope-options legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
+    .scope-option { display: flex; gap: 9px; padding: 9px 0; align-items: flex-start; font-size: 13px; }
+    .scope-option + .scope-option { border-top: 1px solid var(--line); }
+    .scope-option input { accent-color: var(--accent); margin-top: 4px; }
+    .scope-option small { display: block; font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 9px; margin-top: 21px; }
+    .dialog-actions button { font-size: 12px; }
+    .mail-preview { background: var(--subtle); border: 1px solid var(--line); border-radius: 8px; padding: 15px; font-size: 13px; margin: 16px 0; }
+    .mail-preview dl { display: grid; grid-template-columns: 55px minmax(0, 1fr); gap: 7px 10px; margin: 0 0 14px; }
+    .mail-preview dt { color: var(--muted); }
+    .mail-preview dd { margin: 0; overflow-wrap: anywhere; }
+    .mail-preview p { white-space: pre-line; margin: 0; border-top: 1px solid var(--line); padding-top: 12px; }
+    @media (max-width: 960px) { .settings-layout { grid-template-columns: minmax(0, 1fr); gap: 14px; } .settings-tabs { display: flex; gap: 4px; overflow-x: auto; padding: 6px; } .settings-tabs p, .settings-tabs span:not(.active) { display: none; } .settings-tabs span { padding: 6px 11px; } .settings-content { max-width: none; } .task-layout { grid-template-columns: minmax(0, 1fr); } }
+    @media (max-width: 600px) { .demo-notice { align-items: flex-start; padding: 10px 16px; gap: 8px; } .demo-notice strong { display: block; } .demo-notice button { padding: 5px 7px; } .app-header { padding: 0 16px; height: 61px; } .brand { font-size: 16px; } .view-tabs button { padding: 5px 11px; } main { padding: 20px 16px 32px; } h1 { font-size: 20px; } .settings-content, .panel { padding: 16px; } .connection-section { padding: 16px; } .page-heading { flex-wrap: wrap; gap: 12px; } .scene-content { grid-template-columns: minmax(0, 1fr); } .dialog-actions > button { flex: 1 1 130px; } .connection-heading { gap: 8px; } .service-monogram { width: 28px; height: 28px; } .state-text { font-size: 11px; } .composer-actions { flex-wrap: wrap; } }
+  </style>
+</head>
+<body>
+  <aside class="demo-notice" aria-label="演示边界">
+    <div><strong>v0.2 · 虚构数据交互演示</strong><span>仅内存模拟；不联网、不授权、不保存凭据、不向外部服务发送或写入内容。刷新即重置。</span></div>
+    <button id="reset-demo" type="button">重置演示</button>
+  </aside>
+  <header class="app-header">
+    <div class="brand">Optra<span>Call</span></div>
+    <nav class="view-tabs" aria-label="演示页面">
+      <button id="settings-view-button" type="button" aria-pressed="true" aria-controls="settings-view">设置</button>
+      <button id="task-view-button" type="button" aria-pressed="false" aria-controls="task-view">分析任务</button>
+    </nav>
+  </header>
+  <main>
+    <div id="announcement" class="notice" role="status" aria-live="polite" hidden></div>
+    <section id="settings-view" aria-labelledby="settings-title">
+      <header class="page-heading">
+        <div><h1 id="settings-title" tabindex="-1">设置</h1><p>管理资料、模型、连接与自动模式。</p></div>
+        <button id="return-to-task" type="button">← 返回分析任务</button>
+      </header>
+      <div class="settings-layout">
+        <nav class="settings-tabs" aria-label="设置分类（展示现有导航）">
+          <p>基础与模型</p><span>使用用途</span><span>模型设置</span><span>网络检索</span>
+          <p>能力与连接</p><span>自动模式</span><span>Skill 资料与依赖</span><span class="active" aria-current="page">连接配置</span>
+          <p>资料与资产包</p><span>个人资料</span><span>业务模型包</span><span>领域资产包</span>
+        </nav>
+        <div class="settings-content">
+          <h2>连接配置</h2>
+          <p class="section-intro">连接你自己的账号，再为需要的任务单独开启。连接完成不会自动读取资料或运行任务。</p>
+          <section class="connection-section" aria-labelledby="github-heading">
+            <header class="connection-heading"><div class="service-name"><span class="service-monogram" aria-hidden="true">GH</span><h3 id="github-heading">GitHub</h3></div><span id="github-status" class="state-text">尚未连接</span></header>
+            <p class="service-description">查找仓库、Issue 与 PR。按你选择的能力范围，协助整理和参与协作。</p>
+            <div id="github-account-summary"></div>
+            <div class="actions"><button id="github-connect" type="button" class="primary-button">连接 GitHub</button><button id="github-disconnect" type="button" class="text-button danger-button" hidden>断开连接</button></div>
+            <details class="setup-details"><summary>接入准备与其他连接方式</summary><p>正式连接需要配置 GitHub OAuth 应用及回调地址。具体认证与工具接线以确认后的技术方案为准。</p><button type="button" id="github-oauth-help" class="text-button">查看 GitHub OAuth 应用配置说明（演示）</button><div class="setup-fields"><label for="github-demo-pat">演示 PAT<input id="github-demo-pat" type="password" value="demo-placeholder-not-a-token" readonly autocomplete="off"><span class="field-help">固定占位内容，禁止填写真实令牌。PAT 为可选连接方式，不要求日常使用者自行维护。</span></label></div><button type="button" id="github-pat-connect">模拟使用 PAT 连接</button></details>
+          </section>
+          <section class="connection-section" aria-labelledby="gmail-heading">
+            <header class="connection-heading"><div class="service-name"><span class="service-monogram" aria-hidden="true">G</span><h3 id="gmail-heading">Gmail</h3></div><span id="gmail-status" class="state-text">尚未连接</span></header>
+            <p class="service-description">查找和阅读邮件，可按需增加草稿、标签或发送能力。发送前核对具体收件人与正文。</p>
+            <div id="gmail-account-summary"></div>
+            <div class="actions"><button id="gmail-connect" type="button" class="primary-button">连接 Gmail</button><button id="gmail-disconnect" type="button" class="text-button danger-button" hidden>断开连接</button></div>
+            <details class="setup-details"><summary>接入准备与权限说明</summary><p>一次性应用配置：在 Google Cloud 使用 Personal mode，创建 Desktop app OAuth 客户端，并配置 AI-powered-agent client；同时启用 Gmail API 与 Gmail MCP API。配置一次后，由用户完成自己的账号授权。</p><p>此页不代表 Pi 原生 Gmail 接入已验证；正式客户端接线仍待最终技术验证。</p><div class="setup-fields"><label for="gmail-demo-client-id">Desktop app OAuth Client ID（演示占位）<input id="gmail-demo-client-id" type="text" readonly value="demo-client-id.apps.example.invalid"><span class="field-help">这里只展示一次性应用配置位置；演示不接收真实 Client ID、密钥或授权码。</span></label></div><button type="button" id="gmail-client-id-help" class="text-button">查看 Gmail Client ID 配置说明（演示）</button><p>授权范围由你选择。连接或重新授权不会自动为任务增加权限，也不会自动发送邮件。</p></details>
+          </section>
+          <section class="connection-section" aria-labelledby="tencent-heading">
+            <header class="connection-heading"><div class="service-name"><span class="service-monogram" aria-hidden="true">邮</span><h3 id="tencent-heading">腾讯邮箱</h3></div><span id="tencent-status" class="state-text">尚未连接</span></header>
+            <p class="service-description">连接 QQ／Foxmail 或腾讯企业邮箱，搜索和阅读邮件，按需开启发送。本机草稿沿用普通任务编辑。</p>
+            <div id="tencent-account-summary"></div>
+            <div class="actions"><button id="tencent-connect" type="button" class="primary-button">连接腾讯邮箱</button><button id="tencent-disconnect" type="button" class="text-button danger-button" hidden>断开连接</button></div>
+            <details class="setup-details"><summary>邮箱类型、授权码与读取方式</summary><p>QQ／Foxmail 在官方设置开启 IMAP／SMTP 并生成 16 位授权码；腾讯企业邮箱按安全登录及管理员策略生成客户端专用密码。两者不使用 OAuth，使用 IMAP 993／SMTP 465 SSL。</p><p>正式产品在专用凭据输入中接收授权码，先核验邮箱身份与服务。本演示只有固定只读占位值，不接收密码或真实授权码。</p><p>读取使用 IMAP PEEK 行为，避免因读取正文自动标记为已读。本机草稿属于普通任务编辑，不代表已存入邮箱草稿箱；远端草稿和特殊文件夹另待实际能力验证。发送回执未知时保留原请求，不自动重发。</p></details>
+          </section>
+          <section class="connection-section" aria-labelledby="feishu-heading">
+            <header class="connection-heading"><div class="service-name"><span class="service-monogram" aria-hidden="true">飞</span><h3 id="feishu-heading">飞书</h3></div><span id="feishu-status" class="state-text">尚未连接</span></header>
+            <p class="service-description">通过官方远端 MCP 读取云文档与会话，按需开启文档写入与发消息。账号同时绑定租户与用户。</p>
+            <div id="feishu-account-summary"></div>
+            <div class="actions"><button id="feishu-connect" type="button" class="primary-button">连接飞书</button><button id="feishu-disconnect" type="button" class="text-button danger-button" hidden>断开连接</button></div>
+            <details class="setup-details"><summary>官方 OAuth 与管理员准备</summary><p>默认使用飞书官方托管远端 MCP（mcp.feishu.cn/mcp）和浏览器 OAuth，普通用户无需自行创建 App ID 或密钥。组织管理员须先安装 officialMCPApp 并允许对应账号与工具权限；用户只能访问自己实际获准的资料。</p><p>本轮以实际发现且管理员允许的云文档、消息与群会话工具为范围，不承诺多维表格或日历。缺少管理员准备时不能完成连接；不会改用机器人身份或其他账号。</p></details>
+          </section>
+          <div class="existing-connections"><h3>数据库、商圈与历史天气</h3><p>沿用原连接设置与任务授权。本演示只展示新增四项账号连接。</p></div>
+        </div>
+      </div>
+    </section>
+    <section id="task-view" aria-labelledby="task-title" hidden>
+      <header class="page-heading"><div><p class="project-crumb">增长计划 · 虚构项目</p><h1 id="task-title" tabindex="-1">整理本周协作与来信</h1><p>普通项目任务 · 任务独立保存对话和能力选择。</p></div><button id="task-manage-connections" type="button">管理连接</button></header>
+      <div id="task-environment-notice" class="notice warning" role="status" hidden></div>
+      <div class="task-layout">
+        <section class="panel" aria-labelledby="task-question-heading">
+          <header class="task-heading"><h2 id="task-question-heading">直接说出你要完成的事</h2><p>开启所需连接后，由 Agent 按问题自主查找和使用工具。</p></header>
+          <label for="task-question" class="question-label">任务问题</label><textarea id="task-question" maxlength="2000">帮我汇总本周 GitHub 上待跟进的 Issue，以及客户邮件中需要回复的事项。</textarea>
+          <div class="composer-actions"><small>虚构任务模型 · 资料结果会进入任务上下文</small><button id="ask-task" type="button" class="primary-button">预览任务响应</button></div>
+          <section id="task-preview" class="task-preview" aria-labelledby="preview-heading"><h3 id="preview-heading">任务预览</h3><div id="task-preview-content" class="preview-message"><p>还没有运行演示任务。</p><small>先在右侧开启所需连接，再预览一次自然提问。</small></div></section>
+        </section>
+        <section class="panel" aria-labelledby="task-capability-heading">
+          <h2 id="task-capability-heading">任务能力</h2><p class="muted" style="font-size:12px">只对当前任务生效；仅空闲时可切换。</p>
+          <fieldset class="task-capability-list"><legend>账号连接</legend>
+            <div class="task-capability-entry"><label class="task-capability-row" for="task-github-enabled"><input id="task-github-enabled" type="checkbox" aria-describedby="task-github-detail"><span><strong>GitHub 连接器</strong><small id="task-github-detail"></small></span></label><div class="actions"><button type="button" class="text-button" data-manage-service="github">管理连接</button><button id="task-github-rebind" type="button" class="text-button" hidden>改为使用当前账号</button></div></div>
+            <div class="task-capability-entry"><label class="task-capability-row" for="task-gmail-enabled"><input id="task-gmail-enabled" type="checkbox" aria-describedby="task-gmail-detail"><span><strong>Gmail 连接器</strong><small id="task-gmail-detail"></small></span></label><div class="actions"><button type="button" class="text-button" data-manage-service="gmail">管理连接</button><button id="task-gmail-rebind" type="button" class="text-button" hidden>改为使用当前账号</button></div></div>
+            <div class="task-capability-entry"><label class="task-capability-row" for="task-tencent-enabled"><input id="task-tencent-enabled" type="checkbox" aria-describedby="task-tencent-detail"><span><strong>腾讯邮箱连接器</strong><small id="task-tencent-detail"></small></span></label><div class="actions"><button type="button" class="text-button" data-manage-service="tencent">管理连接</button><button id="task-tencent-rebind" type="button" class="text-button" hidden>改为使用当前账号</button></div></div>
+            <div class="task-capability-entry"><label class="task-capability-row" for="task-feishu-enabled"><input id="task-feishu-enabled" type="checkbox" aria-describedby="task-feishu-detail"><span><strong>飞书连接器</strong><small id="task-feishu-detail"></small></span></label><div class="actions"><button type="button" class="text-button" data-manage-service="feishu">管理连接</button><button id="task-feishu-rebind" type="button" class="text-button" hidden>改为使用当前账号</button></div></div>
+          </fieldset>
+          <p class="task-capability-help">默认关闭。开启会绑定当时选择的账号；更换全局账号不会自动改绑。受管执行、封闭出稿及受限资料环境不提供这些连接器。历史结果不会因关闭或断开而删除。</p>
+          <section class="send-example" aria-labelledby="merge-example-heading"><h3 id="merge-example-heading">需要合并 PR 时</h3><p>合并权限单独选择。执行前核对仓库、PR 与准确 head SHA；普通协作权限不能合并。</p><button id="open-merge-preview" type="button">核对并合并 PR（演示）</button><p id="merge-availability" class="field-help"></p><div id="merge-result" tabindex="-1" class="notice" role="status" hidden></div></section>
+          <section class="send-example" aria-labelledby="send-example-heading"><h3 id="send-example-heading">需要回复邮件时</h3><p>明确选择本任务绑定的发件服务与账号。每个服务分别保留草稿和发送结果，账号不可用时不会切换到另一服务。Gmail 正式接线仍待技术验证。</p><label class="dialog-field" for="mail-source">这封邮件使用的服务与账号<select id="mail-source"><option value="">请选择发件服务与账号</option></select></label><details id="mail-draft-editor"><summary>修改所选服务的回复草稿</summary><label class="dialog-field" for="mail-draft-subject">主题<input id="mail-draft-subject" type="text" maxlength="160"></label><label class="dialog-field" for="mail-draft-body">正文<textarea id="mail-draft-body" maxlength="3000"></textarea></label><p>修改后先重新查看完整预览。旧预览不作为新内容的发送确认。</p></details><button id="open-send-preview" type="button">查看回复并确认发送（演示）</button><p id="send-availability" class="field-help"></p><div id="send-result" tabindex="-1" class="notice" role="status" hidden></div></section>
+          <section class="send-example" aria-labelledby="document-example-heading"><h3 id="document-example-heading">需要创建飞书云文档时</h3><p>本次演示请求先核对新文档标题、目标文件夹与完整正文；任务须明确开启文档写入。普通创建沿实际任务授权执行，需确认时展示具体目标。</p><button id="open-document-preview" type="button">核对并创建云文档（演示）</button><p id="document-availability" class="field-help"></p><div id="document-result" tabindex="-1" class="notice" role="status" hidden></div></section>
+          <section class="send-example" aria-labelledby="message-example-heading"><h3 id="message-example-heading">需要向飞书群发消息时</h3><p>核对当前用户身份、准确群会话与完整内容。仅在本任务明确开启消息发送后可确认。</p><button id="open-message-preview" type="button">核对并发送群消息（演示）</button><p id="message-availability" class="field-help"></p><div id="message-result" tabindex="-1" class="notice" role="status" hidden></div></section>
+        </section>
+      </div>
+    </section>
+    <details class="scene-controls"><summary>演示场景</summary><div class="scene-content"><label for="demo-execution-profile">执行环境<select id="demo-execution-profile"><option value="ordinary">普通项目任务</option><option value="restricted">受限环境（连接器不可用）</option></select></label><label for="demo-task-state">任务状态<select id="demo-task-state"><option value="idle">空闲</option><option value="busy">正在执行</option></select></label><label for="demo-mail-outcome">确认发送后的模拟结果<select id="demo-mail-outcome"><option value="sent">明确发送成功</option><option value="unknown">发送回执丢失 · UNKNOWN</option></select></label><label for="demo-merge-outcome">确认合并后的模拟结果<select id="demo-merge-outcome"><option value="merged">明确合并成功</option><option value="unknown">合并回执丢失 · UNKNOWN</option></select></label><label for="demo-feishu-admin">飞书管理员准备<select id="demo-feishu-admin"><option value="ready">已安装官方应用并允许所选工具权限</option><option value="missing">缺少管理员安装／所选工具权限</option></select></label><label for="demo-document-outcome">确认创建文档后的模拟结果<select id="demo-document-outcome"><option value="created">明确创建成功</option><option value="unknown">文档写入回执丢失 · UNKNOWN</option></select></label><div id="service-scene-actions" class="actions"></div><p>这些按钮只改变演示内存。连接弹窗可模拟成功、取消或失败；失效、更换账号及腾讯邮箱类型变化不会抹掉任务原选择。邮件、PR 或文档结果 UNKNOWN 时均不自动重试。</p></div></details>
+    <p class="demo-footer">准备阶段原型 · 未接入真实服务、凭据存储、项目文件、会话或模型。设置的其他分类仅展示现有导航位置。</p>
+  </main>
+
+  <dialog id="authorization-dialog" aria-labelledby="authorization-title" aria-describedby="authorization-description">
+    <header class="dialog-heading"><h2 id="authorization-title">模拟连接</h2><button class="close-button" id="authorization-close" type="button" aria-label="关闭模拟授权">×</button></header>
+    <p id="authorization-description">选择虚构账号和本次授权范围。不会打开外部网站，也不会取得任何真实权限。</p>
+    <label class="dialog-field" for="authorization-account">虚构账号<select id="authorization-account"></select></label>
+    <label id="authorization-mailbox-type-field" class="dialog-field" for="authorization-mailbox-type" hidden>腾讯邮箱类型<select id="authorization-mailbox-type"><option value="personal">QQ／Foxmail 邮箱</option><option value="enterprise">腾讯企业邮箱</option></select><span class="field-help">类型变化需要重新连接并在任务中明确改绑。</span></label>
+    <label id="authorization-auth-code-field" class="dialog-field" for="authorization-demo-auth-code" hidden>专用授权码（固定演示占位）<input id="authorization-demo-auth-code" type="password" value="demo-readonly-not-an-auth-code" readonly autocomplete="off"><span class="field-help">此演示不允许输入真实凭据；正式产品使用邮箱官方生成的专用授权码，不使用 OAuth。</span></label>
+    <label id="authorization-repositories-field" class="dialog-field" for="authorization-repositories">允许使用的 GitHub 仓库<input id="authorization-repositories" type="text" value="demo-team/ops-demo" autocomplete="off" aria-describedby="authorization-repositories-help"><span id="authorization-repositories-help" class="field-help">使用 owner/repository 格式，多个仓库以英文逗号分隔，最多 5 个。仅填写虚构仓库。</span></label>
+    <fieldset id="authorization-scope-options" class="scope-options"><legend>这个账号允许提供哪些能力</legend></fieldset>
+    <p id="authorization-error" class="notice error" role="alert" hidden></p>
+    <p class="notice">连接后，当前任务仍默认关闭。授权成功只表示此演示连接完成，不代表真实服务可用。</p>
+    <div class="dialog-actions"><button id="authorization-fail" type="button">模拟授权失败</button><button id="authorization-cancel" type="button">模拟取消</button><button id="authorization-succeed" type="button" class="primary-button">模拟授权成功</button></div>
+  </dialog>
+  <dialog id="decision-dialog" aria-labelledby="decision-title" aria-describedby="decision-description"><header class="dialog-heading"><h2 id="decision-title"></h2><button id="decision-close" type="button" class="close-button" aria-label="关闭确认">×</button></header><p id="decision-description"></p><div class="dialog-actions"><button id="decision-cancel" type="button">取消</button><button id="decision-confirm" type="button" class="primary-button">确认</button></div></dialog>
+  <dialog id="send-dialog" aria-labelledby="send-title" aria-describedby="send-description">
+    <header class="dialog-heading"><h2 id="send-title">确认这封回复</h2><button id="send-close" type="button" class="close-button" aria-label="关闭发送预览">×</button></header>
+    <p id="send-description">仅确认下面这一封邮件；不授权其他邮件。本演示不会真正发送。</p>
+    <div class="mail-preview"><dl><dt>服务</dt><dd id="send-service"></dd><dt>发件人</dt><dd id="send-from"></dd><dt>收件人</dt><dd>客户示例 &lt;client@example.invalid&gt;</dd><dt>Cc</dt><dd>无</dd><dt>Bcc</dt><dd>无</dd><dt>主题</dt><dd id="send-subject"></dd><dt>附件</dt><dd>无</dd></dl><p id="send-body"></p></div>
+    <p class="field-help">点击下方确认按钮，仅同意按当前发件人、收件人、Cc、Bcc、主题、正文和附件范围模拟发送这一封邮件。</p>
+    <p id="send-dialog-status" class="notice warning" role="status" hidden></p>
+    <div class="dialog-actions"><button id="send-edit" type="button">返回修改草稿</button><button id="send-cancel" type="button">拒绝发送</button><button id="send-confirm" type="button" class="primary-button">确认发送这一封（演示）</button></div>
+  </dialog>
+  <dialog id="merge-dialog" aria-labelledby="merge-title" aria-describedby="merge-description"><header class="dialog-heading"><h2 id="merge-title">确认合并这个 PR</h2><button id="merge-close" type="button" class="close-button" aria-label="关闭合并预览">×</button></header><p id="merge-description">仅确认下面这个 PR 的当前准确 head SHA；不授权其他 PR。本演示不会真正合并。</p><label class="dialog-field" for="merge-repository">仓库<select id="merge-repository"></select></label><div class="mail-preview"><dl><dt>账号</dt><dd id="merge-account"></dd><dt>PR</dt><dd>#42 · 整理协作事项入口（虚构）</dd><dt>目标分支</dt><dd>main</dd><dt>Head SHA</dt><dd id="merge-head-sha">a7c94e12f530b6d88941c25fe03a7d620b18e9f4</dd><dt>合并方式</dt><dd>Squash merge（演示固定）</dd></dl><p>确认仅针对所选 owner/repository、PR #42 与上述 head SHA。若 head 变化，原确认不能继续使用。</p></div><div class="dialog-actions"><button id="merge-cancel" type="button">拒绝合并</button><button id="merge-confirm" type="button" class="primary-button">确认合并此 PR（演示）</button></div></dialog>
+  <dialog id="document-dialog" aria-labelledby="document-title" aria-describedby="document-description"><header class="dialog-heading"><h2 id="document-title">确认创建这份云文档</h2><button id="document-close" type="button" class="close-button" aria-label="关闭文档写入预览">×</button></header><p id="document-description">仅确认下面这一份新文档及正文。本演示不会真正写入飞书。</p><div class="mail-preview"><dl><dt>租户用户</dt><dd id="document-account"></dd><dt>操作</dt><dd>创建新的云文档</dd><dt>文档标题</dt><dd id="document-preview-title"></dd><dt>目标位置</dt><dd id="document-destination"></dd></dl><p id="document-body"></p></div><div class="dialog-actions"><button id="document-cancel" type="button">拒绝创建</button><button id="document-confirm" type="button" class="primary-button">确认创建这份文档（演示）</button></div></dialog>
+  <dialog id="message-dialog" aria-labelledby="message-title" aria-describedby="message-description"><header class="dialog-heading"><h2 id="message-title">确认向这个群发送消息</h2><button id="message-close" type="button" class="close-button" aria-label="关闭群消息预览">×</button></header><p id="message-description">仅确认下面这个群和这一条消息。本演示不会真正发送。</p><div class="mail-preview"><dl><dt>发送身份</dt><dd id="message-account"></dd><dt>目标群</dt><dd id="message-target"></dd><dt>消息类型</dt><dd>普通文本，无附件，不 @ 全体</dd></dl><p id="message-body"></p></div><div class="dialog-actions"><button id="message-cancel" type="button">拒绝发送</button><button id="message-confirm" type="button" class="primary-button">确认发送这一条（演示）</button></div></dialog>
+  <script>
+    'use strict';
+
+    const serviceDefinitions = {
+      github: {
+        name: 'GitHub',
+        accounts: [{ id: 'github-demo-linyue', label: '@linyue-demo' }, { id: 'github-demo-chenan', label: '@chenan-demo' }],
+        scopes: [
+          { id: 'read', label: '读取', detail: '在账号授权范围内查找与读取仓库、Issue 和 PR。' },
+          { id: 'collaborate', label: '读取与 Issue / PR 协作', detail: '另可在已授权仓库内创建或回复 Issue、参与 PR 协作；不授予 PR 合并、删除仓库或任意代码写入。' },
+          { id: 'merge', label: '读取、Issue / PR 协作与 PR 合并', detail: '另可合并所选仓库的 PR；每次合并先核对仓库、PR 与准确 head SHA，不授予删除仓库或任意代码写入。' }
+        ]
+      },
+      gmail: {
+        name: 'Gmail',
+        accounts: [{ id: 'gmail-demo-linyue', label: 'linyue@example.invalid' }, { id: 'gmail-demo-chenan', label: 'chenan@example.invalid' }],
+        scopes: [
+          { id: 'read', label: '读取', detail: '搜索、读取邮件与会话。' },
+          { id: 'manage', label: '读取、草稿与标签', detail: '另可保存草稿、整理标签；不发送邮件。' },
+          { id: 'send', label: '读取、草稿、标签与发送', detail: '发送前核对具体邮件。官方客户端交互演示，最终技术可行性仍待验证。' }
+        ]
+      },
+      tencent: {
+        name: '腾讯邮箱',
+        accounts: [
+          { id: 'tencent-personal-demo-linyue', label: 'linyue.qq@example.invalid（QQ 邮箱）', mailboxType: 'personal' },
+          { id: 'tencent-personal-demo-chenan', label: 'chenan.fox@example.invalid（Foxmail）', mailboxType: 'personal' },
+          { id: 'tencent-enterprise-demo-linyue', label: 'linyue@demo-company.example.invalid', mailboxType: 'enterprise' },
+          { id: 'tencent-enterprise-demo-chenan', label: 'chenan@demo-company.example.invalid', mailboxType: 'enterprise' }
+        ],
+        scopes: [
+          { id: 'read', label: '读取', detail: '搜索和读取邮件；IMAP PEEK 不因读取正文标记已读。本机草稿可在普通任务中编辑。' },
+          { id: 'send', label: '读取与发送', detail: '另可发送、回复与转发；每封先核对完整内容。未承诺远端草稿与标签管理。' }
+        ]
+      },
+      feishu: {
+        name: '飞书',
+        accounts: [
+          { id: 'tenant-demo-growth/user-demo-linyue', label: '示例增长团队 · 林悦（用户）', tenantId: 'tenant-demo-growth', openId: 'user-demo-linyue' },
+          { id: 'tenant-demo-partner/user-demo-chenan', label: '示例合作团队 · 陈安（用户）', tenantId: 'tenant-demo-partner', openId: 'user-demo-chenan' }
+        ],
+        scopes: [
+          { id: 'read', label: '读取文档与会话', detail: '仅开放实际发现且管理员允许的云文档搜索、读取与会话读取工具。' },
+          { id: 'write', label: '读取与创建／更新云文档', detail: '另可按任务授权写入具体云文档；需要确认时核对文档、位置和内容。' },
+          { id: 'message', label: '读取、文档写入与发消息', detail: '另可向明确的会话发送消息；每次核对发送用户、目标与内容，不改用机器人身份。' }
+        ]
+      }
+    };
+    const services = Object.keys(serviceDefinitions);
+    const mailServices = ['gmail', 'tencent'];
+    const byId = identifier => document.getElementById(identifier);
+    const mailboxTypeLabel = type => type === 'enterprise' ? '腾讯企业邮箱' : 'QQ／Foxmail 邮箱';
+    const isMailLocked = result => ['unknown', 'sent'].includes(result?.status);
+
+    function initialState() {
+      const connections = {}, task = {}, mailDrafts = {}, sends = {};
+      for (const service of services) {
+        connections[service] = { status: 'disconnected', account: null, scope: 'read' };
+        task[service] = { enabled: false, account: null, scope: null };
+      }
+      Object.assign(connections.github, { repositories: ['demo-team/ops-demo'], method: 'oauth' });
+      task.github.repositories = [];
+      connections.tencent.mailboxType = 'personal';
+      task.tencent.mailboxType = null;
+      for (const service of mailServices) {
+        mailDrafts[service] = { subject: 'Re: 本周协作事项确认', body: '你好，\n\n本周需要跟进的事项已整理好。我们将于周五前反馈进展，请确认这一时间是否合适。\n\n林悦', version: 1 };
+        sends[service] = { status: 'draft', fromAccount: null, receipt: null };
+      }
+      return {
+        view: 'settings', profile: 'ordinary', busy: false, feishuAdminReady: true,
+        connections, task, mailSource: '', mailDrafts, sends,
+        merge: { status: 'draft', account: null, repository: null, receipt: null },
+        document: { status: 'draft' }, message: { status: 'draft' }
+      };
+    }
+
+    let state = initialState();
+    let authorizationService = null, authorizationMethod = 'oauth', pendingDecision = null;
+    let pendingMailPreview = null, pendingMergePreview = null, pendingDocumentPreview = null, pendingMessagePreview = null;
+    const dialogRestoreTargets = new WeakMap();
+    const authorizationDialog = byId('authorization-dialog'), decisionDialog = byId('decision-dialog');
+    const sendDialog = byId('send-dialog'), mergeDialog = byId('merge-dialog');
+    const documentDialog = byId('document-dialog'), messageDialog = byId('message-dialog');
+    const dialogs = [authorizationDialog, decisionDialog, sendDialog, mergeDialog, documentDialog, messageDialog];
+
+    function announce(message, tone = '') {
+      const notice = byId('announcement');
+      notice.textContent = message; notice.className = 'notice' + (tone ? ' ' + tone : ''); notice.hidden = false;
+    }
+
+    function showView(view, focusHeading = false) {
+      state.view = view;
+      byId('settings-view').hidden = view !== 'settings'; byId('task-view').hidden = view !== 'task';
+      byId('settings-view-button').setAttribute('aria-pressed', String(view === 'settings'));
+      byId('task-view-button').setAttribute('aria-pressed', String(view === 'task'));
+      if (focusHeading) byId(view === 'settings' ? 'settings-title' : 'task-title').focus({ preventScroll: true });
+    }
+
+    function scopeLabel(service, scope) {
+      return serviceDefinitions[service].scopes.find(option => option.id === scope)?.label || '权限待核';
+    }
+    function scopeRank(service, scope) { return serviceDefinitions[service].scopes.findIndex(option => option.id === scope); }
+    function sameRepositories(left, right) { return JSON.stringify([...(left || [])].sort()) === JSON.stringify([...(right || [])].sort()); }
+    function sameIdentity(service, left, right) {
+      return left.account?.id === right.account?.id && (service !== 'tencent' || left.mailboxType === right.mailboxType);
+    }
+    function sameBinding(service, left, right) {
+      return sameIdentity(service, left, right) && (service !== 'github' || sameRepositories(left.repositories, right.repositories));
+    }
+    function bindingSnapshot(service, connection) {
+      return { enabled: true, account: { ...connection.account }, scope: connection.scope,
+        ...(service === 'github' ? { repositories: [...connection.repositories] } : {}),
+        ...(service === 'tencent' ? { mailboxType: connection.mailboxType } : {}) };
+    }
+    function bindingDetail(service, binding) {
+      return binding.account.label + (service === 'tencent' ? ' · ' + mailboxTypeLabel(binding.mailboxType) : '') +
+        (service === 'feishu' ? ' · tenant ' + binding.account.tenantId + ' / openID ' + binding.account.openId : '');
+    }
+
+    function effectiveStatus(service) {
+      const choice = state.task[service], connection = state.connections[service];
+      if (!choice.enabled) return 'off';
+      if (state.profile !== 'ordinary') return 'restricted';
+      if (connection.status !== 'connected') return connection.status;
+      if (service === 'feishu' && !state.feishuAdminReady) return 'admin-missing';
+      if (service === 'tencent' && choice.mailboxType !== connection.mailboxType) return 'type-changed';
+      if (choice.account?.id !== connection.account?.id) return 'account-changed';
+      if (scopeRank(service, choice.scope) > scopeRank(service, connection.scope)) return 'scope-changed';
+      if (service === 'github' && !sameRepositories(choice.repositories, connection.repositories)) return 'repositories-changed';
+      return 'available';
+    }
+    function serviceUnavailableText(service) {
+      const messages = { off: '本任务未开启', restricted: '当前受限环境不提供此连接器', disconnected: '账号连接已断开', expired: '授权已失效，需重新连接', failed: '连接不可用，需重新连接', 'account-changed': '全局账号已更换，任务仍绑定原账号', 'scope-changed': '授权范围已缩小，需重新选择任务能力', 'repositories-changed': '仓库范围已变化，任务仍保留原仓库绑定', 'type-changed': '邮箱类型已变化，任务仍保留原类型绑定', 'admin-missing': '管理员尚未安装 officialMCPApp 或未允许所需账号／工具权限' };
+      return messages[effectiveStatus(service)] || '当前不可用';
+    }
+
+    function renderConnection(service) {
+      const connection = state.connections[service], definition = serviceDefinitions[service];
+      const statusText = { connected: '已连接（演示）', disconnected: '尚未连接', expired: '授权已失效（演示）', failed: '连接失败（演示）' };
+      const adminMissing = service === 'feishu' && !state.feishuAdminReady;
+      const status = byId(service + '-status');
+      status.textContent = adminMissing ? '缺少管理员准备' : connection.status === 'disconnected' && connection.account ? '已断开（演示）' : statusText[connection.status];
+      status.className = 'state-text ' + (adminMissing ? 'failed' : connection.status);
+      const summary = byId(service + '-account-summary'); summary.replaceChildren();
+      if (connection.account) {
+        const identity = document.createElement('p'); identity.className = 'account-name';
+        identity.textContent = (connection.status === 'disconnected' ? '原账号 · ' : '') + bindingDetail(service, connection);
+        const scope = document.createElement('p'); scope.className = 'scope-summary';
+        scope.textContent = '授权能力：' + scopeLabel(service, connection.scope) + '。' + (adminMissing ? '需管理员完成准备后才能使用；原任务意图保持。' : connection.status === 'connected' ? '仅为模拟连接，未验证真实服务可用性。' : '任务原选择与历史保留。');
+        summary.append(identity, scope);
+        if (service === 'github') {
+          const repositories = document.createElement('p'); repositories.className = 'scope-summary';
+          repositories.textContent = '仓库范围：' + connection.repositories.join('、') + ' · ' + (connection.method === 'pat' ? 'PAT 连接演示' : 'OAuth 连接演示'); summary.append(repositories);
+        }
+      }
+      const connect = byId(service + '-connect');
+      connect.textContent = connection.status === 'connected' ? '管理账号与权限' : ['expired', 'failed'].includes(connection.status) ? '重新连接 ' + definition.name : '连接 ' + definition.name;
+      connect.className = connection.status === 'connected' ? '' : 'primary-button';
+      byId(service + '-disconnect').hidden = !connection.account || connection.status === 'disconnected';
+      byId('expire-' + service).disabled = connection.status !== 'connected';
+      byId('change-' + service + '-account').disabled = connection.status !== 'connected';
+    }
+
+    function renderTaskCapability(service) {
+      const choice = state.task[service], connection = state.connections[service];
+      const checkbox = byId('task-' + service + '-enabled');
+      checkbox.checked = choice.enabled;
+      checkbox.disabled = state.busy || state.profile !== 'ordinary' || (!choice.enabled && (connection.status !== 'connected' || service === 'feishu' && !state.feishuAdminReady));
+      const detail = byId('task-' + service + '-detail');
+      const identity = choice.enabled && choice.account ? '绑定 ' + bindingDetail(service, choice) + ' · ' + scopeLabel(service, choice.scope) : connection.status === 'connected' ? '可选账号 ' + bindingDetail(service, connection) + ' · ' + scopeLabel(service, connection.scope) : '尚无可用连接；先在连接配置中连接账号。';
+      const availability = choice.enabled ? effectiveStatus(service) === 'available' ? '本任务已开启。' : serviceUnavailableText(service) + '；原开启意图保留。' : '本任务默认关闭。';
+      const repositories = service === 'github' && (choice.enabled || connection.status === 'connected') ? ' 仓库：' + (choice.enabled ? choice.repositories : connection.repositories).join('、') + '。' : '';
+      detail.textContent = identity + repositories + ' ' + availability;
+      detail.className = choice.enabled && effectiveStatus(service) !== 'available' ? 'unavailable' : '';
+      const rebind = byId('task-' + service + '-rebind');
+      rebind.hidden = !choice.enabled || connection.status !== 'connected' || (sameBinding(service, choice, connection) && choice.scope === connection.scope);
+      rebind.disabled = state.busy || state.profile !== 'ordinary' || service === 'feishu' && !state.feishuAdminReady;
+      rebind.textContent = !sameIdentity(service, choice, connection) ? '改为使用当前账号与类型' : service === 'github' && !sameRepositories(choice.repositories, connection.repositories) ? '更新本任务仓库范围' : '更新本任务权限';
+      const scopeSelect = byId('task-' + service + '-scope'); scopeSelect.replaceChildren();
+      const granted = scopeRank(service, connection.scope);
+      for (const scope of serviceDefinitions[service].scopes) {
+        if (scopeRank(service, scope.id) > granted && scope.id !== choice.scope) continue;
+        const option = document.createElement('option'); option.value = scope.id; option.textContent = scope.label + (scopeRank(service, scope.id) > granted ? '（原选择，当前授权不足）' : '');
+        option.disabled = scopeRank(service, scope.id) > granted; scopeSelect.append(option);
+      }
+      scopeSelect.value = choice.scope || connection.scope;
+      scopeSelect.disabled = !choice.enabled || state.busy || state.profile !== 'ordinary' || connection.status !== 'connected' || !sameBinding(service, choice, connection) || service === 'feishu' && !state.feishuAdminReady;
+    }
+
+    function canSend(service = state.mailSource) {
+      return mailServices.includes(service) && effectiveStatus(service) === 'available' && state.task[service].scope === 'send' && !state.busy;
+    }
+    function renderSend() {
+      const sourceSelect = byId('mail-source'); sourceSelect.replaceChildren();
+      const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = '请选择发件服务与账号'; sourceSelect.append(placeholder);
+      for (const service of mailServices) {
+        const choice = state.task[service], result = state.sends[service];
+        const eligible = effectiveStatus(service) === 'available';
+        if (!eligible && service !== state.mailSource && !isMailLocked(result)) continue;
+        const option = document.createElement('option'); option.value = service;
+        option.textContent = serviceDefinitions[service].name + ' · ' + (isMailLocked(result) ? '原发送 ' + result.fromAccount.label : choice.account?.label || '未绑定账号') + (!eligible ? '（当前不可用）' : choice.scope !== 'send' ? '（本机草稿；未开启发送）' : '') + (result.status === 'unknown' ? ' · UNKNOWN 保留' : result.status === 'sent' ? ' · 已发送' : '');
+        option.disabled = !eligible && service !== state.mailSource && !isMailLocked(result); sourceSelect.append(option);
+      }
+      sourceSelect.value = state.mailSource; sourceSelect.disabled = state.busy;
+      const service = state.mailSource, result = state.sends[service], draft = state.mailDrafts[service];
+      const locked = isMailLocked(result), button = byId('open-send-preview');
+      button.disabled = !canSend() || locked;
+      button.textContent = result?.status === 'unknown' ? '原发送结果待核，禁止重发' : result?.status === 'sent' ? '这封演示邮件已发送' : '查看回复并确认发送（演示）';
+      byId('send-availability').textContent = !service ? '请明确选择当前任务已绑定的 Gmail 或腾讯邮箱账号编辑本机草稿；发送另需本任务发送权限。不会自动选择发件服务。' : locked ? '保留 ' + serviceDefinitions[service].name + ' 原发送记录，切换服务、视图或重新连接均不重发。刷新页面重置整个演示。' : canSend() ? '当前任务已开启 ' + serviceDefinitions[service].name + ' 发送范围；下方预览将使用本任务绑定的账号。' : serviceDefinitions[service].name + '：' + (effectiveStatus(service) !== 'available' ? serviceUnavailableText(service) : state.busy ? '任务执行中' : '本任务未开启发送权限') + '。保留当前选择，不会切换到另一服务。';
+      const resultBox = byId('send-result'); resultBox.hidden = !locked;
+      resultBox.className = 'notice ' + (result?.status === 'unknown' ? 'warning' : 'success');
+      if (locked) resultBox.textContent = serviceDefinitions[service].name + ' · 原发件人 ' + result.fromAccount.label + ' · ' + result.subject + ' · 请求 ' + result.receipt + '。' + (result.status === 'unknown' ? 'UNKNOWN：请求已模拟提交但回执丢失，可能已送达。原收件人、正文、服务与账号快照保留；需核对原请求，不自动重发。' : '模拟发送成功，仅对应这一封邮件；未真正发送。');
+      byId('mail-draft-subject').value = draft?.subject || ''; byId('mail-draft-body').value = draft?.body || '';
+      byId('mail-draft-subject').disabled = !service || locked || state.busy; byId('mail-draft-body').disabled = !service || locked || state.busy;
+    }
+
+    function canMerge() { return effectiveStatus('github') === 'available' && state.task.github.scope === 'merge' && !state.busy; }
+    function renderMerge() {
+      const locked = ['merged', 'unknown'].includes(state.merge.status), button = byId('open-merge-preview');
+      button.disabled = !canMerge() || locked;
+      button.textContent = state.merge.status === 'unknown' ? '原合并结果待核，禁止重试' : state.merge.status === 'merged' ? '这个演示 PR 已合并' : '核对并合并 PR（演示）';
+      byId('merge-availability').textContent = locked ? '本次演示内保留这个 PR 的原结果，不因切换视图或重新授权再次合并。' : canMerge() ? '当前任务已明确开启 PR 合并范围。确认只对所选仓库与准确 head SHA 生效。' : '需为当前任务开启 GitHub 的 PR 合并范围，保持仓库绑定一致且任务空闲。';
+      const result = byId('merge-result'); result.hidden = !locked; result.className = 'notice ' + (state.merge.status === 'unknown' ? 'warning' : 'success');
+      if (state.merge.status === 'unknown') result.textContent = 'UNKNOWN：' + state.merge.repository + ' 的 PR #42 合并请求已模拟提交，但回执丢失。可能已合并，需核对原 PR；不自动重试，也不再次请求合并。';
+      if (state.merge.status === 'merged') result.textContent = '已模拟合并 ' + state.merge.repository + ' 的 PR #42，准确 head SHA 与本次确认一致。未真正修改仓库。';
+    }
+
+    function canUseFeishu(scope) { return effectiveStatus('feishu') === 'available' && scopeRank('feishu', state.task.feishu.scope) >= scopeRank('feishu', scope) && !state.busy; }
+    function feishuTarget(account) {
+      const growth = account.tenantId === 'tenant-demo-growth';
+      return { documentTitle: '本周协作事项 · 2026-11-27（虚构）', folderId: growth ? 'folder-demo-growth-weekly' : 'folder-demo-partner-weekly', folderLabel: growth ? '示例增长团队 / 每周协作' : '示例合作团队 / 每周协作', groupId: growth ? 'chat-demo-growth-weekly' : 'chat-demo-partner-weekly', groupLabel: growth ? '每周协作 · 示例增长群' : '每周协作 · 示例合作群' };
+    }
+    function renderFeishuAction(kind, scope, completeStatus, actionLabel) {
+      const result = state[kind], locked = ['unknown', completeStatus].includes(result.status);
+      const button = byId('open-' + kind + '-preview'); button.disabled = !canUseFeishu(scope) || locked;
+      button.textContent = result.status === 'unknown' ? '原结果待核，禁止重试' : result.status === completeStatus ? '本次已模拟完成' : actionLabel;
+      byId(kind + '-availability').textContent = locked ? '保留原租户、用户、目标及内容；重新授权或更换账号不重放本次动作。' : canUseFeishu(scope) ? '当前任务使用 ' + state.task.feishu.account.label + '，可核对本次具体动作。' : '需飞书连接、管理员允许、本任务明确开启相应权限且任务空闲。' + (state.task.feishu.enabled && effectiveStatus('feishu') !== 'available' ? serviceUnavailableText('feishu') + '。' : '');
+      const box = byId(kind + '-result'); box.hidden = !locked; box.className = 'notice ' + (result.status === 'unknown' ? 'warning' : 'success');
+      if (locked) box.textContent = '飞书 · 原用户 ' + result.account.label + ' · ' + (kind === 'document' ? '创建《' + result.target.documentTitle + '》，位置 ' + result.target.folderLabel + ' / ' + result.target.folderId : '发送至 ' + result.target.groupLabel + ' / ' + result.target.groupId) + ' · 请求 ' + result.receipt + '。' + (result.status === 'unknown' ? 'UNKNOWN：可能已执行，原目标和正文快照保留；核对原请求，不自动重试。' : '仅在内存模拟完成，没有真实外部写入。');
+    }
+
+    function render() {
+      for (const service of services) { renderConnection(service); renderTaskCapability(service); }
+      const notice = byId('task-environment-notice'); notice.hidden = !state.busy && state.profile === 'ordinary';
+      notice.textContent = state.profile !== 'ordinary' ? '当前演示为受限执行环境：四项连接器均不可用，任务原选择保留。' : '任务正在执行（模拟）。能力开关、权限选择与账号改绑需等任务空闲；停止不会重放外部动作。';
+      byId('ask-task').disabled = state.busy; byId('demo-execution-profile').value = state.profile; byId('demo-task-state').value = state.busy ? 'busy' : 'idle';
+      byId('demo-feishu-admin').value = state.feishuAdminReady ? 'ready' : 'missing';
+      renderSend(); renderMerge(); renderFeishuAction('document', 'write', 'created', '核对并创建云文档（演示）'); renderFeishuAction('message', 'message', 'sent', '核对并发送群消息（演示）'); showView(state.view);
+    }
+
+    function openDialog(dialog) { dialogRestoreTargets.set(dialog, document.activeElement); dialog.showModal(); }
+    function closeDialog(dialog, returnFocusTo) { if (returnFocusTo) dialogRestoreTargets.set(dialog, returnFocusTo); dialog.close(); }
+    for (const dialog of dialogs) {
+      dialog.addEventListener('close', () => {
+        const returnFocusTo = dialogRestoreTargets.get(dialog);
+        if (returnFocusTo?.isConnected) returnFocusTo.focus({ preventScroll: true });
+        dialogRestoreTargets.delete(dialog);
+        if (dialog === decisionDialog) pendingDecision = null;
+        if (dialog === sendDialog) pendingMailPreview = null;
+        if (dialog === mergeDialog) pendingMergePreview = null;
+        if (dialog === documentDialog) pendingDocumentPreview = null;
+        if (dialog === messageDialog) pendingMessagePreview = null;
+      });
+    }
+
+    function populateAuthorizationAccounts(replaceAccount = false) {
+      const service = authorizationService, connection = state.connections[service], select = byId('authorization-account'); select.replaceChildren();
+      const accounts = serviceDefinitions[service].accounts.filter(account => service !== 'tencent' || account.mailboxType === byId('authorization-mailbox-type').value);
+      for (const account of accounts) { const option = document.createElement('option'); option.value = account.id; option.textContent = account.label; select.append(option); }
+      select.value = (replaceAccount ? accounts.find(account => account.id !== connection.account?.id) : accounts.find(account => account.id === connection.account?.id))?.id || accounts[0].id;
+    }
+    function openAuthorization(service, replaceAccount = false, method = 'oauth') {
+      authorizationService = service; authorizationMethod = service === 'tencent' ? 'auth-code' : method;
+      const definition = serviceDefinitions[service], connection = state.connections[service];
+      byId('authorization-error').hidden = true; byId('authorization-repositories-field').hidden = service !== 'github';
+      byId('authorization-mailbox-type-field').hidden = service !== 'tencent'; byId('authorization-auth-code-field').hidden = service !== 'tencent';
+      byId('authorization-mailbox-type').value = connection.mailboxType || 'personal';
+      byId('authorization-repositories').value = (connection.repositories || ['demo-team/ops-demo']).join(', ');
+      byId('authorization-title').textContent = '模拟' + (connection.account ? '管理 ' : '连接 ') + definition.name + (authorizationMethod === 'pat' ? ' · PAT' : service === 'tencent' ? ' · 专用授权码' : ' · OAuth');
+      byId('authorization-description').textContent = service === 'tencent' ? '选择邮箱类型和虚构账号，模拟官方专用授权码连接。下方只读占位码不会发送或保存。' : service === 'feishu' ? '模拟官方托管 MCP 的 OAuth 用户授权。以租户与 openID 绑定用户；管理员未允许账号和工具时不能完成连接。不切换到机器人身份。' : '选择虚构账号和本次授权范围。不会打开外部网站，也不会取得任何真实权限。';
+      populateAuthorizationAccounts(replaceAccount);
+      const scopeOptions = byId('authorization-scope-options'); scopeOptions.replaceChildren();
+      const legend = document.createElement('legend'); legend.textContent = '这个账号允许提供哪些能力'; scopeOptions.append(legend);
+      for (const scope of definition.scopes) {
+        const label = document.createElement('label'); label.className = 'scope-option';
+        const input = document.createElement('input'); input.type = 'radio'; input.name = 'authorization-scope'; input.value = scope.id; input.checked = scope.id === connection.scope;
+        const span = document.createElement('span'); span.textContent = scope.label; const small = document.createElement('small'); small.textContent = scope.detail;
+        span.append(small); label.append(input, span); scopeOptions.append(label);
+      }
+      byId('authorization-succeed').textContent = service === 'tencent' ? '模拟连接成功' : '模拟授权成功';
+      openDialog(authorizationDialog);
+    }
+
+    function readRepositorySelection() {
+      const values = byId('authorization-repositories').value.split(',').map(value => value.trim().toLowerCase());
+      const pattern = /^[a-z0-9](?:[a-z0-9-]{0,38})\/[a-z0-9_.-]{1,100}$/;
+      if (!values.length || values.length > 5 || values.some(value => !pattern.test(value) || ['.', '..'].includes(value.split('/')[1]))) {
+        const error = byId('authorization-error'); error.hidden = false; error.textContent = '请输入 1–5 个有效虚构仓库，格式为 owner/repository；以英文逗号分隔，不得留空或填写 URL。'; byId('authorization-repositories').focus(); return null;
+      }
+      return [...new Set(values)].sort();
+    }
+    function completeAuthorization(outcome) {
+      const service = authorizationService, definition = serviceDefinitions[service], previous = state.connections[service];
+      if (outcome === 'success') {
+        if (service === 'feishu' && !state.feishuAdminReady) {
+          const error = byId('authorization-error'); error.hidden = false; error.textContent = '连接未完成：请管理员先安装 officialMCPApp，并允许此账号与所选云文档／消息工具权限。原连接和任务选择保留。'; return;
+        }
+        const repositories = service === 'github' ? readRepositorySelection() : null; if (service === 'github' && !repositories) return;
+        const account = definition.accounts.find(candidate => candidate.id === byId('authorization-account').value);
+        const scope = document.querySelector('input[name="authorization-scope"]:checked').value;
+        const next = { status: 'connected', account: { ...account }, scope, ...(service === 'github' ? { repositories, method: authorizationMethod } : {}), ...(service === 'tencent' ? { mailboxType: byId('authorization-mailbox-type').value, method: 'auth-code' } : {}) };
+        state.connections[service] = next;
+        const task = state.task[service], changed = task.enabled && (!sameBinding(service, task, next) || task.scope !== next.scope);
+        announce('已模拟连接 ' + definition.name + ' · ' + account.label + '。' + (changed ? '当前任务仍保留原账号、类型、仓库与权限绑定，未自动改绑；在任务能力中明确更新。' : task.enabled ? '任务原选择保持；账号授权与任务能力分别核对。' : '当前任务仍未开启，请按需要单独开启。'), changed ? 'warning' : 'success');
+      } else if (outcome === 'failure') {
+        if (!previous.account) state.connections[service].status = 'failed';
+        announce(definition.name + ' 模拟连接失败。原连接、任务选择与历史保持；未采用本次未完成的账号或权限。', 'error');
+      } else announce('已取消 ' + definition.name + ' 模拟连接。原连接和任务选择保持。');
+      closeDialog(authorizationDialog); render();
+    }
+    function askDecision(title, description, confirmLabel, action) {
+      byId('decision-title').textContent = title; byId('decision-description').textContent = description; byId('decision-confirm').textContent = confirmLabel; pendingDecision = action; openDialog(decisionDialog);
+    }
+    function toggleTaskCapability(service) {
+      const input = byId('task-' + service + '-enabled'); if (input.disabled) { render(); return; }
+      const connection = state.connections[service];
+      if (input.checked && connection.status === 'connected') {
+        state.task[service] = bindingSnapshot(service, connection);
+        announce('本任务已模拟开启 ' + serviceDefinitions[service].name + ' · ' + bindingDetail(service, connection) + '（' + scopeLabel(service, connection.scope) + '）。工具结果和出处会进入任务模型上下文；未执行任何查询。', 'success');
+      } else { state.task[service].enabled = false; announce('本任务已关闭 ' + serviceDefinitions[service].name + '。原绑定与历史保留；没有删除全局连接。'); }
+      render();
+    }
+    function previewTask() {
+      if (state.busy) return;
+      if (!byId('task-question').value.trim()) { announce('先输入你想完成的事。', 'warning'); byId('task-question').focus(); return; }
+      const preview = byId('task-preview-content'); preview.replaceChildren();
+      const available = services.filter(service => effectiveStatus(service) === 'available'), response = document.createElement('p');
+      response.textContent = available.length ? '演示响应：可以先整理待跟进事项，再按需要起草邮件、云文档或消息。当前可使用 ' + available.map(service => serviceDefinitions[service].name + '（' + state.task[service].account.label + '）').join('、') + '。' : '演示响应：当前没有可用的账号连接。你可以先开启需要的任务能力，或继续使用已有项目资料。';
+      const explanation = document.createElement('small'); explanation.textContent = '这是固定交互预览，未调用模型、读取账号内容或产生外部动作。'; preview.append(response, explanation);
+      for (const service of services) if (state.task[service].enabled && effectiveStatus(service) !== 'available') { const unavailable = document.createElement('small'); unavailable.textContent = serviceDefinitions[service].name + '：' + serviceUnavailableText(service) + '。'; preview.append(unavailable); }
+      announce('已更新虚构任务预览。没有访问任何外部服务。');
+    }
+
+    function openSendPreview() {
+      const service = state.mailSource, draft = state.mailDrafts[service];
+      if (!canSend(service) || isMailLocked(state.sends[service])) return;
+      if (!draft.subject.trim() || !draft.body.trim()) { announce('请先补全主题和正文，再查看发送预览。', 'warning'); byId('mail-draft-editor').open = true; return; }
+      pendingMailPreview = { ...draft, service, binding: bindingSnapshot(service, state.task[service]), account: { ...state.task[service].account }, to: 'client@example.invalid', cc: [], bcc: [], attachments: [] };
+      byId('send-service').textContent = serviceDefinitions[service].name + (service === 'tencent' ? ' · ' + mailboxTypeLabel(state.task[service].mailboxType) : '');
+      byId('send-from').textContent = pendingMailPreview.account.label; byId('send-subject').textContent = draft.subject; byId('send-body').textContent = draft.body;
+      byId('send-confirm').disabled = false; byId('send-dialog-status').hidden = true; openDialog(sendDialog);
+    }
+    function submitSimulatedMail() {
+      const preview = pendingMailPreview; if (!preview || !canSend(preview.service) || isMailLocked(state.sends[preview.service])) return;
+      if (preview.service !== state.mailSource || preview.version !== state.mailDrafts[preview.service].version || !sameBinding(preview.service, preview.binding, state.task[preview.service])) {
+        closeDialog(sendDialog); announce('草稿、服务或发件账号已变化，请重新核对完整预览；原预览不能确认新内容。', 'warning'); return;
+      }
+      const outcome = byId('demo-mail-outcome').value;
+      state.sends[preview.service] = { ...preview, status: outcome === 'unknown' ? 'unknown' : 'sent', fromAccount: { ...preview.account }, receipt: 'demo-' + preview.service + '-mail-request-001' };
+      closeDialog(sendDialog, byId('send-result')); render();
+      announce(serviceDefinitions[preview.service].name + (outcome === 'unknown' ? ' 模拟发送回执丢失，结果 UNKNOWN。原发送记录保留；不自动重发，也不允许再次点击发送。' : ' 这一封邮件已模拟发送成功。没有真正发送邮件。'), outcome === 'unknown' ? 'warning' : 'success');
+    }
+    function openMergePreview() {
+      if (!canMerge() || ['unknown', 'merged'].includes(state.merge.status)) return;
+      const repositories = byId('merge-repository'); repositories.replaceChildren();
+      for (const repository of state.task.github.repositories) { const option = document.createElement('option'); option.value = repository; option.textContent = repository; repositories.append(option); }
+      pendingMergePreview = { account: { ...state.task.github.account }, repositories: [...state.task.github.repositories], headSha: byId('merge-head-sha').textContent };
+      byId('merge-account').textContent = pendingMergePreview.account.label; openDialog(mergeDialog);
+    }
+    function submitSimulatedMerge() {
+      const preview = pendingMergePreview; if (!preview || !canMerge() || ['unknown', 'merged'].includes(state.merge.status)) return;
+      const repository = byId('merge-repository').value;
+      if (preview.account.id !== state.task.github.account.id || !sameRepositories(preview.repositories, state.task.github.repositories) || !preview.repositories.includes(repository)) { closeDialog(mergeDialog); announce('账号或仓库绑定已变化，请重新核对 PR；原预览不能继续合并。', 'warning'); return; }
+      const outcome = byId('demo-merge-outcome').value;
+      state.merge = { status: outcome === 'unknown' ? 'unknown' : 'merged', account: { ...preview.account }, repository, headSha: preview.headSha, receipt: 'demo-merge-request-001' };
+      closeDialog(mergeDialog, byId('merge-result')); render(); announce(outcome === 'unknown' ? '模拟合并回执丢失，结果 UNKNOWN。需核对原 PR，不自动重试。' : '这个 PR 已模拟合并成功。未真正修改仓库。', outcome === 'unknown' ? 'warning' : 'success');
+    }
+    function openDocumentPreview() {
+      if (!canUseFeishu('write') || ['unknown', 'created'].includes(state.document.status)) return;
+      const account = { ...state.task.feishu.account }, target = feishuTarget(account);
+      pendingDocumentPreview = { account, target, body: '本周协作事项\n\n1. 跟进已授权仓库内的待办 Issue。\n2. 核对客户邮件中需要回复的事项。\n3. 周五前更新进展。\n\n以上内容为虚构交互样例。' };
+      byId('document-account').textContent = bindingDetail('feishu', state.task.feishu);
+      byId('document-preview-title').textContent = target.documentTitle; byId('document-destination').textContent = target.folderLabel + ' · folderID ' + target.folderId; byId('document-body').textContent = pendingDocumentPreview.body; openDialog(documentDialog);
+    }
+    function submitSimulatedDocument() {
+      const preview = pendingDocumentPreview; if (!preview || !canUseFeishu('write') || ['unknown', 'created'].includes(state.document.status)) return;
+      if (preview.account.id !== state.task.feishu.account.id) { closeDialog(documentDialog); announce('飞书租户或用户已变化，请重新核对文档写入。', 'warning'); return; }
+      const unknown = byId('demo-document-outcome').value === 'unknown';
+      state.document = { ...preview, status: unknown ? 'unknown' : 'created', receipt: 'demo-feishu-document-request-001' };
+      closeDialog(documentDialog, byId('document-result')); render(); announce(unknown ? '文档写入结果 UNKNOWN。保留原文档位置、标题与正文，不自动重试。' : '已模拟创建这份云文档，没有真实外部写入。', unknown ? 'warning' : 'success');
+    }
+    function openMessagePreview() {
+      if (!canUseFeishu('message') || ['unknown', 'sent'].includes(state.message.status)) return;
+      const account = { ...state.task.feishu.account }, target = feishuTarget(account);
+      pendingMessagePreview = { account, target, body: '本周待跟进事项已整理，请各位于周五前更新进展。这是一条虚构演示消息。' };
+      byId('message-account').textContent = bindingDetail('feishu', state.task.feishu) + ' · 以当前用户发送';
+      byId('message-target').textContent = target.groupLabel + ' · chatID ' + target.groupId; byId('message-body').textContent = pendingMessagePreview.body; openDialog(messageDialog);
+    }
+    function submitSimulatedMessage() {
+      const preview = pendingMessagePreview; if (!preview || !canUseFeishu('message') || ['unknown', 'sent'].includes(state.message.status)) return;
+      if (preview.account.id !== state.task.feishu.account.id) { closeDialog(messageDialog); announce('飞书租户或用户已变化，请重新核对消息。', 'warning'); return; }
+      const unknown = byId('demo-message-outcome').value === 'unknown';
+      state.message = { ...preview, status: unknown ? 'unknown' : 'sent', receipt: 'demo-feishu-message-request-001' };
+      closeDialog(messageDialog, byId('message-result')); render(); announce(unknown ? '群消息发送结果 UNKNOWN。保留原用户、群与正文，不自动重发。' : '已模拟发送这一条群消息，没有真正发送。', unknown ? 'warning' : 'success');
+    }
+
+    // All providers use the same settings, task binding and scene lifecycle.
+    for (const service of services) {
+      const entry = byId('task-' + service + '-enabled').closest('.task-capability-entry');
+      const scopeLabelNode = document.createElement('label'); scopeLabelNode.className = 'dialog-field'; scopeLabelNode.style.fontSize = '11px';
+      scopeLabelNode.htmlFor = 'task-' + service + '-scope'; scopeLabelNode.textContent = '本任务允许的动作';
+      const select = document.createElement('select'); select.id = 'task-' + service + '-scope'; scopeLabelNode.append(select); entry.append(scopeLabelNode);
+      select.addEventListener('change', event => {
+        const connection = state.connections[service], choice = state.task[service], scope = event.target.value;
+        if (select.disabled || !choice.enabled || !sameBinding(service, choice, connection) || scopeRank(service, scope) < 0 || scopeRank(service, scope) > scopeRank(service, connection.scope)) { render(); return; }
+        choice.scope = scope; announce('本任务已明确选择 ' + serviceDefinitions[service].name + ' · ' + scopeLabel(service, scope) + '。其他任务与历史不变。', 'success'); render();
+      });
+      const sceneActions = byId('service-scene-actions');
+      for (const type of ['expire', 'change']) {
+        const button = document.createElement('button'); button.type = 'button'; button.id = type === 'expire' ? 'expire-' + service : 'change-' + service + '-account';
+        button.textContent = type === 'expire' ? '模拟 ' + serviceDefinitions[service].name + ' 授权失效' : '模拟更换 ' + serviceDefinitions[service].name + ' 账号'; sceneActions.append(button);
+      }
+      byId(service + '-connect').addEventListener('click', () => openAuthorization(service));
+      byId(service + '-disconnect').addEventListener('click', () => {
+        const connection = state.connections[service];
+        askDecision('断开 ' + serviceDefinitions[service].name + '？', '断开 ' + connection.account.label + ' 的演示连接。各任务原开启意图、账号绑定及历史保留；后续不能继续使用该连接。本演示不触及真实账号授权。', '断开演示连接', () => { state.connections[service].status = 'disconnected'; announce('已模拟断开 ' + serviceDefinitions[service].name + '。任务原开启意图与历史保留，连接当前不可用。', 'warning'); render(); });
+      });
+      byId('task-' + service + '-enabled').addEventListener('change', () => toggleTaskCapability(service));
+      byId('task-' + service + '-rebind').addEventListener('click', () => {
+        const connection = state.connections[service], original = state.task[service];
+        const originalRepositories = service === 'github' ? '，仓库 ' + original.repositories.join('、') : '', nextRepositories = service === 'github' ? '，仓库 ' + connection.repositories.join('、') : '';
+        askDecision('更新本任务的 ' + serviceDefinitions[service].name + ' 绑定？', '原绑定：' + bindingDetail(service, original) + '（' + scopeLabel(service, original.scope) + originalRepositories + '）。改为：' + bindingDetail(service, connection) + '（' + scopeLabel(service, connection.scope) + nextRepositories + '）。只更新当前任务；历史结果保留原服务、账号与目标来源。', '确认使用当前账号与权限', () => { state.task[service] = bindingSnapshot(service, connection); announce('当前任务已明确改为使用 ' + connection.account.label + '。历史来源保持。', 'success'); render(); });
+      });
+      byId('expire-' + service).addEventListener('click', () => { if (state.connections[service].status !== 'connected') return; state.connections[service].status = 'expired'; announce('已模拟 ' + serviceDefinitions[service].name + ' 授权失效。任务原选择保留，需重新连接后才能继续。', 'warning'); render(); });
+      byId('change-' + service + '-account').addEventListener('click', () => openAuthorization(service, true));
+    }
+    const messageOutcomeLabel = document.createElement('label'); messageOutcomeLabel.htmlFor = 'demo-message-outcome'; messageOutcomeLabel.textContent = '确认发送群消息后的模拟结果';
+    const messageOutcome = document.createElement('select'); messageOutcome.id = 'demo-message-outcome';
+    for (const [value, label] of [['sent', '明确发送成功'], ['unknown', '消息回执丢失 · UNKNOWN']]) { const option = document.createElement('option'); option.value = value; option.textContent = label; messageOutcome.append(option); }
+    messageOutcomeLabel.append(messageOutcome); byId('service-scene-actions').before(messageOutcomeLabel);
+
+    byId('settings-view-button').addEventListener('click', () => showView('settings', true)); byId('task-view-button').addEventListener('click', () => showView('task', true));
+    byId('return-to-task').addEventListener('click', () => showView('task', true)); byId('task-manage-connections').addEventListener('click', () => showView('settings', true));
+    document.querySelectorAll('[data-manage-service]').forEach(button => button.addEventListener('click', () => { showView('settings'); byId(button.dataset.manageService + '-connect').focus({ preventScroll: false }); }));
+    byId('authorization-close').addEventListener('click', () => completeAuthorization('cancel')); byId('authorization-cancel').addEventListener('click', () => completeAuthorization('cancel'));
+    byId('authorization-fail').addEventListener('click', () => completeAuthorization('failure')); byId('authorization-succeed').addEventListener('click', () => completeAuthorization('success'));
+    byId('authorization-mailbox-type').addEventListener('change', () => populateAuthorizationAccounts());
+    authorizationDialog.addEventListener('cancel', event => { event.preventDefault(); completeAuthorization('cancel'); });
+    byId('decision-close').addEventListener('click', () => closeDialog(decisionDialog)); byId('decision-cancel').addEventListener('click', () => closeDialog(decisionDialog));
+    byId('decision-confirm').addEventListener('click', () => { const action = pendingDecision; closeDialog(decisionDialog); action?.(); });
+    byId('github-pat-connect').addEventListener('click', () => openAuthorization('github', false, 'pat'));
+    byId('github-oauth-help').addEventListener('click', () => announce('演示配置说明：管理员在 GitHub 配置 OAuth 应用和回调地址；普通使用者完成账号授权即可。本原型没有外部链接或实际配置动作。'));
+    byId('gmail-client-id-help').addEventListener('click', () => announce('一次性配置演示：在 Google Cloud 使用 Personal mode，创建 Desktop app OAuth 客户端，配置 AI-powered-agent client，并同时启用 Gmail API 与 Gmail MCP API。此处没有打开外部页面，也不接收真实配置。'));
+    byId('ask-task').addEventListener('click', previewTask);
+    byId('demo-execution-profile').addEventListener('change', event => { state.profile = event.target.value; render(); announce(state.profile === 'ordinary' ? '已恢复普通项目任务演示；按原任务账号绑定核对可用性。' : '已切换受限环境演示。四项连接器不提供，原任务意图保留。'); });
+    byId('demo-task-state').addEventListener('change', event => { state.busy = event.target.value === 'busy'; render(); announce(state.busy ? '已模拟任务执行中。任务开关、权限选择和账号改绑暂停，等待任务空闲。' : '任务已模拟恢复空闲，可以修改任务能力。'); });
+    byId('demo-feishu-admin').addEventListener('change', event => { state.feishuAdminReady = event.target.value === 'ready'; render(); announce(state.feishuAdminReady ? '已模拟管理员准备完成；仍按原账号绑定与实际所选权限核对，不自动开启任务或增加权限。' : '已模拟缺少飞书管理员准备。连接不能完成或使用；原连接、任务意图与历史保持。', 'warning'); });
+    byId('mail-source').addEventListener('change', event => { state.mailSource = event.target.value; renderSend(); announce(state.mailSource ? '已明确选择 ' + serviceDefinitions[state.mailSource].name + '；显示该服务自己的草稿与发送记录。' : '已清除发件服务选择；不会自动选择其他服务。'); });
+    byId('open-send-preview').addEventListener('click', openSendPreview); byId('send-confirm').addEventListener('click', submitSimulatedMail);
+    byId('send-close').addEventListener('click', () => closeDialog(sendDialog)); byId('send-cancel').addEventListener('click', () => { closeDialog(sendDialog); announce('已保留所选服务的虚构草稿；没有发送。'); });
+    byId('send-edit').addEventListener('click', () => { byId('mail-draft-editor').open = true; closeDialog(sendDialog, byId('mail-draft-body')); announce('已结束原发送预览。修改草稿后，需要重新查看并确认更新后的完整邮件。'); });
+    for (const field of ['subject', 'body']) byId('mail-draft-' + field).addEventListener('input', event => { const service = state.mailSource; if (!service || isMailLocked(state.sends[service]) || state.busy) { renderSend(); return; } state.mailDrafts[service][field] = event.target.value; state.mailDrafts[service].version += 1; });
+    byId('open-merge-preview').addEventListener('click', openMergePreview); byId('merge-confirm').addEventListener('click', submitSimulatedMerge); byId('merge-close').addEventListener('click', () => closeDialog(mergeDialog));
+    byId('merge-cancel').addEventListener('click', () => { closeDialog(mergeDialog); announce('已拒绝合并，虚构 PR 保持原样。'); });
+    byId('open-document-preview').addEventListener('click', openDocumentPreview); byId('document-confirm').addEventListener('click', submitSimulatedDocument); byId('document-close').addEventListener('click', () => closeDialog(documentDialog));
+    byId('document-cancel').addEventListener('click', () => { closeDialog(documentDialog); announce('已拒绝创建，未写入飞书文档。'); });
+    byId('open-message-preview').addEventListener('click', openMessagePreview); byId('message-confirm').addEventListener('click', submitSimulatedMessage); byId('message-close').addEventListener('click', () => closeDialog(messageDialog));
+    byId('message-cancel').addEventListener('click', () => { closeDialog(messageDialog); announce('已拒绝发送，未向飞书群发送消息。'); });
+    byId('reset-demo').addEventListener('click', () => {
+      for (const dialog of dialogs) if (dialog.open) closeDialog(dialog);
+      state = initialState(); pendingMailPreview = null; pendingMergePreview = null; pendingDocumentPreview = null; pendingMessagePreview = null;
+      byId('demo-mail-outcome').value = 'sent'; byId('demo-merge-outcome').value = 'merged'; byId('demo-document-outcome').value = 'created'; byId('demo-message-outcome').value = 'sent';
+      byId('mail-draft-editor').open = false; byId('task-question').value = '帮我汇总本周 GitHub 上待跟进的 Issue，以及客户邮件中需要回复的事项。';
+      byId('task-preview-content').replaceChildren(); const paragraph = document.createElement('p'); paragraph.textContent = '还没有运行演示任务。'; byId('task-preview-content').append(paragraph);
+      render(); announce('已重置演示。四项模拟连接、任务选择和外部动作记录已清空。');
+    });
+    render();
+  </script>
+</body>
+</html>

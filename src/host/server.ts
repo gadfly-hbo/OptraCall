@@ -83,6 +83,8 @@ import { PROJECT_UPLOAD_JSON_MAX_BYTES } from './project-upload.ts';
 import { ModelPackStore } from './model-pack-store.ts';
 import { createModelPackRoutes } from './model-pack-routes.ts';
 import { isTaskCapability } from './task-capabilities.ts';
+import { ServiceConnectionManager } from './service-connection-manager.ts';
+import { ServiceConnectionError, isServiceId, serviceKeys, serviceRecord, servicePolicyFingerprint, type TaskServiceBindings } from './service-connection-types.ts';
 import { readTradeAreaStatus } from './trade-area-status.ts';
 import { CaseStore, CaseStoreError } from './case-store.ts';
 import { createCaseRoutes, CaseRouteError } from './case-routes.ts';
@@ -210,6 +212,18 @@ function heartbeat(response: ServerResponse, intervalMs: number) {
 export function createHost(options: { cwd: string; uiPorts: number[]; transportVersion: string; connectionTimeoutMs?: number; dataRoot?: string; projectsRoot?: string; staticUiRoot?: string; webSearchFetch?: typeof fetch; instanceId?: string; heartbeatIntervalMs?: number; caseDecisionsEnabled?: boolean; caseRelationsEnabled?: boolean; experienceLearningEnabled?: boolean; sapMethodsEnabled?: boolean; memberPackEnabled?: boolean; goalDecompositionEnabled?: boolean; goalDecompositionPreCommitFault?: (goalId: string, operationId: string) => void; memberPackPublishHook?: import('./member-pack-host.ts').MemberPackHostOptions['publishAuthorityDependency']; resolveOperator?: (request: IncomingMessage) => import('./member-pack-host.ts').TrustedHostOperator; studioPython?: string; reviewAdmission?: ReviewAdmissionContract; semanticGraph?: { bindingFor: (projectId: string, taskId: string) => SemanticGraphBinding | undefined; configuration?: { enabled: boolean; configurationSha256: string; assets: readonly { projectId: string; snapshotId: string }[] } } }) {
   const dataRoot = options.dataRoot ?? path.join(os.homedir(), '.optracall'), projectsRoot = options.projectsRoot ?? path.join(os.homedir(), 'OptraCallProjects');
   const configuration = new ConfigurationStore({ dataRoot }), projects = new ProjectStore({ dataRoot, projectsRoot }), cases = new CaseStore({ dataRoot, decisionsEnabled: options.caseDecisionsEnabled !== false, relationsEnabled: options.caseRelationsEnabled !== false });
+  const serviceConnections = new ServiceConnectionManager({
+    dataRoot,
+    invalidate: service => projectSessions.closeAll({}, owner => Boolean(owner.task.serviceConnections?.[service])),
+    affectedTasks: async service => (await projects.list()).flatMap(project => project.tasks.filter(task => task.serviceConnections?.[service]).map(task => `${project.name} / ${task.name}`)),
+    assertOwner: async (projectId, taskId, bindings) => {
+      if (closing) throw new ServiceConnectionError('service_host_closing', 503);
+      const owner = await pair(projectId, taskId, true);
+      if (studio.memberPack.getProjectToolScope(projectId)) throw new ServiceConnectionError('service_profile_restricted', 403);
+      const fingerprints = (value: TaskServiceBindings | undefined) => JSON.stringify(Object.values(value ?? {}).map(servicePolicyFingerprint).sort());
+      if (fingerprints(owner.task.serviceConnections) !== fingerprints(bindings)) throw new ServiceConnectionError('service_binding_changed', 409);
+    },
+  });
   let studioForGuard: ReturnType<typeof createStudioFeature> | undefined;
   const guardedProjects = new Proxy(projects, {
     get(target, prop, receiver) {
@@ -474,7 +488,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   }
   const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 15_000;
   if (!Number.isSafeInteger(heartbeatIntervalMs) || heartbeatIntervalMs < 10) throw new Error('Invalid observer heartbeat interval.');
-  const ready = Promise.resolve().then(async () => { if (options.staticUiRoot) staticUi = await loadStaticUi(options.staticUiRoot); await projects.init(); await cases.init(); await configuration.init(); await dbLinks.init(); await boardStore.init(); await decisionFeedback.init(); await verification.reconcileInterrupted(); await automatic.init(); });
+  const ready = Promise.resolve().then(async () => { if (options.staticUiRoot) staticUi = await loadStaticUi(options.staticUiRoot); await projects.init(); await serviceConnections.init(); await cases.init(); await configuration.init(); await dbLinks.init(); await boardStore.init(); await decisionFeedback.init(); await verification.reconcileInterrupted(); await automatic.init(); });
   type ProjectOwner = { project: ProjectRecord; task: TaskRecord; reviewAdmission?: ReviewAdmissionContract };
   const streams = new Map<string, Set<ServerResponse>>();
   const streamRequests = new WeakMap<ServerResponse, { request: IncomingMessage; statusOnly: boolean }>();
@@ -699,8 +713,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       key: owner => keyOf(owner.project.id, owner.task.id),
       projectId: owner => owner.project.id,
       configuration: owner => availableConfiguration(owner.task.configuration.id, owner.task.configuration.revision),
-      policyFingerprint: owner => studio.memberPack.projectPermissionFingerprint(owner.project.id),
-      policyCurrent: (owner, captured) => captured === studio.memberPack.projectPermissionFingerprint(owner.project.id),
+      policyFingerprint: owner => JSON.stringify([studio.memberPack.projectPermissionFingerprint(owner.project.id), serviceConnections.policyFingerprint(owner.task.serviceConnections)]),
+      policyCurrent: (owner, captured) => captured === JSON.stringify([studio.memberPack.projectPermissionFingerprint(owner.project.id), serviceConnections.policyFingerprint(owner.task.serviceConnections)]),
       executionMode: async owner => {
         const memberScope = studio.memberPack.getProjectToolScope(owner.project.id);
         if (memberScope) return memberScope.osSandboxAvailable ? 'ordinary' : 'unmanaged';
@@ -761,7 +775,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
               deliver();
             }),
           };
-        }, analysisPython: analysisPythonFor(options.cwd), ...(task.assignment ? { assignment: task.assignment } : {}), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, ...(restrictedMemberPackWs ? { memberPackWorkspaceRoot: restrictedMemberPackWs.workspaceRoot, memberPackContextStartAt: restrictedMemberPackWs.contextStartAt, memberPackPermissionCurrent: () => restrictedMemberPackWs.policyFingerprint === studio.memberPack.projectPermissionFingerprint(project.id), ...(restrictedMemberPackWs.osSandboxAvailable ? { memberPackExecutionScope: restrictedMemberPackWs.protectedScope } : {}) } : {}), goalContextSource: async(input,context)=>readTaskGoalContextSource(project.id,task.id,input,context), sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: await enterpriseMetricIndex(project.id, task.id), webSearch, ...(semanticContextRead ? { semanticContextRead } : {}), ...(!isRestrictedMemberPack && task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(!isRestrictedMemberPack && task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(!isRestrictedMemberPack && task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(!isRestrictedMemberPack && task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution, ...(protectedExecution.profile === 'ordinary' ? { studioRead: studio.port(project.id, task.id, { analysisOnly: true }) } : {}) } : { projectFiles, memberPackGuard: call => studio.memberPack.evaluateNativeToolCall(project.id, project.rootPath, call, restrictedMemberPackWs?.workspaceRoot), methodIssue: async (input, context) => {
+        }, ...(!protectedExecution && !isRestrictedMemberPack && Object.keys(task.serviceConnections ?? {}).length ? { serviceBindings: task.serviceConnections, serviceConnections: serviceConnections.port(project.id, task.id, task.serviceConnections!) } : {}), analysisPython: analysisPythonFor(options.cwd), ...(task.assignment ? { assignment: task.assignment } : {}), projectId: project.id, taskId: task.id, projectDirectory: project.rootPath, ...(restrictedMemberPackWs ? { memberPackWorkspaceRoot: restrictedMemberPackWs.workspaceRoot, memberPackContextStartAt: restrictedMemberPackWs.contextStartAt, memberPackPermissionCurrent: () => restrictedMemberPackWs.policyFingerprint === studio.memberPack.projectPermissionFingerprint(project.id), ...(restrictedMemberPackWs.osSandboxAvailable ? { memberPackExecutionScope: restrictedMemberPackWs.protectedScope } : {}) } : {}), goalContextSource: async(input,context)=>readTaskGoalContextSource(project.id,task.id,input,context), sessionDirectory: task.sessionDirectory, sessionFile: task.sessionFile, draft: task.draft, codeRoot: options.cwd, resourceRoot: path.join(dataRoot, 'pi'), managementPorts: [...options.uiPorts, typeof address === 'object' && address ? address.port : 4175], metricIndexText: await enterpriseMetricIndex(project.id, task.id), webSearch, ...(semanticContextRead ? { semanticContextRead } : {}), ...(!isRestrictedMemberPack && task.simulationTools ? { simulationTools: { storeRoot: path.join(dataRoot, 'sim-lab', 'projects', project.id), projectId: project.id } } : {}), ...(!isRestrictedMemberPack && task.tradeAreaTools ? { tradeAreaConnector: { dataRoot: path.join(dataRoot, 'connectors/trade-area') } } : {}), ...(!isRestrictedMemberPack && task.weatherTools ? { weatherConnector: { cacheRoot: path.join(dataRoot, 'connectors/weather') } } : {}), ...(!isRestrictedMemberPack && task.modelTools ? { modelPackTools: { modelsRoot: path.join(dataRoot, 'models') } } : {}), ...(protectedExecution ? { protectedExecution, ...(protectedExecution.profile === 'ordinary' ? { studioRead: studio.port(project.id, task.id, { analysisOnly: true }) } : {}) } : { projectFiles, memberPackGuard: call => studio.memberPack.evaluateNativeToolCall(project.id, project.rootPath, call, restrictedMemberPackWs?.workspaceRoot), methodIssue: async (input, context) => {
           const operationId = stableActionId(['task-method-issue-v1', project.id, task.id, context.requestId, input.methodId, input.version, input.note, input.sources]);
           return methodIssues(input, { ...context, operationId, projectId: project.id, taskId: task.id });
         }, quotedDecisions: async (action, input, context) => {
@@ -2068,6 +2082,11 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   }
   const priorRequest = priorTaskRequest;
   const savedHistory = (project: ProjectRecord, task: TaskRecord, capabilities: Record<string, unknown> = {}) => savedTaskHistory(project, task, SDK_VERSION, capabilities);
+  async function taskServiceEligibility(projectId: string, taskId: string): Promise<{ supported: boolean; reason?: string }> {
+    if (studio.memberPack.getProjectToolScope(projectId)) return { supported: false, reason: '当前任务使用企业会员包的受限资源，个人账号连接不可用。' };
+    if (reviewTransition.legacyAdmissionAllowed() && (await automatic.store.readSettings({ projectId, taskId })).enabled && (await automatic.capabilities({ projectId, taskId })).supported) return { supported: false, reason: '当前任务采用受管执行环境，个人账号连接不可用。' };
+    return { supported: true };
+  }
   async function taskState(projectId: string, taskId: string, activate = false, inMutation = false) {
     let { project, task } = await pair(projectId, taskId);
     await checkReceivedHistory({ project, task }, { signal: AbortSignal.timeout(30000), assertCurrent() { if (closing) throw new RequestFault(409, 'host_closing'); } });
@@ -2102,6 +2121,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     const diagnostic = readRunDiagnostic(task.lastRun?.diagnostic, snapshot.lastRun?.outcome);
     if (diagnostic && snapshot.lastRun && snapshot.lastRun.requestId === task.lastRun?.id) snapshot.lastRun = { ...snapshot.lastRun, diagnostic };
     const execution = projectSessions.executionState(ref);
+    snapshot.capabilities = { ...snapshot.capabilities, serviceConnections: await taskServiceEligibility(projectId, taskId) };
     snapshot = await presentFrameworkHistory(projectId, taskId, { ...snapshot, status: execution.busy ? 'running' : 'idle', ...(execution.cleanupRequestId ? { cleanupRequestId: execution.cleanupRequestId } : {}) });
     return { project: decorateProject(project), task, snapshot };
   }
@@ -3074,6 +3094,27 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         throw new RequestFault(404, 'not_found');
       }
       if (request.headers['x-optracall-client'] !== '1' || (request.method !== 'GET' && !origin)) throw new RequestFault(403, 'client_rejected');
+      if (url.pathname === '/api/service-connections' && request.method === 'GET') { json(response, 200, { connections: await serviceConnections.list() }); return; }
+      const serviceRoute = /^\/api\/service-connections\/([^/]+)(?:\/(status|connect|verify|disconnect|oauth\/start|oauth\/cancel))?$/.exec(url.pathname);
+      if (serviceRoute) {
+        const service = serviceRoute[1], action = serviceRoute[2];
+        if (!isServiceId(service)) throw new ServiceConnectionError('invalid_service');
+        if (request.method === 'GET' && action === 'status') { json(response, 200, await serviceConnections.snapshot(service)); return; }
+        if (request.method === 'PUT' && !action) {
+          const input = await body(request); serviceKeys(input, ['expectedRevision', 'config', 'credentials']);
+          if (input.credentials !== undefined) { if (!serviceRecord(input.credentials)) throw new ServiceConnectionError('invalid_service_credentials'); serviceKeys(input.credentials, ['accessToken', 'clientSecret', 'authorizationCode']); }
+          json(response, 200, await mutate(() => serviceConnections.save(service, { expectedRevision: input.expectedRevision, config: input.config, credentials: input.credentials }))); return;
+        }
+        if (request.method === 'POST' && action) {
+          const input = await body(request);
+          if (action === 'oauth/cancel') { serviceKeys(input, ['attemptId']); json(response, 200, await serviceConnections.cancelAuthorization(service, input.attemptId)); return; }
+          serviceKeys(input, ['expectedRevision']);
+          if (action === 'disconnect') { json(response, 200, await mutate(() => serviceConnections.disconnect(service, input.expectedRevision))); return; }
+          if (action === 'oauth/start' || action === 'connect' && (service === 'gmail' || service === 'feishu')) { json(response, 200, await serviceConnections.authorize(service, input.expectedRevision)); return; }
+          if (action === 'verify' || action === 'connect') { json(response, 200, await serviceConnections.verify(service, input.expectedRevision)); return; }
+        }
+        throw new RequestFault(404, 'not_found');
+      }
       const dbLinkProjectMatch = /^\/api\/projects\/([a-f0-9-]+)(?:\/tasks\/[a-f0-9-]+)?\/db-link(?:\/|$)/.exec(url.pathname);
       if (dbLinkProjectMatch && studio.memberPack.getProjectToolScope(dbLinkProjectMatch[1])) {
         throw new RequestFault(403, 'member_pack_connector_restricted');
@@ -3616,6 +3657,27 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             });
             return;
           }
+          const taskServiceRoute = /^service-connections\/([^/]+)$/.exec(operation ?? '');
+          if (taskServiceRoute) {
+            const service = taskServiceRoute[1];
+            if (service === 'operations' && request.method === 'GET') {
+              await pair(projectId, taskId);
+              json(response, 200, await serviceConnections.store.listOperations({ projectId, taskId, limit: 50, offset: Number(url.searchParams.get('offset') ?? 0) })); return;
+            }
+            if (!isServiceId(service) || request.method !== 'PUT') throw new RequestFault(404, 'not_found');
+            const input = await body(request); serviceKeys(input, ['enabled', 'scopes', 'repositories', 'expectedConnectionRevision']);
+            if (typeof input.enabled !== 'boolean') throw new ServiceConnectionError('invalid_service_binding');
+            const task = await mutate(async () => {
+              const owner = await pair(projectId, taskId, true);
+              if (!(await taskServiceEligibility(projectId, taskId)).supported) throw new ServiceConnectionError('service_profile_restricted', 403);
+              const ref = projectSessions.ref(owner);
+              if (projectSessions.busy(ref) || await verification.revisionBusy(projectId, taskId)) throw new RequestFault(409, 'session_busy');
+              const binding = input.enabled ? await serviceConnections.binding(service, { expectedConnectionRevision: input.expectedConnectionRevision, scopes: input.scopes, repositories: input.repositories }) : undefined;
+              await projectSessions.close(ref);
+              return projects.setTaskServiceConnection(projectId, taskId, service, binding);
+            });
+            json(response, 200, { task }); return;
+          }
           if ((operation === 'simulation-tools' || operation === 'capabilities') && request.method === 'PUT') {
             const input = await body(request);
             const capability = operation === 'simulation-tools' ? 'simulationTools' : input.capability;
@@ -3782,6 +3844,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
       throw new RequestFault(404, 'not_found');
     } catch (error) {
+      if (error instanceof ServiceConnectionError) { json(response, error.status, { code: error.code, message: '服务连接未完成，请核对当前账号、权限和原操作记录。' }); return; }
       const rejectedSend = (statusCode: number) => (messageSendRoute && statusCode >= 400 && statusCode < 500 ? { accepted: false as const } : {});
       if (messageSendRoute && error instanceof ProjectRuntimeError && error.code === 'native_run_start_rejected') {
         json(response, 500, { code: 'sdk_operation_failed', accepted: false, message: '原会话暂时无法写入，本次消息未被接受。请恢复写入权限后重试。' }); return;
@@ -3896,6 +3959,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     const release = async (operation: () => unknown | Promise<unknown>) => { try { await operation(); } catch (error) { errors.push(error); } };
     await release(() => gate);
     await release(() => closeAgents());
+    await release(() => serviceConnections.close());
     await release(() => { for (const responses of requirementStreams.values()) for (const response of responses) response.end(); requirementStreams.clear(); endStreams(); });
     await release(() => modelPacks.close());
     await release(() => cases.close());

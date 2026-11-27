@@ -2,6 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { inspectSessionSource } from '../scripts/check-agent-session-boundary.mjs';
 
+test('GG public native MCP surface allows only reviewed client symbols and exact consumers', () => {
+  assert.deepEqual(inspectSessionSource('src/agent/sdk.ts', `export { McpClient, StreamableHttpTransport } from '@earendil-works/pi-mcp';`), []);
+  for (const source of [`export * from '@earendil-works/pi-mcp';`, `export { Server } from '@earendil-works/pi-mcp';`, `export { McpClient } from '@earendil-works/pi-mcp/dist/client.js';`]) assert.ok(inspectSessionSource('src/agent/sdk.ts', source).length);
+  assert.deepEqual(inspectSessionSource('src/host/service-connection-mcp.ts', `import { McpClient, StreamableHttpTransport } from '../agent/sdk.ts';`), []);
+  assert.ok(inspectSessionSource('src/host/service-connection-mcp.ts', `import { createAgentSession } from '../agent/sdk.ts';`).length);
+  assert.deepEqual(inspectSessionSource('src/agent/sdk.ts', `export { McpOAuthProvider as PiMcpOAuthProvider, OAuthCallbackServer as PiOAuthCallbackServer, authorizeMcp as authorizePiMcp } from '@earendil-works/pi-mcp/oauth';`), []);
+  assert.ok(inspectSessionSource('src/agent/sdk.ts', `export * from '@earendil-works/pi-mcp/oauth';`).length);
+  assert.deepEqual(inspectSessionSource('src/host/service-connection-oauth.ts', `import { PiMcpOAuthProvider, PiOAuthCallbackServer, authorizePiMcp } from '../agent/sdk.ts';`), []);
+  assert.ok(inspectSessionSource('src/host/service-connection-oauth.ts', `import { ModelRuntime } from '../agent/sdk.ts';`).length);
+  assert.ok(inspectSessionSource('src/host/service-connection-oauth.ts', `import { createAgentSession } from '../agent/sdk.ts';`).length);
+  assert.ok(inspectSessionSource('extensions/business-plugins/arbitrary/entry.ts', `import { McpClient } from '../../../src/agent/sdk.ts';`).length);
+});
+
 test('SDK private installed paths remain confined to the sole reviewed SDK surface', () => {
   const privatePath = '../../../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/config.js';
   const source = `import { loadMcpConfig } from '${privatePath}';`;
