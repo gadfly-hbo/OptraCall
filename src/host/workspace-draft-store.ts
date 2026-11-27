@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { GoalRef } from './strategy-goals-types.ts';
+import type { CaseCreationSource, CaseGoalIntentRef } from './case-types.ts';
 
 export type WorkspaceDraftKind = 'prepare' | 'carry-over' | 'issue-draft';
 
@@ -16,6 +17,8 @@ export type PrepareDraftPayload = {
   creationReceipt: { caseId: string; operationId: string; createdAt: string } | null;
   creationState: 'idle' | 'partial_failed' | 'partial_unknown' | 'completed';
   targetLocation: { caseId: string; issueId?: string | null } | null;
+  creationSource?: CaseCreationSource;
+  goalIntent?: CaseGoalIntentRef;
 };
 
 export type CarryOverFragmentPayload = {

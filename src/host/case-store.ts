@@ -341,14 +341,18 @@ export class CaseStore {
     this.getCase(caseId);
     return this.database().prepare("SELECT operation_id FROM operation_receipts WHERE case_id=? AND kind='project_create_link' AND phase!='completed' ORDER BY created_at,operation_id").all(caseId).map(row => this.getOperation(String(row.operation_id))!);
   }
-  private operation<T>(kind: string, input: { operationId: string } & object, caseId: string | null, projectId: string | null, fn: () => T, options?: CaseDecisionWriteOptions & CaseEnterpriseScopeOptions & { decisions?: boolean; relations?: boolean; goals?: boolean }): T {
+  private operation<T>(kind: string, input: { operationId: string } & object, caseId: string | null, projectId: string | null, fn: () => T, options?: CaseDecisionWriteOptions & CaseEnterpriseScopeOptions & { decisions?: boolean; relations?: boolean; goals?: boolean; legacyReplayRequest?: () => object | undefined }): T {
     uuid(input.operationId);
     const digest = sha(canonical({ kind, ...input }));
     let writes = false;
     return this.transaction(() => {
       const previous = this.getOperation(input.operationId);
       if (previous) {
-        if (previous.kind !== kind || previous.requestSha256 !== digest) fail('operation_conflict', 409);
+        if (previous.kind !== kind) fail('operation_conflict', 409);
+        if (previous.requestSha256 !== digest) {
+          const legacy = options?.legacyReplayRequest?.();
+          if (!legacy || previous.requestSha256 !== sha(canonical({ kind, ...legacy }))) fail('operation_conflict', 409);
+        }
         if (previous.phase !== 'completed' || previous.result === null) fail('operation_incomplete', 409);
         return previous.result as T;
       }
@@ -774,7 +778,8 @@ export class CaseStore {
       explanation: input.explanation == null ? '' : text(input.explanation, 1000, true),
       source: { kind: source.kind, ref: text(source.ref, 400, true, true, true) },
     };
-    const request = { ...clean, op: 'issue-edge' };
+    const { expectedRevision: _aggregateRevision, ...intent } = clean;
+    const request = { ...(options?.currentCaseRevision ? { ...intent, caseRevisionMode: 'current' } : clean), op: 'issue-edge' };
     return this.operation('case_update', request, clean.caseId, null, () => {
       options?.assertWritable?.();
       const before = this.activeCase(clean.caseId, clean.expectedRevision), createdAt = now();
@@ -799,7 +804,10 @@ export class CaseStore {
       this.put('cases', 'id', after);
       this.event('case', before.id, after.revision, 'case_updated', clean.operationId, { issueEdge: { before: previous ?? null, after: edge } }, createdAt);
       return edge;
-    }, { decisions: true });
+    }, { ...options, decisions: true, legacyReplayRequest: options?.currentCaseRevision ? () => {
+      const event = this.getEvents('case', clean.caseId).find(e => e.operationId === clean.operationId && e.changes.issueEdge?.after);
+      return event ? { ...clean, expectedRevision: event.revision - 1, op: 'issue-edge' } : undefined;
+    } : undefined });
   }
   /** Explicit decision requests are append-only Case events (changes.decisionRequest); the latest revision per requestId is current. */
   listDecisionRequests(caseId: string, options: { includeHistory?: boolean } = {}): CaseDecisionRequest[] {
@@ -818,7 +826,7 @@ export class CaseStore {
     const source = input.source;
     if (!source || (source.kind !== 'user-declaration' && source.kind !== 'agent-tool')) fail('invalid_case_decision_request_source');
     const optional = (value: unknown, max: number) => value == null || value === '' ? null : text(value, max, true, true);
-    const dueDate = input.dueDate == null ? undefined : (typeof input.dueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(input.dueDate) && !Number.isNaN(Date.parse(input.dueDate)) ? input.dueDate : fail('invalid_case_decision_request'));
+    const dueDate = input.dueDate == null ? input.dueDate : (typeof input.dueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(input.dueDate) && !Number.isNaN(Date.parse(input.dueDate)) ? input.dueDate : fail('invalid_case_decision_request'));
     let target: CaseDecisionRequestTarget | undefined;
     if (input.target) {
       const t = input.target as Record<string, unknown>;
@@ -837,13 +845,17 @@ export class CaseStore {
       expectedRequestRevision: revision(input.expectedRequestRevision, true), ...(input.requestId ? { requestId: uuid(input.requestId) } : {}),
       ...(input.issueId ? { issueId: uuid(input.issueId) } : {}), ...(input.kind ? { kind: input.kind } : {}),
       ...(input.text !== undefined ? { text: text(input.text, 4000, true, true) } : {}),
-      ...(dueDate ? { dueDate } : {}), ...(target ? { target } : {}),
-      assignee: { label: optional(input.assignee?.label, 120), source: optional(input.assignee?.source, 400) },
+      ...(input.dueDate !== undefined ? { dueDate } : {}), ...(target ? { target } : {}),
+      ...(input.assignee !== undefined ? { assignee: {
+        ...(input.assignee.label !== undefined ? { label: optional(input.assignee.label, 120) } : {}),
+        ...(input.assignee.source !== undefined ? { source: optional(input.assignee.source, 400) } : {}),
+      } } : {}),
       ...(input.requestedAt ? { requestedAt: text(input.requestedAt, 40, true, true) } : {}),
       source: { kind: source.kind, ref: source.ref == null ? null : text(source.ref, 400, true, true, true) },
     };
     if (clean.kind !== undefined && clean.kind !== 'choose' && clean.kind !== 'observe') fail('invalid_case_decision_request');
-    const request = { ...clean, op: `decision-request-${action}` };
+    const { expectedRevision: _aggregateRevision, ...intent } = clean;
+    const request = { ...(options?.currentCaseRevision ? { ...intent, caseRevisionMode: 'current' } : clean), op: `decision-request-${action}` };
     return this.operation('case_update', request, clean.caseId, null, () => {
       const before = this.activeCase(clean.caseId, clean.expectedRevision), createdAt = now();
       let previous: CaseDecisionRequest | undefined;
@@ -863,18 +875,26 @@ export class CaseStore {
         if (ref.caseId !== before.id || ref.caseStoreId !== this.decisionStoreId()) fail('case_decision_scope_mismatch', 409);
         if (this.getDecision(before.id, ref.recordId, ref.revision).kind !== 'strategy') fail('case_choice_requires_strategy');
       }
-      const assignee = action === 'save' ? clean.assignee : previous?.assignee ?? clean.assignee;
+      const assignee = { label: previous?.assignee.label ?? null, source: previous?.assignee.source ?? null,
+        ...(action === 'save' ? clean.assignee : {}) };
+      const nextDueDate = action === 'save' && input.dueDate !== undefined ? clean.dueDate : previous?.dueDate;
       const request: CaseDecisionRequest = {
         requestId: previous?.requestId ?? randomUUID(), revision: (previous?.revision ?? 0) + 1, caseId: before.id, issueId, kind, text: body,
         source: clean.source, assignee: previous && action !== 'save' ? previous.assignee : assignee, requestedAt: previous?.requestedAt ?? clean.requestedAt ?? createdAt,
-        ...((action === 'save' ? clean.dueDate : previous?.dueDate) ? { dueDate: (action === 'save' ? clean.dueDate : previous?.dueDate)! } : {}),
+        ...(nextDueDate ? { dueDate: nextDueDate } : {}),
         target: nextTarget, lifecycle: action === 'withdraw' ? 'withdrawn' : action === 'supersede' ? 'superseded' : 'open', operationId: clean.operationId, createdAt,
       };
       const after = { ...before, revision: before.revision + 1, updatedAt: createdAt };
       this.put('cases', 'id', after);
       this.event('case', before.id, after.revision, 'case_updated', clean.operationId, { decisionRequest: { before: previous ?? null, after: request } }, createdAt);
       return request;
-    }, { decisions: true });
+    }, { ...options, decisions: true, legacyReplayRequest: () => {
+      const event = this.getEvents('case', clean.caseId).find(e => e.operationId === clean.operationId && e.changes.decisionRequest?.after);
+      if (!event) return undefined;
+      const { dueDate, assignee: _assignee, ...legacy } = clean;
+      return { ...legacy, expectedRevision: options?.currentCaseRevision ? event.revision - 1 : clean.expectedRevision,
+        ...(dueDate ? { dueDate } : {}), assignee: { label: optional(input.assignee?.label, 120), source: optional(input.assignee?.source, 400) }, op: `decision-request-${action}` };
+    } });
   }
   saveIssueReview(input: Omit<CaseIssueReview, 'createdAt'> & { expectedRevision: number }, observedAuthorizationId?: string): CaseIssueReview {
     const clean = { ...input, judgement: text(input.judgement, 4000, true, true), nextStep: text(input.nextStep, 4000, true, true), observation: text(input.observation, 4000, true, true) };

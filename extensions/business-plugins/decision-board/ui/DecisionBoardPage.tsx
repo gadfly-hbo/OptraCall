@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BoardRequestError, addManualItem, addTask, adoptItem, dismissItem, extractReport, readBoard, saveFeedback, feedbackHistory, feedbackOperation, setTaskStatus, stopExtraction, type BoardItemView, type BoardReportView, type BoardTaskView, type BoardView, type FeedbackInput } from './decision-board-client.ts';
+import { BoardRequestError, addManualItem, addTask, adoptItem, dismissItem, extractReport, readBoard, saveFeedback, feedbackHistory, feedbackOperation, authorizationHistory, setTaskStatus, stopExtraction, type BoardItemView, type BoardReportView, type BoardTaskView, type BoardView, type FeedbackInput } from './decision-board-client.ts';
 import { EVIDENCE_CONFIDENCE, type ConfirmedReviewClaim, type Priority, type TaskFeedbackRevision } from '../types.ts';
 import { CaseDialog } from '../../../../src/host/ui/CaseDialogs.tsx';
 import { FeedbackReview } from '../../../../src/host/ui/FeedbackReview.tsx';
@@ -9,6 +9,8 @@ import { PersonalDialog } from '../../../../src/host/ui/PersonalDialog.tsx';
 import { readConclusionReport } from '../../../../src/host/ui/conclusion-review-client.ts';
 import type { PersonalRetentionEntry } from '../../../../src/host/ui/personal-retention-client.ts';
 import { ActionAuthorityHistory } from './ActionAuthorityHistory.tsx';
+import { readDecisionRequests } from '../../../../src/host/ui/workspace-daily-client.ts';
+import { availableObservationRequests, observationRequestContext, observationRequestKey, validateObservationRequest, type ObservationRequestContext, type ObservationRequestSnapshot, type ObservationSubject } from './observation-request-model.ts';
 
 const EVIDENCE_CLASS: Record<string, string> = { '数据支撑': 'ev-data', '多源佐证': 'ev-multi', '逻辑推断': 'ev-logic', '经验假设': 'ev-exp' };
 const PRIORITY_LABEL: Record<string, string> = { high: '高优', medium: '中优', low: '低优' };
@@ -22,7 +24,7 @@ function BoardDialog({ title, error, children, onClose, busy = false }: { title:
   </CaseDialog>;
 }
 
-type FeedbackDraft = { executed: 'unknown' | 'yes' | 'no'; outcome: string; metricDelta: string; review: string; score: string; effect: FeedbackInput['effect']; expectedLatestRevisionId: string | null; operationId: string };
+type FeedbackDraft = { executed: 'unknown' | 'yes' | 'no'; outcome: string; metricDelta: string; review: string; score: string; effect: FeedbackInput['effect']; expectedLatestRevisionId: string | null; operationId: string; requestContext?: ObservationRequestContext };
 const effectLabel = (effect: string) => ({ unknown: '效果未知', positive: '用户认为有改善', negative: '用户认为变差', none: '用户未观察到改善' })[effect] ?? '效果未知';
 const feedbackDraft = (task: BoardTaskView): FeedbackDraft => ({ executed: task.feedback ? task.feedback.adopted ? 'yes' : 'no' : 'unknown', outcome: task.feedback?.outcome ?? '', metricDelta: task.feedback?.metricDelta ?? '', review: task.feedback?.review ?? '', score: task.feedback?.score == null ? '' : String(task.feedback.score), effect: task.feedback?.effect ?? 'unknown', expectedLatestRevisionId: task.feedback?.revisionId ?? null, operationId: crypto.randomUUID() });
 
@@ -47,7 +49,7 @@ export function DecisionBoardPage({ onOpenFeedbackTask, initialReview, initialRe
   const title = useRef<HTMLHeadingElement>(null);
   useEffect(() => { title.current?.focus(); }, []);
   useEffect(() => { if (initialReport) setProjectFilter(initialReport.projectId); }, [initialReport?.projectId, initialReport?.relativePath, initialReport?.reportSha256]);
-  useEffect(() => { if (initialReview && !initialReview.openOriginal) setReviewTarget({ taskId: initialReview.boardTaskId, revisionId: initialReview.feedbackRevisionId, selectedFile: initialReview.selectedFile, draftKey: initialReview.draftKey }); }, [initialReview?.draftKey]);
+  useEffect(() => { if (initialReview && !initialReview.openOriginal && !initialReview.openFeedback) setReviewTarget({ taskId: initialReview.boardTaskId, revisionId: initialReview.feedbackRevisionId, selectedFile: initialReview.selectedFile, draftKey: initialReview.draftKey }); }, [initialReview?.draftKey]);
 
   const load = useCallback(async () => {
     try { setBoard(await readBoard()); setLoadError(null); }
@@ -85,6 +87,22 @@ export function DecisionBoardPage({ onOpenFeedbackTask, initialReview, initialRe
       requestAnimationFrame(() => document.getElementById('board-task-'+task.id)?.focus());
     }
   },[board,initialReview]);
+
+  const openedFeedback = useRef('');
+  useEffect(() => {
+    if (!board || !initialReview?.openFeedback || openedFeedback.current === initialReview.draftKey) return;
+    openedFeedback.current = initialReview.draftKey;
+    const item = board.items.find(row => row.tasks.some(task => task.id === initialReview.boardTaskId));
+    const task = item?.tasks.find(row => row.id === initialReview.boardTaskId);
+    if (!item || !task) { setError('原看板行动当前不可读，未改用其他行动。'); return; }
+    setReviewTarget(null); setHistoryTask(null); setProjectFilter(item.projectId);
+    if (unknownFeedbacks[task.id]) setError('该行动原反馈保存结果未知，已保留原输入与请求；请先查询原保存结果。');
+    setFeedbackDrafts(old => {
+      const draft = old[task.id] ?? feedbackDraft(task);
+      return { ...old, [task.id]: unknownFeedbacks[task.id] ? draft : { ...draft, requestContext: initialReview.requestContext, operationId: crypto.randomUUID() } };
+    });
+    setFeedbackTask({ task, item });
+  }, [board, initialReview, unknownFeedbacks]);
 
   const run = async (key: string, operation: () => Promise<unknown>) => {
     if (pending) return;
@@ -194,7 +212,7 @@ export function DecisionBoardPage({ onOpenFeedbackTask, initialReview, initialRe
 
     {dismissTarget && <DismissDialog item={dismissTarget} error={error} onClose={() => setDismissTarget(null)} onSubmit={reason => run(`dismiss:${dismissTarget.id}`, async () => { await dismissItem(dismissTarget.id, reason); setDismissTarget(null); })} />}
     {taskTarget && <TaskDialog item={taskTarget} error={error} onClose={() => setTaskTarget(null)} onSubmit={input => run(`addtask:${taskTarget.id}`, async () => { await addTask(taskTarget.id, input); setTaskTarget(null); })} />}
-    {feedbackTask && <FeedbackDialog busy={pending === `feedback:${feedbackTask.task.id}`} task={feedbackTask.task} draft={feedbackDrafts[feedbackTask.task.id]!} error={error} unknownOperation={unknownFeedback} onChange={draft => setFeedbackDrafts(old => ({ ...old, [feedbackTask.task.id]: draft }))} onClose={() => setFeedbackTask(null)} onAsk={() => { const task = feedbackTask.task; setFeedbackTask(null); review(task, null); }} onQuery={async () => { try { const result = await feedbackOperation(unknownFeedback!); if (result.feedback) { setFeedbackDrafts(old => { const next = { ...old }; delete next[feedbackTask.task.id]; return next; }); setUnknownFeedbacks(old => { const next = { ...old }; delete next[feedbackTask.task.id]; return next; }); setFeedbackTask(null); await load(); } else { setError('尚未查到原保存结果，输入与原意图保留。可明确继续同一保存，不会创建重复修订。'); setUnknownFeedbacks(old => { const next = { ...old }; delete next[feedbackTask.task.id]; return next; }); } } catch { setError('原保存结果仍未知，请保留输入，不要另建保存意图。'); } }} onSubmit={async input => { if (pending) return; setPending(`feedback:${feedbackTask.task.id}`); setError(null); try { await saveFeedback(feedbackTask.task.id, input); setFeedbackDrafts(old => { const next = { ...old }; delete next[feedbackTask.task.id]; return next; }); setFeedbackTask(null); await load(); } catch (caught) { if (!(caught instanceof BoardRequestError)) setUnknownFeedbacks(old => ({ ...old, [feedbackTask.task.id]: input.operationId })); setError(caught instanceof BoardRequestError ? caught.message : '保存结果未知。请先查询原保存意图，当前输入保留。'); } finally { setPending(null); } }} />}
+    {feedbackTask && <FeedbackDialog key={feedbackTask.task.id} subject={{ projectId: feedbackTask.item.projectId, itemId: feedbackTask.item.id, taskId: feedbackTask.task.id }} busy={pending === `feedback:${feedbackTask.task.id}`} task={feedbackTask.task} draft={feedbackDrafts[feedbackTask.task.id]!} error={error} unknownOperation={unknownFeedback} onChange={draft => setFeedbackDrafts(old => ({ ...old, [feedbackTask.task.id]: draft }))} onClose={() => setFeedbackTask(null)} onAsk={() => { const task = feedbackTask.task; setFeedbackTask(null); review(task, null); }} onQuery={async () => { try { const result = await feedbackOperation(unknownFeedback!); if (result.feedback) { setFeedbackDrafts(old => { const next = { ...old }; delete next[feedbackTask.task.id]; return next; }); setUnknownFeedbacks(old => { const next = { ...old }; delete next[feedbackTask.task.id]; return next; }); setFeedbackTask(null); await load(); } else { setError('尚未查到原保存结果，输入与原意图保留。可明确继续同一保存，不会创建重复修订。'); setUnknownFeedbacks(old => { const next = { ...old }; delete next[feedbackTask.task.id]; return next; }); } } catch { setError('原保存结果仍未知，请保留输入，不要另建保存意图。'); } }} onSubmit={async input => { if (pending) return; setPending(`feedback:${feedbackTask.task.id}`); setError(null); try { await saveFeedback(feedbackTask.task.id, input); setFeedbackDrafts(old => { const next = { ...old }; delete next[feedbackTask.task.id]; return next; }); setFeedbackTask(null); await load(); } catch (caught) { if (!(caught instanceof BoardRequestError) || caught.status >= 500) setUnknownFeedbacks(old => ({ ...old, [feedbackTask.task.id]: input.operationId })); setError(caught instanceof BoardRequestError ? caught.message : '保存结果未知。请先查询原保存意图，当前输入保留。'); } finally { setPending(null); } }} />}
     {historyTask && <FeedbackHistory task={historyTask} originalRevision={originalRevision} onClose={() => {setOriginalRevision(undefined); setHistoryTask(null);}} onReview={revisionId => review(historyTask, revisionId)} onOrganize={onOrganize ? (revisionId, kind) => { const item = board?.items.find(item => item.tasks.some(task => task.id === historyTask.id)); if (item) onOrganize({ ref: { type: 'feedback', sourceProjectId: item.projectId, boardTaskId: historyTask.id, feedbackRevisionId: revisionId }, kind }); } : undefined} disabled={projectArchived(items.find(item => item.tasks.some(task => task.id === historyTask.id))?.projectId ?? '')} />}
     {manualOpen && board && <ManualDialog error={error} projects={projects.filter(project => project.archivedAt === null)} onClose={() => setManualOpen(false)} onSubmit={input => run('manual', async () => { await addManualItem(input); setManualOpen(false); })} />}
   </div>;
@@ -353,23 +371,80 @@ function TaskDialog({ item, error, onClose, onSubmit }: { item: BoardItemView; e
   </BoardDialog>;
 }
 
-function FeedbackDialog({ task, draft, error, busy, unknownOperation, onChange, onClose, onAsk, onSubmit, onQuery }: { task: BoardTaskView; draft: FeedbackDraft; busy: boolean; error?: string | null; unknownOperation: string | null; onChange: (draft: FeedbackDraft) => void; onClose: () => void; onAsk: () => void; onSubmit: (input: FeedbackInput) => Promise<void>; onQuery: () => Promise<void> }) {
+function FeedbackDialog({ task, subject, draft, error, busy, unknownOperation, onChange, onClose, onAsk, onSubmit, onQuery }: { task: BoardTaskView; subject: ObservationSubject; draft: FeedbackDraft; busy: boolean; error?: string | null; unknownOperation: string | null; onChange: (draft: FeedbackDraft) => void; onClose: () => void; onAsk: () => void; onSubmit: (input: FeedbackInput) => Promise<void>; onQuery: () => Promise<void> }) {
   const [latestForComparison, setLatestForComparison] = useState<TaskFeedbackRevision | null>(null), [comparisonError, setComparisonError] = useState('');
+  const [snapshot, setSnapshot] = useState<ObservationRequestSnapshot | null>(null), [requestError, setRequestError] = useState('');
+  const [readState, setReadState] = useState<'loading' | 'ready' | 'restricted' | 'stale' | 'unavailable'>('loading'), [checking, setChecking] = useState(false);
+  const readSerial = useRef(0), mounted = useRef(true), submitting = useRef(false);
+  const reloadRequests = useCallback(async () => {
+    const serial = ++readSerial.current; setReadState('loading'); setRequestError('');
+    try {
+      const [auths, history] = await Promise.all([authorizationHistory(task.id), feedbackHistory(task.id)]);
+      const authorization = auths.authorizations.at(-1) ?? null;
+      const requests = authorization && !('kind' in authorization.source) ? (await readDecisionRequests(authorization.source.caseId)).requests : [];
+      const value = { authorization, requests, latestRevisionId: history.revisions.at(-1)?.revisionId ?? null };
+      if (mounted.current && serial === readSerial.current) { setSnapshot(value); setReadState('ready'); }
+      return mounted.current && serial === readSerial.current ? value : null;
+    } catch (fault) {
+      if (mounted.current && serial === readSerial.current) {
+        const restricted = fault !== null && typeof fault === 'object' && 'status' in fault && [401, 403].includes(Number(fault.status));
+        if (restricted) { setSnapshot(null); setReadState('restricted'); setRequestError('原请求或授权已不可读，已清除其内容与回应入口。反馈输入保留。'); }
+        else { setReadState(old => old === 'restricted' ? 'restricted' : 'stale'); setRequestError('原请求、授权或反馈基线暂未核对。旧快照仅供查看，不能据此回应；输入保留。'); }
+      }
+      return null;
+    }
+  }, [task.id]);
+  useEffect(() => { mounted.current = true; void reloadRequests(); return () => { mounted.current = false; readSerial.current++; }; }, [reloadRequests]);
   const change = (patch: Partial<FeedbackDraft>) => onChange({ ...draft, ...patch, operationId: crypto.randomUUID() });
-  return <BoardDialog title={task.feedback ? '更新反馈' : '回录反馈'} error={error} onClose={onClose} busy={busy}>
+  const selected = draft.requestContext;
+  const choices = snapshot ? availableObservationRequests(subject, draft.expectedLatestRevisionId, snapshot) : [];
+  const selectedKey = selected ? observationRequestKey(selected) : '';
+  const selectedRequest = readState !== 'restricted' ? snapshot?.requests.find(row => row.requestId === selected?.requestId && row.revision === selected.revision) : undefined;
+  const selectedProblem = selected && snapshot ? validateObservationRequest(selected, subject, draft.expectedLatestRevisionId, snapshot).problem : null;
+  const locked = busy || checking || Boolean(unknownOperation);
+  const submit = async () => {
+    if (locked || submitting.current || draft.executed === 'unknown') return;
+    submitting.current = true; setChecking(true);
+    try {
+      let respondsToRequest: FeedbackInput['respondsToRequest'];
+      if (selected) {
+        const current = await reloadRequests();
+        if (!current) return;
+        const verified = validateObservationRequest(selected, subject, draft.expectedLatestRevisionId, current);
+        if (!verified.ref) { setRequestError(verified.problem!); return; }
+        respondsToRequest = verified.ref;
+      }
+      if (!mounted.current) return;
+      await onSubmit({ operationId: draft.operationId, expectedLatestRevisionId: draft.expectedLatestRevisionId, adopted: draft.executed === 'yes', outcome: draft.outcome, metricDelta: draft.metricDelta, review: draft.review, score: draft.score === '' ? null : Number(draft.score), effect: draft.effect, ...(respondsToRequest ? { respondsToRequest } : {}) });
+    } finally { submitting.current = false; if (mounted.current) setChecking(false); }
+  };
+  return <BoardDialog title={task.feedback ? '更新反馈' : '回录反馈'} error={error} onClose={onClose} busy={busy || checking}>
     <p className="card-source">任务：{task.title} · 保存会新增一版，旧版保留。取消或 Esc 保留未保存输入。</p>
-    <form className="board-form" onSubmit={event => { event.preventDefault(); if (busy || draft.executed === 'unknown' || unknownOperation) return; void onSubmit({ operationId: draft.operationId, expectedLatestRevisionId: draft.expectedLatestRevisionId, adopted: draft.executed === 'yes', outcome: draft.outcome, metricDelta: draft.metricDelta, review: draft.review, score: draft.score === '' ? null : Number(draft.score), effect: draft.effect }); }}>
+    <form className="board-form" onSubmit={event => { event.preventDefault(); void submit(); }}>
+      <section aria-label="回应明确观察请求">
+        {readState !== 'restricted' && <><label htmlFor="feedback-request">本次反馈回应的明确请求</label><select id="feedback-request" value={selectedKey} disabled={locked || readState !== 'ready'} onChange={event => { const request = choices.find(row => observationRequestKey(row) === event.target.value); change({ requestContext: request ? observationRequestContext(request)! : undefined }); }}>
+          <option value="">普通反馈 · 不回应明确请求</option>
+          {selected && !choices.some(row => observationRequestKey(row) === selectedKey) && <option value={selectedKey} disabled>原请求 v{selected.revision} · 需重新核对</option>}
+          {choices.map(request => <option key={observationRequestKey(request)} value={observationRequestKey(request)}>{request.text} · v{request.revision} · {request.assignee.label || '承担人未声明'}</option>)}
+        </select></>}
+        {readState === 'loading' && <p role="status">正在核对原请求、实际授权与反馈基线…</p>}
+        {readState === 'ready' && !choices.length && !selected && <p className="board-context-note">当前没有与本行动、实际授权和反馈基线准确匹配的待回应请求。可保存普通反馈。</p>}
+        {requestError && <p role="alert">{requestError}</p>}{selectedProblem && <p role="alert">{selectedProblem}</p>}
+        {selectedRequest && <div className="feedback-help"><strong>正在回应原请求 · v{selectedRequest.revision}</strong><blockquote>{selectedRequest.text}</blockquote><p>实际承担人：{selectedRequest.assignee.label || '未声明'} · 声明来源：{selectedRequest.assignee.source || '未知'}</p><p>提出时间：{selectedRequest.requestedAt}{selectedRequest.dueDate ? ` · 原期限：${selectedRequest.dueDate}` : ''}</p><details><summary>请求的准确引用与原文来源</summary><p>Case {selectedRequest.caseId} · 事项 {selectedRequest.issueId}<br />请求 {selectedRequest.requestId} · 修订 {selectedRequest.revision}<br />原文来源：{selectedRequest.source.ref || '未知'}</p>{selectedRequest.target.kind === 'observe' && <p>项目 {selectedRequest.target.projectId}<br />建议 {selectedRequest.target.itemId} · 行动 {selectedRequest.target.taskId}<br />授权 {selectedRequest.target.authorizationId}<br />原反馈基线 {selectedRequest.target.feedbackBaseRevisionId || '尚无反馈'}</p>}</details></div>}
+        {selected && <button type="button" className="secondary-button" disabled={locked} onClick={() => change({ requestContext: undefined })}>改为普通反馈 · 保留输入</button>}
+        <button type="button" className="secondary-button" disabled={locked || readState === 'loading'} onClick={() => { void reloadRequests(); }}>重新读取原请求与授权</button>
+      </section>
       <label htmlFor="feedback-adopted">是否按建议执行</label>
-      <select id="feedback-adopted" disabled={busy || Boolean(unknownOperation)} value={draft.executed} onChange={event => change({ executed: event.target.value as FeedbackDraft['executed'] })}><option value="unknown">未取得明确反馈（不存为否）</option><option value="yes">按建议执行</option><option value="no">未按原建议执行</option></select>
-      <label htmlFor="feedback-outcome">执行记录（选填）</label><textarea id="feedback-outcome" disabled={busy || Boolean(unknownOperation)} maxLength={4000} value={draft.outcome} onChange={event => change({ outcome: event.target.value })} />
-      <label htmlFor="feedback-metric">指标变化 · 用户回录（选填）</label><textarea id="feedback-metric" disabled={busy || Boolean(unknownOperation)} maxLength={1000} value={draft.metricDelta} onChange={event => change({ metricDelta: event.target.value })} />
-      <label htmlFor="feedback-effect">效果判断</label><select id="feedback-effect" disabled={busy || Boolean(unknownOperation)} value={draft.effect} onChange={event => change({ effect: event.target.value as FeedbackDraft['effect'] })}>{(['unknown', 'positive', 'negative', 'none'] as const).map(value => <option key={value} value={value}>{effectLabel(value)}</option>)}</select>
-      <label htmlFor="feedback-review">复盘说明与仍未知的内容（选填）</label><textarea id="feedback-review" disabled={busy || Boolean(unknownOperation)} maxLength={4000} value={draft.review} onChange={event => change({ review: event.target.value })} />
-      <label htmlFor="feedback-score">主观评分（选填）</label><select id="feedback-score" disabled={busy || Boolean(unknownOperation)} value={draft.score} onChange={event => change({ score: event.target.value })}><option value="">未填写</option>{[1, 2, 3, 4, 5].map(value => <option key={value} value={value}>{value} / 5</option>)}</select>
+      <select id="feedback-adopted" disabled={locked} value={draft.executed} onChange={event => change({ executed: event.target.value as FeedbackDraft['executed'] })}><option value="unknown">未取得明确反馈（不存为否）</option><option value="yes">按建议执行</option><option value="no">未按原建议执行</option></select>
+      <label htmlFor="feedback-outcome">执行记录（选填）</label><textarea id="feedback-outcome" disabled={locked} maxLength={4000} value={draft.outcome} onChange={event => change({ outcome: event.target.value })} />
+      <label htmlFor="feedback-metric">指标变化 · 用户回录（选填）</label><textarea id="feedback-metric" disabled={locked} maxLength={1000} value={draft.metricDelta} onChange={event => change({ metricDelta: event.target.value })} />
+      <label htmlFor="feedback-effect">效果判断</label><select id="feedback-effect" disabled={locked} value={draft.effect} onChange={event => change({ effect: event.target.value as FeedbackDraft['effect'] })}>{(['unknown', 'positive', 'negative', 'none'] as const).map(value => <option key={value} value={value}>{effectLabel(value)}</option>)}</select>
+      <label htmlFor="feedback-review">复盘说明与仍未知的内容（选填）</label><textarea id="feedback-review" disabled={locked} maxLength={4000} value={draft.review} onChange={event => change({ review: event.target.value })} />
+      <label htmlFor="feedback-score">主观评分（选填）</label><select id="feedback-score" disabled={locked} value={draft.score} onChange={event => change({ score: event.target.value })}><option value="">未填写</option>{[1, 2, 3, 4, 5].map(value => <option key={value} value={value}>{value} / 5</option>)}</select>
       <p className="board-context-note">效果和评分均是用户陈述，不代表独立核算或效果验证。未执行、负效果、观察不足均可记录；没有反馈也能直接提问。</p>
-      <details className="feedback-next"><summary>保存冲突时：对照最新反馈，保留我的输入</summary><button type="button" className="secondary-button" disabled={busy || Boolean(unknownOperation)} onClick={async () => { try { const result = await feedbackHistory(task.id); setLatestForComparison(result.revisions.at(-1) ?? null); setComparisonError(result.revisions.length ? '' : '当前尚无已保存反馈。'); } catch (fault) { setComparisonError(fault instanceof Error ? fault.message : '最新反馈未读回。'); } }}>读取最新反馈供对照</button>{comparisonError && <p role="status">{comparisonError}</p>}{latestForComparison && <><p className="feedback-help">已读最新 v{latestForComparison.revisionNumber} · {latestForComparison.savedAt} · {latestForComparison.adopted ? '按建议执行' : '未按建议执行'} · {effectLabel(latestForComparison.effect)}</p><pre className="feedback-text">{`${latestForComparison.outcome}\n${latestForComparison.metricDelta}\n${latestForComparison.review}`}</pre><button type="button" className="secondary-button" disabled={busy || Boolean(unknownOperation)} onClick={() => { onChange({ ...draft, expectedLatestRevisionId: latestForComparison.revisionId, operationId: crypto.randomUUID() }); setComparisonError(`已明确选用v${latestForComparison.revisionNumber}作为保存基线，以上编辑正文保持原样。提交会追加新版本，不覆盖旧版。`); }}>按已查看最新版继续保存 · 保留我的输入</button></>}</details>
+      <details className="feedback-next"><summary>保存冲突时：对照最新反馈，保留我的输入</summary><button type="button" className="secondary-button" disabled={locked} onClick={async () => { try { const result = await feedbackHistory(task.id); setLatestForComparison(result.revisions.at(-1) ?? null); setComparisonError(result.revisions.length ? '' : '当前尚无已保存反馈。'); } catch (fault) { setComparisonError(fault instanceof Error ? fault.message : '最新反馈未读回。'); } }}>读取最新反馈供对照</button>{comparisonError && <p role="status">{comparisonError}</p>}{latestForComparison && <><p className="feedback-help">已读最新 v{latestForComparison.revisionNumber} · {latestForComparison.savedAt} · {latestForComparison.adopted ? '按建议执行' : '未按建议执行'} · {effectLabel(latestForComparison.effect)}</p><pre className="feedback-text">{`${latestForComparison.outcome}\n${latestForComparison.metricDelta}\n${latestForComparison.review}`}</pre><button type="button" className="secondary-button" disabled={locked} onClick={() => { onChange({ ...draft, expectedLatestRevisionId: latestForComparison.revisionId, operationId: crypto.randomUUID() }); setComparisonError(`已明确选用v${latestForComparison.revisionNumber}作为保存基线，以上编辑正文保持原样。提交会追加新版本，不覆盖旧版。`); }}>按已查看最新版继续保存 · 保留我的输入</button></>}</details>
       {unknownOperation && <p className="board-context-note">原保存意图：{unknownOperation} · 结果待确认，先查询，不盲目重发。</p>}
-      <div className="board-dialog-actions"><button type="button" className="secondary-button" disabled={busy} onClick={onClose}>取消 · 保留输入</button>{unknownOperation ? <button type="button" className="primary-button" onClick={() => { void onQuery(); }}>查询原保存结果</button> : <><button type="button" className="secondary-button" disabled={busy} onClick={onAsk}>不保存反馈，直接提问</button><button className="primary-button" type="submit" disabled={busy || draft.executed === 'unknown'}>{busy ? '正在保存…' : '另存为新版本'}</button></>}</div>
+      <div className="board-dialog-actions"><button type="button" className="secondary-button" disabled={busy || checking} onClick={onClose}>取消 · 保留输入</button>{unknownOperation ? <button type="button" className="primary-button" onClick={() => { void onQuery(); }}>查询原保存结果</button> : <><button type="button" className="secondary-button" disabled={busy || checking} onClick={onAsk}>不保存反馈，直接提问</button><button className="primary-button" type="submit" disabled={locked || draft.executed === 'unknown' || Boolean(selected && (readState !== 'ready' || selectedProblem))}>{busy || checking ? '正在保存…' : selected ? '保存反馈并回应原请求' : '另存为新版本'}</button></>}</div>
     </form>
   </BoardDialog>;
 }

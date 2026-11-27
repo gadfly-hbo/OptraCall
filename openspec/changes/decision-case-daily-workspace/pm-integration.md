@@ -1,0 +1,27 @@
+# PM 二审与集成
+
+目标：按冻结 DW01–18 完成 Issue #149 的最终工程交付。二审不再退回，PM 接收候选后直接修复已确认范围内余项。
+
+- 接收：`495cbfce171cf28f8fcb65c0ad391718c3b5cca0`，原基线 `699e425cb0900b50385377d638495069fa726761`。
+- [二审接手与写入归属](https://github.com/gadfly-hbo/OptraCall/issues/149#issuecomment-7222037339)：Codex PM，独立 `codex/issue149-final`；原 Antigravity 分支只读。
+- [首审退回与永久证据](https://github.com/gadfly-hbo/OptraCall/issues/149#issuecomment-7221256920)保留，作者二次只读报告的 PASS 仅为其当时判断，不替代 PM 验收。
+- 本轮二审独立只读：[后端](pm-review/second/backend-review.md)、[Runtime](pm-review/second/runtime-review.md)、[UI](pm-review/second/ui-review.md)。已修部分与剩余问题分别记录。
+
+## 收尾清单
+
+- [x] 核对远端候选、重新领取与二次交接，记录接手与唯一写入归属。
+- [x] 并行只读复核 FR01–FR08，保留真实 HTTP、Store、Pi 和 UI 反例。
+- [ ] 修复原创建操作恢复与 UNKNOWN 分类，补正常／负例永久回归。
+- [ ] 修复请求精确事项、逐请求读取状态、元数据省略语义及 Pi 并行声明／取消／兼容。
+- [ ] 补齐统一准备、真实候选采纳与所有入口、首事项、部分成功恢复和原 composer 持久输入保护。
+- [ ] 修复准确请求原反馈入口、事项／项目导航范围、本轮摘要及撤权状态。
+- [ ] 固定完整候选，完成实际产品 UI、官方 Pi 合成、适用完整检查与全新非作者／四原则终检。
+- [ ] 集成最新 main，推送、创建关联 PR，准确 head CI 通过后按授权 squash 合并。
+- [ ] 本地 main 安全快进，main push CI 通过后回填并关闭同一 Issue。
+
+## 执行记录
+
+- 使用本工作树的锁定依赖正常 `npm ci --no-audit --no-fund`，未复用符号链安装；Node 25.9.0，官方 Pi 1.4.0 不变。
+- 开始过完整 `npm run check` 探查；因 PM 修复开始，主动中止为 exit 130，日志 `.local/pm-second/full-check-incoming.log` 保留。该次进程可能读取到进行中的修改，**不作为任一固定候选全量成绩**。最终固定后重新完整检查。
+- 原创建恢复新增两项反例先 0/2、修后 2/2；连同原三分支和草稿回归共 5/5。原日志 `.local/pm-second/create-recovery-{red,green}.log` 保留；永久测试 `tests/case-preparation-recovery.test.ts`。
+- 设备采用、运行服务切换、真实 Provider／业务材料仍不在本轮工程交付中。

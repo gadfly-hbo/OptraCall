@@ -82,7 +82,11 @@ export type CaseDecisionList = {
   decisionUpdatedAt: string | null; continuation: string | null;
 };
 /** Synchronous Host qualification, rechecked immediately before the transaction commits. */
-export type CaseDecisionWriteOptions = { assertWritable?: () => void };
+export type CaseDecisionWriteOptions = {
+  assertWritable?: () => void;
+  /** Host-only declaration adapter: resolve aggregate revision inside mutate; entity CAS stays explicit. */
+  currentCaseRevision?: true;
+};
 
 /** Explicit request for someone to respond (choose / observe) on a Case issue. Event-sourced; never inferred. */
 export type CaseDecisionRequestRef = { requestId: string; revision: number };

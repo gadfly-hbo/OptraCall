@@ -1,4 +1,4 @@
-import type { CaseGoalBindingInput, CaseRecord } from './case-types.ts';
+import type { CaseCreationSource, CaseGoalBindingInput, CaseGoalIntentRef, CaseRecord } from './case-types.ts';
 import type { CaseStore } from './case-store.ts';
 import { WorkspaceDraftError, type PrepareDraftPayload, type WorkspaceDraftRecord, type WorkspaceDraftStore } from './workspace-draft-store.ts';
 
@@ -10,7 +10,7 @@ export type VerifiedGoalAuthority = {
 };
 export type ReadGoalFn = (ref: { goalId: string; version: number }) => Promise<VerifiedGoalAuthority>;
 export type AdoptGoalFn = (input: { operationId: string; goalId: string; expectedVersion: number; strategy: string }) => Promise<{ goalId: string; version: number; strategy: string; adoptedAt: string }>;
-export type CreateCaseFn = (input: { operationId: string; title: string; description: string; goalBinding: CaseGoalBindingInput }) => Promise<CaseRecord>;
+export type CreateCaseFn = (input: { operationId: string; title: string; description: string; goalBinding: CaseGoalBindingInput; creationSource?:CaseCreationSource; goalIntent?:CaseGoalIntentRef }) => Promise<CaseRecord>;
 
 export type ThreeBranchCreateInput = {
   draftId: string;
@@ -20,6 +20,8 @@ export type ThreeBranchCreateInput = {
   goal: { goalId: string; version: number; strategy: string; alreadyAdopted: boolean };
   adoptOperationId: string;
   createOperationId: string;
+  creationSource?: CaseCreationSource;
+  goalIntent?: CaseGoalIntentRef;
 };
 
 export type ThreeBranchCreateResult =
@@ -77,19 +79,6 @@ export async function executeThreeBranchCaseCreate(
     throw new WorkspaceDraftError('prepare_draft_goal_mismatch', 409);
   }
 
-  // FR01: Verify exact GoalVersion, strategy membership, and real adoption status from authoritative GoalStore.
-  let realGoalAdopted = input.goal.alreadyAdopted;
-  if (deps.readGoal) {
-    const authoritative = await deps.readGoal({ goalId: input.goal.goalId, version: input.goal.version });
-    if (!input.goal.strategy || !authoritative.strategies.includes(input.goal.strategy)) {
-      throw new WorkspaceDraftError('invalid_goal_strategy', 400);
-    }
-    realGoalAdopted = authoritative.status === 'adopted';
-    if (input.goal.alreadyAdopted && !realGoalAdopted) {
-      throw new WorkspaceDraftError('goal_not_adopted', 409);
-    }
-  }
-
   const saveDraft = async (patch: Partial<PrepareDraftPayload>): Promise<WorkspaceDraftRecord<PrepareDraftPayload>> => {
     const base: PrepareDraftPayload = existingDraft?.payload ?? {
       rawInput: input.rawInput,
@@ -102,6 +91,7 @@ export async function executeThreeBranchCaseCreate(
       creationReceipt: null,
       creationState: 'idle',
       targetLocation: null,
+      ...(input.creationSource?{creationSource:input.creationSource}:{}), ...(input.goalIntent?{goalIntent:input.goalIntent}:{}),
     };
     const next: PrepareDraftPayload = {
       ...base,
@@ -112,6 +102,7 @@ export async function executeThreeBranchCaseCreate(
       adoptOperationId: input.adoptOperationId,
       createOperationId: input.createOperationId,
       adoptionReceipt,
+      ...(input.creationSource?{creationSource:input.creationSource}:{}), ...(input.goalIntent?{goalIntent:input.goalIntent}:{}),
       ...patch,
     };
     const saved = await deps.drafts.save<PrepareDraftPayload>('prepare', input.draftId, draftRev, next);
@@ -126,21 +117,27 @@ export async function executeThreeBranchCaseCreate(
     if (priorCreate.kind !== 'case_create' || priorCreate.phase !== 'completed' || !priorCreate.caseId) {
       throw new WorkspaceDraftError('operation_conflict', 409);
     }
-    const createdCase = deps.cases.getCase(priorCreate.caseId);
-    const bound = deps.cases.getGoalBinding(createdCase.id);
-    if (
-      createdCase.title !== input.title.trim() ||
-      createdCase.description !== input.description ||
-      !bound ||
-      bound.primary.goalId !== input.goal.goalId ||
-      bound.primary.version !== input.goal.version ||
-      (bound.strategy ?? '') !== input.goal.strategy
-    ) {
-      throw new WorkspaceDraftError('operation_conflict', 409);
-    }
+    // The original create authority compares its immutable, normalized request
+    // hash and reads its saved result. Later edits or goal revisions must neither
+    // invalidate that receipt nor make a different request appear to match it.
+    const createdCase = await deps.createCase({
+      operationId: input.createOperationId, title: input.title, description: input.description,
+      goalBinding: { primary: { goalId: input.goal.goalId, version: input.goal.version }, related: [], strategy: input.goal.strategy },
+      ...(input.creationSource?{creationSource:input.creationSource}:{}), ...(input.goalIntent?{goalIntent:input.goalIntent}:{}),
+    });
     const creationReceipt = { caseId: createdCase.id, operationId: input.createOperationId, createdAt: priorCreate.updatedAt };
     const draft = await saveDraft({ creationReceipt, creationState: 'completed', targetLocation: { caseId: createdCase.id } });
     return { branch: 'created', createdCase, adoptionReceipt, creationReceipt, replayedFromOperation: true, draft };
+  }
+
+  // Admission applies to new writes; completed original operations above are
+  // read back under their original identity even after the goal changes.
+  let realGoalAdopted = input.goal.alreadyAdopted;
+  if (deps.readGoal) {
+    const authoritative = await deps.readGoal({ goalId: input.goal.goalId, version: input.goal.version });
+    if (!input.goal.strategy || !authoritative.strategies.includes(input.goal.strategy)) throw new WorkspaceDraftError('invalid_goal_strategy', 400);
+    realGoalAdopted = authoritative.status === 'adopted';
+    if (input.goal.alreadyAdopted && !realGoalAdopted) throw new WorkspaceDraftError('goal_not_adopted', 409);
   }
 
   // Step 1: Check if exact G/S already has a Case (never merge by title, never auto-reopen closed Case).
@@ -186,13 +183,16 @@ export async function executeThreeBranchCaseCreate(
       title: input.title,
       description: input.description,
       goalBinding: binding,
+      ...(input.creationSource?{creationSource:input.creationSource}:{}), ...(input.goalIntent?{goalIntent:input.goalIntent}:{}),
     });
     const creationReceipt = { caseId: createdCase.id, operationId: input.createOperationId, createdAt: createdCase.createdAt };
     const draft = await saveDraft({ creationReceipt, creationState: 'completed', targetLocation: { caseId: createdCase.id } });
     return { branch: 'created', createdCase, adoptionReceipt, creationReceipt, replayedFromOperation: false, draft };
   } catch (error) {
     const code = typeof (error as { code?: unknown })?.code === 'string' ? String((error as { code?: unknown }).code) : 'case_create_unknown';
-    const isUnknown = code === 'case_create_unknown' || code === 'network_timeout' || code === 'response_dropped';
+    const status = Number((error as { statusCode?: number; status?: number })?.statusCode ?? (error as { status?: number })?.status);
+    const isUnknown = code === 'case_create_unknown' || code === 'network_timeout' || code === 'response_dropped'
+      || code === 'case_transaction_outcome_unknown' || !Number.isFinite(status) && !(error as { code?: unknown })?.code || status >= 500;
     const draft = await saveDraft({ creationState: isUnknown ? 'partial_unknown' : 'partial_failed' });
     return {
       branch: 'partial',

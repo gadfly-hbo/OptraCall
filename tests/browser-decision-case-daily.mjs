@@ -12,7 +12,7 @@ import { CaseStore } from '../src/host/case-store.ts';
 async function launchChrome(url) {
   const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'optracall-chrome-'));
   const port = 19222 + Math.floor(Math.random() * 10000);
-  const proc = spawn('/usr/bin/google-chrome', [
+  const proc = spawn(process.env.CHROME_BIN ?? '/usr/bin/chromium', [
     '--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
     `--remote-debugging-port=${port}`, `--user-data-dir=${userDataDir}`, url,
   ], { stdio: 'ignore' });
@@ -143,33 +143,62 @@ async function run() {
     await new Promise(r => setTimeout(r, 600));
     await chrome.evalJs(`Array.from(document.querySelectorAll('.home-daily-quick-input button')).find(b => b.textContent?.trim() === '全部项目')?.click()`);
     await waitForText('Browser合成项目');
-    await chrome.evalJs(`Array.from(document.querySelectorAll('nav.primary-nav button')).find(b => b.textContent?.includes('工作台首页'))?.click()`);
+    await chrome.evalJs(`Array.from(document.querySelectorAll('nav.primary-nav button')).filter(b=>b.getClientRects().length).find(b => b.textContent?.includes('工作台首页'))?.click()`);
     await waitForText('待处理事项（1）');
     const restoredVal = await chrome.evalJs(`document.querySelector('.home-daily-quick-input textarea')?.value || ''`);
     assert.equal(restoredVal, '导航前未点保存的轻输入', 'light input must survive navigation without manual save click');
 
     // 3. Click "前往原事项回应" -> verify pinned G/S bar, 3-part summary, tree multi-predecessor, and preserved issue+manual scope across tabs
-    await chrome.evalJs(`Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('前往原事项回应'))?.click()`);
+    await chrome.evalJs(`Array.from(document.querySelectorAll('button')).filter(b => b.getClientRects().length).find(b => b.textContent?.includes('前往原事项回应'))?.click()`);
     const caseText = await waitForText('树状图');
     assert.ok(caseText.includes('目标 / 策略（G/S）'), 'pinned G/S bar must appear');
     assert.ok(caseText.includes('已明确') && caseText.includes('正在推进') && caseText.includes('接下来'), '3-part round summary must appear');
-    await chrome.evalJs(`Array.from(document.querySelectorAll('button')).find(b => b.textContent?.trim() === '树状图')?.click()`);
+    await chrome.evalJs(`Array.from(document.querySelectorAll('button')).filter(b => b.getClientRects().length).find(b => b.textContent?.trim() === '树状图')?.click()`);
     const treeText = await waitForText('汇入 · 2 个前驱');
     assert.ok(treeText.includes('扩围取舍'));
 
-    // Switch to 关联项目 tab -> verify pinned G/S still visible + "按事项筛选" + manual scope preserved back & forth
-    await chrome.evalJs(`Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('关联项目'))?.click()`);
+    // Switch to 项目与任务 tab -> verify pinned G/S still visible + "按事项筛选" + manual scope preserved back & forth
+    await chrome.evalJs(`Array.from(document.querySelectorAll('button')).filter(b => b.getClientRects().length).find(b => b.textContent?.includes('项目与任务'))?.click()`);
     const projTabText = await waitForText('浏览范围（不改变 Agent 协作上下文）');
     assert.ok(projTabText.includes('目标 / 策略（G/S）'), 'G/S bar must stay pinned on projects tab');
     assert.ok(projTabText.includes('按事项筛选'), 'other-issue selector must exist');
     await chrome.evalJs(`Array.from(document.querySelectorAll('.case-scope-bar button')).find(b => b.textContent?.trim() === '全部当前 Case')?.click()`);
     await chrome.evalJs(`Array.from(document.querySelectorAll('.case-detail-tabs button')).find(b => b.textContent?.includes('当前工作'))?.click()`);
     await waitForText('树状图');
-    // Return to 关联项目: manual "全部当前 Case" MUST still be aria-pressed="true"
-    await chrome.evalJs(`Array.from(document.querySelectorAll('.case-detail-tabs button')).find(b => b.textContent?.includes('关联项目'))?.click()`);
+    // Return to 项目与任务: manual "全部当前 Case" MUST still be aria-pressed="true"
+    await chrome.evalJs(`Array.from(document.querySelectorAll('.case-detail-tabs button')).find(b => b.textContent?.includes('项目与任务'))?.click()`);
     await waitForText('浏览范围（不改变 Agent 协作上下文）');
     const stillAll = await chrome.evalJs(`Array.from(document.querySelectorAll('.case-scope-bar button')).find(b => b.textContent?.trim() === '全部当前 Case')?.getAttribute('aria-pressed')`);
     assert.equal(stillAll, 'true', 'manual scope selection must survive tab switches');
+
+    // Draft protection uses the same visible composer and Host draft, even after the panel remounts.
+    await chrome.evalJs(`Array.from(document.querySelectorAll('.case-detail-tabs button')).find(b=>b.textContent?.includes('当前工作'))?.click()`);
+    await waitForText('树状图');
+    await chrome.evalJs(`Array.from(document.querySelectorAll('button')).filter(b=>b.getClientRects().length).find(b=>b.textContent?.trim()==='与决策 Agent 协作')?.click()`);
+    const composerSelector = '.case-agent-entry .role-composer textarea';
+    for(let i=0;i<60;i++){
+      if(await chrome.evalJs(`Boolean(document.querySelector('${composerSelector}')&&!document.querySelector('${composerSelector}').disabled)`))break;
+      await new Promise(r=>setTimeout(r,100));
+    }
+    await chrome.evalJs(`(()=>{const ta=document.querySelector('${composerSelector}');if(!ta||ta.disabled)throw Error('composer unavailable');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(ta,'原对话中尚未发送的输入');ta.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await new Promise(r=>setTimeout(r,500));
+    const draft = await chrome.evalJs(`fetch('/api/workspace/drafts/issue-draft/'+encodeURIComponent('issue:${created.id}:${c.id}'),{headers:{'x-optracall-client':'1'}}).then(r=>r.json())`);
+    assert.equal(draft.draft.payload.text,'原对话中尚未发送的输入');
+    await chrome.evalJs(`Array.from(document.querySelectorAll('.case-detail-tabs button')).find(b=>b.textContent?.includes('成果与依据'))?.click()`);
+    await waitForText('浏览范围（不改变 Agent 协作上下文）');
+    await chrome.evalJs(`Array.from(document.querySelectorAll('.case-detail-tabs button')).find(b=>b.textContent?.includes('当前工作'))?.click()`);
+    await waitForText('树状图');
+    await chrome.evalJs(`Array.from(document.querySelectorAll('button')).filter(b=>b.getClientRects().length).find(b=>b.textContent?.trim()==='与决策 Agent 协作')?.click()`);
+    for(let i=0;i<60;i++){
+      if(await chrome.evalJs(`document.querySelector('${composerSelector}')?.value==='原对话中尚未发送的输入'`))break;
+      await new Promise(r=>setTimeout(r,100));
+    }
+    assert.equal(await chrome.evalJs(`document.querySelector('${composerSelector}')?.value`),'原对话中尚未发送的输入');
+    assert.equal(await chrome.evalJs(`Boolean(document.querySelector('.case-issue-draft-box'))`),false,'one editable composer owns the issue input');
+    // A modal must keep keyboard focus in its visible controls.
+    await chrome.evalJs(`document.querySelector('dialog[open] button')?.focus()`);
+    for(let i=0;i<4;i++)await chrome.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+    assert.equal(await chrome.evalJs(`Boolean(document.querySelector('dialog[open]')?.contains(document.activeElement))`),true);
 
     // 4. Check 1024px and 390px viewports render cleanly with no crash and readable content
     for (const width of [1024, 390]) {
@@ -177,9 +206,14 @@ async function run() {
       await new Promise(r => setTimeout(r, 150));
       const len = await chrome.evalJs('document.body.innerText.trim().length');
       assert.ok(len > 100, `content must remain readable at ${width}px`);
+      await fs.mkdir('.local/pm-second/screenshots',{recursive:true});
+      const screenshot=await chrome.send('Page.captureScreenshot',{format:'png'});
+      await fs.writeFile(`.local/pm-second/screenshots/case-${width}.png`,Buffer.from(screenshot.data,'base64'));
+      const overflow = await chrome.evalJs('document.documentElement.scrollWidth > innerWidth + 2');
+      assert.equal(overflow, false, `page must not overflow at ${width}px`);
     }
 
-    console.log('BROWSER_DW_ALL_PASS: 1440/1024/390 + FR04 no heuristic queue + FR06 auto-persist across nav + FR07 pinned G/S, 3-part summary, other-issue selector & preserved manual scope + XSS safe');
+    console.log('BROWSER_DW_ALL_PASS: 1440/1024/390 + FR04 no heuristic queue + FR06 auto-persist across nav + FR07 pinned G/S, 3-part summary, other-issue selector & preserved manual scope + real composer persistence/remount + keyboard focus + XSS safe');
   } finally {
     if (chrome) await chrome.close();
     await host.close().catch(() => {});

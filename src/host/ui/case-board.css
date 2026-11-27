@@ -277,3 +277,8 @@
 .case-gs-pinned { padding: 8px 12px; margin-bottom: 8px; border: 1px solid var(--border, #d0d5dd); border-radius: 8px; font-size: 13px; }
 .case-round-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; padding: 10px 12px; margin-bottom: 10px; border: 1px solid var(--border, #d0d5dd); border-radius: 10px; }
 .home-daily-prepare-box, .home-daily-agent-box { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px dashed var(--border, #d0d5dd); border-radius: 8px; }
+
+.case-round-summary > header, .case-round-summary > footer { grid-column: 1 / -1; min-width: 0; }
+.case-round-summary h3 { margin: 0; font-size: 15px; }
+.case-round-summary p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.case-round-summary > footer p { margin: 0; }

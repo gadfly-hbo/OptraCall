@@ -1248,7 +1248,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   }
   const discussionOptions: Parameters<typeof createStrategyDiscussionHost>[0]={dataRoot,codeRoot:options.cwd,goals:strategyGoals,readDecompositionWorkspace,mapImports:()=>strategyMapImports,
     readCaseDirectory: opts => listVisibleCaseDirectory(cases, opts),
-    caseDeclarations: { saveIssueEdge: (caseId, input, opts) => caseDecisions.saveIssueEdge(caseId, input, opts), saveDecisionRequest: (caseId, input, opts) => caseDecisions.saveDecisionRequest(caseId, input, opts), caseRevision: caseId => cases.getCase(caseId).revision },
+    caseDeclarations: { readDeclarations: (caseId, issueId, input) => caseDecisions.readDeclarations(caseId, issueId, input), saveIssueEdge: (caseId, input, opts) => caseDecisions.saveIssueEdge(caseId, input, opts), saveDecisionRequest: (caseId, input, opts) => caseDecisions.saveDecisionRequest(caseId, input, opts) },
     goalEnterprises:projectId=>{
       const directory=studio.enterpriseScopes.list();
       const assigned=projectId&&directory.projectAssignments.find(link=>link.projectId===projectId)?.enterpriseId;
@@ -1881,8 +1881,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       const goal = strategyGoals.adopt(ref, { operationId, expectedVersion, decision: `明确采纳策略「${strategy}」并创建 Case` });
       return { goalId: goal.goalId, version: goal.version, strategy, adoptedAt: goal.adoptedAt ?? new Date().toISOString() };
     }),
-    createCase: async ({ operationId, title, description, goalBinding }) => {
-      const res = await caseRoutes({ pathname: '/api/cases', method: 'POST', input: { operationId, title, description, goalBinding } });
+    createCase: async ({ operationId, title, description, goalBinding, creationSource, goalIntent }) => {
+      const res = await caseRoutes({ pathname: '/api/cases', method: 'POST', input: { operationId, title, description, goalBinding, ...(creationSource ? { creationSource } : {}), ...(goalIntent ? { goalIntent } : {}) } });
       return (res!.body as { case: import('./case-types.ts').CaseRecord }).case;
     },
   });

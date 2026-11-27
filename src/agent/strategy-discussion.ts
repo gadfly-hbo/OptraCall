@@ -1,11 +1,11 @@
 import { strategyMapDraftSchema } from './strategy-map-schema.ts';
 import { decompositionDraftFields, reachabilityEstimateSchema } from './goal-decomposition-schema.ts';
 import { Type } from 'typebox';
-export type StrategyDiscussionAction = 'read-goals' | 'find-sources' | 'read-source' | 'read-import-source' | 'propose-map-draft' | 'propose-goal' | 'adopt-goal' | 'case-directory' | 'case-save-issue-edge' | 'case-save-decision-request' | 'operation' | 'public-search' | 'read-map' | 'save-map' | 'initiative-files' | 'initiative-read-file' | 'initiative-read-kickoff' | 'initiative-save-kickoff' | 'initiative-save-candidate' | 'initiative-save-verification' | 'initiative-read-candidate' | 'initiative-propose-revision' | 'initiative-read-skill' | 'goal-read-context' | 'goal-read-skill' | 'goal-run-script' | 'goal-save-estimate' | 'goal-save-decomposition-draft' | 'goal-analyze-progress' | 'goal-assess-actual' | 'goal-propose-plan' | 'goal-propose-review';
+export type StrategyDiscussionAction = 'read-goals' | 'find-sources' | 'read-source' | 'read-import-source' | 'propose-map-draft' | 'propose-goal' | 'adopt-goal' | 'case-directory' | 'case-read-declarations' | 'case-save-issue-edge' | 'case-save-decision-request' | 'operation' | 'public-search' | 'read-map' | 'save-map' | 'initiative-files' | 'initiative-read-file' | 'initiative-read-kickoff' | 'initiative-save-kickoff' | 'initiative-save-candidate' | 'initiative-save-verification' | 'initiative-read-candidate' | 'initiative-propose-revision' | 'initiative-read-skill' | 'goal-read-context' | 'goal-read-skill' | 'goal-run-script' | 'goal-save-estimate' | 'goal-save-decomposition-draft' | 'goal-analyze-progress' | 'goal-assess-actual' | 'goal-propose-plan' | 'goal-propose-review';
 export type StrategyDiscussionToolContext = { requestId:string; sessionId:string; toolCallId:string; signal:AbortSignal; assertCurrent():void; originalUserText:string; userQuoteEligible:boolean; goalBasis?:import('../host/strategy-goals-types.ts').GoalBasis; importSourceIds?:string[]; selectedImportPages?:Record<string,number[]>; importMode?:'review-draft'; draftGroupId?:string; supersedesDraftEntryId?:string; targetMapRef?:{mapId:string;version:number}; registerCleanup?:(cleanup:(options:{retryFailed?:boolean})=>Promise<void>)=>void };
 export type StrategyDiscussionToolContent = {type:'text';text:string} | {type:'image';data:string;mimeType:string};
 export type StrategyDiscussionPort = (action:StrategyDiscussionAction,input:Record<string,unknown>,context:StrategyDiscussionToolContext)=>Promise<{content:StrategyDiscussionToolContent[];details:Record<string,unknown>}>;
-export const STRATEGY_DISCUSSION_ACTIONS = ['read-goals','find-sources','read-source','read-import-source','propose-map-draft','propose-goal','adopt-goal','case-directory','case-save-issue-edge','case-save-decision-request','operation','public-search','read-map','save-map','initiative-files','initiative-read-file','initiative-read-kickoff','initiative-save-kickoff','initiative-save-candidate','initiative-save-verification','initiative-read-candidate','initiative-propose-revision','initiative-read-skill','goal-read-context','goal-read-skill','goal-run-script','goal-save-estimate','goal-save-decomposition-draft','goal-analyze-progress','goal-assess-actual','goal-propose-plan','goal-propose-review'] as const;
+export const STRATEGY_DISCUSSION_ACTIONS = ['read-goals','find-sources','read-source','read-import-source','propose-map-draft','propose-goal','adopt-goal','case-directory','case-read-declarations','case-save-issue-edge','case-save-decision-request','operation','public-search','read-map','save-map','initiative-files','initiative-read-file','initiative-read-kickoff','initiative-save-kickoff','initiative-save-candidate','initiative-save-verification','initiative-read-candidate','initiative-propose-revision','initiative-read-skill','goal-read-context','goal-read-skill','goal-run-script','goal-save-estimate','goal-save-decomposition-draft','goal-analyze-progress','goal-assess-actual','goal-propose-plan','goal-propose-review'] as const;
 const exact = { additionalProperties: false };
 const nonblank = (maxLength = 4000) => Type.String({ minLength: 1, maxLength, pattern: '\\S' });
 const textList = Type.Array(nonblank(), { maxItems: 100 });
@@ -259,9 +259,13 @@ export const goalReviewTool = {
 export const caseDeclarationsTool = {
   name: strategyDiscussionTool.name,
   label: 'Case 事项关系与明确请求保存',
-  description: '仅在用户明确声明本案两个事项的有向承接关系（case-save-issue-edge）或明确要求由谁对方案作取舍/补录观察（case-save-decision-request）时调用；Case 与当前事项归属由 Host 绑定，不接受模型改写他案。',
+  description: 'case-read-declarations 按 section 只读本案 issues/edges 和当前事项 requests/strategies/choices/observations，使用返回的准确身份与修订；limit 1–20，offset/nextOffset 或 strategies 的 continuation 分页，不把 partial 当完整结果。修订请求时省略assignee或dueDate保留原值，assignee子字段或dueDate传null明确清除。仅在用户明确声明本案两个事项的有向承接关系（case-save-issue-edge）或明确要求由谁对方案作取舍/补录观察（case-save-decision-request）时调用；Case 与当前事项归属由 Host 绑定，不接受模型改写他案。',
   parameters: Type.Object({
-    action: Type.Union([Type.Literal('case-save-issue-edge'), Type.Literal('case-save-decision-request')]),
+    action: Type.Union([Type.Literal('case-read-declarations'), Type.Literal('case-save-issue-edge'), Type.Literal('case-save-decision-request')]),
+    section: Type.Optional(Type.Union(['issues','edges','requests','strategies','choices','observations'].map(value => Type.Literal(value)))),
+    offset: Type.Optional(Type.Integer({ minimum: 0, maximum: 100000 })),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 20 })),
+    continuation: Type.Optional(Type.String()),
     edgeId: Type.Optional(Type.String()),
     fromIssueId: Type.Optional(Type.String()),
     toIssueId: Type.Optional(Type.String()),
@@ -274,10 +278,10 @@ export const caseDeclarationsTool = {
     kind: Type.Optional(Type.Union([Type.Literal('choose'), Type.Literal('observe')])),
     text: Type.Optional(Type.String({ maxLength: 4000 })),
     assignee: Type.Optional(Type.Object({
-      label: Type.Union([Type.String({ maxLength: 120 }), Type.Null()]),
-      source: Type.Union([Type.String({ maxLength: 400 }), Type.Null()]),
+      label: Type.Optional(Type.Union([Type.String({ maxLength: 120 }), Type.Null()])),
+      source: Type.Optional(Type.Union([Type.String({ maxLength: 400 }), Type.Null()])),
     }, { additionalProperties: false })),
-    dueDate: Type.Optional(Type.String()),
+    dueDate: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     target: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
     expectedRequestRevision: Type.Optional(Type.Integer({ minimum: 0 })),
   }, { additionalProperties: false }),

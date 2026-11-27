@@ -80,6 +80,8 @@ export type HomePendingCaseInput = {
   requests: CaseDecisionRequest[];
   choices?: CaseStrategyChoice[] | null;
   feedbackResponses?: CaseFeedbackResponse[] | null;
+  /** Qualified per request; one unavailable action must not hide other requests. */
+  requestStatuses?: Readonly<Record<string, CaseDecisionRequestStatus>>;
   pendingOperations?: OperationReceipt[];
 };
 
@@ -128,7 +130,7 @@ export function projectHomePending(input: {
       }
     }
     for (const req of requests) {
-      const status = requestStatus(req, req.kind === 'choose' ? choices : undefined, req.kind === 'observe' ? feedbackResponses : undefined);
+      const status = entry.requestStatuses?.[req.requestId] ?? requestStatus(req, req.kind === 'choose' ? choices : undefined, req.kind === 'observe' ? feedbackResponses : undefined);
       const item: HomePendingItem = {
         requestId: req.requestId,
         revision: req.revision,

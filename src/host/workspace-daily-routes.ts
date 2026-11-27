@@ -1,10 +1,9 @@
 import { projectHomePending } from './home-pending.ts';
 import { listVisibleCaseDirectory } from './case-directory.ts';
 import { executeThreeBranchCaseCreate, type AdoptGoalFn, type CreateCaseFn, type ReadGoalFn } from './case-creation-orchestrator.ts';
-import { authorityAtFeedback } from './case-issues.ts';
+import { observationRequestStatus } from './case-issues.ts';
 import { WorkspaceDraftError, type WorkspaceDraftKind, type WorkspaceDraftStore } from './workspace-draft-store.ts';
 import type { CaseStore } from './case-store.ts';
-import type { CaseFeedbackResponse } from './case-decision-types.ts';
 import type { createDecisionBoardStore } from '../../extensions/business-plugins/decision-board/storage/store.ts';
 
 type BoardStore = Pick<ReturnType<typeof createDecisionBoardStore>, 'getTask' | 'getItem' | 'listFeedbackHistory' | 'listActionAuthorizations'>;
@@ -33,42 +32,9 @@ export function createWorkspaceDailyRoutes(deps: WorkspaceDailyRoutesDeps) {
         const requests = deps.cases.listDecisionRequests(record.id);
         const choices = deps.cases.getStrategyChoices(record.id);
         const pendingOperations = deps.cases.listPendingProjectOperations(record.id);
-        let feedbackResponses: CaseFeedbackResponse[] | undefined;
-        if (deps.board && requests.some(r => r.target.kind === 'observe')) {
-          const collected: CaseFeedbackResponse[] = [];
-          let anyUnreadable = false;
-          for (const req of requests) {
-            if (req.target.kind !== 'observe') continue;
-            const target = req.target;
-            try {
-              if (!deps.cases.listProjectLinks(record.id).some(l => l.projectId === target.projectId)) { anyUnreadable = true; continue; }
-              const task = deps.board.getTask(target.taskId);
-              const item = deps.board.getItem(task.itemId);
-              if (item.id !== target.itemId || item.projectId !== target.projectId) { anyUnreadable = true; continue; }
-              const allAuths = deps.board.listActionAuthorizations(task.id);
-              if (!allAuths.some(a => a.authorizationId === target.authorizationId && !('kind' in a.source) && a.source.caseId === record.id)) { anyUnreadable = true; continue; }
-              const history = deps.board.listFeedbackHistory(task.id);
-              for (let idx = 0; idx < history.length; idx++) {
-                const rev = history[idx]!;
-                if (!rev.respondsToRequest) continue;
-                const activeAuth = authorityAtFeedback(allAuths, rev);
-                if (!activeAuth || activeAuth.authority.authorizationId !== rev.respondsToRequest.authorizationId) continue;
-                collected.push({
-                  requestId: rev.respondsToRequest.requestId,
-                  requestRevision: rev.respondsToRequest.revision,
-                  projectId: item.projectId,
-                  itemId: item.id,
-                  taskId: task.id,
-                  authorizationId: activeAuth.authority.authorizationId,
-                  revisionId: rev.revisionId,
-                  baseRevisionId: idx === 0 ? null : history[idx - 1]!.revisionId,
-                });
-              }
-            } catch { anyUnreadable = true; }
-          }
-          feedbackResponses = anyUnreadable ? undefined : collected;
-        }
-        return { record, issues, requests, choices, feedbackResponses, pendingOperations };
+        const requestStatuses = Object.fromEntries(requests.filter(r => r.kind === 'observe')
+          .map(request => [request.requestId, observationRequestStatus(deps.cases, deps.board, request)]));
+        return { record, issues, requests, choices, requestStatuses, pendingOperations };
       });
       return { body: projectHomePending({ storeState: 'ready', cases: entries }) };
     }
@@ -140,6 +106,8 @@ export function createWorkspaceDailyRoutes(deps: WorkspaceDailyRoutesDeps) {
           rawInput: body.rawInput,
           adoptOperationId: body.adoptOperationId,
           createOperationId: body.createOperationId,
+          ...(body.creationSource !== undefined ? { creationSource: body.creationSource as import('./case-types.ts').CaseCreationSource } : {}),
+          ...(body.goalIntent !== undefined ? { goalIntent: body.goalIntent as import('./case-types.ts').CaseGoalIntentRef } : {}),
           goal: { goalId: goal.goalId, version: Number(goal.version), strategy: goal.strategy, alreadyAdopted: goal.alreadyAdopted },
         },
       );
