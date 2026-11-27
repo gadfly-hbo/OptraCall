@@ -27,7 +27,7 @@ import type {
   ReachabilityEstimate,
 } from '../strategy-goal-decomposition-types.ts';
 import { MAX_GOAL_ACTUAL_REPORT_CHARS } from '../strategy-goal-decomposition-types.ts';
-import { checkpointPeriods, progressMetric } from '../strategy-goal-progress.ts';
+import { checkpointPeriods, comparabilityLabel, granularityLabel, progressMetric } from '../strategy-goal-progress.ts';
 import { BusinessRoleConversation } from './BusinessRoleConversation.tsx';
 import { CaseDialog, CaseFormError, caseDate } from './CaseDialogs.tsx';
 import { DownloadVersion } from './StrategyChoicePanel.tsx';
@@ -519,10 +519,51 @@ export function GoalDecompositionWorkspace({
 
   const activePub = workspace?.activePublication ?? null;
   const thresholdMetric = activePub ? progressMetric(activePub.snapshot, record.versions.find(v => v.version === activePub.snapshot.gsaPlan.goal.version)?.measurement ?? goal.measurement) : '';
-  const displayedThreshold = workspace?.thresholdStreams?.find(t => t.metricId === thresholdMetric && t.periodGranularity === threshGranularity) ?? workspace?.threshold;
+  const exactThresholdStream = workspace?.thresholdStreams?.find(t => t.metricId === thresholdMetric && t.periodGranularity === threshGranularity);
+  const legacyApplicableThreshold = !exactThresholdStream && workspace?.threshold?.configured &&
+    (!workspace.threshold.metricId || workspace.threshold.metricId === thresholdMetric) &&
+    (!workspace.threshold.periodGranularity || workspace.threshold.periodGranularity === threshGranularity)
+    ? workspace.threshold : undefined;
+  const displayedThreshold = exactThresholdStream ?? legacyApplicableThreshold;
+  const [thresholdOpen, setThresholdOpen] = useState(false);
+  const [actualReportOpen, setActualReportOpen] = useState(false);
+  const [actualBasisOpen, setActualBasisOpen] = useState(false);
+
+  const formatThresholdRule = (cfg: DecompositionThresholdConfig | undefined) => {
+    if (!cfg?.configured) return '尚未配置';
+    const parts = [
+      cfg.magnitudePct === undefined ? '' : `不利偏差 ${cfg.magnitudePct}${cfg.unit === 'percentage-points' ? '个百分点' : '%'}`,
+      cfg.consecutivePeriods === undefined ? '' : `连续 ${cfg.consecutivePeriods} 期`,
+    ].filter(Boolean);
+    return parts.join(' 或 ') || '尚未配置';
+  };
+
+  const currentCheckTargetPub = selectedCheckPub ?? activePub;
+  const currentCheckPeriod = useMemo(() => {
+    if (!currentCheckTargetPub) return undefined;
+    const rowId = checkRowId || currentCheckTargetPub.snapshot.rows[0]?.rowId || 'G-TOTAL';
+    const visibleCps = rowId !== 'G-TOTAL'
+      ? currentCheckTargetPub.snapshot.frozenCheckpoints.filter(c => c.rowId === rowId)
+      : currentCheckTargetPub.snapshot.frozenCheckpoints;
+    const rowCp = rowId === 'G-TOTAL' ? undefined : visibleCps.find(c => c.checkpointId === checkCheckpointId);
+    const periods = rowCp ? checkpointPeriods(currentCheckTargetPub.snapshot.timePlan, rowCp) : currentCheckTargetPub.snapshot.timePlan;
+    return periods.find(p => p.periodId === checkPeriodId) ?? periods[0];
+  }, [currentCheckTargetPub, checkRowId, checkCheckpointId, checkPeriodId]);
+  const currentCheckGranularity = currentCheckPeriod?.granularity ?? workspace?.checks.at(-1)?.periodGranularity;
+  const currentCheckMetric = currentCheckTargetPub
+    ? progressMetric(currentCheckTargetPub.snapshot, record.versions.find(v => v.version === currentCheckTargetPub.snapshot.gsaPlan.goal.version)?.measurement ?? goal.measurement)
+    : thresholdMetric;
+  const currentCheckThreshold = currentCheckGranularity
+    ? (workspace?.thresholdStreams?.find(t => t.metricId === currentCheckMetric && t.periodGranularity === currentCheckGranularity) ??
+       (workspace?.threshold?.configured && (!workspace.threshold.metricId || workspace.threshold.metricId === currentCheckMetric) && (!workspace.threshold.periodGranularity || workspace.threshold.periodGranularity === currentCheckGranularity) ? workspace.threshold : undefined))
+    : undefined;
+  const otherConfiguredCheckStreams = currentCheckGranularity
+    ? (workspace?.thresholdStreams ?? []).filter(t => t.configured && t.metricId === currentCheckMetric && t.periodGranularity && t.periodGranularity !== currentCheckGranularity)
+    : [];
+
   useEffect(() => {
-    setThreshMagnitude(displayedThreshold?.magnitudePct?.toString() ?? '');
-    setThreshConsecutive(displayedThreshold?.consecutivePeriods?.toString() ?? '');
+    setThreshMagnitude(displayedThreshold?.configured && displayedThreshold.magnitudePct !== undefined ? String(displayedThreshold.magnitudePct) : '');
+    setThreshConsecutive(displayedThreshold?.configured && displayedThreshold.consecutivePeriods !== undefined ? String(displayedThreshold.consecutivePeriods) : '');
     setThreshDirection(displayedThreshold?.adverseDirection ?? 'below');
     setThreshUnit(displayedThreshold?.unit ?? 'percent');
   }, [displayedThreshold, threshGranularity, thresholdMetric]);
@@ -532,18 +573,38 @@ export function GoalDecompositionWorkspace({
     if(!activeGsaPlan||mutationsLocked)return;
     setBusy(true);setWsError('');
     try{
-      const full=await api.getWorkspace(record.id);
-      const prior=full.draft;
-      if(!prior)throw new Error('原拆解草稿暂不可读，请在版本与来源核对。');
+      const full=await api.getWorkspace(record.id, goal.version);
       const plan=full.activeGsaPlan;
-      if(!plan||plan.contentSha256!==activeGsaPlan.contentSha256)throw new Error('总 GSA 已变化，请刷新后重新核对。');
-      const carried=buildInitialDraft(goal,{...full,activeGsaPlan:{...plan,planVersion:prior.gsaPlanVersion,contentSha256:prior.gsaPlanSha256}});
-      setDraftForm({...carried,gsaPlanId:plan.planId,gsaPlanVersion:plan.planVersion,gsaPlanSha256:plan.contentSha256,
+      if(!plan||plan.contentSha256!==activeGsaPlan.contentSha256)throw new Error('总 GSA 已变化，本地输入已保留；请刷新并重新核对新版总 GSA。');
+      if(full.draftUnavailable)throw new Error('原拆解草稿因权限范围变更暂不可读，本地输入已保留；请在「版本与来源」核对。');
+      if(full.draft&&full.draft.gsaPlanVersion===plan.planVersion){
+        setWorkspace(full);
+        setDraftForm(buildInitialDraft(goal, full));
+        setNotice('当前新版总 GSA 已有拆解草稿，已为您刷新最新草稿。');
+        return;
+      }
+      const prior=full.draft??full.priorDraft;
+      if(!prior)throw new Error('原拆解草稿暂不可读，本地输入已保留；请在「版本与来源」核对后重试。');
+      const sameCaliber=prior.estimate.unit===plan.formalTarget.unit&&prior.estimate.metricKind===plan.formalTarget.metricKind;
+      const nextEstimate:ReachabilityEstimate={
+        ...structuredClone(prior.estimate),
+        formalTargetValue:plan.formalTarget.value,
+        gapValue:prior.estimate.estimatedValue===null||!sameCaliber?null:Number((plan.formalTarget.value-prior.estimate.estimatedValue).toFixed(6)),
+      };
+      setDraftForm({
+        gsaPlanId:plan.planId,gsaPlanVersion:plan.planVersion,gsaPlanSha256:plan.contentSha256,
         reviewedPreviousPlanVersion:prior.gsaPlanVersion,expectedDraftRevision:prior.revision,
-        estimate:{...carried.estimate,formalTargetValue:plan.formalTarget.value,gapValue:carried.estimate.estimatedValue===null?null:plan.formalTarget.value-carried.estimate.estimatedValue}});
+        estimate:nextEstimate,
+        rows:structuredClone(prior.rows),
+        reserves:structuredClone(prior.reserves),
+        gapStrategies:structuredClone(prior.gapStrategies),
+        views:structuredClone(prior.views),
+        timePlan:structuredClone(prior.timePlan),
+        notes:prior.notes,
+      });
       editSerial.current++;setDraftDirty(true);setDraftSaveState('unsaved');setPreview(null);
       setEditingDecomposition(true);
-      setNotice('已按负责人核对承接新版总 GSA，原拆解明细保留为草稿，请继续核对差额与阶段计划。');
+      setNotice(`已按负责人核对承接新版总 GSA（保留原总 GSA v${prior.gsaPlanVersion} 草稿 r${prior.revision}），请继续核对差额、分配与阶段计划后再发布。`);
     }catch(fault){setWsError(fault instanceof Error?fault.message:api.goalError(fault));}finally{setBusy(false);}
   };
 
@@ -703,8 +764,8 @@ export function GoalDecompositionWorkspace({
     try {
       const res=await api.saveDecompositionDraft(record.id,payload);
       if(!mounted.current)return res;
-      setWorkspace(ws=>ws?{...ws,draft:res.draft,latestDraftRevision:res.draft.revision,validation:res.validation}:ws);
-      setDraftForm(form=>form?{...form,expectedDraftRevision:res.draft.revision}:form);
+      setWorkspace(ws=>ws?{...ws,draft:res.draft,priorDraft:null,latestDraftRevision:res.draft.revision,validation:res.validation}:ws);
+      setDraftForm(form=>form?{...form,expectedDraftRevision:res.draft.revision,reviewedPreviousPlanVersion:undefined}:form);
       const unchanged=serial===editSerial.current;
       editBase.current=unchanged?null:{...payload,expectedDraftRevision:res.draft.revision};
       setDraftConflict(null);
@@ -1026,7 +1087,7 @@ export function GoalDecompositionWorkspace({
     setWsError('');
     setNotice('');
     try {
-      await api.setDecompositionThreshold(record.id, {
+      const { threshold: saved } = await api.setDecompositionThreshold(record.id, {
         expectedGoalVersion: goal.version,
         configured: Boolean(threshMagnitude || threshConsecutive),
         ...(threshMagnitude ? { magnitudePct: Number(threshMagnitude) } : {}),
@@ -1034,7 +1095,15 @@ export function GoalDecompositionWorkspace({
         adverseDirection: threshDirection, unit: threshUnit,
         metricId: thresholdMetric, periodGranularity: threshGranularity,
       });
-      setNotice('已保存本目标的跟进偏差阈值设置。');
+      const granText = granularityLabel(saved.periodGranularity ?? threshGranularity);
+      const metricText = saved.metricId || thresholdMetric || '当前目标';
+      const ruleText = formatThresholdRule(saved);
+      const granMismatch = Boolean(currentCheckGranularity && (saved.periodGranularity ?? threshGranularity) !== currentCheckGranularity);
+      const metricMismatch = Boolean(currentCheckMetric && (saved.metricId || thresholdMetric) && (saved.metricId || thresholdMetric) !== currentCheckMetric);
+      const mismatchHint = granMismatch || metricMismatch
+        ? `（提示：该${granText}粒度 · 「${metricText}」规则不适用当前${granularityLabel(currentCheckGranularity)}检查）`
+        : '';
+      setNotice(`已保存「${granText}粒度 · ${metricText}」阈值：${ruleText}${mismatchHint}。`);
       await loadWorkspace();
     } catch (fault) {
       setWsError(api.goalError(fault));
@@ -2045,24 +2114,88 @@ export function GoalDecompositionWorkspace({
             <h3>实绩核对结果</h3>
             {workspace.checks.length ? (
               <ul className="sg-history">
-                {workspace.checks.slice().reverse().map(chk => (
-                  <li key={chk.checkId}><details className="gj-check" open={chk.checkId===workspace.checks.at(-1)?.checkId}><summary>{chk.periods.map(p=>p.label).join('、')} · 拆解正式版 v{chk.publicationVersion} · {chk.actualSource.label}{chk.checkId===workspace.checks.at(-1)?.checkId?' · 最新检查':''}</summary>
+                {workspace.checks.slice().reverse().map(chk => {
+                  const issueFieldLabel = (field: string) => ({
+                    metric: '指标', scope: '业务范围', unit: '单位', period: '归属期间',
+                    coverage: '覆盖范围', maturity: '观察窗', cutoff: '截至时间', plan: '冻结计划', actual: '实绩数值',
+                  }[field] ?? field);
+                  const focusFieldSelector = (field: string | undefined) => {
+                    if (field === 'cutoff') return '[aria-label="实绩数据截至时间"]';
+                    if (field === 'metric') return '[aria-label="凭证中的指标定义或 SAP 版本"]';
+                    if (field === 'scope') return '[aria-label="凭证所覆盖的业务范围"]';
+                    if (field === 'unit') return '[aria-label="凭证单位"]';
+                    if (field === 'period') return '[aria-label="凭证归属期间"]';
+                    if (field === 'coverage') return '[aria-label="凭证覆盖情况"]';
+                    if (field === 'maturity') return '[aria-label="凭证观察窗"]';
+                    return '[aria-label="实绩报表原文"]';
+                  };
+                  const statusBadgeLabel = chk.comparability === 'partial-missing'
+                    ? '部分未出数 · 整体偏差待补'
+                    : chk.comparability === 'observing'
+                      ? '观察窗未满 · 暂不计偏离'
+                      : chk.comparability === 'incomparable'
+                        ? '口径/期间不可比 · 整体待核'
+                        : chk.trigger.triggered
+                          ? `已触发偏差提示 (${chk.trigger.type})`
+                          : '未触发阈值';
+                  const issueSummary = chk.comparabilityIssues?.map(i => i.message).join('；');
+                  return (
+                  <li key={chk.checkId}><details className="gj-check" open={chk.checkId===workspace.checks.at(-1)?.checkId}><summary>{chk.periods.map(p=>p.label).join('、')} · 拆解正式版 v{chk.publicationVersion} · {chk.actualSource.label} · {comparabilityLabel(chk.comparability)}{chk.checkId===workspace.checks.at(-1)?.checkId?' · 最新检查':''}</summary>
                     <div className="gj-check-body"><GoalFigures items={[
                       {label:'冻结计划',value:chk.periods.length===1?`${chk.periods[0].plannedValue??'待定'}${chk.actualSource.basis?.unit??''}`:'见逐期对照',note:`总 GSA v${chk.gsaPlanVersion} · 拆解 v${chk.publicationVersion}`},
                       {label:'本期实绩',value:chk.periods.length===1?`${chk.periods[0].actualValue??'待补'}${chk.actualSource.basis?.unit??''}`:'见逐期对照',note:chk.actualSource.cutoffAt},
-                      {label:'整体偏差',value:chk.overallPending?'待补':chk.overallVariancePct==null?'暂不能计算':`${chk.overallVariancePct}%`,note:chk.overallPending?(chk.missingCoverageNote||'覆盖或可比性待核'):chk.trigger.reason}]}/>
+                      {label:'整体偏差',value:chk.overallPending?'待核':chk.overallVariancePct==null?'暂不能计算':`${chk.overallVariancePct}%`,note:chk.overallPending?(issueSummary||chk.missingCoverageNote||chk.trigger.reason):chk.trigger.reason}]}/>
                     <div className="sg-table-scroll"><table className="gj-result-table"><thead><tr><th>检查阶段</th><th>冻结计划</th><th>实绩</th><th>偏差</th></tr></thead><tbody>{chk.periods.map(p=><tr key={p.periodId}><td>{p.label}</td><td>{p.plannedValue??'未定'}</td><td>{p.actualValue??'待补'}</td><td>{p.variancePct==null?'待核':`${p.variancePct}%`}</td></tr>)}</tbody></table></div>
-                    <div className="gj-note"><strong>Agent 核对说明</strong><p>{chk.assessmentNote||chk.trigger.reason}</p>{chk.evidenceQuote&&<blockquote>{chk.evidenceQuote}</blockquote>}</div>
+                    {chk.comparabilityIssues && chk.comparabilityIssues.length > 0 && (
+                      <div className="gm-validation-box" aria-label="本次待核与冲突项">
+                        <strong>具体待核／冲突项（{comparabilityLabel(chk.comparability)}）：</strong>
+                        <ul>
+                          {chk.comparabilityIssues.map((issue, idx) => (
+                            <li key={`${issue.field}-${idx}`}>
+                              <strong>{issueFieldLabel(issue.field)}</strong>：{issue.message}
+                            </li>
+                          ))}
+                        </ul>
+                        {!mutationsLocked && (
+                          <div className="sg-row">
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              onClick={() => {
+                                const sourceBasis = chk.submittedBasis ?? chk.actualSource.basis;
+                                setCheckPubVersion(chk.publicationVersion);
+                                setCheckRowId(chk.rowId);
+                                setCheckCheckpointId(chk.checkpointId);
+                                if (chk.periods[0]?.periodId) setCheckPeriodId(chk.periods[0].periodId);
+                                editActual({
+                                  reportText: chk.actualSource.reportText ?? '',
+                                  checkSourceRef: chk.actualSource.ref,
+                                  checkSourceLabel: chk.actualSource.label,
+                                  checkCutoffAt: chk.actualSource.cutoffAt,
+                                  checkActualVal: chk.periods[0]?.actualValue != null ? String(chk.periods[0].actualValue) : '',
+                                  checkBasis: sourceBasis ? { ...sourceBasis } : { ...emptyActualInput.checkBasis },
+                                  checkMissingNote: chk.missingCoverageNote ?? chk.actualSource.coverageNote ?? '',
+                                  supplementCheck: chk.checkId,
+                                });
+                                setActualReportOpen(true);
+                                setActualBasisOpen(true);
+                                const selector = focusFieldSelector(chk.comparabilityIssues?.[0]?.field);
+                                setTimeout(() => { document.querySelector<HTMLElement>(selector)?.focus(); }, 60);
+                              }}
+                            >
+                              补充／纠正待核项后重新核对
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div className="gj-note"><strong>核对说明</strong><p>{chk.assessmentNote||chk.trigger.reason}</p>{chk.evidenceQuote&&<blockquote>{chk.evidenceQuote}</blockquote>}</div>
                     <details className="gj-details"><summary>本次实绩凭证与准确引用</summary>
                     <div className="sg-row-between">
                       <div>
                         <strong>{chk.checkId} · 拆解版 v{chk.publicationVersion} · {chk.rowId} · {chk.actualSource.label}</strong>{' '}
                         <span className={`sg-badge ${chk.trigger.triggered ? '' : 'pending'}`}>
-                          {chk.overallPending
-                            ? '部分未出数 · 整体偏差待补'
-                            : chk.trigger.triggered
-                              ? `已触发偏差提示 (${chk.trigger.type})`
-                              : '未触发阈值'}
+                          {statusBadgeLabel}
                         </span>
                       </div>
                       <span className="sg-muted">{caseDate(chk.recordedAt)}</span>
@@ -2071,9 +2204,28 @@ export function GoalDecompositionWorkspace({
                       {chk.actualSource.cutoffQuote&&<span>截至时间原句「{chk.actualSource.cutoffQuote}」<br/></span>}
                       实绩凭证：{chk.actualSource.ref}（截至 {chk.actualSource.cutoffAt}）·{' '}
                       {chk.overallPending
-                        ? `整体偏差：待补（${chk.missingCoverageNote || '部分门店未出数，不自动折算整体百分比'}）`
+                        ? `整体偏差：待核（${issueSummary || chk.missingCoverageNote || '未满足口径/覆盖/观察窗条件，不自动折算整体百分比'}）`
                         : `整体绝对差额：${chk.overallAbsoluteDiff ?? '—'} · 整体偏差百分比：${chk.overallVariancePct === null ? '无法计算（计划为 0 或未定）' : `${chk.overallVariancePct}%`}`}
                     </p>
+                    {chk.basisResolution && chk.basisResolution.length > 0 && (
+                      <div className="gj-note">
+                        <strong>口径映射与未知项补充依据</strong>
+                        <ul>
+                          {chk.basisResolution.map((item, idx) => (
+                            <li key={`${item.field}-${idx}`}>
+                              {issueFieldLabel(item.field)}（{item.action === 'mapped' ? '口径映射' : '补齐未知项'}）：
+                              {item.submittedValue ? `原提交「${item.submittedValue}」→ ` : item.sourceValue ? `原文「${item.sourceValue}」→ ` : ''}
+                              采用「{item.adoptedValue}」· 依据：{item.rationale}（原文：「{item.evidenceQuote}」）
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {chk.agentAssessmentNote && (
+                      <p className="sg-muted">
+                        Agent 原始说明（已被结构核验降级，不作为最终结论）：{chk.agentAssessmentNote}
+                      </p>
+                    )}
                     <p>{chk.trigger.reason}</p></details><h4>本次处理</h4>
                     {chk.caseChoice ? (
                       <p className="sg-muted">已选择处理方式：{chk.caseChoice.kind}（{chk.caseChoice.note || '已记录'}）{chk.caseChoice.kind === 'continue-existing' && onInspectCase && <button disabled={mutationsLocked} type="button" className="text-button"
@@ -2099,7 +2251,8 @@ export function GoalDecompositionWorkspace({
                       </div>
                     )}
                   </div></details></li>
-                ))}
+                  );
+                })}
               </ul>
             ) : (
               <p className="sg-muted">尚无阶段检查记录。</p>
@@ -2200,7 +2353,7 @@ export function GoalDecompositionWorkspace({
                   }}>补充截至时间后重新核对</button></>}
                   <button type="button" className="secondary-button" disabled={mutationsLocked||busy} onClick={()=>startActualCheck(actual.actualId)}>用这份核对</button>
                 </div>})}</div>}
-              </div><details className="gj-details gj-report" open={savedForPeriod.length===0}><summary>提交新的实绩报表</summary><div className="gm-form-grid">
+              </div><details className="gj-details gj-report" open={actualReportOpen || savedForPeriod.length===0} onToggle={e => setActualReportOpen(e.currentTarget.open)}><summary>提交新的实绩报表</summary><div className="gm-form-grid">
                 <label className="case-field"><span>实绩报表原文</span>
                   <textarea disabled={mutationsLocked} className="gm-input" aria-label="实绩报表原文" value={reportText}
                     placeholder="粘贴报表或本次检查相关段落，Agent 将从原文核对数值、口径和覆盖范围。"
@@ -2231,7 +2384,7 @@ export function GoalDecompositionWorkspace({
                   />
                 </label>
               </div>
-              <details><summary>可选补充数值、口径与覆盖说明</summary>
+              <details open={actualBasisOpen} onToggle={e => setActualBasisOpen(e.currentTarget.open)}><summary>可选补充数值、口径与覆盖说明</summary>
                 <div className="gm-form-grid">
                 <label className="case-field">
                   <span>实绩数据来源说明</span>
@@ -2242,18 +2395,18 @@ export function GoalDecompositionWorkspace({
                   <input disabled={mutationsLocked} type="number" step="any" className="gm-input" value={checkActualVal} onChange={e => editActual({ checkActualVal: e.target.value })} placeholder="输入实绩数值" />
                 </label>
                 <label className="case-field"><span>凭证中的指标定义或 SAP 版本</span>
-                  <input disabled={mutationsLocked} className="gm-input" value={checkBasis.metric} placeholder={original && progressMetric(targetPub.snapshot, original.measurement)} onChange={e => editActual({ checkBasis: {...checkBasis, metric: e.target.value} })} />
+                  <input disabled={mutationsLocked} aria-label="凭证中的指标定义或 SAP 版本" className="gm-input" value={checkBasis.metric} placeholder={original && progressMetric(targetPub.snapshot, original.measurement)} onChange={e => editActual({ checkBasis: {...checkBasis, metric: e.target.value} })} />
                 </label>
-                <label className="case-field"><span>凭证单位</span><input disabled={mutationsLocked} className="gm-input" value={checkBasis.unit} placeholder={rowCheckpoint?.unit ?? selectedPeriod?.unit} onChange={e => editActual({ checkBasis: {...checkBasis, unit: e.target.value} })}/></label>
-                <label className="case-field"><span>凭证所覆盖的业务范围</span><input disabled={mutationsLocked} className="gm-input" value={checkBasis.scope} placeholder={targetRow?.scopeLabel ?? targetPub.snapshot.estimate.scopeDescription} onChange={e => editActual({ checkBasis: {...checkBasis, scope: e.target.value} })}/></label>
-                <label className="case-field"><span>凭证归属期间</span><input disabled={mutationsLocked} className="gm-input" value={checkBasis.periodId} placeholder={selectedPeriod?.periodId} onChange={e => editActual({ checkBasis: {...checkBasis, periodId: e.target.value} })}/></label>
+                <label className="case-field"><span>凭证单位</span><input disabled={mutationsLocked} aria-label="凭证单位" className="gm-input" value={checkBasis.unit} placeholder={rowCheckpoint?.unit ?? selectedPeriod?.unit} onChange={e => editActual({ checkBasis: {...checkBasis, unit: e.target.value} })}/></label>
+                <label className="case-field"><span>凭证所覆盖的业务范围</span><input disabled={mutationsLocked} aria-label="凭证所覆盖的业务范围" className="gm-input" value={checkBasis.scope} placeholder={targetRow?.scopeLabel ?? targetPub.snapshot.estimate.scopeDescription} onChange={e => editActual({ checkBasis: {...checkBasis, scope: e.target.value} })}/></label>
+                <label className="case-field"><span>凭证归属期间</span><input disabled={mutationsLocked} aria-label="凭证归属期间" className="gm-input" value={checkBasis.periodId} placeholder={selectedPeriod?.periodId} onChange={e => editActual({ checkBasis: {...checkBasis, periodId: e.target.value} })}/></label>
                 <label className="case-field"><span>凭证覆盖情况</span>
-                  <select disabled={mutationsLocked} className="sg-select" value={checkBasis.coverage} onChange={e => editActual({ checkBasis: {...checkBasis, coverage: e.target.value as ProgressEvidenceBasis['coverage']} })}>
+                  <select disabled={mutationsLocked} aria-label="凭证覆盖情况" className="sg-select" value={checkBasis.coverage} onChange={e => editActual({ checkBasis: {...checkBasis, coverage: e.target.value as ProgressEvidenceBasis['coverage']} })}>
                     <option value="unknown">待核</option><option value="complete">凭证覆盖全范围</option><option value="partial">部分范围未出数</option>
                   </select>
                 </label>
                 <label className="case-field"><span>凭证观察窗</span>
-                  <select disabled={mutationsLocked} className="sg-select" value={checkBasis.maturity} onChange={e => editActual({ checkBasis: {...checkBasis, maturity: e.target.value as ProgressEvidenceBasis['maturity']} })}>
+                  <select disabled={mutationsLocked} aria-label="凭证观察窗" className="sg-select" value={checkBasis.maturity} onChange={e => editActual({ checkBasis: {...checkBasis, maturity: e.target.value as ProgressEvidenceBasis['maturity']} })}>
                     <option value="unknown">待核</option><option value="closed">已结账</option><option value="open">尚未结账</option>
                   </select>
                 </label>
@@ -2304,21 +2457,66 @@ export function GoalDecompositionWorkspace({
             </button>
           </div></details>
         </div><aside className="gj-card gj-case-rules"><header className="gj-card-head"><h3>Case 提示规则</h3></header><div className="gj-card-body">
-          <p>可比实绩达到任一条件时，提示负责人核对已有事项。续接或新建 Case 由负责人决定。</p>
-          {workspace.checks.at(-1)&&<><h4>最新检查采用的规则</h4><p>{workspace.checks.at(-1)!.thresholdSnapshot.configured?[workspace.checks.at(-1)!.thresholdSnapshot.magnitudePct===undefined?'':`不利偏差 ${workspace.checks.at(-1)!.thresholdSnapshot.magnitudePct}${workspace.checks.at(-1)!.thresholdSnapshot.unit==='percentage-points'?'个百分点':'%'}`,workspace.checks.at(-1)!.thresholdSnapshot.consecutivePeriods===undefined?'':`连续 ${workspace.checks.at(-1)!.thresholdSnapshot.consecutivePeriods} 期`].filter(Boolean).join(' 或 '):'当时尚未配置阈值'}</p></>}
-          <h4>下一次检查</h4>
-            <details className="gj-details gj-threshold"><summary>偏差提醒设置 · {displayedThreshold?.configured?[displayedThreshold.magnitudePct===undefined?'':`${displayedThreshold.magnitudePct}${displayedThreshold.unit==='percentage-points'?'个百分点':'%'}`,displayedThreshold.consecutivePeriods===undefined?'':`连续 ${displayedThreshold.consecutivePeriods} 期`].filter(Boolean).join(' 或 '):'尚未配置'}</summary><div className="sg-row gm-threshold-bar">
-              <label>检查周期<select disabled={mutationsLocked} className="sg-select" value={threshGranularity} onChange={e => setThreshGranularity(e.target.value as DecompositionTimePeriod['granularity'])}><option value="day">日</option><option value="week">周</option><option value="month">月</option></select></label>
-              <label>不利方向<select disabled={mutationsLocked} className="sg-select" value={threshDirection} onChange={e => setThreshDirection(e.target.value as typeof threshDirection)}><option value="below">低于计划</option><option value="above">高于计划</option></select></label>
-              <label>幅度单位<select disabled={mutationsLocked} className="sg-select" value={threshUnit} onChange={e => setThreshUnit(e.target.value as typeof threshUnit)}><option value="percent">百分比</option><option value="percentage-points">百分点</option></select></label>
-              <label>单期幅度阈值
-                <input disabled={mutationsLocked} type="number" className="gm-input gm-input-xs" value={threshMagnitude} onChange={e => setThreshMagnitude(e.target.value)} />
-              </label>
-              <label>连续期数
-                <input disabled={mutationsLocked} type="number" className="gm-input gm-input-xs" value={threshConsecutive} onChange={e => setThreshConsecutive(e.target.value)} />
-              </label>
-              <button type="button" className="secondary-button" disabled={mutationsLocked || busy || !activePub} onClick={() => void handleSaveThreshold()}>保存阈值</button>
-            </div></details>          <button type="button" className="text-button" onClick={onOpenVersions}>查看计划引用</button>
+          <p>可比实绩达到任一条件时，提示负责人核对已有事项。日／周／月粒度规则互相隔离，续接或新建 Case 由负责人决定。</p>
+          {workspace.checks.at(-1)&&(() => {
+            const latestChk = workspace.checks.at(-1)!;
+            const otherForLatest = !latestChk.thresholdSnapshot.configured
+              ? (workspace.thresholdStreams ?? []).filter(t => t.configured && t.metricId === latestChk.metricId && t.periodGranularity && t.periodGranularity !== latestChk.periodGranularity)
+              : [];
+            return <><h4>最新检查采用的规则</h4><p>
+              {granularityLabel(latestChk.periodGranularity)}粒度 · 指标「{latestChk.metricId || '当前目标'}」：{latestChk.thresholdSnapshot.configured ? formatThresholdRule(latestChk.thresholdSnapshot) : '当时尚未配置阈值'}
+              {otherForLatest.length > 0 ? `（已配置${otherForLatest.map(t => `${granularityLabel(t.periodGranularity)}粒度`).join('、')}规则，不适用该${granularityLabel(latestChk.periodGranularity)}检查）` : ''}
+            </p></>;
+          })()}
+          <h4>当前检查适用规则</h4>
+          {currentCheckGranularity ? (
+            currentCheckThreshold?.configured ? (
+              <p>适用当前{granularityLabel(currentCheckGranularity)}检查（指标「{currentCheckMetric || '当前目标'}」）：{formatThresholdRule(currentCheckThreshold)}。</p>
+            ) : (
+              <div>
+                <p>
+                  当前{granularityLabel(currentCheckGranularity)}检查（指标「{currentCheckMetric || '当前目标'}」）<strong>尚未配置阈值</strong>。
+                  {otherConfiguredCheckStreams.length > 0 && (
+                    <> 已配置{otherConfiguredCheckStreams.map(t => `${granularityLabel(t.periodGranularity)}粒度（${formatThresholdRule(t)}）`).join('、')}，<strong>不适用当前{granularityLabel(currentCheckGranularity)}检查</strong>。</>
+                  )}
+                </p>
+                {!mutationsLocked && activePub && (
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => {
+                      setThreshGranularity(currentCheckGranularity);
+                      setThresholdOpen(true);
+                    }}
+                  >
+                    立即配置{granularityLabel(currentCheckGranularity)}粒度阈值
+                  </button>
+                )}
+              </div>
+            )
+          ) : (
+            <p className="sg-muted">发布正式拆解表并选定检查阶段后，按对应指标与周期粒度生效。</p>
+          )}
+          <h4>按指标与周期配置</h4>
+            <details className="gj-details gj-threshold" open={thresholdOpen} onToggle={e => setThresholdOpen(e.currentTarget.open)}>
+              <summary>
+                偏差提醒设置（{granularityLabel(threshGranularity)}粒度{thresholdMetric ? ` · ${thresholdMetric}` : ''}）· {formatThresholdRule(displayedThreshold)}
+                {(currentCheckGranularity && threshGranularity !== currentCheckGranularity) || (currentCheckMetric && thresholdMetric && thresholdMetric !== currentCheckMetric) ? ` · 不适用当前${granularityLabel(currentCheckGranularity)}检查` : ''}
+              </summary>
+              <div className="sg-row gm-threshold-bar">
+                <label>检查周期<select disabled={mutationsLocked} className="sg-select" aria-label="阈值检查周期" value={threshGranularity} onChange={e => setThreshGranularity(e.target.value as DecompositionTimePeriod['granularity'])}><option value="day">日</option><option value="week">周</option><option value="month">月</option></select></label>
+                <label>不利方向<select disabled={mutationsLocked} className="sg-select" value={threshDirection} onChange={e => setThreshDirection(e.target.value as typeof threshDirection)}><option value="below">低于计划</option><option value="above">高于计划</option></select></label>
+                <label>幅度单位<select disabled={mutationsLocked} className="sg-select" value={threshUnit} onChange={e => setThreshUnit(e.target.value as typeof threshUnit)}><option value="percent">百分比</option><option value="percentage-points">百分点</option></select></label>
+                <label>单期幅度阈值
+                  <input disabled={mutationsLocked} type="number" className="gm-input gm-input-xs" value={threshMagnitude} onChange={e => setThreshMagnitude(e.target.value)} />
+                </label>
+                <label>连续期数
+                  <input disabled={mutationsLocked} type="number" className="gm-input gm-input-xs" value={threshConsecutive} onChange={e => setThreshConsecutive(e.target.value)} />
+                </label>
+                <button type="button" className="secondary-button" disabled={mutationsLocked || busy || !activePub} onClick={() => void handleSaveThreshold()}>保存阈值</button>
+              </div>
+            </details>
+            <button type="button" className="text-button" onClick={onOpenVersions}>查看计划引用</button>
         </div></aside>
         </section>
       )}
@@ -2454,11 +2652,28 @@ export function GoalDecompositionWorkspace({
               ? `已分配 ${preview.summary.allocatedTotal ?? '待核'} + 预留 ${preview.summary.reserveTotal}${formalUnit}`
               : preview.gsaPlan.formalTarget.metricKind === 'ratio' ? `按分子分母汇总 ${preview.summary.allocatedTotal ?? '待核'}${formalUnit}` : '按各项成果标准核对'}</dd>
             <dt>可达测算 / 差额</dt><dd>{preview.summary.estimatedValue ?? '部分待补'}{formalUnit} / 差额 {preview.summary.gapValue ?? '待核'}{formalUnit}</dd>
+            <dt>补缺策略预期贡献</dt><dd>{preview.gapStrategies.length} 条，合计 {preview.summary.gapCoverageTotal}{formalUnit}（独立核对预期增量，不与已分配或预留互相抵消）</dd>
             <dt>将正式采用子目标</dt><dd>{preview.committedGoals.length} 条（{preview.committedGoals.map(g => `${g.title} ${g.targetValue ?? '待定'}${g.unit}`).join('、') || '无'}）</dd>
-            <dt>非目标行/预留</dt><dd>仅记录，不自动采用为子目标（预留合计 {preview.summary.reserveTotal}{formalUnit}）</dd>
+            <dt>非目标行/预留</dt><dd>仅记录，不自动采用为子目标（共 {preview.reserves.length} 笔，预留合计 {preview.summary.reserveTotal}{formalUnit}）</dd>
             <dt>将冻结行级检查点</dt><dd>{preview.committedGoals.reduce((sum, g) => sum + g.checkpoints.length, 0)} 个</dd>
-            <dt>草稿内容指纹</dt><dd><code>{preview.draftSha256.slice(0, 16)}</code></dd>
+            <dt>草稿身份</dt><dd>总 GSA v{preview.gsaPlan.planVersion} · 草稿 r{preview.draftRevision} · <code>{preview.draftSha256.slice(0, 16)}</code></dd>
           </dl>
+          {preview.reserves.length > 0 && <details open>
+            <summary>核对预留明细（{preview.reserves.length} 笔，合计 {preview.summary.reserveTotal}{formalUnit}）</summary>
+            <ul>{preview.reserves.map((res, idx) => <li key={res.id || idx}>
+              <strong>{res.amount}{res.unit || formalUnit}</strong> · 用途：{res.purpose || '未填'} · 负责人：{res.owner || '未填'}
+              {res.basis && <p className="sg-muted">依据：{res.basis}</p>}
+            </li>)}</ul>
+          </details>}
+          {preview.gapStrategies.length > 0 && <details open>
+            <summary>核对补缺策略明细（{preview.gapStrategies.length} 条，预期贡献合计 {preview.summary.gapCoverageTotal}{formalUnit}）</summary>
+            <ul>{preview.gapStrategies.map((gap, idx) => <li key={gap.id || idx}>
+              <strong>{gap.name || gap.id || `补缺策略 ${idx + 1}`}</strong> · 预期贡献 {gap.expectedContribution}{gap.unit || formalUnit}
+              <p>策略：{gap.strategy || '未填'}</p>
+              <p>不重叠范围：{gap.nonOverlappingScope || '未填'}</p>
+              <p className="sg-muted">依据：{gap.basis || '未填'}</p>
+            </li>)}</ul>
+          </details>}
           {preview.committedGoals.length > 0 && <details>
             <summary>核对正式承诺行与贡献关系</summary>
             <ul>{preview.committedGoals.map(row => <li key={row.rowId}>

@@ -92,3 +92,15 @@ F9–F12 以真实产品的测试与运行记录勾验。已确认的方案、�
 - [x] H4 GREEN、金额／比率／里程碑和待完善草稿、同会话修正通过。最终受影响四文件 30 PASS、两项整数边界增量后专项 5 PASS，构建／边界／high audit PASS。原全仓 3334 项中 2 项旧提示词版本预期失败保留，精确修正后原会话断言 4 PASS；196 条件跳过不算通过。详见同一[工程记录](issue-138-result.md)，准确候选完整 CI 为 H5 交付关口。
 - [ ] H5 candidate-5 独立非作者与四原则复核已 PASS，11 项最终独立/永久测试及 101 个边界变体核对通过，2 P2／1 P3 全部关闭。剩余 Git、PR 实际 head CI、授权合并与 main CI 按原授权推进；本候选不预先勾选，最终状态由同一 #138 绑定准确提交的结案回执补齐。
 - [ ] H6 关闭 H5 的直接 CI 阻塞。PR 首次完整检查持续执行至末段时达到 25 分钟上限，原 cancelled 保留；仅把作业总时限调至 35 分钟，YAML／差异与非作者增量复核已 PASS，再跑新准确 head 和 main 完整 CI。产品、测试范围和单项时限不变，实际结果在同一 #138 回填。
+
+## I Issue #148 目标管理试用修正（A1 / A3 / A4 / A5）
+
+目标：基于基线 `4132a39d336c22d46c5bc57ae9d9b544a7ebac5f`，按 [#148](https://github.com/gadfly-hbo/OptraCall/issues/148) 闭环修复已核实的四项试用问题（A1、A3、A4、A5），保留原已确认布局／导航、Interface v3 与官方 Pi 1.4.0 统一会话边界；报告问题 #2 保持待补证，不纳入本轮开发。详细验证与独立复核记录见 [Issue #148 工程记录](issue-148-result.md)。
+
+- [x] I1 环境检查、核对最新 `origin/main` 与占用，建立独立分支 `work/antigravity/issue-148-goal-trial-fixes` 并在 #148 留言领取及回读。
+- [x] I2 针对 A1 / A3 / A4 / A5 编写永久行为测试 `tests/issue-148-goal-trial-fixes.test.ts`，在基线保留真实 RED 失败。
+- [x] I3 A1（P1）：Store `getGoalWorkspace` 暴露跨版本承接用的 `priorDraft` 并在 `authorizeWorkspace` 实施权限校验；UI `reviewUpstream` 承接准确旧稿与 revision，覆盖五种情形，保留上游核对与 CAS／权限门禁，不自动平差或发布。
+- [x] I4 A3（P1）：补齐 `assessProgressEvidenceDetails` 具体待核／冲突项、`readRoleContext` 精确 `expectedBasis` 交付、`assessSubmittedActual` 有证据口径映射与未知项补齐（保留原提交与 `basisResolution`，拒绝覆盖人填 `partial`/`open` 或显式排除范围），以及 Host 降级时 `assessmentNote` 与最终状态一致性与前端一键补充／纠正入口。
+- [x] I5 A4（P2）：消除前端阈值跨粒度回退，在最新检查规则、当前检查适用规则、设置摘要、保存回执及 Host `trigger.reason` 明确指标／周期粒度与适用性，提供就地配置当前粒度阈值入口，保持日／周／月流隔离与历史不可变。
+- [x] I6 A5（P2）：只读 `previewDecompositionPublish` 绑定当前准确草稿返回每笔预留（金额／用途／负责人／依据）与每条补缺策略（策略／预期贡献／不重叠范围／依据）；发布预览对话框清晰展示并保持取消零写入与桌面／390px／深色可读。
+- [x] I7 完成受影响回归（57/57 PASS）、真实 Chromium 浏览器验证（A1/A3/A4/A5 PASS）、边界检查与构建（PASS）及非作者独立复核与四原则终检（2 P2 / 2 P3 全部关闭，最终全项 PASS），推送候选分支并在 #148 回执交回 PM Agent。
