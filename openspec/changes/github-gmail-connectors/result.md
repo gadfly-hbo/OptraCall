@@ -76,3 +76,8 @@ Node 25.9.0、官方 Pi 1.4.0 下，作者当前定向验证为私有存储 27 �
 正常产品入口另通过 `tests/service-connections-app-browser.mjs` 的完整应用／真实 Host 检查，包含原任务范围弹窗、服务端持久化、连接设置、Escape／焦点恢复、返回原任务保留草稿与 390px 布局；合成截图在本工作区 `/tmp/optracall-service-app-yMHG2r`。`tests/service-connections-browser.mjs` 使用实际 React 组件核对四服务独立状态、失败、改绑、UNKNOWN、原账号重授权失败和键盘焦点。两者均阻止外部站点调用，未登录服务。前一完整应用脚本初次误用 draft 的 HTTP 方法，随后将受控权限复选框误当立即保存的勾选，修正检查脚本后通过；这些定位／fixture 失败不作为产品 RED。
 
 既有 ProjectRuntime／个人上下文／数据库工具定向回归共 93 项，90 通过、2 个原条件跳过、1 项信号退出检查因当前容器未回收子进程而超时；同一原检查在 Linux child subreaper 下独立复跑通过，未改产品或放宽断言。当前全量 `npm run check` 以同样子进程回收环境执行，正式 CI 继续使用仓库原命令。
+
+
+补充 `tests/service-connection-host-flow.test.ts` 4 项完整链路检查通过，直接使用实际 Host API、原任务 Pi worker、Host 管理器、真实 Pi MCP 客户端和 loopback 协议服务。覆盖仓库读取及协作写入、丢失回执后模型换工具编号仍不重放、Gmail 2026 协议经原 BrowserUI 一次内容确认后准确续接，以及实际断开接口撤销在途读取。核对了操作 actor、外部回执 ID、原生历史及 API／事件／模型请求／工具参数中的合成凭据保密。未替换产品 Host 业务端口，测试进程只将固定供应商 URL 映射到本地协议服务。
+
+固定源码候选 `56d15f73ec64fff0832c0cb7c05d263b3e7c0eda` 已获得非作者的源码、权限／持久化契约和四原则复核通过，无剩余已知必修代码发现。新增完整链路测试及最终交付元数据另作增量核对，完整 CI 和工程关闭回执统一在 [Issue #145](https://github.com/gadfly-hbo/OptraCall/issues/145) 留存。全量本地执行的原始输出保存在 `/tmp/optracall-four-connectors-check.log`；目前 A23 nested-short 的 6 秒观察截止和 AV07 的 Host 启动出现超时，仍按原断言复验，不通过放宽超时、删断言或跳过测试制造通过。
