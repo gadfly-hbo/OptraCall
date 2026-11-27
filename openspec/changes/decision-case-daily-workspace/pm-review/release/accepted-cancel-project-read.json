@@ -1,0 +1,9 @@
+{
+  "candidate": "a571245698d432d39e3fbdbcfee423ebc06fd919",
+  "root": "/workspace/OptraCall-issue149-final/.local/pm-final/runtime-tmp/accepted-project-read-KyvHSQ",
+  "reads": 1,
+  "operationId": "b3e61721-1665-4141-a025-ee5623e09bb3",
+  "operation": null,
+  "requests": 0,
+  "result": "PASS"
+}

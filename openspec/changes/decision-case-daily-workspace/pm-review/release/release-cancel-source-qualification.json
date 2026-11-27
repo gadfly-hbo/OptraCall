@@ -1,0 +1,25 @@
+{
+  "candidate": "6bc7be2849d280e5e6a6e598ee6b7a68dd5e48eb",
+  "root": "/workspace/OptraCall-issue149-final/.local/pm-final/runtime-tmp/release-source-read-6hwPdx",
+  "native": "/workspace/OptraCall-issue149-final/.local/pm-final/runtime-tmp/release-source-read-6hwPdx/private/projects/2f86d861-232c-4cbb-b20a-9f155067a7fb/tasks/e8eeb828-f83e-4d3e-93a3-243fa8e2717c/sessions/a6236745-e15d-4b6d-a7de-414271716c9d.jsonl",
+  "nativeBytesUnchanged": true,
+  "results": [
+    {
+      "kind": "cancel",
+      "sourceQualificationReached": true,
+      "operationId": "c19cf1c3-a766-4140-a55e-5f9d2719dce7",
+      "operation": null,
+      "requests": 0,
+      "revisionUnchanged": true
+    },
+    {
+      "kind": "configuration",
+      "sourceQualificationReached": true,
+      "operationId": "74b035d9-c143-4328-875c-ce28a400d570",
+      "operation": null,
+      "requests": 0,
+      "revisionUnchanged": true
+    }
+  ],
+  "result": "PASS"
+}

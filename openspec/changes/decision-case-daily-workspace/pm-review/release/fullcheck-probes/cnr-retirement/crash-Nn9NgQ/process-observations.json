@@ -1,0 +1,81 @@
+{
+  "beforeIdentities": {
+    "host": {
+      "pid": 130099,
+      "reachable": true,
+      "state": "S",
+      "ppid": 129994,
+      "startTicks": "6441453",
+      "observedAt": "2026-11-27T16:43:27.363Z"
+    },
+    "drivers": [
+      {
+        "pid": 130181,
+        "reachable": true,
+        "state": "S",
+        "ppid": 130099,
+        "startTicks": "6441895",
+        "observedAt": "2026-11-27T16:43:27.369Z"
+      }
+    ]
+  },
+  "hostSamples": [
+    {
+      "pid": 130099,
+      "reachable": true,
+      "state": "Z",
+      "ppid": 129994,
+      "startTicks": "6441453",
+      "observedAt": "2026-11-27T16:43:27.373Z"
+    },
+    {
+      "pid": 130099,
+      "reachable": true,
+      "state": "absent",
+      "readCode": "ESRCH",
+      "observedAt": "2026-11-27T16:43:27.413Z"
+    }
+  ],
+  "driverSamples": [
+    [
+      {
+        "pid": 130181,
+        "reachable": true,
+        "state": "R",
+        "ppid": 1,
+        "startTicks": "6441895",
+        "observedAt": "2026-11-27T16:43:27.423Z"
+      }
+    ],
+    [
+      {
+        "pid": 130181,
+        "reachable": true,
+        "state": "R",
+        "ppid": 1,
+        "startTicks": "6441895",
+        "observedAt": "2026-11-27T16:43:27.447Z"
+      }
+    ],
+    [
+      {
+        "pid": 130181,
+        "reachable": true,
+        "state": "R",
+        "ppid": 1,
+        "startTicks": "6441895",
+        "observedAt": "2026-11-27T16:43:27.474Z"
+      }
+    ],
+    [
+      {
+        "pid": 130181,
+        "reachable": true,
+        "state": "Z",
+        "ppid": 1,
+        "startTicks": "6441895",
+        "observedAt": "2026-11-27T16:43:27.512Z"
+      }
+    ]
+  ]
+}

@@ -1,0 +1,109 @@
+{
+  "head": null,
+  "sourceOverlay": {
+    "base": "6bc7be2849d280e5e6a6e598ee6b7a68dd5e48eb",
+    "path": "src/host/ui/CaseIssuePanel.tsx",
+    "sha256": "d331165f038a5ac09042bf1cea0e72395ead14eefd9e2554943629c9591c8799",
+    "committed": false
+  },
+  "scratch": "/tmp/issue149-independent-ui-VuV4VH",
+  "dropAck": false,
+  "steps": [
+    {
+      "name": "VISITED_EMPTY_CASE_OVERVIEW_WITHOUT_INITIALIZING"
+    },
+    {
+      "name": "FRESH_GETS_AND_PREPARATION_DO_NOT_INITIALIZE_CASE_STORAGE"
+    },
+    {
+      "name": "EXPLICIT_FIRST_CREATE_INITIALIZES_AND_SAVES_ONE_CASE_ONE_ISSUE",
+      "caseId": "0a2b184d-e628-4488-94f7-22d0abe2399e",
+      "issueId": "751e1ba6-20a1-44ec-8ce1-a93ae33d07f8"
+    },
+    {
+      "name": "HISTORICAL_EXACT_OPTION_VISIBLE_BUT_CONFIRMATION_REQUIRED",
+      "requestId": "424d4c12-19ab-41d7-a2dc-8aa1d50b419c",
+      "options": [
+        {
+          "value": "",
+          "text": "选择方案版本"
+        },
+        {
+          "value": "2f5f2f61-6fd1-4b6f-bb1f-3d0ced28a6b1@1",
+          "text": "准确方案B v1"
+        },
+        {
+          "value": "947c4294-7c1d-4f12-8767-4cd7d212178e@2",
+          "text": "准确方案A新版 v2"
+        },
+        {
+          "value": "947c4294-7c1d-4f12-8767-4cd7d212178e@1",
+          "text": "准确方案A旧版 v1（原请求历史版本，当前活动 v2）"
+        }
+      ]
+    },
+    {
+      "name": "ORIGINAL_UI_ACCURATELY_ANSWERS_V1_WITH_EXPLICIT_HISTORY",
+      "choiceId": "2923f279-d4db-41a8-b354-e99e2b3d65e5"
+    },
+    {
+      "name": "SIDEBAR_SWITCH_CLEARS_A_FOCUS_AND_ACCURATELY_ANSWERS_CURRENT_B",
+      "choiceId": "a444438d-e6e4-498c-962e-a5b50251b969"
+    },
+    {
+      "name": "EXACT_HISTORY_403_DOES_NOT_SELECT_LATEST_OR_WRITE",
+      "requestId": "c49ceaf7-1a98-45cd-930c-97a3b2628f40"
+    }
+  ],
+  "networkMessages": [],
+  "createRequests": [
+    "{\"draftId\":\"prepare-d76c44d4-15a5-4d34-80ea-81d2e69d155c\",\"title\":\"干净首用第一Case\",\"description\":\"干净首用完整背景\",\"rawInput\":\"干净首用原输入 <img src=x onerror=\\\"window.__freshXss=1\\\">\",\"goal\":{\"goalId\":\"e17c455e-38aa-414a-9bd3-9c5a6c869011\",\"version\":1,\"strategy\":\"首用明确具体S\",\"alreadyAdopted\":false},\"adoptOperationId\":\"92611aee-1dcd-4611-b802-026899fac1c3\",\"createOperationId\":\"1e39e7cf-f49c-463e-a304-1090a1d574ec\"}"
+  ],
+  "choiceRequests": [
+    {
+      "caseStoreId": "7e00b1dd-5eca-4ee6-b565-21352793b277",
+      "strategyRef": {
+        "type": "case-decision",
+        "caseStoreId": "7e00b1dd-5eca-4ee6-b565-21352793b277",
+        "caseId": "0a2b184d-e628-4488-94f7-22d0abe2399e",
+        "recordId": "947c4294-7c1d-4f12-8767-4cd7d212178e",
+        "revision": 1
+      },
+      "issueId": "751e1ba6-20a1-44ec-8ce1-a93ae33d07f8",
+      "choice": "trial",
+      "reason": "明确按原请求历史v1记录取舍",
+      "expectedPreviousChoiceId": null,
+      "allowHistorical": true,
+      "respondsToRequest": {
+        "requestId": "424d4c12-19ab-41d7-a2dc-8aa1d50b419c",
+        "revision": 1
+      },
+      "operationId": "84342550-0c11-4403-8989-26db12840e91"
+    },
+    {
+      "caseStoreId": "7e00b1dd-5eca-4ee6-b565-21352793b277",
+      "strategyRef": {
+        "type": "case-decision",
+        "caseStoreId": "7e00b1dd-5eca-4ee6-b565-21352793b277",
+        "caseId": "0a2b184d-e628-4488-94f7-22d0abe2399e",
+        "recordId": "2f5f2f61-6fd1-4b6f-bb1f-3d0ced28a6b1",
+        "revision": 1
+      },
+      "issueId": "27bb3113-9793-4b06-ab4b-596b802408a5",
+      "choice": "trial",
+      "reason": "明确回应事项B的原请求",
+      "expectedPreviousChoiceId": null,
+      "respondsToRequest": {
+        "requestId": "5a7a05ef-718f-424a-9a76-4d974881fe62",
+        "revision": 1
+      },
+      "operationId": "a70ac897-2684-4c75-855b-ec28542e7bce"
+    }
+  ],
+  "base": "http://127.0.0.1:36907",
+  "caseId": "0a2b184d-e628-4488-94f7-22d0abe2399e",
+  "issueId": "751e1ba6-20a1-44ec-8ce1-a93ae33d07f8",
+  "result": "PASS",
+  "overlayHashAfter": "d331165f038a5ac09042bf1cea0e72395ead14eefd9e2554943629c9591c8799",
+  "authorHashAfter": "d331165f038a5ac09042bf1cea0e72395ead14eefd9e2554943629c9591c8799"
+}

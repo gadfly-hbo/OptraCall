@@ -1,0 +1,70 @@
+{
+  "head": "7fe8e936d2463e514f2d8b08deae23f8c0467e24",
+  "scratch": "/tmp/issue149-independent-ui-LaQEQa",
+  "steps": [
+    {
+      "name": "PREPARE_PERSISTED_EXACT",
+      "id": "prepare-693cb87c-6700-4fd0-8eba-dc7427b76101",
+      "goal": {
+        "goalId": "05f7ac5e-adac-4fb5-a3b1-611166ca9109",
+        "version": 1,
+        "strategy": "走真实准备和草稿路径"
+      }
+    },
+    {
+      "name": "CREATED_FIRST_ISSUE_AND_UNSENT_FRAGMENT",
+      "caseId": "9ca1650b-e932-41a5-8edb-78e7f3c4d824",
+      "issueId": "9d0fb335-c283-4d8e-b0e3-491ec76c90b4",
+      "fragmentText": "准备名称：独立轻建案名称\n\n问题背景：独立轻建案背景，必须回读\n\n原输入：独立轻输入 <img src=x onerror=\"window.__xss=1\">，核对真实新Case路径"
+    },
+    {
+      "name": "APPEND_PRESERVES_EXISTING_AND_IS_IDEMPOTENT",
+      "length": 104
+    },
+    {
+      "name": "SINGLE_COMPOSER_PERSISTED_EDIT",
+      "revision": 3,
+      "text": "已有非空草稿，不可覆盖\n\n准备名称：独立轻建案名称\n\n问题背景：独立轻建案背景，必须回读\n\n原输入：独立轻输入 <img src=x onerror=\"window.__xss=1\">，核对真实新Case路径\n编辑后再重开也保留"
+    },
+    {
+      "name": "AFTER_RELOAD_DOM",
+      "text": "跳到主内容\nOptraCall\n持续做出更好的决策\n当\n当前工作区\n经营工作区\n新建项目\n主导航\n⌄\n\n日常工作\n\n工作台首页\nDecision Case\n基础建设总览\n›\n战略选择\n目标管理\n语义资产\n分析资产\n项目空间 (0)\n⌄\n\n还没有项目\n\n已归档项目 (0)\n›\n设置\n已保存本机配置\n中／EN\nDecision Case · Case 总览\n分析\n决策\n搜索工作区\n/\n帮助\nCase 总览\n全部项目\n\nDecision Case\n\nCase 总览\n\n从问题到分析、决策、执行与复盘，让项目围绕一件事持续工作。\n\n＋ 新建 Case\n搜索 Case、项目或分析任务\nCase 状态筛选\n全部状态\n待处理\n分析中\n待确认\n待观察\n已结束\n刷新\n星图\n常规\n关系类型 \n全部关系\n共享项目\n前后续\n支持\n补充关系\n1\nCase\n0\n项目\n0\n分析任务\n0\n已载入业务关系\n事项关联\n点击节点直接打开 · 拖动空白平移 · 共享项目仅显示一次\nCASE\n待处理\n独立轻建案名称\n下一步尚未记录\n0 个关联项目\n◎ 聚焦\n−\n88%\n＋\n适应画布\n─ 关联项目 / 包含任务\n→ 前后续\n⇢ 支持\n关系为原作者声明，可点击核对依据\n关系列表与节点导航 · 键盘及窄屏均可使用\n\n分析任务的运行、人的取舍、实际行动与反馈分别记录。图谱浏览不会发送消息或启动分析。"
+    },
+    {
+      "name": "OPEN_CASE_AFTER_RELOAD",
+      "opened": "CASE待处理独立轻建案名称下一步尚未记录"
+    },
+    {
+      "name": "RELOAD_RESTORED_SAME_COMPOSER_WITHOUT_SEND"
+    },
+    {
+      "name": "NARROW_SCREEN_NO_PAGE_OVERFLOW"
+    },
+    {
+      "name": "KEYBOARD_FOCUS_REMAINED_IN_MODAL_20_TABS"
+    },
+    {
+      "name": "503_RETAINS_LABELED_EXACT_SNAPSHOT"
+    },
+    {
+      "name": "403_CLEARS_CONTENT_AND_ACTION_ENTRIES"
+    },
+    {
+      "name": "READ_RECOVERY_DOES_NOT_REPLAY_SEND"
+    },
+    {
+      "name": "SHARED_PROJECT_CURRENT_ISSUE_SCOPE",
+      "rows": "当前Case专属任务\n11/27 23:52\n打开原任务\n按此 Case 继续"
+    },
+    {
+      "name": "SHARED_PROJECT_ALL_CURRENT_CASE_SCOPE",
+      "rows": "当前Case专属任务\n11/27 23:52\n打开原任务\n按此 Case 继续\n别Case专属任务\n11/27 23:52\n打开原任务\n按此 Case 继续\n未绑定Case的独立任务\n11/27 23:52\n打开原任务\n按此 Case 继续",
+      "foreignTaskShown": true
+    }
+  ],
+  "networkMessages": [],
+  "base": "http://127.0.0.1:34147",
+  "caseId": "9ca1650b-e932-41a5-8edb-78e7f3c4d824",
+  "issueId": "9d0fb335-c283-4d8e-b0e3-491ec76c90b4",
+  "result": "SPEC_FAIL_FOREIGN_CASE_TASK_AS_CURRENT_CASE"
+}

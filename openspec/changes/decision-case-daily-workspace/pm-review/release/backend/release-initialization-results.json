@@ -1,0 +1,29 @@
+{
+  "candidate": "6bc7be2849d280e5e6a6e598ee6b7a68dd5e48eb",
+  "root": "/workspace/OptraCall-issue149-final/.local/pm-final/backend/release-init-LghKEB",
+  "outputs": [
+    {
+      "name": "first-explicit-create-original-initialization",
+      "initialReadsSideEffectFree": true,
+      "invalidPostDoesNotInitialize": true,
+      "createStatus": 201,
+      "storeState": "ready",
+      "initializeCalls": 1,
+      "originalOperationReplay": true,
+      "caseCount": 1
+    },
+    {
+      "name": "unmarked-existing-database-preserved",
+      "status": {
+        "state": "unavailable",
+        "code": "case_marker_missing"
+      },
+      "createError": "case_store_unavailable",
+      "statusCode": 503,
+      "initializeCalls": 0,
+      "originalBytesUnchanged": true,
+      "markerAbsent": true,
+      "readsSideEffectFree": true
+    }
+  ]
+}

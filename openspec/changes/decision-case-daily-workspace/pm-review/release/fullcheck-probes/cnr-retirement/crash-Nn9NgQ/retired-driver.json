@@ -1,0 +1,13 @@
+{
+  "driverPids": [
+    130181
+  ],
+  "native": [
+    {
+      "file": "2026-11-27T16-43-26-040Z_01a21de3-ebd4-742b-a708-0beff9eb3791.jsonl",
+      "bytes": 35024,
+      "sha256": "0523ccfc8a614acbbf14656bd6bfe4b30563e5b03c844c99725908b970dda339"
+    }
+  ],
+  "proof": "driver exit only; unrelated tool cleanup remains unproved"
+}

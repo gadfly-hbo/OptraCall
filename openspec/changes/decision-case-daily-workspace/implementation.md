@@ -1,5 +1,7 @@
 # 实施与首审返工记录（Issue #149，领取方 Antigravity）
 
+下文保留领取方二次交接时的实现与判断；其中当时未接通的观察回应 UI、目录与原 composer 等接缝，已由 PM 接手修复，实际状态按 [PM 集成记录](pm-integration.md)、[独立证据](pm-review/release/index.md)及 [Issue #149 最终回执](https://github.com/gadfly-hbo/OptraCall/issues/149)核对。原候选 PASS 不替代最终候选验收。
+
 - 任务分支：`work/antigravity/issue-149-decision-case-daily-workspace`
 - 核实基线：`699e425cb0900b50385377d638495069fa726761`（最新 `origin/main`）
 - 首次候选（首审退回，保留证据）：`fd0003e6441e75f9e7daae88e09f3a0411227f04`

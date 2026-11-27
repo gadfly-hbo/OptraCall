@@ -1,5 +1,7 @@
 # 固化与外发准备记录
 
+**当前工程实施及二审记录见 [PM 集成记录](pm-integration.md)和[最终证据索引](pm-review/release/index.md)，远端交付与结案见 [Issue #149](https://github.com/gadfly-hbo/OptraCall/issues/149)／[PR #151](https://github.com/gadfly-hbo/OptraCall/pull/151)。以下为冻结确认包当时的准备记录，保留其原阶段与验收边界。**
+
 2026-11-27 · 当前仅为确认版规格／UI／任务包，不是产品实现结果。
 
 ## 目标与阶段清单
