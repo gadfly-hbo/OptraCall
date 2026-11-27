@@ -37,11 +37,30 @@ export function knownUnitScale(sourceUnit: string, targetUnit: string): number |
   const dst = targetUnit.trim();
   if (!src || !dst) return null;
   for (const family of UNIT_SCALE_FAMILIES) {
-    if (src in family && dst in family) {
+    if (Object.hasOwn(family, src) && Object.hasOwn(family, dst)) {
       return family[src]! / family[dst]!;
     }
   }
   return null;
+}
+
+/** Literal value/unit pairs are evidence for conversion, not a semantic scope/metric classifier. */
+export function quotedMeasurementUnits(quote: string, value: number): string[] {
+  const text = quote.replace(/(?<=\d)[,，](?=\d{3}(?:\D|$))/g, '');
+  const names = [...new Set(UNIT_SCALE_FAMILIES.flatMap(family => Object.keys(family)))].sort((a, b) => b.length - a.length);
+  const found = new Set<string>();
+  for (const match of text.matchAll(/[+-]?(?:\d+\.\d+|\d+|\.\d+)/g)) {
+    if (Number(match[0]) !== value) continue;
+    const suffix = text.slice(match.index! + match[0].length).trimStart();
+    const unit = names.find(name => suffix.startsWith(name));
+    if (!unit) continue;
+    // Keep a compound/prefix as conflicting evidence instead of treating its unit as absent
+    // and silently falling back to manually submitted plain-unit metadata.
+    const next = suffix.slice(unit.length);
+    const compound = next.match(/^[A-Za-z/%／]+/);
+    found.add(compound ? unit + compound[0] : unit);
+  }
+  return [...found];
 }
 
 /** A row checkpoint can fall in a planned reporting period or stand on its own dated milestone. */

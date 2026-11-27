@@ -10,7 +10,7 @@ import { parseUsageContext } from './usage-context-types.ts';
 import { parseGoalBasis } from './strategy-goals-types.ts';
 import type { GoalActionArrangement, GoalArrangementInput } from './strategy-goals-types.ts';
 import type { GoalAdoptionInput, GoalAdoptionProvenance, GoalBasis, GoalContextSnapshot, GoalDraftInput, GoalFeedback, GoalFeedbackInput, GoalMutation, GoalOperationReceipt, GoalRef, GoalRelation, GoalRelationInput, GoalRelationRevisionInput, GoalRelationVersion, GoalRevisionInput, GoalSourceRef, GoalVersion, StrategyGoalRecord, StrategyGoalsIndex } from './strategy-goals-types.ts';
-import { assessProgressEvidenceDetails, checkpointPeriods, comparabilityLabel, granularityLabel, knownUnitScale, progressMetric } from './strategy-goal-progress.ts';
+import { assessProgressEvidenceDetails, checkpointPeriods, comparabilityLabel, granularityLabel, knownUnitScale, progressMetric, quotedMeasurementUnits } from './strategy-goal-progress.ts';
 import { hasGsaCheckpoint, MAX_GOAL_ACTUAL_REPORT_CHARS } from './strategy-goal-decomposition-types.ts';
 import type { StrategyMapPublicationIdentity } from './strategy-map-types.ts';
 import type {
@@ -48,6 +48,7 @@ import type {
   NextCycleDraftInput,
   PreConfirmEstimateRecord,
   ProgressBasisResolutionItem,
+  ProgressBasisSuggestion,
   ProgressCaseChoice,
   ProgressEvidenceBasis,
   ReachabilityEstimate,
@@ -1772,6 +1773,7 @@ export class StrategyGoalsStore {
 
     const submittedBasis = actual.input.actualSource.basis ? structuredClone(actual.input.actualSource.basis) : undefined;
     const basisResolution: ProgressBasisResolutionItem[] = [];
+    const basisSuggestions: ProgressBasisSuggestion[] = [];
 
     if (observation !== undefined) {
       if (!object(observation)) fail('invalid_progress_evidence', 400);
@@ -1816,13 +1818,20 @@ export class StrategyGoalsStore {
           fail('actual_report_value_mismatch', 409);
         }
         const expectedScale = knownUnitScale(sourceUnit, convertedUnit);
-        if (expectedScale !== null && Math.abs(factor - expectedScale) > expectedScale * 1e-6) {
+        // Internally consistent arithmetic does not prove the dimension or the source unit.
+        // Unverified scales remain unverified rather than becoming comparable by relabeling.
+        if (expectedScale === null || Math.abs(factor - expectedScale) > expectedScale * 1e-6) {
           fail('actual_report_value_mismatch', 409);
         }
         if (period.actualValue !== null && period.actualValue !== sourceValue) {
           fail('actual_report_value_mismatch', 409);
         }
-        if (submittedBasis?.unit?.trim() && submittedBasis.unit.trim() !== sourceUnit) {
+        const submittedUnit = submittedBasis?.unit?.trim();
+        const quotedUnits = quotedMeasurementUnits(evidenceQuote, sourceValue);
+        if (quotedUnits.length > 0 && (quotedUnits.length !== 1 || quotedUnits[0] !== sourceUnit)) {
+          fail('actual_report_value_mismatch', 409);
+        }
+        if (submittedUnit ? submittedUnit !== sourceUnit : quotedUnits.length !== 1) {
           fail('actual_report_value_mismatch', 409);
         }
         if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value !== convertedValue)) {
@@ -1920,9 +1929,21 @@ export class StrategyGoalsStore {
         const resolveScope = (): string => {
           const subVal = submittedBasis?.scope?.trim() ?? '';
           const obsVal = obsBasis.scope;
-          // Explicit human-submitted scope is ALWAYS protected from overwrite.
-          if (subVal) return subVal;
           const mapping = mappingsByField.get('scope');
+          // Preserve explicit human scope. A qualified proposal can fill the existing
+          // correction form, but it is not an adopted scope or a comparable result.
+          if (subVal) {
+            if (mapping && mapping.sourceValue === subVal && mapping.mappedValue === obsVal && obsVal !== subVal) {
+              const publication = this.readDecompositionPublication(goalId, actual.input.publicationVersion);
+              const row = actual.input.rowId === 'G-TOTAL' ? undefined : publication.snapshot.rows.find(r => r.rowId === actual.input.rowId);
+              const expectedScope = row?.scopeLabel ?? publication.snapshot.estimate.scopeDescription;
+              if (obsVal === expectedScope) {
+                basisSuggestions.push({ field: 'scope', submittedValue: subVal, proposedValue: obsVal,
+                  evidenceQuote: mapping.evidenceQuote, rationale: mapping.rationale });
+              }
+            }
+            return subVal;
+          }
           if (mapping && mapping.mappedValue === obsVal) {
             basisResolution.push({
               field: 'scope',
@@ -2049,6 +2070,7 @@ export class StrategyGoalsStore {
     return this.writeProgressCheck(goalId, check, actual.actualId, {
       ...(submittedBasis ? { submittedBasis } : {}),
       ...(basisResolution.length ? { basisResolution } : {}),
+      ...(basisSuggestions.length ? { basisSuggestions } : {}),
     });
   }
 
@@ -2060,7 +2082,7 @@ export class StrategyGoalsStore {
     goalId: string,
     input: DecompositionProgressCheckInput,
     submittedId?: string,
-    provenance?: { submittedBasis?: ProgressEvidenceBasis; basisResolution?: ProgressBasisResolutionItem[] },
+    provenance?: { submittedBasis?: ProgressEvidenceBasis; basisResolution?: ProgressBasisResolutionItem[]; basisSuggestions?: ProgressBasisSuggestion[] },
   ): { check: DecompositionProgressCheck; replayed: boolean } {
     this.assertDecompositionWritable();
     const id = uuid(goalId);
@@ -2170,6 +2192,7 @@ export class StrategyGoalsStore {
         ...(comparabilityIssues.length ? { comparabilityIssues } : {}),
         ...(provenance?.submittedBasis ? { submittedBasis: provenance.submittedBasis } : {}),
         ...(provenance?.basisResolution?.length ? { basisResolution: provenance.basisResolution } : {}),
+        ...(provenance?.basisSuggestions?.length ? { basisSuggestions: provenance.basisSuggestions } : {}),
         ...(input.evidenceQuote ? {evidenceQuote: input.evidenceQuote} : {}),
         checkId: `CHECK-${String(existingChecks.length + 1).padStart(3, '0')}`,
         goalId: id,

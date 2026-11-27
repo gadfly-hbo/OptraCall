@@ -4,6 +4,40 @@ import type {
   GsaPlanVersion,
   ReachabilityEstimate,
 } from '../strategy-goal-decomposition-types.ts';
+import type { StrategyDiscussionDetail } from '../strategy-discussion-types.ts';
+
+/** A completed model reply alone does not prove the requested merge was saved. */
+export function savedUpstreamMergeDraft(
+  detail: StrategyDiscussionDetail,
+  requestId: string,
+  baseline: { gsaPlanId: string; gsaPlanVersion: number; gsaPlanSha256: string; revision: number },
+): { revision: number; contentSha256: string } | null {
+  if (detail.busy || detail.discussion.lastRun?.id !== requestId || detail.discussion.lastRun.status !== 'completed' ||
+      detail.requestReceipt?.requestId !== requestId) return null;
+  const messages = detail.snapshot.messages;
+  // The existing user projection exposes the verified original text, while native entry IDs are only projected on assistant messages.
+  let start = messages.length - 1;
+  while (start >= 0 && messages[start]?.role !== 'user') start--;
+  if (start < 0 || detail.snapshot.sessionId !== detail.requestReceipt.sessionId ||
+      messages[start]?.originalUserText !== detail.requestReceipt.originalUserText) return null;
+  let saved: { revision: number; contentSha256: string } | null = null;
+  for (const message of messages.slice(start + 1)) {
+    if (message.role === 'user') break;
+    if (message.role !== 'toolResult' || message.toolName !== 'strategy_goals' || message.isError) continue;
+    try {
+      const text = Array.isArray(message.content) ? message.content.filter(part => part.type === 'text').map(part => part.text).join('') : message.content;
+      const value = JSON.parse(text);
+      const draft = value?.draft;
+      if (value?.saved === true && value.claim === 'decomposition-draft-not-published' &&
+          draft?.gsaPlanId === baseline.gsaPlanId && draft.gsaPlanVersion === baseline.gsaPlanVersion &&
+          draft.gsaPlanSha256 === baseline.gsaPlanSha256 && Number.isSafeInteger(draft.revision) && draft.revision > baseline.revision &&
+          typeof draft.contentSha256 === 'string' && /^[a-f0-9]{64}$/.test(draft.contentSha256)) {
+        saved = { revision: draft.revision, contentSha256: draft.contentSha256 };
+      }
+    } catch { /* An unreadable native result cannot clear the retained local edits. */ }
+  }
+  return saved;
+}
 
 export type UpstreamCarryoverResolution =
   | { kind: 'gsa-changed'; message: string }

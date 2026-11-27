@@ -573,6 +573,15 @@ export interface ProgressBasisResolutionItem {
   rationale: string;
 }
 
+/** Agent proposal only; the submitted scope remains authoritative until the owner submits a correction. */
+export interface ProgressBasisSuggestion {
+  field: 'scope';
+  submittedValue: string;
+  proposedValue: string;
+  evidenceQuote: string;
+  rationale: string;
+}
+
 export interface DecompositionProgressCheck {
   checkId: string;
   goalId: string;
@@ -604,6 +613,7 @@ export interface DecompositionProgressCheck {
   comparabilityIssues?: ProgressCheckIssue[];
   submittedBasis?: ProgressEvidenceBasis;
   basisResolution?: ProgressBasisResolutionItem[];
+  basisSuggestions?: ProgressBasisSuggestion[];
   evidenceQuote?: string;
   comparability: ProgressComparability;
   missingCoverageNote?: string;

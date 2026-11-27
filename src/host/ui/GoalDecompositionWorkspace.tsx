@@ -1,6 +1,6 @@
 import { GoalFigures, GoalPlanSheet, GoalSource, GsaWorksheet } from './GoalJourneyViews.tsx';
 import { goalDraftChanges } from './goal-draft-changes.ts';
-import { resolveUpstreamCarryover } from './goal-upstream-carryover.ts';
+import { resolveUpstreamCarryover, savedUpstreamMergeDraft } from './goal-upstream-carryover.ts';
 import { GoalReviewDraft } from './GoalReviewDraft.tsx';
 import { GoalPlanAssistance } from './GoalPlanAssistance.tsx';
 import { hasGsaCheckpoint } from '../strategy-goal-decomposition-types.ts';
@@ -271,6 +271,9 @@ export function GoalDecompositionWorkspace({
   const saveInFlight=useRef(false);
   const editSerial=useRef(0);
   const editBase=useRef<DecompositionDraftInput|null>(null);
+  const mergeAttempt=useRef<{id:string;ownerKey:string;serial:number;baseline:NonNullable<GoalWorkspaceView['draft']>}|null>(null);
+  const draftOwnerKey=`${record.id}:${goal.version}`;
+  const draftOwnerRef=useRef(draftOwnerKey);draftOwnerRef.current=draftOwnerKey;
   const draftFormRef=useRef(draftForm);draftFormRef.current=draftForm;
   const mounted=useRef(true);
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
@@ -434,6 +437,8 @@ export function GoalDecompositionWorkspace({
 
   useEffect(() => {
     loadSeqRef.current += 1;
+    mergeAttempt.current=null;
+    setBusy(false);
     setWorkspace(null);
     setDraftForm(null);
     setNotice('');
@@ -759,7 +764,7 @@ export function GoalDecompositionWorkspace({
 
   const handleSaveDraft = async (): Promise<{ draft: NonNullable<GoalWorkspaceView['draft']>; validation: NonNullable<GoalWorkspaceView['validation']> } | null> => {
     const current=draftFormRef.current;
-    if (mutationsLocked || endedCycle || upstreamNeedsReview || !current || !activeGsaPlan || saveInFlight.current) return null;
+    if (mutationsLocked || endedCycle || upstreamNeedsReview || !current || !activeGsaPlan || saveInFlight.current || mergeAttempt.current) return null;
     saveInFlight.current=true;
     const serial=editSerial.current;
     const payload=structuredClone(current);
@@ -790,17 +795,48 @@ export function GoalDecompositionWorkspace({
     return()=>clearTimeout(timer);
   },[draftDirty,draftForm,mutationsLocked,upstreamNeedsReview,draftSaveState]);
 
-  const mergeDraftConflict=()=>{
-    if(!draftConflict?.activeGsaPlan||!draftForm||mutationsLocked)return;
+  const mergeDraftConflict=async()=>{
+    if(!draftConflict?.activeGsaPlan||!draftForm||!activeGsaPlan||mutationsLocked||endedCycle||busy||splitRunning||saveInFlight.current||mergeAttempt.current)return;
     if(!editBase.current){setDraftSaveError('原编辑基线暂不可读，本地改稿已保留，请先核对原版本后继续。');return;}
-    const changes=goalDraftChanges(editBase.current,draftForm)
+    const local=structuredClone(draftForm),base=structuredClone(editBase.current),serial=editSerial.current,ownerKey=draftOwnerKey;
+    const changes=goalDraftChanges(base,local)
       .filter(change=>!['/expectedDraftRevision','/operationId'].includes(change.path));
-    const text='请读取当前准确总 GSA 和服务器最新拆解草稿，把以下人工改动合并到最新稿，保留服务器其他改动。存在业务冲突时说明原值并请负责人决定，仅保存可核对草稿。\n人工改动\n'+JSON.stringify({fromRevision:draftForm.expectedDraftRevision,changes});
+    const text='请读取当前准确总 GSA 和服务器最新拆解草稿，把以下人工改动合并到最新稿，保留服务器其他改动。存在业务冲突时说明原值并请负责人决定，仅保存可核对草稿。\n人工改动\n'+JSON.stringify({fromRevision:local.expectedDraftRevision,changes});
     if(text.length>20000){setDraftSaveError('本地改动较多，请分项与 Agent 核对；完整改稿仍保存在本机。');return;}
-    try{sessionStorage.setItem(draftCacheKey+'.conflict',JSON.stringify(draftForm));sessionStorage.removeItem(draftCacheKey);}catch{setDraftSaveError('本地备份保存失败，改稿继续保留在原框，请恢复存储后重试。');return;}
-    setWorkspace(draftConflict);setDraftForm(buildInitialDraft(goal,draftConflict));setDraftDirty(false);setDraftSaveState('saved');setDraftSaveError('');setDraftConflict(null);
-    setSplitRunning(true);setSplitRequest({id:crypto.randomUUID(),text});
-    setNotice('已保留本地改稿备份，Agent 将对照最新稿合并，请核对结果后再发布。');
+    try{
+      sessionStorage.setItem(draftCacheKey,JSON.stringify(local));sessionStorage.setItem(draftCacheKey+'.base',JSON.stringify(base));
+      sessionStorage.setItem(draftCacheKey+'.conflict',JSON.stringify(local));sessionStorage.setItem(draftCacheKey+'.conflict.base',JSON.stringify(base));
+    }catch{setDraftSaveError('本地备份保存失败，改稿继续保留在原框，请恢复存储后重试。');return;}
+    const current=()=>mounted.current&&draftOwnerRef.current===ownerKey;
+    saveInFlight.current=true;setBusy(true);setDraftSaveState('error');setWsError('');
+    try{
+      let latest=await api.getWorkspace(record.id);
+      if(!current())return;
+      const outcome=resolveUpstreamCarryover({currentGoalVersion:goal.version,currentActivePlan:activeGsaPlan,latestWorkspace:latest,hadLocalEdits:false,startEditSerial:serial,currentEditSerial:serial});
+      if(outcome.kind!=='carryover'&&outcome.kind!=='already-current'){
+        setDraftSaveError(outcome.message);return;
+      }
+      if(outcome.kind==='carryover'){
+        // The user's explicit review/merge action carries the exact readable prior body through the original user route.
+        // The Agent never receives the authority to bypass upstream review.
+        const saved=await api.saveDecompositionDraft(record.id,outcome.draftForm);
+        if(!current())return;
+        latest={...latest,draft:saved.draft,priorDraft:null,latestDraftRevision:saved.draft.revision,validation:saved.validation};
+      }
+      setWorkspace(latest);setDraftConflict(latest);setPreview(null);
+      if(serial!==editSerial.current){setDraftSaveError('承接期间新增的本地改稿已保留，请再次核对并合并。');return;}
+      if(!latest.draft)throw new Error('尚未核实新版总 GSA 草稿保存，本地改稿已保留。');
+      const id=crypto.randomUUID();
+      mergeAttempt.current={id,ownerKey,serial,baseline:latest.draft};
+      setDraftSaveError('Agent 正在合并，本地改稿和原编辑基线继续保留，待核实实际保存结果。');
+      setSplitRunning(true);setSplitRequest({id,text});
+      setNotice('已核对新版草稿，Agent 将对照最新稿合并；本地改稿继续保留，核对结果后再发布。');
+    }catch(fault){
+      if(current()){
+        setDraftSaveError(api.goalError(fault));
+        try{const latest=await api.getWorkspace(record.id);if(current())setDraftConflict(latest);}catch{}
+      }
+    }finally{saveInFlight.current=false;if(current())setBusy(false);}
   };
 
   const handleAlignConflict = async () => {
@@ -1319,7 +1355,9 @@ export function GoalDecompositionWorkspace({
   // --- Draft mutation helpers ---
   const updateDraft = (updater: (prev: DecompositionDraftInput) => DecompositionDraftInput) => {
     if(!draftDirtyRef.current&&draftFormRef.current)editBase.current=structuredClone(draftFormRef.current);
-    editSerial.current++;setPreview(null);setDraftSaveState('unsaved');setDraftSaveError('');
+    editSerial.current++;setPreview(null);
+    if(mergeAttempt.current){setDraftSaveState('error');setDraftSaveError('Agent 合并期间新增的改稿已保留，待本轮结束后核对并合并。');}
+    else {setDraftSaveState('unsaved');setDraftSaveError('');}
     setDraftForm(prev => (prev ? updater(prev) : prev));
     setDraftDirty(true);
   };
@@ -1563,6 +1601,25 @@ export function GoalDecompositionWorkspace({
                 readOnly={mutationsLocked||endedCycle||upstreamNeedsReview}
                 showInlineTitle={false}
                 onGoalDraft={onGoalDraftSuggestion}
+                onFailure={message=>{if(mergeAttempt.current){mergeAttempt.current=null;setDraftSaveState('error');setDraftSaveError(message+' 本地改稿和原编辑基线继续保留，请核对后再合并。');}}}
+                onResult={async(detail,id)=>{
+                  const attempt=mergeAttempt.current;
+                  if(!attempt||attempt.id!==id||attempt.ownerKey!==draftOwnerRef.current)return;
+                  const saved=savedUpstreamMergeDraft(detail,id,attempt.baseline);
+                  try{
+                    const latest=await api.getWorkspace(record.id);
+                    if(!mounted.current||mergeAttempt.current!==attempt||attempt.ownerKey!==draftOwnerRef.current)return;
+                    setWorkspace(latest);setDraftConflict(latest);mergeAttempt.current=null;
+                    const samePlan=latest.goal.adoptedVersion===goal.version&&latest.latestGsaPlanVersion===attempt.baseline.gsaPlanVersion&&
+                      latest.activeGsaPlan?.planId===attempt.baseline.gsaPlanId&&latest.activeGsaPlan.contentSha256===attempt.baseline.gsaPlanSha256;
+                    if(!samePlan||!saved||latest.draft?.revision!==saved.revision||latest.draft.contentSha256!==saved.contentSha256||attempt.serial!==editSerial.current){
+                      setDraftSaveState('error');setDraftSaveError('本地改稿继续保留；本轮未核实相同版本的合并保存，或已有新输入／服务器修订，请核对后再合并。');return;
+                    }
+                    setDraftForm(buildInitialDraft(goal,latest));setDraftDirty(false);setDraftSaveState('saved');setDraftSaveError('');setDraftConflict(null);editBase.current=null;
+                    try{sessionStorage.removeItem(draftCacheKey);sessionStorage.removeItem(draftCacheKey+'.base');}catch{}
+                    setNotice('Agent 合并草稿已实际保存，请核对内容后再发布；原本地改稿与编辑基线备份仍保留。');
+                  }catch(fault){if(mounted.current&&mergeAttempt.current===attempt){mergeAttempt.current=null;setDraftSaveState('error');setDraftSaveError(api.goalError(fault));}}
+                }}
                 onSettled={() => void loadWorkspace()}
               />
             </section>
@@ -2142,6 +2199,32 @@ export function GoalDecompositionWorkspace({
                           ? `已触发偏差提示 (${chk.trigger.type})`
                           : '未触发阈值';
                   const issueSummary = chk.comparabilityIssues?.map(i => i.message).join('；');
+                  const openCheckCorrection=async(scopeSuggestion?:string)=>{
+                    if(mutationsLocked||busy)return;
+                    const ownerKey=draftOwnerKey;
+                    setBusy(true);setWsError('');
+                    try{
+                      const publication=selectedCheckPub?.version===chk.publicationVersion?selectedCheckPub:
+                        workspace.activePublication?.version===chk.publicationVersion?workspace.activePublication:
+                        (await api.readDecompositionPublication(record.id,chk.publicationVersion)).publication;
+                      if(!mounted.current||draftOwnerRef.current!==ownerKey)return;
+                      const sourceBasis=chk.submittedBasis??chk.actualSource.basis??emptyActualInput.checkBasis;
+                      const periodId=chk.periods[0]?.periodId??'';
+                      const key=JSON.stringify([chk.publicationVersion,chk.rowId,chk.checkpointId,periodId]);
+                      setSelectedCheckPub(publication);setCheckPubVersion(chk.publicationVersion);setCheckRowId(chk.rowId);setCheckCheckpointId(chk.checkpointId);setCheckPeriodId(periodId);
+                      setActualInputs(inputs=>({...inputs,[key]:{
+                        ...emptyActualInput,...inputs[key],uploadedName:'',
+                        reportText:chk.actualSource.reportText??'',checkSourceRef:chk.actualSource.ref,checkSourceLabel:chk.actualSource.label,
+                        checkCutoffAt:chk.actualSource.cutoffAt,checkActualVal:chk.periods[0]?.actualValue!=null?String(chk.periods[0].actualValue):'',
+                        checkBasis:{...sourceBasis,...(scopeSuggestion!==undefined?{scope:scopeSuggestion}:{})},
+                        checkMissingNote:chk.missingCoverageNote??chk.actualSource.coverageNote??'',supplementCheck:chk.checkId,
+                      }}));
+                      setActualReportOpen(true);setActualBasisOpen(true);
+                      const selector=focusFieldSelector(scopeSuggestion!==undefined?'scope':chk.comparabilityIssues?.[0]?.field);
+                      setTimeout(()=>{if(draftOwnerRef.current===ownerKey)document.querySelector<HTMLElement>(selector)?.focus();},60);
+                    }catch(fault){if(mounted.current&&draftOwnerRef.current===ownerKey)setWsError(api.goalError(fault));}
+                    finally{if(mounted.current&&draftOwnerRef.current===ownerKey)setBusy(false);}
+                  };
                   return (
                   <li key={chk.checkId}><details className="gj-check" open={chk.checkId===workspace.checks.at(-1)?.checkId}><summary>{chk.periods.map(p=>p.label).join('、')} · 拆解正式版 v{chk.publicationVersion} · {chk.actualSource.label} · {comparabilityLabel(chk.comparability)}{chk.checkId===workspace.checks.at(-1)?.checkId?' · 最新检查':''}</summary>
                     <div className="gj-check-body"><GoalFigures items={[
@@ -2159,32 +2242,21 @@ export function GoalDecompositionWorkspace({
                             </li>
                           ))}
                         </ul>
+                        {chk.basisSuggestions?.map((suggestion,index)=>(
+                          <div className="gj-note" key={`${suggestion.field}-${index}`}>
+                            <strong>业务范围建议（待负责人核对）</strong>
+                            <p>原提交「{suggestion.submittedValue}」→ 建议「{suggestion.proposedValue}」</p>
+                            <details><summary>查看建议依据</summary><p>{suggestion.rationale}</p><blockquote>{suggestion.evidenceQuote}</blockquote></details>
+                            <button type="button" className="secondary-button" disabled={mutationsLocked||busy} onClick={()=>void openCheckCorrection(suggestion.proposedValue)}>将建议范围填入核对表单</button>
+                          </div>
+                        ))}
                         {!mutationsLocked && (
                           <div className="sg-row">
                             <button
                               type="button"
                               className="secondary-button"
-                              onClick={() => {
-                                const sourceBasis = chk.submittedBasis ?? chk.actualSource.basis;
-                                setCheckPubVersion(chk.publicationVersion);
-                                setCheckRowId(chk.rowId);
-                                setCheckCheckpointId(chk.checkpointId);
-                                if (chk.periods[0]?.periodId) setCheckPeriodId(chk.periods[0].periodId);
-                                editActual({
-                                  reportText: chk.actualSource.reportText ?? '',
-                                  checkSourceRef: chk.actualSource.ref,
-                                  checkSourceLabel: chk.actualSource.label,
-                                  checkCutoffAt: chk.actualSource.cutoffAt,
-                                  checkActualVal: chk.periods[0]?.actualValue != null ? String(chk.periods[0].actualValue) : '',
-                                  checkBasis: sourceBasis ? { ...sourceBasis } : { ...emptyActualInput.checkBasis },
-                                  checkMissingNote: chk.missingCoverageNote ?? chk.actualSource.coverageNote ?? '',
-                                  supplementCheck: chk.checkId,
-                                });
-                                setActualReportOpen(true);
-                                setActualBasisOpen(true);
-                                const selector = focusFieldSelector(chk.comparabilityIssues?.[0]?.field);
-                                setTimeout(() => { document.querySelector<HTMLElement>(selector)?.focus(); }, 60);
-                              }}
+                              disabled={busy}
+                              onClick={() => void openCheckCorrection()}
                             >
                               补充／纠正待核项后重新核对
                             </button>

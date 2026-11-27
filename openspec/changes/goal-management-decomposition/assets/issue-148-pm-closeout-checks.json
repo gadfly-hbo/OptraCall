@@ -1,0 +1,92 @@
+{
+  "schema": 1,
+  "issue": 148,
+  "candidate": "pm-closeout-1",
+  "base": "4132a39d336c22d46c5bc57ae9d9b544a7ebac5f",
+  "received": "736f44abd162fc7228d9c1843622bc18aa1a4b25",
+  "productAndTestSha256": {
+    "src/agent/strategy-discussion.ts": "e73b6e849ec723cae22ef8c6f4c7c65670b42cdffb80df19f9d852dcd89c84d5",
+    "src/host/goal-decomposition-access.ts": "609a03f34c6e4e215c48bd4724aaf7d895c07741b434c208452cfc5aee995fc0",
+    "src/host/server.ts": "07bc6f84bf8ca6879405ac1f4136ff5a2941cb7519aaea4a114bb040115b4912",
+    "src/host/strategy-goal-decomposition-types.ts": "7c9721bd96ca61335dd6e171563a582bea35dedb7f3e726691fbc62b492359e2",
+    "src/host/strategy-goal-progress.ts": "679c9b7a3310972c4b41f7cd0e371585303a166039be4f1b90810501251a2229",
+    "src/host/strategy-goals-store.ts": "c4bf1c9e4380a9802f2ed4821ab24b88f9c91f9e04cb6376f644bf92766c8e0e",
+    "src/host/ui/GoalDecompositionWorkspace.tsx": "881ee453de58a0f7151826e871821e7e00df7e0e3769eef9fad01370a33a0c08",
+    "src/host/ui/goal-upstream-carryover.ts": "d669e44647d8a8684422ee1f3dddecd86c6f5e09d1563282511a4732243d5841",
+    "tests/browser-issue-148-carryover-recovery.mjs": "2732bf565210c34600e9c7f1681f24b472591b789987f8c87d05d38aa6e3ea9c",
+    "tests/browser-issue-148-goal-trial.mjs": "151fd2775f31d664f12dcedaa4a5e92764dcef5925b11518683bce52fe1049c0",
+    "tests/issue-148-carryover-recovery.test.ts": "21c68114fce4bf93e8cf8c2db0b3553657b301f42cd2fbfa3c1e9015c40a5ea7",
+    "tests/issue-148-goal-trial-fixes.test.ts": "6810b21d0688305eca8de845f740b2beddb574437120e6aef522b207a2a30b63",
+    "tests/issue-148-scope-suggestion.test.ts": "77f45e323fda47f8be725b7d4f6920d87fe347d00f8c3dfc3120611d7e1a4901",
+    "tests/issue-148-unit-conversion-boundary.test.ts": "7747e7d138a41cf4785e6aa96c57e6f96d3bf35bb3647d88eac57bf224ff4c7b"
+  },
+  "proofs": [
+    {
+      "path": "/workspace/issue148-pm-closeout/units/red.log",
+      "result": "RED: 1 PASS / 3 FAIL",
+      "sha256": "877a77569dc41d3905779e4daa7fb2054b9d465b8122116b3010eaa48126b08c"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/units/compound-red.log",
+      "result": "RED: 3 PASS / 1 FAIL",
+      "sha256": "3cde2a1d272ec665945964a4fb828c6f2dc5012f8085bfd084e4a1e62b7f2bfc"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/units/boundaries-final-2.log",
+      "result": "PASS: 5 tests",
+      "sha256": "38190e0fa196e14dafd2bdc540011c9ca0454361baf3008cd06cc0de1e19ea5b"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/recovery/red-browser.log",
+      "result": "RED: actual UI conflict recovery blocked",
+      "sha256": "756273a1640420aeb4541d08ca52118a6211de2a3a2a91b868a291cacb31666c"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/recovery/host-native-tests-final.log",
+      "result": "PASS: 2 Host/native Pi tests",
+      "sha256": "bd6b071ef1172fc0344013c60045961b47accc3cfe2615323fd565879679a7cb"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/recovery/original-issue148-regression.log",
+      "result": "PASS: original 6 tests",
+      "sha256": "fd8d8b7c15bdaee7e104c2bbc6e289f98d584e053de7b22aeef3af775445cad2"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/recovery/green-browser-v3.log",
+      "result": "PASS: 8 browser scenarios",
+      "sha256": "1d140501760f90a2fbae417ae459dcccb0cffee697847194d30fc685d17671af"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/recovery/green-browser-v3-6a570472-5caf-487f-affe-0608f0e1537a/summary.json",
+      "result": "PASS: actual browser result index",
+      "sha256": "c8a81cbb9f60022549e0567fe74903381ed4ee4e3ee8f04ea41f63173f2249dc"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/recovery/candidate-build-v3.log",
+      "result": "PASS: build",
+      "sha256": "419432db9bb1718e3a65cad8736297ba75bcaa3908b8e73b021a1fe2564561ce"
+    },
+    {
+      "path": "/workspace/issue148-pm-closeout/audit.log",
+      "result": "PASS: high audit; 2 existing moderate advisories",
+      "sha256": "25ecebe01f17aadef48d6217a655100aa0af0595b1d612f548bb54e13927377e"
+    }
+  ],
+  "fullCheck": {
+    "status": "RUNNING",
+    "path": "/workspace/issue148-pm-closeout/full-check.log",
+    "command": "PATH=/workspace/scratch/issue136-node25-matched-bin:$PATH python3 /workspace/scratch/issue138-draft-contract/.local/draft-contract/run-with-reaper.py npm run check",
+    "note": "Task-local reaper only collects its own test descendants; no SDK/product/test patch."
+  },
+  "independentReview": {
+    "status": "PENDING",
+    "root": "/workspace/issue148-pm-closeout/final-review"
+  },
+  "limits": [
+    "Original provider quality was not rerun; official Pi uses isolated synthetic Provider.",
+    "No real business data, credentials or MacBook/Mac mini service changes.",
+    "Report issue #2 and unconfirmed configured:false remain pending.",
+    "Local evidence paths are not public uploaded attachments.",
+    "Historic failures remain separate from final candidate results."
+  ]
+}
