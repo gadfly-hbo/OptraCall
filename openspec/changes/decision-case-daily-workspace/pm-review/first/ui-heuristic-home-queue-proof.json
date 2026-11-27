@@ -1,0 +1,17 @@
+{
+  "candidate": "fd0003e6441e75f9e7daae88e09f3a0411227f04",
+  "kind": "pure source execution, no service/model/requests",
+  "queue": [
+    {
+      "kind": "case",
+      "id": "case:case",
+      "caseId": "case",
+      "title": "普通工作下一步",
+      "context": "没有请求的合成Case",
+      "statusLabel": "待处理",
+      "tone": "attention",
+      "owner": "待定",
+      "dateLabel": "期限待定"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "candidate": "fd0003e6441e75f9e7daae88e09f3a0411227f04",
+  "kind": "pure source execution, no service or model",
+  "ordinaryUiChoiceStatus": "superseded",
+  "explicitResponseStatus": "answered",
+  "ordinaryUiProjection": {
+    "pending": 0,
+    "unresolved": [
+      {
+        "requestId": "req",
+        "status": "superseded"
+      }
+    ]
+  }
+}

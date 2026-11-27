@@ -1,0 +1,29 @@
+{
+  "issue": 149,
+  "candidate": "fd0003e6441e75f9e7daae88e09f3a0411227f04",
+  "baseline": "699e425cb0900b50385377d638495069fa726761",
+  "decision": "FAIL_FIRST_REVIEW",
+  "reviewers": [
+    "Codex PM",
+    "case149_ui_review",
+    "case149_backend_review",
+    "case149_runtime_review"
+  ],
+  "candidateSourceReadonly": true,
+  "rootTargetedTests": {
+    "passed": 16,
+    "failed": 0,
+    "node": "25.9.0",
+    "logWorkspacePath": "/workspace/OptraCall-issue149-pm-review/.local/pm-review/targeted-tests.log"
+  },
+  "notRun": [
+    "full npm run check",
+    "actual Pi synthetic provider roundtrip",
+    "actual product browser",
+    "real models",
+    "device update"
+  ],
+  "environmentNote": "Root official installation path check rejected shared node_modules symlink; not treated as candidate code RED",
+  "proofsUseSyntheticDataOnly": true,
+  "originalFailuresPreserved": true
+}

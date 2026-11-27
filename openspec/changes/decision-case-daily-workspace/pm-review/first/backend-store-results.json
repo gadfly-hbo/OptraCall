@@ -1,0 +1,57 @@
+{
+  "root": "/workspace/OptraCall-issue149-pm-review/.local/pm-backend-review/synthetic-Mz6SSP",
+  "results": [
+    {
+      "probe": "same-revision-concurrent-CAS",
+      "statuses": [
+        "fulfilled",
+        "fulfilled"
+      ],
+      "revisions": [
+        1,
+        1
+      ],
+      "final": {
+        "text": "second user input"
+      }
+    },
+    {
+      "probe": "cross-owner-fragment",
+      "fragmentTarget": "A",
+      "savedDraftCase": "B",
+      "text": "Case A input"
+    },
+    {
+      "probe": "unrelated-completed-operation",
+      "originalOperationKind": "case_note",
+      "branch": "created",
+      "caseTitle": "Unrelated original Case",
+      "replayedFromOperation": true,
+      "adopts": 0,
+      "creates": 0
+    },
+    {
+      "probe": "stale-adoption-receipt-on-goal-switch",
+      "selectedGoal": {
+        "goalId": "c9436854-cafc-4e88-816c-581c3b29cc82",
+        "version": 1,
+        "strategy": "Strategy B"
+      },
+      "actualBinding": {
+        "primary": {
+          "goalId": "b032780b-9bfa-45c6-97d5-4f273be6dd7c",
+          "version": 1
+        },
+        "related": [],
+        "strategy": "Strategy A"
+      },
+      "receipt": {
+        "goalId": "b032780b-9bfa-45c6-97d5-4f273be6dd7c",
+        "version": 1,
+        "strategy": "Strategy A",
+        "operationId": "a59923f3-f646-4805-91b3-8de01d54c1eb",
+        "adoptedAt": "2026-11-27T14:44:08.997Z"
+      }
+    }
+  ]
+}

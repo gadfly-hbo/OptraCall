@@ -1,0 +1,6 @@
+{"stage":"before-feedback","status":"open","actualAuthorizationCount":0,"caseProjectLinks":0,"source":{"kind":"user-declaration","ref":null}}
+{"stage":"home-before","pending":[{"id":"1328ef59-6ff3-459c-9bc9-6b21b9e029f3","status":"open","source":{"kind":"user-declaration","ref":null}}]}
+{"stage":"after-feedback","status":"answered","actualAuthorizationCount":0,"feedbackRevision":"2706f344-ec8e-4ff8-b762-f47f432e8661"}
+{"stage":"home-after","pendingCount":0}
+{"stage":"reopen","outcome":"error","code":"unsupported_board_schema","message":"unsupported_board_schema"}
+{"artifactRoot":"/workspace/OptraCall-issue149-pm-review/.local/pm-backend-review/request-data-RI9R8Z"}

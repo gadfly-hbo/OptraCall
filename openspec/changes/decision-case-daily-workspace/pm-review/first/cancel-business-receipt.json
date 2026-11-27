@@ -1,0 +1,23 @@
+{
+  "scope": "Actual CaseIssueService/CaseStore; no Pi/provider; adapter ordering reproduced from server.ts",
+  "result": {
+    "status": "rejected",
+    "message": "cancelled-before-mutate"
+  },
+  "edgeCountAfterPrecommitCancellation": 1,
+  "edge": {
+    "edgeId": "afa4a2e9-48fd-4692-8dfe-f6916565682c",
+    "caseId": "908bf05f-48de-4f15-8942-604b1d83928c",
+    "fromIssueId": "d366a6b2-5f78-4159-a7b4-e352ade56c2f",
+    "toIssueId": "404bcb9b-2888-42fd-875b-6846a355228b",
+    "revision": 1,
+    "lifecycle": "active",
+    "explanation": "",
+    "source": {
+      "kind": "user-declaration",
+      "ref": "synthetic/session/request/tool"
+    },
+    "operationId": "4e313d9e-fb6c-4f24-a027-a64737fef342",
+    "createdAt": "2026-11-27T14:43:01.354Z"
+  }
+}

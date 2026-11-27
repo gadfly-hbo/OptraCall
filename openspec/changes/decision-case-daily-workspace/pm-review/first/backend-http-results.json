@@ -1,0 +1,359 @@
+{
+  "root": "/workspace/OptraCall-issue149-pm-review/.local/pm-backend-review/http-synthetic-QUDwEv",
+  "rows": [
+    {
+      "probe": "ordinary-case-candidate-goal",
+      "status": 409,
+      "body": {
+        "code": "goal_not_adopted",
+        "message": "目标或自动设置未保存，请保留输入并核对原版本和操作结果。"
+      }
+    },
+    {
+      "probe": "workspace-case-candidate-client-claims-adopted",
+      "status": 201,
+      "body": {
+        "branch": "created",
+        "createdCase": {
+          "id": "cc8f34a7-295f-4a33-bcfb-8065f1a7dab7",
+          "title": "Created without goal adoption",
+          "description": "",
+          "judgement": "",
+          "nextStep": "",
+          "status": "pending",
+          "closeReason": null,
+          "closedAt": null,
+          "revision": 1,
+          "createdAt": "2026-11-27T14:43:31.607Z",
+          "updatedAt": "2026-11-27T14:43:31.607Z"
+        },
+        "adoptionReceipt": null,
+        "creationReceipt": {
+          "caseId": "cc8f34a7-295f-4a33-bcfb-8065f1a7dab7",
+          "operationId": "57fe7b0f-64d7-467c-a363-b346d39c3807",
+          "createdAt": "2026-11-27T14:43:31.607Z"
+        },
+        "replayedFromOperation": false,
+        "draft": {
+          "kind": "prepare",
+          "id": "candidate-client-claims-adopted",
+          "revision": 1,
+          "payload": {
+            "rawInput": "Input survives",
+            "title": "Created without goal adoption",
+            "description": "",
+            "selectedGoal": {
+              "goalId": "67ce7ed6-b38e-4e49-9e43-9cecb4da44e1",
+              "version": 1,
+              "strategy": "Only authorized strategy"
+            },
+            "adoptOperationId": "360d897f-bf00-409b-9354-13b0d6de191a",
+            "createOperationId": "57fe7b0f-64d7-467c-a363-b346d39c3807",
+            "adoptionReceipt": null,
+            "creationReceipt": {
+              "caseId": "cc8f34a7-295f-4a33-bcfb-8065f1a7dab7",
+              "operationId": "57fe7b0f-64d7-467c-a363-b346d39c3807",
+              "createdAt": "2026-11-27T14:43:31.607Z"
+            },
+            "creationState": "completed",
+            "targetLocation": {
+              "caseId": "cc8f34a7-295f-4a33-bcfb-8065f1a7dab7"
+            }
+          },
+          "createdAt": "2026-11-27T14:43:31.613Z",
+          "updatedAt": "2026-11-27T14:43:31.613Z"
+        }
+      }
+    },
+    {
+      "probe": "goal-still-candidate",
+      "status": 200,
+      "body": {
+        "goal": {
+          "id": "67ce7ed6-b38e-4e49-9e43-9cecb4da44e1",
+          "currentVersion": 1,
+          "adoptedVersion": null,
+          "versions": [
+            {
+              "title": "Synthetic candidate unadopted",
+              "outcome": "Test only",
+              "perspective": "personal",
+              "scope": {
+                "kind": "personal",
+                "id": "pm-probe",
+                "name": "Synthetic"
+              },
+              "measurement": {
+                "kind": "deliverable",
+                "criterion": "Test only"
+              },
+              "baseline": {
+                "state": "pending",
+                "description": "Synthetic"
+              },
+              "responsible": "Synthetic",
+              "strategies": [
+                "Only authorized strategy"
+              ],
+              "goalId": "67ce7ed6-b38e-4e49-9e43-9cecb4da44e1",
+              "version": 1,
+              "status": "candidate",
+              "createdAt": "2026-11-27T14:43:31.579Z"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "probe": "workspace-case-nonexistent-goal-and-invented-strategy",
+      "status": 201,
+      "body": {
+        "branch": "created",
+        "createdCase": {
+          "id": "5e8b01a4-a324-436a-b6a5-f0a66041f970",
+          "title": "Created with nonexistent goal",
+          "description": "",
+          "judgement": "",
+          "nextStep": "",
+          "status": "pending",
+          "closeReason": null,
+          "closedAt": null,
+          "revision": 1,
+          "createdAt": "2026-11-27T14:43:31.623Z",
+          "updatedAt": "2026-11-27T14:43:31.623Z"
+        },
+        "adoptionReceipt": null,
+        "creationReceipt": {
+          "caseId": "5e8b01a4-a324-436a-b6a5-f0a66041f970",
+          "operationId": "079e5c7c-dff0-4e73-9456-df43b03aa3b1",
+          "createdAt": "2026-11-27T14:43:31.623Z"
+        },
+        "replayedFromOperation": false,
+        "draft": {
+          "kind": "prepare",
+          "id": "phantom-goal",
+          "revision": 1,
+          "payload": {
+            "rawInput": "Synthetic",
+            "title": "Created with nonexistent goal",
+            "description": "",
+            "selectedGoal": {
+              "goalId": "5a8f464e-568e-4a4a-934d-94653e10f659",
+              "version": 99,
+              "strategy": "Invented strategy"
+            },
+            "adoptOperationId": "aa8aa825-46e3-45c5-9ee7-324389050167",
+            "createOperationId": "079e5c7c-dff0-4e73-9456-df43b03aa3b1",
+            "adoptionReceipt": null,
+            "creationReceipt": {
+              "caseId": "5e8b01a4-a324-436a-b6a5-f0a66041f970",
+              "operationId": "079e5c7c-dff0-4e73-9456-df43b03aa3b1",
+              "createdAt": "2026-11-27T14:43:31.623Z"
+            },
+            "creationState": "completed",
+            "targetLocation": {
+              "caseId": "5e8b01a4-a324-436a-b6a5-f0a66041f970"
+            }
+          },
+          "createdAt": "2026-11-27T14:43:31.627Z",
+          "updatedAt": "2026-11-27T14:43:31.627Z"
+        }
+      }
+    },
+    {
+      "probe": "workspace-case-adopts-valid-goal-but-invented-strategy",
+      "status": 201,
+      "body": {
+        "branch": "created",
+        "createdCase": {
+          "id": "87b94cfc-4237-4e40-9d7f-b480a292a5c3",
+          "title": "Created with nonexistent strategy",
+          "description": "",
+          "judgement": "",
+          "nextStep": "",
+          "status": "pending",
+          "closeReason": null,
+          "closedAt": null,
+          "revision": 1,
+          "createdAt": "2026-11-27T14:43:31.637Z",
+          "updatedAt": "2026-11-27T14:43:31.637Z"
+        },
+        "adoptionReceipt": {
+          "goalId": "67ce7ed6-b38e-4e49-9e43-9cecb4da44e1",
+          "version": 1,
+          "strategy": "Invented strategy not in goal version",
+          "operationId": "c868ef37-26f2-4f6b-a160-419aeeed9d42",
+          "adoptedAt": "2026-11-27T14:43:31.633Z"
+        },
+        "creationReceipt": {
+          "caseId": "87b94cfc-4237-4e40-9d7f-b480a292a5c3",
+          "operationId": "93a6acc9-3ca0-415f-8814-01091cd84acf",
+          "createdAt": "2026-11-27T14:43:31.637Z"
+        },
+        "replayedFromOperation": false,
+        "draft": {
+          "kind": "prepare",
+          "id": "invented-strategy",
+          "revision": 2,
+          "payload": {
+            "rawInput": "Synthetic",
+            "title": "Created with nonexistent strategy",
+            "description": "",
+            "selectedGoal": {
+              "goalId": "67ce7ed6-b38e-4e49-9e43-9cecb4da44e1",
+              "version": 1,
+              "strategy": "Invented strategy not in goal version"
+            },
+            "adoptOperationId": "c868ef37-26f2-4f6b-a160-419aeeed9d42",
+            "createOperationId": "93a6acc9-3ca0-415f-8814-01091cd84acf",
+            "adoptionReceipt": {
+              "goalId": "67ce7ed6-b38e-4e49-9e43-9cecb4da44e1",
+              "version": 1,
+              "strategy": "Invented strategy not in goal version",
+              "operationId": "c868ef37-26f2-4f6b-a160-419aeeed9d42",
+              "adoptedAt": "2026-11-27T14:43:31.633Z"
+            },
+            "creationReceipt": {
+              "caseId": "87b94cfc-4237-4e40-9d7f-b480a292a5c3",
+              "operationId": "93a6acc9-3ca0-415f-8814-01091cd84acf",
+              "createdAt": "2026-11-27T14:43:31.637Z"
+            },
+            "creationState": "completed",
+            "targetLocation": {
+              "caseId": "87b94cfc-4237-4e40-9d7f-b480a292a5c3"
+            }
+          },
+          "createdAt": "2026-11-27T14:43:31.635Z",
+          "updatedAt": "2026-11-27T14:43:31.641Z"
+        }
+      }
+    },
+    {
+      "probe": "adoption-success-create-invalid-title",
+      "status": 200,
+      "body": {
+        "branch": "partial",
+        "createStatus": "failed",
+        "errorCode": "invalid_text",
+        "adoptionReceipt": {
+          "goalId": "e0973936-871d-40f4-a1d3-ca9825648a0e",
+          "version": 1,
+          "strategy": "Goal A strategy",
+          "operationId": "e7b18926-2310-45a8-a2c4-e24afc9d00d4",
+          "adoptedAt": "2026-11-27T14:43:31.659Z"
+        },
+        "createOperationId": "b98500ff-950f-452f-aa90-369610158941",
+        "draft": {
+          "kind": "prepare",
+          "id": "switch-goal-after-partial",
+          "revision": 2,
+          "payload": {
+            "rawInput": "A input",
+            "title": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+            "description": "Prepare A",
+            "selectedGoal": {
+              "goalId": "e0973936-871d-40f4-a1d3-ca9825648a0e",
+              "version": 1,
+              "strategy": "Goal A strategy"
+            },
+            "adoptOperationId": "e7b18926-2310-45a8-a2c4-e24afc9d00d4",
+            "createOperationId": "b98500ff-950f-452f-aa90-369610158941",
+            "adoptionReceipt": {
+              "goalId": "e0973936-871d-40f4-a1d3-ca9825648a0e",
+              "version": 1,
+              "strategy": "Goal A strategy",
+              "operationId": "e7b18926-2310-45a8-a2c4-e24afc9d00d4",
+              "adoptedAt": "2026-11-27T14:43:31.659Z"
+            },
+            "creationReceipt": null,
+            "creationState": "partial_failed",
+            "targetLocation": null
+          },
+          "createdAt": "2026-11-27T14:43:31.662Z",
+          "updatedAt": "2026-11-27T14:43:31.663Z"
+        }
+      }
+    },
+    {
+      "probe": "switch-goal-B-reuses-goal-A-adoption",
+      "status": 201,
+      "body": {
+        "branch": "created",
+        "createdCase": {
+          "id": "d72e8827-4515-4307-8b80-eb2bdae5f4db",
+          "title": "Prepare B",
+          "description": "Prepare B",
+          "judgement": "",
+          "nextStep": "",
+          "status": "pending",
+          "closeReason": null,
+          "closedAt": null,
+          "revision": 1,
+          "createdAt": "2026-11-27T14:43:31.670Z",
+          "updatedAt": "2026-11-27T14:43:31.670Z"
+        },
+        "adoptionReceipt": {
+          "goalId": "e0973936-871d-40f4-a1d3-ca9825648a0e",
+          "version": 1,
+          "strategy": "Goal A strategy",
+          "operationId": "e7b18926-2310-45a8-a2c4-e24afc9d00d4",
+          "adoptedAt": "2026-11-27T14:43:31.659Z"
+        },
+        "creationReceipt": {
+          "caseId": "d72e8827-4515-4307-8b80-eb2bdae5f4db",
+          "operationId": "85c8c7f3-f610-4e0d-8306-11375d132437",
+          "createdAt": "2026-11-27T14:43:31.670Z"
+        },
+        "replayedFromOperation": false,
+        "draft": {
+          "kind": "prepare",
+          "id": "switch-goal-after-partial",
+          "revision": 3,
+          "payload": {
+            "rawInput": "B input",
+            "title": "Prepare B",
+            "description": "Prepare B",
+            "selectedGoal": {
+              "goalId": "80f47115-b731-4ca9-b88b-06f9c9083729",
+              "version": 1,
+              "strategy": "Goal B strategy"
+            },
+            "adoptOperationId": "29f6e7ff-a320-42e5-996b-ef8ed1c766d3",
+            "createOperationId": "85c8c7f3-f610-4e0d-8306-11375d132437",
+            "adoptionReceipt": {
+              "goalId": "e0973936-871d-40f4-a1d3-ca9825648a0e",
+              "version": 1,
+              "strategy": "Goal A strategy",
+              "operationId": "e7b18926-2310-45a8-a2c4-e24afc9d00d4",
+              "adoptedAt": "2026-11-27T14:43:31.659Z"
+            },
+            "creationReceipt": {
+              "caseId": "d72e8827-4515-4307-8b80-eb2bdae5f4db",
+              "operationId": "85c8c7f3-f610-4e0d-8306-11375d132437",
+              "createdAt": "2026-11-27T14:43:31.670Z"
+            },
+            "creationState": "completed",
+            "targetLocation": {
+              "caseId": "d72e8827-4515-4307-8b80-eb2bdae5f4db"
+            }
+          },
+          "createdAt": "2026-11-27T14:43:31.662Z",
+          "updatedAt": "2026-11-27T14:43:31.675Z"
+        }
+      },
+      "requestedGoalB": "80f47115-b731-4ca9-b88b-06f9c9083729",
+      "actualCaseBinding": {
+        "primary": {
+          "goalId": "e0973936-871d-40f4-a1d3-ca9825648a0e",
+          "version": 1
+        },
+        "related": [],
+        "strategy": "Goal A strategy",
+        "caseId": "d72e8827-4515-4307-8b80-eb2bdae5f4db",
+        "caseRevision": 1,
+        "confirmedAt": "2026-11-27T14:43:31.670Z",
+        "operationId": "85c8c7f3-f610-4e0d-8306-11375d132437"
+      }
+    }
+  ]
+}
