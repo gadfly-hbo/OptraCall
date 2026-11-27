@@ -186,7 +186,7 @@ docs/                        产品与工程资料
 ## 进一步阅读
 
 - [产品讨论稿 v0.4](docs/OptraCall_产品讨论稿_v0.4.md)记录产品方向、业务内容和演进目标，具体实现以对应变更记录为准。
-- [Agent 大脑与外部协作产品讨论稿 v0.1](docs/optracall-agent-brain-discussion-v0.1.md)整理 OptraCall 按需委派外部 Agent、在原任务中验收并保留业务闭环的方向及待讨论问题。
+- [Agent 大脑与外部协作产品讨论稿 v0.1](docs/optracall-agent-brain-discussion-v0.1.md)整理按需委派外部 Agent、通过远端 MCP 提供任务所需语义及分析资产、在原任务中验收并保留业务闭环的方向及待讨论问题。
 - [Studio 二期使用说明](docs/studio-phase2-usage.md)介绍企业基础资产、任务使用与资产演进。
 - [本地试用说明](docs/macbook-trial.md)介绍启动、更新、本机数据与反馈方式。
 - [工程规范](docs/engineering-workflow.md)定义开发、任务范围、复核和交付流程。
