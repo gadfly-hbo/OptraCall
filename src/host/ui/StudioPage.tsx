@@ -54,6 +54,7 @@ export interface StudioPageProps {
   initialProfessionalTarget?: StudioProfessionalTarget;
   onProfessionalTargetConsumed?: () => void;
   onCreateProject?: () => void;
+  selectedEnterpriseId?: string;
   onEnterpriseChange?: (enterpriseId: string | undefined) => void;
 }
 export interface StudioProfessionalTarget { kind: 'materials' | 'metrics' | 'methods'; id?: string; version?: string | number }
@@ -571,9 +572,28 @@ export function StudioPage(props: StudioPageProps) {
     const [value, systems] = await Promise.all([listStudioEnterprises(), listStudioSystems()]);
     if (!mounted.current) return value;
     setDirectory(value); setAllSystems(systems);
-    setEnterpriseId(previous => value.enterprises.some(item => item.id === previous) ? previous : value.projectAssignments.find(item => item.projectId === currentProjectId)?.enterpriseId || (value.enterprises.length === 1 ? value.enterprises[0]!.id : ''));
+    setEnterpriseId(previous => {
+      if (props.selectedEnterpriseId === '') return '';
+      if (props.selectedEnterpriseId && value.enterprises.some(item => item.id === props.selectedEnterpriseId)) {
+        return props.selectedEnterpriseId;
+      }
+      return value.enterprises.some(item => item.id === previous)
+        ? previous
+        : value.projectAssignments.find(item => item.projectId === currentProjectId)?.enterpriseId ||
+          (value.enterprises.length === 1 ? value.enterprises[0]!.id : '');
+    });
     return value;
-  }, [currentProjectId]);
+  }, [currentProjectId, props.selectedEnterpriseId]);
+  useEffect(() => {
+    if (props.selectedEnterpriseId === undefined) return;
+    if (props.selectedEnterpriseId === '') {
+      if (enterpriseId !== '') setEnterpriseId('');
+      return;
+    }
+    if (directory?.enterprises.some(item => item.id === props.selectedEnterpriseId) && enterpriseId !== props.selectedEnterpriseId) {
+      setEnterpriseId(props.selectedEnterpriseId);
+    }
+  }, [props.selectedEnterpriseId, directory, enterpriseId]);
   const refreshFoundation = useCallback(async () => {
     const id = scopeRef.current;
     if (!id) return;
@@ -589,7 +609,7 @@ export function StudioPage(props: StudioPageProps) {
   }, [active, refreshDirectory]);
   useEffect(() => {
     setFoundation(undefined); setProfessional(undefined); setSeenProfessional([]); setSelectedSystemId(''); setSystemTarget('');
-    props.onEnterpriseChange?.(enterpriseId || undefined);
+    if (enterpriseId) props.onEnterpriseChange?.(enterpriseId);
     if (!enterpriseId || !active) return;
     const current = ++loadEpoch.current; let alive = true; setLoading(true);
     void readStudioFoundation(enterpriseId).then(value => { if (alive && current === loadEpoch.current) setFoundation(value); }).catch(error => { if (alive) setError(errorText(error)); }).finally(() => { if (alive) setLoading(false); });
@@ -639,7 +659,7 @@ export function StudioPage(props: StudioPageProps) {
     if (pane === 'coverage') { if (await allowLeave()) { setProfessional(undefined); setView('foundation'); setFoundationSection('coverage'); } }
     else await selectView(pane);
   };
-  const selectEnterprise = async (id: string) => { if (!await allowLeave()) return; setEnterpriseId(id); setSource(undefined); setContribution(undefined); setMaintenance(undefined); setError(''); };
+  const selectEnterprise = async (id: string) => { if (!await allowLeave()) return; setEnterpriseId(id); props.onEnterpriseChange?.(id); setSource(undefined); setContribution(undefined); setMaintenance(undefined); setError(''); };
   const mutate = async (label: string, operation: (requestId: string) => Promise<unknown>, done?: () => void) => {
     if (busy || pending) return;
     const requestId = crypto.randomUUID(); setBusy(true); setError(''); setNotice('');

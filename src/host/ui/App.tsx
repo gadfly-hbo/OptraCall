@@ -78,15 +78,22 @@ import '../../../extensions/business-plugins/sim-lab/ui/simlab.css';
 import { ModelRegistryPage } from '../../../extensions/business-plugins/model-pack/ui/ModelRegistryPage.tsx';
 import '../../../extensions/business-plugins/model-pack/ui/model-pack.css';
 import type { RequirementContextSelection } from './requirement-types.ts';
+import { taskPurpose } from '../task-assignment.ts';
+import { FoundationOverview } from './FoundationOverview.tsx';
+import { TaskReportDesk, type TaskReportDeskPersistedState } from './TaskReportDesk.tsx';
+import { WorkspaceHome, type WorkspaceHomeReportTarget } from './WorkspaceHome.tsx';
+import { WorkspaceSearchDialog } from './WorkspaceSearchDialog.tsx';
+import { resolveInitialWorkspaceView, type HomeFoundationId, type WorkspaceSearchTarget } from './workspace-home-model.ts';
 
 type SettingsView = 'usage-context-settings' | 'settings' | 'personal-materials' | 'web-search-settings' | 'automatic-action-settings' | 'skill-settings' | 'connection-settings' | 'capability-plans' | 'model-pack-settings';
 type CapabilityView = 'requirement' | 'refiner' | 'simlab' | 'model-pack';
 type LegacyAssetView = 'metric' | 'enterprise-materials';
-type AppView = 'project-plan' | 'goals' | 'studio' | 'cases' | 'projects' | 'chat' | 'decision' | 'requirement' | 'refiner' | 'simlab' | 'model-pack' | SettingsView;
+type AppView = 'home' | 'foundation' | 'project-plan' | 'goals' | 'studio' | 'cases' | 'projects' | 'chat' | 'decision' | 'requirement' | 'refiner' | 'simlab' | 'model-pack' | SettingsView;
 
-type IconName = 'panel' | 'plus' | 'chat' | 'settings' | 'arrow' | 'stop' | 'check' | 'warning' | 'moon' | 'sun' | 'back' | 'assets' | 'market' | 'folder' | 'help' | 'search';
+type IconName = 'home' | 'panel' | 'plus' | 'chat' | 'settings' | 'arrow' | 'stop' | 'check' | 'warning' | 'moon' | 'sun' | 'back' | 'assets' | 'market' | 'folder' | 'help' | 'search';
 function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   const shapes: Record<IconName, ReactNode> = {
+    home: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
     help: <><circle cx="12" cy="12" r="9" /><path d="M9.5 9a2.5 2.5 0 0 1 5 .5c0 2-2.5 2-2.5 4m0 3v.1" /></>,
     folder: <path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />,
     panel: <><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M9 4v16" /></>,
@@ -159,11 +166,29 @@ function writeRejectedSend(projectId: string, taskId: string, record: RejectedSe
 export function App() {
   const [dbConnectionsOpen, setDbConnectionsOpen] = useState(false), [dbConnectionsProjectId, setDbConnectionsProjectId] = useState<string>();
   const [projects, setProjects] = useState<ClientProject[]>([]), [activeId, setActiveId] = useState<string>(), [activeTaskId, setActiveTaskId] = useState<string>(), [ui, setUI] = useState<Record<string, TaskUI>>({});
-  const [view, setViewState] = useState<AppView>(() => new URL(window.location.href).searchParams.has('management')?'goals':new URL(window.location.href).searchParams.has('studio') ? 'studio' : new URL(window.location.href).searchParams.has('project') ? 'chat' : 'cases');
+  const [view, setViewState] = useState<AppView>(() => resolveInitialWorkspaceView(window.location.href));
   const inSettings = ['settings', 'personal-materials', 'web-search-settings', 'automatic-action-settings', 'skill-settings', 'connection-settings', 'capability-plans', 'usage-context-settings', 'model-pack-settings'].includes(view);
   const [capabilityMounted, setCapabilityMounted] = useState<CapabilityView[]>([]);
   const capabilityReturn = useRef<Partial<Record<CapabilityView, { view: AppView; projectId?: string; taskId?: string; url: string }>>>({});
-  const lastWorkspace = useRef<'chat' | 'decision' | 'cases' | 'projects' | 'studio' | 'goals'>('cases'), settingsReturnView = useRef<Exclude<AppView, SettingsView>>('chat');
+  const lastWorkspace = useRef<'home' | 'foundation' | 'chat' | 'decision' | 'cases' | 'projects' | 'studio' | 'goals'>('home'), settingsReturnView = useRef<Exclude<AppView, SettingsView>>('home');
+  const [homeRefreshToken, setHomeRefreshToken] = useState(0);
+  const [caseCreatePending, setCaseCreatePending] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchTrigger = useRef<HTMLButtonElement>(null);
+  const [activeTaskSourceCase, setActiveTaskSourceCase] = useState<{ taskKey: string; caseId: string; caseTitle?: string } | undefined>(() => {
+    const params = new URL(window.location.href).searchParams;
+    const projectId = params.get('project'), taskId = params.get('task'), caseId = params.get('case');
+    return projectId && taskId && caseId ? { taskKey: taskKey(projectId, taskId), caseId } : undefined;
+  });
+  const [taskPanelByTask, setTaskPanelByTask] = useState<Record<string, 'chat' | 'report'>>(() => {
+    const params = new URL(window.location.href).searchParams;
+    const projectId = params.get('project'), taskId = params.get('task');
+    return projectId && taskId && params.get('panel') === 'report' ? { [taskKey(projectId, taskId)]: 'report' } : {};
+  });
+  const [reportPreviewOpenByTask, setReportPreviewOpenByTask] = useState<Record<string, boolean>>({});
+  const [deskStateByTask, setDeskStateByTask] = useState<Record<string, TaskReportDeskPersistedState>>({});
+  const [autoOpenReportKey, setAutoOpenReportKey] = useState<string>();
+  const [sidebarEnterpriseName, setSidebarEnterpriseName] = useState<string>();
   const [goalMounted, setGoalMounted] = useState(()=>new URL(window.location.href).searchParams.has('management'));
   const [management,setManagement] = useState<ManagementRoute>(()=>new URL(window.location.href).searchParams.get('management')==='gsa'?{area:'gsa',stage:'goals'}:{area:'strategy',stage:'co-create'});
   useEffect(()=>{
@@ -204,6 +229,7 @@ export function App() {
   const closeHelp = () => { setHelpOpen(false); requestAnimationFrame(() => helpTrigger.current?.focus()); };
   const [teachReview,setTeachReview]=useState<import('../business-role-types.ts').TeachReviewOwner>();
   const [caseSource,setCaseSource]=useState<CaseCreationSource>(), [caseFocus, setCaseFocus] = useState<string | undefined>(() => new URL(window.location.href).searchParams.get('returnCase') ?? undefined);
+  const [caseFocusSeq, setCaseFocusSeq] = useState(0);
   const [reportCaseReturn, setReportCaseReturn] = useState<{ caseId: string; projectId: string; taskId: string }>();
   const [caseIssueFocus, setCaseIssueFocus] = useState<string | undefined>(() => new URL(window.location.href).searchParams.get('returnIssue') ?? undefined);
   const [projectIssue, setProjectIssue] = useState<{projectId:string;caseId:string;issueId:string} | undefined>(() => {
@@ -213,6 +239,7 @@ export function App() {
   });
   const [caseMode, setCaseMode] = useState<'cards' | 'list'>('cards'), [projectMode, setProjectMode] = useState<'cards' | 'list'>('cards');
   const [caseMapView, setCaseMapView] = useState(initialCaseMapView), [caseRelationUi, setCaseRelationUi] = useState(initialCaseRelationUi), [caseProjectTarget, setCaseProjectTarget] = useState<string>();
+  const [projectFocusSeq, setProjectFocusSeq] = useState(0);
   const [projectReturnFocus, setProjectReturnFocus] = useState<string>();
   const [caseDecisionUi, setCaseDecisionUi] = useState<Record<string, CaseDecisionUiState>>({});
   const [caseContexts, setCaseContexts] = useState<Record<string, { selection: CaseContextSelection; record: CaseRecord; work: ProjectWorkRecord | null }>>({});
@@ -230,11 +257,15 @@ export function App() {
   const [projectSpaceOpen, setProjectSpaceOpen] = useState(true);
   const sidebarModal = useViewport('(max-width: 760px)');
   const inspectorModal = useViewport('(max-width: 1100px)');
-  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 760), [filesOpen, setFilesOpen] = useState(() => window.innerWidth > 1100);
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 760), [filesOpen, setFilesOpen] = useState(() => window.innerWidth > 1100 && new URL(window.location.href).searchParams.get('panel') !== 'report');
   const [projectDialogOpen, setProjectDialogOpen] = useState(false), [taskDialogProject, setTaskDialogProject] = useState<ClientProject>(), [renameTarget, setRenameTarget] = useState<ClientProject>(), [projectActionId, setProjectActionId] = useState<string>();
   const [capabilityUpdating, setCapabilityUpdating] = useState(false);
   const [taskInspector, setTaskInspector] = useState<{ key: string; section: 'report' | 'conclusion' }>();
-  const [inspectedReport, setInspectedReport] = useState<{ key: string; version: ConclusionReviewReportCandidate }>();
+  const [inspectedReport, setInspectedReport] = useState<{ key: string; version: ConclusionReviewReportCandidate } | undefined>(() => {
+    const params = new URL(window.location.href).searchParams;
+    const projectId = params.get('project'), taskId = params.get('task'), report = params.get('report'), sha256 = params.get('sha256');
+    return projectId && taskId && report && sha256 ? { key: taskKey(projectId, taskId), version: { relativePath: report, sha256, textStatus: 'utf8', reviewable: true, current: false } } : undefined;
+  });
   const [carryingTasks, setCarryingTasks] = useState<Record<string, boolean>>({});
   const visibleTask = useRef<string | undefined>(undefined);
   const inspectorTrigger = useRef<HTMLButtonElement | null>(null), filesToggle = useRef<HTMLButtonElement>(null);
@@ -445,7 +476,21 @@ export function App() {
     void next.then(() => { if (draftQueues.current.get(key) === next) { draftQueues.current.delete(key); changeUI(key, old => ({ ...old, draftSaving: false })); } }, () => { if (draftQueues.current.get(key) === next) { draftQueues.current.delete(key); changeUI(key, old => ({ ...old, draftSaving: false, error: '草稿尚未保存，请检查本地服务后继续。' })); } }); return next;
   };
   const focusComposerOnEntry = () => { requestAnimationFrame(() => textarea.current?.focus()); };
-  const openWorkspace = (next: 'chat' | 'decision' | 'cases' | 'projects' | 'studio' | 'goals') => { setHelpOpen(false); if (next === 'decision') setBoardReportFocus(undefined); lastWorkspace.current = next; if (next === 'cases') { setCaseFocus(undefined); setCaseIssueFocus(undefined); setReportCaseReturn(undefined); } setView(next, () => { if (sidebarModal && sidebarOpen) closeSidebar(); if (next === 'chat') focusComposerOnEntry(); }); };
+  const openWorkspace = (next: 'home' | 'foundation' | 'chat' | 'decision' | 'cases' | 'projects' | 'studio' | 'goals') => { setHelpOpen(false); if (next === 'decision') setBoardReportFocus(undefined); if (next === 'home' || next === 'foundation') setHomeRefreshToken(value => value + 1); lastWorkspace.current = next; if (next === 'cases') { setCaseFocus(undefined); setCaseIssueFocus(undefined); setReportCaseReturn(undefined); } setView(next, () => { if (sidebarModal && sidebarOpen) closeSidebar(); if (next === 'chat') focusComposerOnEntry(); }); };
+  const openQuickSearch = () => setSearchOpen(true);
+  const closeQuickSearch = () => { setSearchOpen(false); requestAnimationFrame(() => searchTrigger.current?.focus()); };
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey || searchOpen) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable)) return;
+      if (document.querySelector('dialog[open]')) return;
+      event.preventDefault();
+      openQuickSearch();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [searchOpen]);
   const openStudioLibrary = (area: StudioLibraryArea) => {
     const enter = () => setView('studio', () => { setStudioLibraryArea(area); setStudioLibraryRequest({area}); setStudioProfessionalTarget(undefined); setStudioFocus(''); setFilesOpen(false); setHelpOpen(false); lastWorkspace.current = 'studio'; if (window.innerWidth <= 760) setSidebarOpen(false); });
     if (view !== 'studio' || !studioLeave.current) { enter(); return; }
@@ -789,24 +834,98 @@ export function App() {
   };
   const refreshProjects = async () => { const saved = await listProjects(); for (const project of saved) mergeProject(project); };
   const boardTask = async (project: ClientProject, task: ClientTask, selection?: CaseContextSelection) => {
+    const key = taskKey(project.id, task.id);
     try {
-      if (!selection) { await chooseTask(project, task, false); setReportCaseReturn(undefined); return; }
+      setTaskPanelByTask(previous => ({ ...previous, [key]: 'chat' }));
+      if (!selection) {
+        setActiveTaskSourceCase(undefined);
+        await chooseTask(project, task, false);
+        setReportCaseReturn(undefined);
+        return;
+      }
       const detail = await caseClient.detail(selection.caseId);
       if (detail.case.revision !== selection.caseRevision) throw new caseClient.CaseRequestError('revision_conflict', 409);
+      setActiveTaskSourceCase({ taskKey: key, caseId: detail.case.id, caseTitle: detail.case.title });
       await chooseTask(project, task, false, { selection, record: detail.case, work: project.work ?? null });
       setReportCaseReturn(undefined);
     } catch (error) { setGlobalError(error instanceof Error ? error.message : 'Case背景未能读取，请刷新后核对。'); }
   };
-  const openFeedbackTask = async (target: { projectId: string; taskId: string; handoffId: string }) => { const value = await readTaskForNavigation(target.projectId, target.taskId); mergeProject(value.project); await chooseTask(value.project, value.task, false); };
+  const openFeedbackTask = async (target: { projectId: string; taskId: string; handoffId: string }) => { const value = await readTaskForNavigation(target.projectId, target.taskId); setActiveTaskSourceCase(undefined); mergeProject(value.project); await chooseTask(value.project, value.task, false); };
   const generatePptx = async (project: ClientProject, file: { name: string; path: string }) => {
     const task = await createDiskTask(project.id, `PPT 生成 · ${file.name.replace(/\.md$/i, '')}`, undefined);
     setProjects(previous => previous.map(item => item.id === project.id ? { ...item, tasks: [...item.tasks, task] } : item));
+    setActiveTaskSourceCase(undefined);
     await chooseTask(project, task);
     await persistDraft(project.id, task.id, `请读取 060_reports 正式报告 ${file.path}，使用 ppt-report skill 生成候选版 PPTX（保存到 060_reports 同目录，文件名加 _候选版）。数字必须逐字来自该报告，版式遵循 skill 规范。`);
   };
   const startFeedbackAnalysis = (source: FeedbackReviewStart) => { setFeedbackReview(source); openWorkspace('decision'); };
-  const pageTitle = view === 'project-plan' ? '项目需求与任务方案' : view === 'goals' ? managementTitle(management) : view === 'studio' ? studioLibraryTitle(studioLibraryArea) : view === 'cases' ? '决策星图' : view === 'projects' ? '项目地图' : view === 'chat' ? active ? activeTask ? `${active.name} / ${activeTask.name}` : active.name : '项目工作台' : inSettings ? '设置' : view === 'decision' ? '决策工作台' : view === 'requirement' ? '需求梳理' : view === 'refiner' ? 'PPT 逐页精修' : view === 'simlab' ? '经营推演' : view === 'model-pack' ? '模型注册表' : '项目工作台';
-  const returnView = settingsReturnView.current, settingsBackLabel = returnView === 'project-plan' ? '返回项目需求方案' : returnView === 'goals' ? '返回' + managementTitle(management) : returnView === 'studio' ? '返回Studio资产体系' : returnView === 'cases' ? '返回决策星图' : returnView === 'projects' ? '返回项目地图' : returnView === 'chat' ? '返回项目空间' : returnView === 'decision' ? '返回决策工作台' : returnView === 'requirement' ? '返回需求梳理' : returnView === 'refiner' ? '返回PPT 逐页精修' : returnView === 'simlab' ? '返回经营推演' : returnView === 'model-pack' ? '返回模型注册表' : '返回当前工作';
+  const openHomeFoundation = (id: HomeFoundationId) => {
+    if (id === 'strategy') showManagement({ area: 'strategy', stage: 'co-create' });
+    else if (id === 'goals') showManagement({ area: 'gsa', stage: 'goals' });
+    else if (id === 'semantic') openStudioLibrary('semantic');
+    else openStudioLibrary('analytics');
+  };
+  const openHomeCase = (caseId: string) => {
+    setHelpOpen(false);
+    setCaseCreatePending(false);
+    setCaseFocus(caseId);
+    setCaseFocusSeq(seq => seq + 1);
+    setCaseIssueFocus(undefined);
+    setReportCaseReturn(undefined);
+    lastWorkspace.current = 'cases';
+    setView('cases');
+  };
+  const openHomeCreateCase = () => {
+    setHelpOpen(false);
+    setCaseFocus(undefined);
+    setCaseIssueFocus(undefined);
+    setCaseCreatePending(true);
+    lastWorkspace.current = 'cases';
+    setView('cases');
+  };
+  const openHomeProject = (projectId: string) => {
+    setCaseProjectTarget(projectId);
+    setProjectFocusSeq(seq => seq + 1);
+    openWorkspace('projects');
+  };
+  const openHomeTask = async (projectId: string, taskId: string, sourceCase?: { caseId: string; caseTitle?: string }, initialPanel: 'chat' | 'report' = 'chat') => {
+    try {
+      const existingProject = projects.find(item => item.id === projectId);
+      const existingTask = existingProject?.tasks.find(item => item.id === taskId);
+      const key = taskKey(projectId, taskId);
+      setActiveTaskSourceCase(sourceCase ? { taskKey: key, ...sourceCase } : undefined);
+      setTaskPanelByTask(previous => ({ ...previous, [key]: initialPanel }));
+      if (existingProject && existingTask) { await chooseTask(existingProject, existingTask, false); return; }
+      const value = await readTaskForNavigation(projectId, taskId);
+      mergeProject(value.project);
+      await chooseTask(value.project, value.task, false);
+    } catch (error) { setGlobalError(safeError(error)); }
+  };
+  const openHomeReport = async (target: WorkspaceHomeReportTarget) => {
+    const key = taskKey(target.projectId, target.taskId);
+    setInspectedReport({ key, version: { relativePath: target.relativePath, sha256: target.sha256, textStatus: 'utf8', reviewable: true, current: false } });
+    setAutoOpenReportKey(key);
+    setReportPreviewOpenByTask(previous => ({ ...previous, [key]: true }));
+    setDeskStateByTask(previous => ({ ...previous, [key]: { selectedReportKey: `${target.relativePath}#${target.sha256}` } }));
+    setTaskInspector(undefined);
+    setFilesOpen(false);
+    await openHomeTask(target.projectId, target.taskId, { caseId: target.caseId, caseTitle: target.caseTitle }, 'report');
+  };
+  const handleSearchSelect = (target: WorkspaceSearchTarget) => {
+    if (target.kind === 'view') {
+      if (target.view === 'help') { setHelpOpen(true); return; }
+      if (target.view === 'projects') setCaseProjectTarget(undefined);
+      openWorkspace(target.view);
+      return;
+    }
+    if (target.kind === 'foundation') { openHomeFoundation(target.foundation); return; }
+    if (target.kind === 'settings') { openSettingsView(target.settingsView); return; }
+    if (target.kind === 'case') { openHomeCase(target.caseId); return; }
+    if (target.kind === 'project') { openHomeProject(target.projectId); return; }
+    void openHomeTask(target.projectId, target.taskId, undefined, 'chat');
+  };
+  const pageTitle = view === 'home' ? '工作台首页' : view === 'foundation' ? '基础建设总览' : view === 'project-plan' ? '项目需求与任务方案' : view === 'goals' ? managementTitle(management) : view === 'studio' ? studioLibraryTitle(studioLibraryArea) : view === 'cases' ? '决策星图' : view === 'projects' ? '项目地图' : view === 'chat' ? active ? activeTask ? `${active.name} / ${activeTask.name}` : active.name : '项目工作台' : inSettings ? '设置' : view === 'decision' ? '决策工作台' : view === 'requirement' ? '需求梳理' : view === 'refiner' ? 'PPT 逐页精修' : view === 'simlab' ? '经营推演' : view === 'model-pack' ? '模型注册表' : '项目工作台';
+  const returnView = settingsReturnView.current, settingsBackLabel = returnView === 'home' ? '返回工作台首页' : returnView === 'foundation' ? '返回基础建设总览' : returnView === 'project-plan' ? '返回项目需求方案' : returnView === 'goals' ? '返回' + managementTitle(management) : returnView === 'studio' ? '返回Studio资产体系' : returnView === 'cases' ? '返回决策星图' : returnView === 'projects' ? '返回项目地图' : returnView === 'chat' ? '返回项目空间' : returnView === 'decision' ? '返回决策工作台' : returnView === 'requirement' ? '返回需求梳理' : returnView === 'refiner' ? '返回PPT 逐页精修' : returnView === 'simlab' ? '返回经营推演' : returnView === 'model-pack' ? '返回模型注册表' : '返回当前工作';
   const messages = messagesOf(current?.snapshot), lastAssistant = [...messages].reverse().find(message => message.role === 'assistant' && messageText(message));
   const currentStatus = current?.observation?.message && current.observation.state !== 'connected' ? current.observation.message : current?.snapshot?.cleanupRequestId ? '上次运行的资源清理未完成，可重新连接任务。' : question ? 'Pi 等待你的回应' : current?.opening ? '正在打开任务' : current?.status === 'running' ? current.toolStatus ?? 'Pi 正在回复' : current?.status === 'stopping' ? '正在停止' : !current?.connected ? '任务连接待恢复' : current.draftSaving ? '正在保存草稿…' : '任务和历史已保存在本机';
   const renderAssistantText = (text: string) => view === 'chat' ? <StrategyDiscussionReply text={text} /> : text;
@@ -895,7 +1014,108 @@ export function App() {
     });
   };
   const switchManagementStage = (stage: ManagementStage) => { if(stage==='goals'||stage==='adopt'||stage==='cases'||stage==='history') setManagement({area:'gsa',stage}); else setManagement({area:'strategy',stage}); };
-  const chatContent = active && activeTask ? <div className={`chat-page ${view === 'chat' ? 'analysis-chat-page' : ''} ${messages.length || current?.streaming || current?.optimistic ? 'has-messages' : ''}`}>
+  const currentTaskSourceCase = selectedCase
+    ? { caseId: selectedCase.record.id, caseTitle: selectedCase.record.title }
+    : activeKey && activeTaskSourceCase?.taskKey === activeKey
+      ? { caseId: activeTaskSourceCase.caseId, caseTitle: activeTaskSourceCase.caseTitle }
+      : undefined;
+  const currentTaskPanel: 'chat' | 'report' = view === 'chat' && activeKey ? (taskPanelByTask[activeKey] ?? 'chat') : 'chat';
+  useEffect(() => {
+    if (view !== 'chat' || !activeId) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('project') !== activeId || url.searchParams.get('task') !== (activeTaskId ?? null)) return;
+    const reportOpen = Boolean(activeTaskId && currentTaskPanel === 'report');
+    const location = {
+      case: activeTaskId && currentTaskSourceCase?.caseId,
+      panel: reportOpen ? 'report' : undefined,
+      report: reportOpen ? inspectedVersion?.relativePath : undefined,
+      sha256: reportOpen ? inspectedVersion?.sha256 : undefined,
+    };
+    for (const [key, value] of Object.entries(location)) {
+      if (value) url.searchParams.set(key, value);
+      else url.searchParams.delete(key);
+    }
+    if (url.href !== window.location.href) window.history.replaceState(null, '', url);
+  }, [view, activeId, activeTaskId, currentTaskPanel, currentTaskSourceCase?.caseId, inspectedVersion?.relativePath, inspectedVersion?.sha256]);
+  const switchTaskPanel = (panel: 'chat' | 'report') => {
+    if (!activeKey) return;
+    setTaskPanelByTask(previous => ({ ...previous, [activeKey]: panel }));
+    if (panel === 'report') {
+      setTaskInspector(undefined);
+      setFilesOpen(false);
+    }
+  };
+  const chatContent = active && activeTask ? (view === 'chat' && currentTaskPanel === 'report' ? (
+    <TaskReportDesk
+      key={`desk-${activeKey}`}
+      projectId={active.id}
+      projectName={active.name}
+      taskId={activeTask.id}
+      taskName={activeTask.name}
+      taskTypeLabel={activeTask.assignment ? taskPurpose[activeTask.assignment.type].label : undefined}
+      initialReport={inspectedVersion}
+      sourceCase={currentTaskSourceCase}
+      persistedState={activeKey ? deskStateByTask[activeKey] : undefined}
+      onPersistedStateChange={next => {
+        if (!activeKey) return;
+        setDeskStateByTask(previous => ({ ...previous, [activeKey]: next }));
+      }}
+      onReportChange={version => {
+        setInspectedReport(activeKey && version ? { key: activeKey, version } : undefined);
+      }}
+      onSwitchToChat={() => switchTaskPanel('chat')}
+      onOpenProject={() => openHomeProject(active.id)}
+      onOpenCase={caseId => {
+        setAutoOpenReportKey(undefined);
+        setCaseFocus(caseId);
+        setCaseFocusSeq(seq => seq + 1);
+        setCaseIssueFocus(undefined);
+        setReportCaseReturn({ caseId, projectId: active.id, taskId: activeTask.id });
+        lastWorkspace.current = 'cases';
+        setView('cases');
+      }}
+      onOpenFiles={trigger => openTaskFiles(trigger)}
+      onOpenConclusionReview={trigger => {
+        inspectorTrigger.current = trigger;
+        selectInspector('conclusion');
+      }}
+    />
+  ) : <div className={`chat-page ${view === 'chat' ? 'analysis-chat-page' : ''} ${messages.length || current?.streaming || current?.optimistic ? 'has-messages' : ''}`}>
+        {view !== 'studio' && (
+          <div className="task-mode-strip" role="region" aria-label="任务视图与来源">
+            <div className="task-mode-strip-inner">
+              <div className="task-mode-tabs" role="group" aria-label="任务工作视图">
+                <button type="button" aria-pressed={true} onClick={() => switchTaskPanel('chat')}>
+                  <span className="pv-chat-icon" aria-hidden="true" />
+                  任务对话
+                </button>
+                <button type="button" aria-pressed={false} onClick={() => switchTaskPanel('report')}>
+                  <span className="pv-paper-icon" aria-hidden="true" />
+                  结论报告
+                </button>
+              </div>
+              {currentTaskSourceCase && (
+                <div className="task-mode-source-case">
+                  <span>来源 Case · <strong>{currentTaskSourceCase.caseTitle || currentTaskSourceCase.caseId}</strong></span>
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => {
+                      setCaseFocus(currentTaskSourceCase.caseId);
+                      setCaseFocusSeq(seq => seq + 1);
+                      setCaseIssueFocus(undefined);
+                      setReportCaseReturn({ caseId: currentTaskSourceCase.caseId, projectId: active.id, taskId: activeTask.id });
+                      lastWorkspace.current = 'cases';
+                      setView('cases');
+                    }}
+                  >
+                    返回来源 Case
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         {view !== 'studio' && <TaskUsageContext projectId={active.id} task={activeTask} providedContext={current?.snapshot?.capabilities?.semanticContext} />}
         {archived && <div className="archive-banner" role="status"><span>{active.archivedAt ? '项目' : '任务'}已归档，当前为只读查看。</span><button className="secondary-button" disabled={Boolean(projectActionId)} onClick={() => { if (active.archivedAt) void projectAction(active, 'restore'); else void taskArchiveAction(true); }}>恢复原记录</button></div>}
         {view !== 'studio' && <><TaskWorkflow projectName={active.name} taskName={activeTask.name} status={archived ? '已归档 · 只读' : currentStatus} busy={busy} hasMessages={Boolean(messages.length)} hasReply={Boolean(lastAssistant)} requirementTitle={attachedRequirement?.title} onFiles={openTaskFiles} onRequirements={openTaskRequirements} onAnalyze={() => { textarea.current?.focus(); }} onResults={() => { resultsPanel.current?.scrollIntoView({ block: 'nearest' }); resultsPanel.current?.focus({ preventScroll: true }); }} /><div className="task-workflow"><button type="button" className="text-button" disabled={busy || Boolean(active.archivedAt)} onClick={() => { void taskArchiveAction(Boolean(activeTask.archivedAt)); }}>{activeTask.archivedAt ? '恢复原任务' : '归档此任务'}</button></div></>}
@@ -906,7 +1126,7 @@ export function App() {
           <details key={`context-${activeKey}`} className="task-context-options" open={selectedCase ? true : undefined}><summary>本次分析背景<span>{[selectedCase && 'Case', attachedRequirement && '需求', attachedEnterprise.length > 0 && '企业资料', attachedFeedback && '反馈'].filter(Boolean).join(' · ') || '按需选择'}</span></summary>
           {selectedCase && <div className="case-context-banner" role="status"><div><strong>本次背景：{selectedCase.record.title}</strong><span>Case v{selectedCase.selection.caseRevision} · 项目进度 v{selectedCase.selection.projectWorkRevision}</span><details><summary>查看本次背景</summary><p>{selectedCase.record.description || '尚未填写背景'}</p><p>判断与未知：{selectedCase.record.judgement || '尚未填写'}</p><p>下一步：{selectedCase.record.nextStep || '尚未填写'}</p><p>项目范围：{selectedCase.work?.workScope || '尚未填写'}；承接人：{selectedCase.work?.assignee || '尚未填写'}；项目下一步：{selectedCase.work?.nextStep || '尚未填写'}</p><p>已选引用：{selectedCase.selection.selectedReferenceIds.length} 项。此任务原有历史可能含其他 Case 信息；如需独立上下文，请在原项目新建任务。</p></details></div><button type="button" className="text-button" disabled={contextLocked} onClick={() => setCaseContexts(previous => { const next = { ...previous }; delete next[activeKey!]; return next; })}>改为项目独立发送</button></div>}
           {attachedRequirement && <div className="case-context-banner" role="status"><div><strong>{attachedRequirement.frameworkVersion ? '附带分析框架' : '附带需求契约'}：{attachedRequirement.title}</strong><span>实例 {attachedRequirement.instanceId} · {attachedRequirement.frameworkVersion ? `框架版本 ${attachedRequirement.frameworkVersion}` : attachedRequirement.version ? `RAP ${attachedRequirement.version}` : '已确认快照'} · 发送时注入结构化摘要</span></div><button type="button" className="text-button" disabled={contextLocked} onClick={() => setRequirementContexts(previous => { const next = { ...previous }; delete next[activeKey!]; return next; })}>移除附带</button></div>}
-          <FeedbackContextPanel key={`feedback-${activeKey}`} project={active} task={activeTask} value={attachedFeedback} onChange={value => setFeedbackContexts(previous => ({ ...previous, [activeKey!]: value }))} disabled={contextLocked} filesRevision={filesRevision} onNextSource={setFeedbackNextSource} onNextAnalysis={startFeedbackAnalysis} onGoCase={caseId => { setCaseFocus(caseId); setView('cases'); lastWorkspace.current = 'cases'; }} onFilesChanged={() => setFilesRevision(previous => previous + 1)} />
+          <FeedbackContextPanel key={`feedback-${activeKey}`} project={active} task={activeTask} value={attachedFeedback} onChange={value => setFeedbackContexts(previous => ({ ...previous, [activeKey!]: value }))} disabled={contextLocked} filesRevision={filesRevision} onNextSource={setFeedbackNextSource} onNextAnalysis={startFeedbackAnalysis} onGoCase={caseId => { setCaseFocus(caseId); setCaseFocusSeq(seq => seq + 1); setView('cases'); lastWorkspace.current = 'cases'; }} onFilesChanged={() => setFilesRevision(previous => previous + 1)} />
           {activeTask.feedbackOrigin && <FeedbackReceiptHistory key={`feedback-history-${activeKey}`} projectId={active.id} taskId={activeTask.id} revision={current?.snapshot?.lastRun?.requestId ?? activeTask.lastRun?.id} />}
           {!archived && <EnterpriseMaterialPicker key={`enterprise-${activeKey}`} value={attachedEnterprise} onChange={value => setEnterpriseMaterials(previous => ({ ...previous, [activeKey!]: value }))} caseId={selectedCase?.record.id} caseValue={attachedEnterpriseCase} onCaseChange={value => setEnterpriseCases(previous => ({ ...previous, [activeKey!]: value }))} disabled={contextLocked} />}
           <PersonalContextSelectionNotice choices={attachedPersonal} disabled={busy || archived || Boolean(current?.uncertainPersonalSend)} onRemove={index => setPersonalContexts(previous => ({ ...previous, [activeKey!]: (previous[activeKey!] ?? []).filter((_value,at)=>at!==index) }))} onChange={(index,selection)=>setPersonalContexts(previous=>({...previous,[activeKey!]:(previous[activeKey!]??[]).map((item,at)=>at===index?{...item,selection}:item)}))} />
@@ -939,14 +1159,15 @@ export function App() {
           {!archived && <button type="button" className="text-button task-case-trigger" onClick={event => { event.currentTarget.focus({preventScroll:true}); showManagement({area:'gsa',stage:'adopt'},{kind:'task',projectId:active.id,taskId:activeTask.id}); }}>带着本任务去核对新增 Case</button>}
           </section>}
         </div><footer className="workspace-footer">本机持久项目 · 任务独立对话 · 020_clean 分析与过程 · 060_reports 最终报告 · 请勿上传敏感数据</footer>
-      </div> : null;
+      </div>) : null;
+  const sidebarWorkspaceLabel = sidebarEnterpriseName || '当前工作区';
   return <div className="app" data-theme={theme} data-build="decision-case-phase1-20261029">
     {personalChoice && <PersonalContextTargetPicker projects={projects} lockedTaskKeys={Object.keys(ui).filter(key => Boolean(ui[key]?.uncertainPersonalSend))} title={personalChoice.title} onClose={() => setPersonalChoice(undefined)} onSelect={(project, task) => {
       if (project.archivedAt || task.archivedAt) return;
       const key = taskKey(project.id, task.id), choice = personalChoice;
       if (uiRef.current[key]?.uncertainPersonalSend) { setGlobalError('该任务有发送状态 UNKNOWN，先核对原请求；选择与原问题保持。'); return; }
       setPersonalContexts(previous => ({ ...previous, [key]: [...(previous[key] ?? []).filter(item => JSON.stringify(item.selection) !== JSON.stringify(choice.selection)), choice] }));
-      setPersonalChoice(undefined); void chooseTask(project, task, false);
+      setPersonalChoice(undefined); setActiveTaskSourceCase(undefined); void chooseTask(project, task, false);
     }} />}
     <a className="skip-link" href="#main-content">跳到主内容</a>
     {sidebarOpen && <ResponsiveWorkspacePanel label="工作台导航" kind="navigation" modal={sidebarModal} onClose={closeSidebar}>
@@ -954,20 +1175,27 @@ export function App() {
       <div className="brand"><BrandMark small /><div><strong>OptraCall</strong><span>持续做出更好的决策</span></div>
         {sidebarModal && <button type="button" className="icon-button sidebar-close" data-panel-focus aria-label="关闭侧栏" onClick={closeSidebar}>×</button>}
       </div>
+      <div className="sidebar-workspace">
+        <span className="sidebar-workspace-avatar" aria-hidden="true">{sidebarWorkspaceLabel.slice(0, 1)}</span>
+        <div><strong>{sidebarWorkspaceLabel}</strong><small>经营工作区</small></div>
+      </div>
       <button type="button" className="new-chat" aria-label="新建项目" onClick={() => openProjectCreation()}><Icon name="plus" />新建项目</button>
       <button type="button" className="history-heading archived-heading workspace-sidebar-disclosure" aria-expanded={primaryNavOpen} aria-controls="workspace-primary-links" onClick={() => setPrimaryNavOpen(open => !open)}>主导航<span aria-hidden="true">{primaryNavOpen ? '⌄' : '›'}</span></button>
       <nav className="primary-nav" id="workspace-primary-links" aria-label="主导航" hidden={!primaryNavOpen}>
-        <button type="button" className={`nav-item ${view === 'goals' && management.area === 'strategy' ? 'selected' : ''}`} aria-current={view === 'goals' && management.area === 'strategy' ? 'page' : undefined} onClick={() => showManagement({area: 'strategy', stage: 'co-create'})}><Icon name="chat" />战略选择</button>
-        <button type="button" className={`nav-item ${view === 'goals' && management.area === 'gsa' ? 'selected' : ''}`} aria-current={view === 'goals' && management.area === 'gsa' ? 'page' : undefined} onClick={() => showManagement({area: 'gsa', stage: 'goals'})}><Icon name="check" />目标管理</button>
+        <p className="nav-group-heading" aria-hidden="true">日常工作</p>
+        <button type="button" className={`nav-item ${view === 'home' ? 'selected' : ''}`} aria-current={view === 'home' ? 'page' : undefined} onClick={() => openWorkspace('home')}><Icon name="home" />工作台首页</button>
         <button type="button" className={`nav-item ${view === 'cases' ? 'selected' : ''}`} aria-current={view === 'cases' ? 'page' : undefined} onClick={() => openWorkspace('cases')}><Icon name="panel" />决策星图</button>
         <button type="button" className={`nav-item ${view === 'projects' ? 'selected' : ''}`} aria-current={view === 'projects' ? 'page' : undefined} onClick={() => { setCaseProjectTarget(undefined); openWorkspace('projects'); }}><Icon name="folder" />项目地图</button>
+        <button type="button" className="nav-foundation-index" aria-current={view === 'foundation' ? 'page' : undefined} onClick={() => openWorkspace('foundation')}><span>基础建设总览</span><span aria-hidden="true">›</span></button>
+        <button type="button" className={`nav-item ${view === 'goals' && management.area === 'strategy' ? 'selected' : ''}`} aria-current={view === 'goals' && management.area === 'strategy' ? 'page' : undefined} onClick={() => showManagement({area: 'strategy', stage: 'co-create'})}><Icon name="chat" />战略选择</button>
+        <button type="button" className={`nav-item ${view === 'goals' && management.area === 'gsa' ? 'selected' : ''}`} aria-current={view === 'goals' && management.area === 'gsa' ? 'page' : undefined} onClick={() => showManagement({area: 'gsa', stage: 'goals'})}><Icon name="check" />目标管理</button>
         <button type="button" className={`nav-item ${view === 'studio' && studioLibraryArea === 'semantic' ? 'selected' : ''}`} aria-current={view === 'studio' && studioLibraryArea === 'semantic' ? 'page' : undefined} onClick={() => openStudioLibrary('semantic')}><Icon name="assets" />语义资产</button>
         <button type="button" className={`nav-item ${view === 'studio' && studioLibraryArea === 'analytics' ? 'selected' : ''}`} aria-current={view === 'studio' && studioLibraryArea === 'analytics' ? 'page' : undefined} onClick={() => openStudioLibrary('analytics')}><Icon name="market" />分析资产</button>
       </nav>
-      <ProjectNavigation spaceOpen={projectSpaceOpen} onSpaceToggle={() => setProjectSpaceOpen(open => !open)} projects={projects} activeProjectId={activeId} activeTaskId={activeTaskId} states={ui} loading={hostStatus === 'loading'} onProject={project => { setCaseContexts({}); selectContext(project.id); openWorkspace('chat'); if (window.innerWidth <= 760) setSidebarOpen(false); }} onTask={(project, task) => { void chooseTask(project, task); }} onCreateTask={showTaskDialog} onRename={(project, trigger) => { dialogTrigger.current = trigger; setRenameTarget(project); }} onArchive={project => { void projectAction(project, 'archive'); }} onRestore={project => { void projectAction(project, 'restore'); }} />
+      <ProjectNavigation spaceOpen={projectSpaceOpen} onSpaceToggle={() => setProjectSpaceOpen(open => !open)} projects={projects} activeProjectId={activeId} activeTaskId={activeTaskId} states={ui} loading={hostStatus === 'loading'} onProject={project => { setCaseContexts({}); setActiveTaskSourceCase(undefined); selectContext(project.id); openWorkspace('chat'); if (window.innerWidth <= 760) setSidebarOpen(false); }} onTask={(project, task) => { const key = taskKey(project.id, task.id); setActiveTaskSourceCase(undefined); setTaskPanelByTask(previous => ({ ...previous, [key]: 'chat' })); void chooseTask(project, task); }} onCreateTask={showTaskDialog} onRename={(project, trigger) => { dialogTrigger.current = trigger; setRenameTarget(project); }} onArchive={project => { void projectAction(project, 'archive'); }} onRestore={project => { void projectAction(project, 'restore'); }} />
       <div className="sidebar-bottom workspace-sidebar-bottom"><button type="button" className={`nav-item ${inSettings ? 'selected' : ''}`} aria-label="设置" aria-current={inSettings ? 'page' : undefined} aria-describedby={config?.hasApiKey ? 'settings-configured' : undefined} onClick={event => openSettings(event.currentTarget)}><Icon name="settings" />设置{config?.hasApiKey && <span className="configured-dot" aria-hidden="true" />}</button>{config?.hasApiKey && <span id="settings-configured" className="sr-only">已保存本机配置</span>}<button type="button" className="text-button workspace-locale" disabled title="界面语言切换后续支持" aria-label="中英界面切换，后续支持">中／EN</button></div>
     </aside></ResponsiveWorkspacePanel>}
-    <main id="main-content" className="main" tabIndex={-1}><header className="topbar"><div className="topbar-context"><button ref={sidebarToggle} className="icon-button" aria-label={sidebarOpen ? '收起侧栏' : '展开侧栏'} aria-expanded={sidebarOpen} aria-controls={sidebarOpen ? 'sidebar' : undefined} aria-haspopup={sidebarModal ? 'dialog' : undefined} onClick={() => sidebarOpen ? closeSidebar() : setSidebarOpen(true)}><Icon name="panel" /></button><span className="topbar-title">{helpOpen ? '帮助' : pageTitle}</span></div><div className="workspace-switch" role="group" aria-label="工作区切换"><button aria-pressed={!helpOpen && view === 'chat'} onClick={() => openWorkspace('chat')}>分析</button><button aria-pressed={!helpOpen && view === 'decision'} onClick={() => openWorkspace('decision')}>决策</button></div><div className="topbar-actions">{canOpenProjectFiles && !helpOpen && <button type="button" ref={filesToggle} className="icon-button files-toggle" aria-label={showProjectFiles ? '收起项目文件' : '展开项目文件'} aria-expanded={showProjectFiles} aria-controls={showProjectFiles ? 'project-files' : undefined} aria-haspopup={inspectorModal ? 'dialog' : undefined} onClick={event => toggleProjectFiles(event.currentTarget)}><Icon name="panel" /></button>}<button ref={helpTrigger} className="help-trigger" type="button" aria-label="帮助" aria-expanded={helpOpen} aria-controls="product-help" onClick={() => helpOpen ? closeHelp() : setHelpOpen(true)}><Icon name="help" size={17} />帮助</button><button className="icon-button" aria-label={theme === 'light' ? '切换为深色' : '切换为浅色'} onClick={() => setTheme(old => old === 'light' ? 'dark' : 'light')}><Icon name={theme === 'light' ? 'moon' : 'sun'} /></button></div></header>
+    <main id="main-content" className="main" tabIndex={-1}><header className="topbar"><div className="topbar-context"><button ref={sidebarToggle} className="icon-button" aria-label={sidebarOpen ? '收起侧栏' : '展开侧栏'} aria-expanded={sidebarOpen} aria-controls={sidebarOpen ? 'sidebar' : undefined} aria-haspopup={sidebarModal ? 'dialog' : undefined} onClick={() => sidebarOpen ? closeSidebar() : setSidebarOpen(true)}><Icon name="panel" /></button><span className="topbar-title">{helpOpen ? '帮助' : pageTitle}</span></div><div className="workspace-switch" role="group" aria-label="工作区切换"><button aria-pressed={!helpOpen && view === 'chat'} onClick={() => openWorkspace('chat')}>分析</button><button aria-pressed={!helpOpen && view === 'decision'} onClick={() => openWorkspace('decision')}>决策</button></div><div className="topbar-actions"><button ref={searchTrigger} type="button" className="topbar-search-button" aria-label="搜索工作区" onClick={openQuickSearch}><Icon name="search" size={15} /><span>搜索工作区</span><kbd aria-hidden="true">/</kbd></button>{canOpenProjectFiles && !helpOpen && <button type="button" ref={filesToggle} className="icon-button files-toggle" aria-label={showProjectFiles ? '收起项目文件' : '展开项目文件'} aria-expanded={showProjectFiles} aria-controls={showProjectFiles ? 'project-files' : undefined} aria-haspopup={inspectorModal ? 'dialog' : undefined} onClick={event => toggleProjectFiles(event.currentTarget)}><Icon name="panel" /></button>}<button ref={helpTrigger} className="help-trigger" type="button" aria-label="帮助" aria-expanded={helpOpen} aria-controls="product-help" onClick={() => helpOpen ? closeHelp() : setHelpOpen(true)}><Icon name="help" size={17} />帮助</button><button className="icon-button" aria-label={theme === 'light' ? '切换为深色' : '切换为浅色'} onClick={() => setTheme(old => old === 'light' ? 'dark' : 'light')}><Icon name={theme === 'light' ? 'moon' : 'sun'} /></button></div></header>
       {globalError && <div className="global-notice" role="alert"><span>{globalError}</span><button className="text-button" onClick={async () => { try { await refreshConfigurations(); const saved = await listProjects(); for (const project of saved) mergeProject(project); setGlobalError(''); } catch {} }}>重新连接</button><button className="text-button" onClick={() => setGlobalError('')}>关闭提示</button></div>}{globalNotice && <p className="project-notice" role="status">{globalNotice}</p>}
       {studioProjectAssociationPending && <div className="global-notice" role="alert"><span>项目 {studioProjectAssociationPending.projectId} 已创建；企业关联结果 UNKNOWN，原请求保持。</span><button type="button" className="secondary-button" onClick={() => { void inspectStudioProjectAssociation(); }}>核对原企业关联结果</button></div>}
       {studioUsePending && <div className="global-notice" role="alert"><span>进入分析结果 UNKNOWN；原请求 {studioUsePending.requestId} 保留，未重复创建任务。</span><button type="button" className="secondary-button" onClick={() => { void inspectStudioUse(); }}>核对原创建结果</button></div>}
@@ -1014,14 +1242,14 @@ export function App() {
         <div id="settings-domain-pack-panel" hidden={view !== 'capability-plans'}>{view === 'capability-plans' && <CapabilityPlansSettings onOpenStudio={() => { setStudioMounted(true); setHelpOpen(false); setView('studio'); }} />}</div>
         </div></div>
       </section>}
-      {goalMounted && <div hidden={view !== 'goals'} style={{ display: view === 'goals' ? 'flex' : 'none', flex: 1, minHeight: 0, minWidth: 0 }}><StrategyGoalsPage teachReview={teachReview} clearTeachReview={()=>setTeachReview(undefined)} onReturnReview={()=>{if(!teachReview)return;setCaseFocus(teachReview.teachReview.caseId);setCaseIssueFocus(teachReview.teachReview.issueId);setTeachReview(undefined);setView('cases');lastWorkspace.current='cases';}} caseSource={caseSource} clearCaseSource={()=>setCaseSource(undefined)} onInspectCase={id=>{setCaseFocus(id);setView('cases');lastWorkspace.current='cases';}} management={management} onStage={switchManagementStage} projects={projects} configurations={configurations} selectedConfigurationId={selectedId} onSettings={() => openSettings()} onOpenBoard={() => openWorkspace('decision')} active={view === 'goals' && !helpOpen} onOpenCase={goal => { setGoalForCase(goal); openWorkspace('cases'); }} onStartProject={(goal, usageContext, handoff) => { openWorkspace('projects'); openProjectCreation(goal, usageContext, handoff); }} onManageMetrics={() => openStudioProfessional({ kind: 'metrics' })} /></div>}
-      {mountedPlans.map(projectId => { const project = projects.find(value => value.id === projectId); return project && <div key={projectId} hidden={view !== 'project-plan' || planProjectId !== projectId} style={{ display: view === 'project-plan' && planProjectId === projectId ? 'flex' : 'none', flex: 1, minHeight: 0, minWidth: 0 }}><ProjectPlanPage historyOnly project={project} initialGoal={project.goalOrigin?.goal ?? goalProjectEntrances[projectId]?.goal} initialUsageContext={goalProjectEntrances[projectId]?.usageContext} onBack={() => openWorkspace('projects')} onConfirmed={async () => { await refreshProjects(); setGoalProjectEntrances(previous => { const next = { ...previous }; delete next[projectId]; return next; }); }} onOpenTask={taskId => { void readTaskForNavigation(projectId, taskId).then(value => { mergeProject(value.project); return chooseTask(value.project, value.task); }).catch(error => setGlobalError(safeError(error))); }} onManageCapabilities={() => { selectContext(project.id); openWorkspace('chat'); setFilesOpen(true); }} /></div>; })}
-      {studioMounted && <div hidden={view !== 'studio'} className="studio-workspace"><StudioPage libraryArea={studioLibraryArea} libraryRequest={studioLibraryRequest} onLibraryAreaChange={setStudioLibraryArea} onSwitchLibraryArea={openStudioLibrary} active={view === 'studio' && !helpOpen} currentProjectId={activeId} operatorProjectReady={boundProjectId === activeId} projects={projects} initialSystemId={studioFocus || undefined} onTargetConsumed={() => setStudioFocus('')} onSelectConstruction={selectStudioConstruction} onStartConstruction={system => runStudioConstruction(system, true)} onContinueConstruction={(system, goal) => runStudioConstruction(system, false, goal)} onOpenTask={(projectId, taskId) => { const project = projects.find(value => value.id === projectId), task = project?.tasks.find(value => value.id === taskId); if (project && task) void chooseTask(project, task, false); else void readTaskForNavigation(projectId, taskId).then(value => { mergeProject(value.project); return chooseTask(value.project, value.task, false); }).catch(error => setGlobalError(safeError(error))); }} renderConversation={(_system, workspace) => view === 'studio' && active?.id === workspace.project.id && activeTask?.id === workspace.task.id ? chatContent : <p className="studio-muted">正在核对当前建设任务与会话…</p>} onUseSystem={useStudioSystem} initialProfessionalTarget={studioProfessionalTarget} onProfessionalTargetConsumed={() => setStudioProfessionalTarget(undefined)} onCreateProject={() => openProjectCreation()} onEnterpriseChange={setStudioEnterpriseId} onNavigationGuard={registerStudioLeave} onModalChange={setStudioDialogOpen} /></div>}
+      {goalMounted && <div hidden={view !== 'goals'} style={{ display: view === 'goals' ? 'flex' : 'none', flex: 1, minHeight: 0, minWidth: 0 }}><StrategyGoalsPage teachReview={teachReview} clearTeachReview={()=>setTeachReview(undefined)} onReturnReview={()=>{if(!teachReview)return;setCaseFocus(teachReview.teachReview.caseId);setCaseFocusSeq(seq => seq + 1);setCaseIssueFocus(teachReview.teachReview.issueId);setTeachReview(undefined);setView('cases');lastWorkspace.current='cases';}} caseSource={caseSource} clearCaseSource={()=>setCaseSource(undefined)} onInspectCase={id=>{setCaseFocus(id);setCaseFocusSeq(seq => seq + 1);setView('cases');lastWorkspace.current='cases';}} management={management} onStage={switchManagementStage} projects={projects} configurations={configurations} selectedConfigurationId={selectedId} onSettings={() => openSettings()} onOpenBoard={() => openWorkspace('decision')} active={view === 'goals' && !helpOpen} onOpenCase={goal => { setGoalForCase(goal); openWorkspace('cases'); }} onStartProject={(goal, usageContext, handoff) => { openWorkspace('projects'); openProjectCreation(goal, usageContext, handoff); }} onManageMetrics={() => openStudioProfessional({ kind: 'metrics' })} /></div>}
+      {mountedPlans.map(projectId => { const project = projects.find(value => value.id === projectId); return project && <div key={projectId} hidden={view !== 'project-plan' || planProjectId !== projectId} style={{ display: view === 'project-plan' && planProjectId === projectId ? 'flex' : 'none', flex: 1, minHeight: 0, minWidth: 0 }}><ProjectPlanPage historyOnly project={project} initialGoal={project.goalOrigin?.goal ?? goalProjectEntrances[projectId]?.goal} initialUsageContext={goalProjectEntrances[projectId]?.usageContext} onBack={() => openWorkspace('projects')} onConfirmed={async () => { await refreshProjects(); setGoalProjectEntrances(previous => { const next = { ...previous }; delete next[projectId]; return next; }); }} onOpenTask={taskId => { void readTaskForNavigation(projectId, taskId).then(value => { setActiveTaskSourceCase(undefined); mergeProject(value.project); return chooseTask(value.project, value.task); }).catch(error => setGlobalError(safeError(error))); }} onManageCapabilities={() => { selectContext(project.id); openWorkspace('chat'); setFilesOpen(true); }} /></div>; })}
+      {studioMounted && <div hidden={view !== 'studio'} className="studio-workspace"><StudioPage libraryArea={studioLibraryArea} libraryRequest={studioLibraryRequest} onLibraryAreaChange={setStudioLibraryArea} onSwitchLibraryArea={openStudioLibrary} active={view === 'studio' && !helpOpen} currentProjectId={activeId} operatorProjectReady={boundProjectId === activeId} projects={projects} initialSystemId={studioFocus || undefined} onTargetConsumed={() => setStudioFocus('')} onSelectConstruction={selectStudioConstruction} onStartConstruction={system => runStudioConstruction(system, true)} onContinueConstruction={(system, goal) => runStudioConstruction(system, false, goal)} onOpenTask={(projectId, taskId) => { setActiveTaskSourceCase(undefined); const project = projects.find(value => value.id === projectId), task = project?.tasks.find(value => value.id === taskId); if (project && task) void chooseTask(project, task, false); else void readTaskForNavigation(projectId, taskId).then(value => { mergeProject(value.project); return chooseTask(value.project, value.task, false); }).catch(error => setGlobalError(safeError(error))); }} renderConversation={(_system, workspace) => view === 'studio' && active?.id === workspace.project.id && activeTask?.id === workspace.task.id ? chatContent : <p className="studio-muted">正在核对当前建设任务与会话…</p>} onUseSystem={useStudioSystem} initialProfessionalTarget={studioProfessionalTarget} onProfessionalTargetConsumed={() => setStudioProfessionalTarget(undefined)} onCreateProject={() => openProjectCreation()} selectedEnterpriseId={studioEnterpriseId} onEnterpriseChange={setStudioEnterpriseId} onNavigationGuard={registerStudioLeave} onModalChange={setStudioDialogOpen} /></div>}
       {capabilityMounted.includes('requirement') && <div hidden={view !== 'requirement'} style={{ display: view === 'requirement' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto' }}><RequirementPage backLabel={requirementReturnTask ? '返回分析任务' : '返回原工作'} initialInstanceId={requirementFocus} projects={projects} onProjectsChanged={() => { void listProjects().then(value => { if (mounted.current) setProjects(value); }).catch(() => {}); }} onBack={() => requirementReturnTask ? returnFromRequirements() : backFromCapability('requirement')} onSendToTask={(project, task, requirement) => { setRequirementContexts(previous => ({ ...previous, [taskKey(project.id, task.id)]: requirement })); void chooseTask(project, task); }} /></div>}
       {capabilityMounted.includes('refiner') && <div hidden={view !== 'refiner'} style={{ display: view === 'refiner' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto' }}><RefinerPage key={refinerSource ? JSON.stringify(refinerSource) : 'refiner-records'} source={refinerSource} initialDeckId={refinerDeckId} projects={projects} configurations={configurations} onDeckChange={setRefinerDeckId} onNavigationGuard={registerRefinerLeave} onBack={() => backFromCapability('refiner')} /></div>}
       {capabilityMounted.includes('simlab') && <div className="workspace-page-gutter" hidden={view !== 'simlab'} style={{ display: view === 'simlab' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto' }}><SimLabPage backLabel="返回原工作" key={simlabTarget ? JSON.stringify(simlabTarget) : `simlab-records:${capabilityReturn.current.simlab?.projectId || ''}`} initialProjectId={capabilityReturn.current.simlab?.projectId} initialSelection={simlabTarget} projects={projects} onOpenTask={(project, task) => { void chooseTask(project, task); }} onBack={() => backFromCapability('simlab')} /></div>}
       {capabilityMounted.includes('model-pack') && <div className="workspace-page-gutter" hidden={view !== 'model-pack'} style={{ display: view === 'model-pack' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto' }}><ModelRegistryPage backLabel="返回原工作" onBack={() => backFromCapability('model-pack')} /></div>}
-      {inSettings ? null : view === 'project-plan' || view === 'goals' ? null : view === 'cases' ? <CaseBoard onTeachReview={owner=>showManagement(owner.role==='goal'?{area:'gsa',stage:'goals'}:{area:'strategy',stage:'strategy-versions'},undefined,owner)} onReviewGoals={source=>showManagement({area:'gsa',stage:'adopt'},source)} initialSource={caseSource} initialGoal={goalForCase} onInitialGoalConsumed={() => setGoalForCase(undefined)} mapView={caseMapView} onMapViewChange={setCaseMapView} relationUi={caseRelationUi} onRelationUiChange={setCaseRelationUi} onOpenProject={(project, issue) => { if (issue) openProjectCollaboration(project,issue); else { setCaseProjectTarget(project.id); openWorkspace('projects'); } }} decisionUi={caseDecisionUi} onDecisionUiChange={(ownerKey, update) => setCaseDecisionUi(previous => ({ ...previous, [ownerKey]: update(previous[ownerKey] ?? emptyCaseDecisionUiState) }))} currentWork={activeId && activeTaskId ? { projectId: activeId, taskId: activeTaskId } : undefined} onOpenDecisionBoard={target => { setFeedbackReview(target); openWorkspace('decision'); }} initialCaseId={caseFocus} initialIssueId={caseIssueFocus} reportReturn={reportCaseReturn} mode={caseMode} onModeChange={setCaseMode} projects={projects} configurations={configurations} onOpenTask={(project, task, context) => { void boardTask(project, task, context); }} onCreateTask={(project, intent) => showTaskDialog(project, document.activeElement as HTMLElement, intent)} onProjectChange={refreshProjects} /> : view === 'projects' ? <ProjectBoard onOpenWorkflow={(project, target) => openCapability(target, project)} onOpenCollaboration={project => openProjectCollaboration(project)} onOpenPlan={openProjectPlan} initialProjectId={caseProjectTarget || projectReturnFocus} onInitialProjectClose={() => { setProjectReturnFocus(undefined); if (caseProjectTarget) { setCaseProjectTarget(undefined); openWorkspace('cases'); } }} mode={projectMode} onModeChange={setProjectMode} projects={projects} onOpenTask={(project, task) => { void boardTask(project, task); }} onCreateProject={() => openProjectCreation()} onCreateTask={project => showTaskDialog(project, document.activeElement as HTMLElement)} onRename={(project, trigger) => { dialogTrigger.current = trigger; setRenameTarget(project); }} onArchive={project => { void projectAction(project, 'archive'); }} onRestore={project => { void projectAction(project, 'restore'); }} onProjectChange={refreshProjects} /> : view === 'decision' ? <DecisionBoardPage initialReport={boardReportFocus} initialReview={feedbackReview} onOpenFeedbackTask={openFeedbackTask} onOrganize={openPersonal} /> : view === 'requirement' || view === 'refiner' || view === 'simlab' || view === 'model-pack' ? null : view === 'studio' ? null : !active && projects.length > 0 ? <div className="project-start"><BrandMark /><p className="eyebrow">原工作定位待核</p><h1>选择已有项目继续</h1><p>原链接对象暂不可读取，未替换到其他项目或任务。可在 项目地图查找准确原记录。</p><button type="button" className="primary-button" onClick={() => openWorkspace('projects')}>查看已有项目</button></div> : !active ? <div className="project-start"><BrandMark /><p className="eyebrow">你好，欢迎来到 OptraCall</p><h1>从一个项目开始</h1><p>让问题、分析与决策，拥有同一个工作空间。</p><button className="primary-button" onClick={() => openProjectCreation()}><Icon name="plus" />创建第一个项目</button><span>项目、文件与任务历史保存在本机</span></div>  : !activeTask && !archived ? <ProjectCollaboration key={active.id + (projectIssue?.projectId === active.id ? projectIssue.issueId : '')} project={active} issue={projectIssue?.projectId === active.id ? {caseId:projectIssue.caseId,issueId:projectIssue.issueId} : undefined} onChangeScope={scope => openProjectCollaboration(active,scope)} onReturnIssue={returnToProjectIssue} onCreate={intent => showTaskDialog(active, document.activeElement as HTMLElement, intent)} onRefresh={refreshProjects} onHistory={() => openProjectPlan(active)}/> : !activeTask ? <div className="project-start"><BrandMark /><p className="eyebrow">{archived ? '已归档项目' : '项目空间'}</p><h1>{active.name}</h1><p>{archived ? '任务、文件与历史完整保留，恢复项目后可继续工作。' : '文件在项目中共享，对话在任务中独立进行。'}</p>{archived ? <button className="primary-button" disabled={Boolean(projectActionId)} onClick={() => { void projectAction(active, 'restore'); }}>恢复此项目</button> : <button className="primary-button" onClick={event => showTaskDialog(active, event.currentTarget)}>{active.tasks.length ? '新建任务' : '新建第一个任务'}</button>}<span>{active.tasks.length} 个任务 · 三个共享项目文件夹</span></div> : chatContent}
+      {inSettings ? null : view === 'home' ? <WorkspaceHome active={view === 'home' && !helpOpen} projects={projects} currentProjectId={activeId} selectedEnterpriseId={studioEnterpriseId} onEnterpriseChange={setStudioEnterpriseId} onResolvedEnterpriseName={setSidebarEnterpriseName} refreshToken={homeRefreshToken} preferredCaseId={caseFocus} onCreateCase={openHomeCreateCase} onOpenCase={openHomeCase} onOpenStarMap={() => openWorkspace('cases')} onOpenProjectMap={() => { setCaseProjectTarget(undefined); openWorkspace('projects'); }} onOpenDecisionBoard={() => openWorkspace('decision')} onOpenProject={openHomeProject} onOpenTask={(projectId, taskId, sourceCase) => { void openHomeTask(projectId, taskId, sourceCase); }} onOpenReport={target => { void openHomeReport(target); }} onOpenFoundation={openHomeFoundation} onOpenFoundationOverview={() => openWorkspace('foundation')} /> : view === 'foundation' ? <FoundationOverview active={view === 'foundation' && !helpOpen} projects={projects} currentProjectId={activeId} selectedEnterpriseId={studioEnterpriseId} onEnterpriseChange={setStudioEnterpriseId} onResolvedEnterpriseName={setSidebarEnterpriseName} refreshToken={homeRefreshToken} preferredCaseId={caseFocus} onOpenFoundation={openHomeFoundation} onOpenCase={openHomeCase} onCreateCase={openHomeCreateCase} onOpenProjectMap={() => { setCaseProjectTarget(undefined); openWorkspace('projects'); }} onOpenSettings={trigger => openSettings(trigger)} /> : view === 'project-plan' || view === 'goals' ? null : view === 'cases' ? <CaseBoard initialCreate={caseCreatePending} onInitialCreateConsumed={() => setCaseCreatePending(false)} onCaseChanged={() => setHomeRefreshToken(value => value + 1)} onTeachReview={owner=>showManagement(owner.role==='goal'?{area:'gsa',stage:'goals'}:{area:'strategy',stage:'strategy-versions'},undefined,owner)} onReviewGoals={source=>showManagement({area:'gsa',stage:'adopt'},source)} initialSource={caseSource} initialGoal={goalForCase} onInitialGoalConsumed={() => setGoalForCase(undefined)} mapView={caseMapView} onMapViewChange={setCaseMapView} relationUi={caseRelationUi} onRelationUiChange={setCaseRelationUi} onOpenProject={(project, issue) => { if (issue) openProjectCollaboration(project,issue); else { setCaseProjectTarget(project.id); setProjectFocusSeq(seq => seq + 1); openWorkspace('projects'); } }} decisionUi={caseDecisionUi} onDecisionUiChange={(ownerKey, update) => setCaseDecisionUi(previous => ({ ...previous, [ownerKey]: update(previous[ownerKey] ?? emptyCaseDecisionUiState) }))} currentWork={activeId && activeTaskId ? { projectId: activeId, taskId: activeTaskId } : undefined} onOpenDecisionBoard={target => { setFeedbackReview(target); openWorkspace('decision'); }} initialCaseId={caseFocus} initialCaseSeq={caseFocusSeq} initialIssueId={caseIssueFocus} reportReturn={reportCaseReturn} mode={caseMode} onModeChange={setCaseMode} projects={projects} configurations={configurations} onOpenTask={(project, task, context) => { void boardTask(project, task, context); }} onCreateTask={(project, intent) => showTaskDialog(project, document.activeElement as HTMLElement, intent)} onProjectChange={refreshProjects} /> : view === 'projects' ? <ProjectBoard onOpenCase={openHomeCase} onOpenWorkflow={(project, target) => openCapability(target, project)} onOpenCollaboration={project => openProjectCollaboration(project)} onOpenPlan={openProjectPlan} initialProjectId={caseProjectTarget || projectReturnFocus} initialProjectSeq={projectFocusSeq} onInitialProjectClose={() => { setProjectReturnFocus(undefined); if (caseProjectTarget) { setCaseProjectTarget(undefined); openWorkspace('cases'); } }} mode={projectMode} onModeChange={setProjectMode} projects={projects} onOpenTask={(project, task) => { void boardTask(project, task); }} onCreateProject={() => openProjectCreation()} onCreateTask={project => showTaskDialog(project, document.activeElement as HTMLElement)} onRename={(project, trigger) => { dialogTrigger.current = trigger; setRenameTarget(project); }} onArchive={project => { void projectAction(project, 'archive'); }} onRestore={project => { void projectAction(project, 'restore'); }} onProjectChange={refreshProjects} /> : view === 'decision' ? <DecisionBoardPage initialReport={boardReportFocus} initialReview={feedbackReview} onOpenFeedbackTask={openFeedbackTask} onOrganize={openPersonal} /> : view === 'requirement' || view === 'refiner' || view === 'simlab' || view === 'model-pack' ? null : view === 'studio' ? null : !active && projects.length > 0 ? <div className="project-start"><BrandMark /><p className="eyebrow">原工作定位待核</p><h1>选择已有项目继续</h1><p>原链接对象暂不可读取，未替换到其他项目或任务。可在 项目地图查找准确原记录。</p><button type="button" className="primary-button" onClick={() => openWorkspace('projects')}>查看已有项目</button></div> : !active ? <div className="project-start"><BrandMark /><p className="eyebrow">你好，欢迎来到 OptraCall</p><h1>从一个项目开始</h1><p>让问题、分析与决策，拥有同一个工作空间。</p><button className="primary-button" onClick={() => openProjectCreation()}><Icon name="plus" />创建第一个项目</button><span>项目、文件与任务历史保存在本机</span></div>  : !activeTask && !archived ? <ProjectCollaboration key={active.id + (projectIssue?.projectId === active.id ? projectIssue.issueId : '')} project={active} issue={projectIssue?.projectId === active.id ? {caseId:projectIssue.caseId,issueId:projectIssue.issueId} : undefined} onChangeScope={scope => openProjectCollaboration(active,scope)} onReturnIssue={returnToProjectIssue} onCreate={intent => showTaskDialog(active, document.activeElement as HTMLElement, intent)} onRefresh={refreshProjects} onHistory={() => openProjectPlan(active)}/> : !activeTask ? <div className="project-start"><BrandMark /><p className="eyebrow">{archived ? '已归档项目' : '项目空间'}</p><h1>{active.name}</h1><p>{archived ? '任务、文件与历史完整保留，恢复项目后可继续工作。' : '文件在项目中共享，对话在任务中独立进行。'}</p>{archived ? <button className="primary-button" disabled={Boolean(projectActionId)} onClick={() => { void projectAction(active, 'restore'); }}>恢复此项目</button> : <button className="primary-button" onClick={event => showTaskDialog(active, event.currentTarget)}>{active.tasks.length ? '新建任务' : '新建第一个任务'}</button>}<span>{active.tasks.length} 个任务 · 三个共享项目文件夹</span></div> : chatContent}
       </div>
       {!helpOpen && showInspector && <ResponsiveWorkspacePanel label="任务检视区" kind="inspector" modal={inspectorModal} onClose={closeInspector}>
         <div className="workspace-inspector" role="region" aria-label="任务检视区">
@@ -1035,11 +1263,19 @@ export function App() {
             </nav>
             <button type="button" className="icon-button" aria-label="关闭检视区" onClick={closeInspector}>×</button>
           </header>
-          {showReport && active && activeTask && <TaskReportEvidence key={activeKey} projectId={active.id} taskId={activeTask.id} initialReport={inspectedVersion} onReportChange={version => {
+          {showReport && active && activeTask && <TaskReportEvidence key={activeKey} projectId={active.id} taskId={activeTask.id} initialReport={inspectedVersion} sourceCase={currentTaskSourceCase} autoOpen={Boolean(activeKey && autoOpenReportKey === activeKey)} previewOpen={Boolean(activeKey && reportPreviewOpenByTask[activeKey])} onPreviewOpenChange={open => {
+            if (!activeKey) return;
+            setReportPreviewOpenByTask(previous => ({ ...previous, [activeKey]: open }));
+          }} onOpenDesk={report => {
+            if (!activeKey) return;
+            if (report) setInspectedReport({ key: activeKey, version: report });
+            switchTaskPanel('report');
+          }} onReportChange={version => {
             setInspectedReport(activeKey && version ? { key: activeKey, version } : undefined);
           }} onOpenCase={caseId => {
             setTaskInspector(undefined); inspectorTrigger.current = null;
-            setCaseFocus(caseId); setCaseIssueFocus(undefined);
+            setAutoOpenReportKey(undefined);
+            setCaseFocus(caseId); setCaseFocusSeq(seq => seq + 1); setCaseIssueFocus(undefined);
             setReportCaseReturn({ caseId, projectId: active.id, taskId: activeTask.id });
             lastWorkspace.current = 'cases'; setView('cases');
           }} />}
@@ -1065,6 +1301,7 @@ export function App() {
       </ResponsiveWorkspacePanel>}
       </div>
     </main>
+    {searchOpen && <WorkspaceSearchDialog onClose={closeQuickSearch} onSelect={handleSearchSelect} />}
     <DbLinkConnections readOnly={Boolean(dbConnectionsProjectId && projects.find(project => project.id === dbConnectionsProjectId)?.archivedAt)} open={dbConnectionsOpen} onClose={() => setDbConnectionsOpen(false)} onChanged={() => setFilesRevision(value => value + 1)} />
     {Object.entries(comparisonContexts).map(([key, context]) => <ExperienceComparisonDialog key={key} open={comparisonKey === key} context={{ ...context, project: projects.find(value => value.id === context.project.id) ?? context.project }} onClose={() => setComparisonKey(undefined)} onCreated={task => setProjects(previous => previous.map(project => project.id === context.project.id ? { ...project, tasks: project.tasks.some(value => value.id === task.id) ? project.tasks.map(value => value.id === task.id ? task : value) : [...project.tasks, task] } : project))} onOpenTask={task => { const project = projects.find(value => value.id === context.project.id); if (project) { setComparisonKey(undefined); void chooseTask(project, task, false); } }} />)}
     {studioFeedback && <StudioFeedbackDialog project={studioFeedback.project} task={studioFeedback.task} message={studioFeedback.message} initialSystemId={studioTaskContexts[taskKey(studioFeedback.project.id, studioFeedback.task.id)]?.systemId || studioFeedback.task.studioContext?.systemId} onClose={() => setStudioFeedback(undefined)} onOpenSystem={systemId => { setStudioFeedback(undefined); setStudioFocus(systemId); setStudioMounted(true); setHelpOpen(false); setView('studio'); }} />}
