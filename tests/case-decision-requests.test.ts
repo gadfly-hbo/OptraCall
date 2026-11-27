@@ -11,6 +11,8 @@ import { requestStatus } from '../src/host/case-decision-types.ts';
 import { projectHomePending } from '../src/host/home-pending.ts';
 import { createDecisionBoardStore } from '../extensions/business-plugins/decision-board/storage/store.ts';
 
+const activeProjectAuthority = { projects: { get: async (id: string) => ({ id, archivedAt: null, tasks: [] }) }, assertActive() {} };
+
 async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'optracall-dw-req-')));
   const cases = new CaseStore({ dataRoot: path.join(root, 'cases') });
@@ -110,7 +112,7 @@ test('DW08/DW09-REQ-02: observe request is only resolved by saveFeedback carryin
     target: { kind: 'observe', projectId: f.projectId, itemId: act.itemId, taskId: act.taskId, authorizationId: act.authorizationId, feedbackBaseRevisionId: null },
   });
 
-  const service = createCaseIssueService({ cases: f.cases, board: f.board, mutate: (fn: () => unknown) => fn() } as never);
+  const service = createCaseIssueService({ ...activeProjectAuthority, cases: f.cases, board: f.board, mutate: (fn: () => unknown) => fn() } as never);
   assert.equal((await service.decisionRequests(f.record.id))[0]!.status, 'open');
 
   // Wait 5ms so feedback savedAt is strictly after authorization createdAt (authorityAtFeedback ordering)
@@ -188,7 +190,7 @@ test('DW08/DW09-HOME-03: home projection separates pending, continue, externalWa
   assert.equal(proj.pendingOperations[0]!.group, 'operation-to-verify');
 
   // Route smoke check
-  const service = createCaseIssueService({ cases: f.cases, board: f.board, mutate: (fn: () => unknown) => fn() } as never);
+  const service = createCaseIssueService({ ...activeProjectAuthority, cases: f.cases, board: f.board, mutate: (fn: () => unknown) => fn() } as never);
   const route = createCaseDecisionRoutes(service as never);
   const got = await route({ pathname: `/api/cases/${f.record.id}/decisions/requests`, method: 'GET' }) as { body: { requests: unknown[] } };
   assert.equal(got.body.requests.length, 2);

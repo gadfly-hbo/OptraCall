@@ -91,7 +91,7 @@ try {
   let revisions = (await history()).revisions;
   assert.equal(revisions.length, 1); assert.deepEqual(revisions[0].respondsToRequest, { requestId: second.requestId, revision: second.revision, authorizationId: action.authorizationId });
   let rows = (await requests()).requests;
-  assert.equal(rows.find(row => row.requestId === first.requestId).status, 'open'); assert.equal(rows.find(row => row.requestId === second.requestId).status, 'answered');
+  assert.equal(rows.find(row => row.requestId === first.requestId).status, 'superseded', 'another request is not answered; its original feedback baseline has moved'); assert.equal(rows.find(row => row.requestId === second.requestId).status, 'answered');
   receipt.checks.push('home second of two requests -> exact original feedback -> only selected request answered; open/cancel no completion; escaped text');
 
   const third = await addRequest('独立入口请求三', revisions[0].revisionId);
@@ -103,7 +103,7 @@ try {
   await fill('feedback-request', `${fourth.requestId}:${fourth.revision}`); await fill('feedback-outcome', '独立入口明确选择第四条'); await button('保存反馈并回应原请求', 'document.querySelector("dialog[open]")');
   await wait('!document.querySelector("dialog[open] #feedback-request")', 'independent saved');
   revisions = (await history()).revisions; assert.equal(revisions.length, 2); assert.equal(revisions[1].respondsToRequest.requestId, fourth.requestId);
-  assert.equal((await requests()).requests.find(row => row.requestId === third.requestId).status, 'open');
+  assert.equal((await requests()).requests.find(row => row.requestId === third.requestId).status, 'superseded', 'unselected request keeps its unresponded history after the feedback baseline changes');
   receipt.checks.push('independent Board feedback defaults ordinary and explicitly selects fourth accurate request');
 
   const fifth = await addRequest('修订请求五原文', revisions[1].revisionId);

@@ -9,6 +9,10 @@ import { chooseRequestStatus, createCaseIssueService, observationRequestStatus }
 import { boardRecordVersion, createDecisionBoardStore } from '../extensions/business-plugins/decision-board/storage/store.ts';
 import { createWorkspaceDailyRoutes } from '../src/host/workspace-daily-routes.ts';
 import { createWorkspaceDraftStore } from '../src/host/workspace-draft-store.ts';
+import { ProjectStore } from '../src/host/project-store.ts';
+import { createDecisionBoardRoutes } from '../extensions/business-plugins/decision-board/api/routes.ts';
+
+const activeProjectAuthority = { projects: { get: async (id: string) => ({ id, archivedAt: null, tasks: [] }) }, assertActive() {} };
 
 async function fixture(t: { after(fn: () => void): void }) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'optracall-case-second-'));
@@ -23,7 +27,7 @@ async function fixture(t: { after(fn: () => void): void }) {
   const caseStoreId = cases.getStatus().storeId!;
   const strategy = cases.saveDecisionDraft({ operationId: randomUUID(), caseStoreId, caseId: record.id, expectedRevision: 0, kind: 'strategy', payload: { title: '方案', proposal: '合成观察' } }, { actorKind: 'agent', projectId, taskId: randomUUID(), requestId: randomUUID(), sessionId: 'synthetic', toolCallId: 'seed' });
   const strategyRef = { type: 'case-decision' as const, caseStoreId, caseId: record.id, recordId: strategy.recordId, revision: strategy.revision };
-  const service = createCaseIssueService({ cases, board, mutate: async (fn: () => unknown) => fn() } as never);
+  const service = createCaseIssueService({ ...activeProjectAuthority, cases, board, mutate: async (fn: () => unknown) => fn() } as never);
   const chooseInput = () => ({ operationId: randomUUID(), expectedRevision: rev(), expectedRequestRevision: 0, issueId: a.id, kind: 'choose', text: '请负责人选择', assignee: { label: '负责人', source: '原用户声明' }, dueDate: '2026-12-01', source: { kind: 'agent-tool', ref: 'synthetic/request/tool' }, target: { kind: 'choose', strategyRef, expectedPreviousChoiceId: null } });
   function action(issueId: string, project = projectId) {
     const prev = cases.getStrategyChoices(record.id).filter(c => c.issueId === issueId).at(-1);
@@ -32,7 +36,7 @@ async function fixture(t: { after(fn: () => void): void }) {
     return arranged.actions[0]!;
   }
   const observeInput = (issueId: string, act: ReturnType<typeof action>, project = projectId) => ({ ...chooseInput(), issueId, kind: 'observe', target: { kind: 'observe', projectId: project, itemId: act.itemId, taskId: act.taskId, authorizationId: act.authorizationId, feedbackBaseRevisionId: null } });
-  const daily = createWorkspaceDailyRoutes({ cases, board, drafts: createWorkspaceDraftStore({ root: path.join(root, 'drafts') }), adoptGoal: async () => { throw Error('unused'); }, createCase: async () => { throw Error('unused'); } });
+  const daily = createWorkspaceDailyRoutes({ cases, board, assertActiveProject: async () => {}, drafts: createWorkspaceDraftStore({ root: path.join(root, 'drafts') }), adoptGoal: async () => { throw Error('unused'); }, createCase: async () => { throw Error('unused'); } });
   return { root, cases, board, record, rev, projectId, a, b, strategyRef, service, chooseInput, action, observeInput, daily };
 }
 
@@ -93,7 +97,7 @@ test('DW-SECOND-04: cancellation immediately before commit rolls back both decla
 
 test('DW-SECOND-05: Host aggregate revision is captured inside mutation, entity CAS and changed-operation conflicts remain strict', async t => {
   const f = await fixture(t); let tail: Promise<unknown> = Promise.resolve();
-  const service = createCaseIssueService({ cases: f.cases, board: f.board, mutate: (fn: () => unknown) => { const next = tail.then(fn); tail = next.catch(() => {}); return next; } } as never);
+  const service = createCaseIssueService({ ...activeProjectAuthority, cases: f.cases, board: f.board, mutate: (fn: () => unknown) => { const next = tail.then(fn); tail = next.catch(() => {}); return next; } } as never);
   const edgeInput = { operationId: randomUUID(), expectedEdgeRevision: 0, fromIssueId: f.a.id, toIssueId: f.b.id, source: { kind: 'user-declaration', ref: 'parallel' } };
   const requestInput = f.chooseInput(); delete (requestInput as { expectedRevision?: number }).expectedRevision;
   const options = { currentCaseRevision: true as const };
@@ -189,7 +193,7 @@ test('DW-FINAL-AUTH-03: original report-confirmation read authority governs requ
   const action = f.board.arrangeActions({ operationId: randomUUID(), projectId: f.projectId, source: { caseStoreId: f.strategyRef.caseStoreId, caseId: f.record.id, choiceId: choice.choiceId, strategyRef: f.strategyRef }, scope: '观察', title: '原确认来源', checks: [], actions: [{ kind: 'create', itemId: item.id, itemVersion: boardRecordVersion(item), title: '原确认观察' }] }, { confirmedIssueId: f.a.id }).actions[0]!;
   let readable = true, authorityReads = 0;
   const assertBoardItemReadable = async () => { authorityReads++; if (!readable) throw Object.assign(Error('source revoked'), { code: 'confirmation_source_unavailable', statusCode: 409 }); };
-  const service = createCaseIssueService({ cases: f.cases, board: f.board, mutate: async (fn: () => unknown) => fn(), assertBoardItemReadable } as never);
+  const service = createCaseIssueService({ ...activeProjectAuthority, cases: f.cases, board: f.board, mutate: async (fn: () => unknown) => fn(), assertBoardItemReadable } as never);
   const originalInput = f.observeInput(f.a.id, action);
   const request = await service.saveDecisionRequest(f.record.id, originalInput);
   const normal = await service.saveDecisionRequest(f.record.id, { ...f.chooseInput(), issueId: f.b.id });
@@ -198,7 +202,69 @@ test('DW-FINAL-AUTH-03: original report-confirmation read authority governs requ
   await assert.rejects(service.saveDecisionRequest(f.record.id, { operationId: randomUUID(), expectedRevision: f.rev(), requestId: request.requestId, expectedRequestRevision: request.revision, text: '修订仍核原权威', source: originalInput.source }), { code: 'confirmation_source_unavailable' });
   assert.deepEqual(await service.saveDecisionRequest(f.record.id, originalInput), request, 'historical completed replay does not reread newly revoked sources or write');
   assert.equal((await service.decisionRequests(f.record.id)).find(row => row.requestId === request.requestId)!.status, 'unverifiable');
-  const routes = createWorkspaceDailyRoutes({ cases: f.cases, board: f.board, assertBoardItemReadable, drafts: createWorkspaceDraftStore({ root: f.root }), adoptGoal: async () => { throw Error('unused'); }, createCase: async () => { throw Error('unused'); } } as never);
+  const routes = createWorkspaceDailyRoutes({ cases: f.cases, board: f.board, assertBoardItemReadable, assertActiveProject: async () => {}, drafts: createWorkspaceDraftStore({ root: f.root }), adoptGoal: async () => { throw Error('unused'); }, createCase: async () => { throw Error('unused'); } } as never);
   const home = (await routes({ pathname: '/api/workspace/home-pending', method: 'GET' }))!.body as any;
   assert.deepEqual(home.pending.map((row: any) => row.requestId), [normal.requestId]); assert.equal(home.unresolvedRequests[0].status, 'unverifiable'); assert.ok(authorityReads >= 3);
+});
+
+test('DW-FINAL-LIFECYCLE-01: latest strategy archive blocks new requests, supersedes unanswered work and preserves actual answers and historical choice rights', async t => {
+  const f = await fixture(t);
+  const answered = await f.service.saveDecisionRequest(f.record.id, f.chooseInput());
+  const choice = f.cases.chooseStrategy({ operationId: randomUUID(), caseStoreId: f.strategyRef.caseStoreId, caseId: f.record.id, issueId: f.a.id, strategyRef: f.strategyRef, choice: 'trial', expectedPreviousChoiceId: null, respondsToRequest: { requestId: answered.requestId, revision: answered.revision } });
+  const input = { ...f.chooseInput(), target: { kind: 'choose', strategyRef: f.strategyRef, expectedPreviousChoiceId: choice.choiceId } };
+  const waiting = await f.service.saveDecisionRequest(f.record.id, input);
+  assert.equal((await f.service.decisionRequests(f.record.id)).find(row => row.requestId === waiting.requestId)!.status, 'open');
+  const archived = f.cases.reviseDecisionByUser({ operationId: randomUUID(), caseStoreId: f.strategyRef.caseStoreId, caseId: f.record.id, recordId: f.strategyRef.recordId, expectedRevision: f.strategyRef.revision, action: 'archive' });
+  await assert.rejects(f.service.saveDecisionRequest(f.record.id, { ...input, operationId: randomUUID(), expectedRevision: f.rev() }), { code: 'case_decision_archived' });
+  let states = await f.service.decisionRequests(f.record.id);
+  assert.equal(states.find(row => row.requestId === waiting.requestId)!.status, 'superseded');
+  assert.equal(states.find(row => row.requestId === answered.requestId)!.status, 'answered');
+  assert.deepEqual(await f.service.saveDecisionRequest(f.record.id, input), waiting, 'original operation remains a read-only historical receipt');
+  const home = (await f.daily({ pathname: '/api/workspace/home-pending', method: 'GET' }))!.body as any;
+  assert.equal(home.pending.length, 0);
+  f.cases.reviseDecisionByUser({ operationId: randomUUID(), caseStoreId: f.strategyRef.caseStoreId, caseId: f.record.id, recordId: f.strategyRef.recordId, expectedRevision: archived.revision, action: 'restore' });
+  const historical = await f.service.saveDecisionRequest(f.record.id, { ...input, operationId: randomUUID(), expectedRevision: f.rev() });
+  const historicalChoice = f.cases.chooseStrategy({ operationId: randomUUID(), caseStoreId: f.strategyRef.caseStoreId, caseId: f.record.id, issueId: f.a.id, strategyRef: f.strategyRef, choice: 'continue', allowHistorical: true, expectedPreviousChoiceId: choice.choiceId, respondsToRequest: { requestId: historical.requestId, revision: historical.revision } });
+  assert.equal((await f.service.decisionRequests(f.record.id)).find(row => row.requestId === historical.requestId)!.status, 'answered');
+  const beforeClose = await f.service.saveDecisionRequest(f.record.id, { ...f.chooseInput(), target: { kind: 'choose', strategyRef: f.strategyRef, expectedPreviousChoiceId: historicalChoice.choiceId } });
+  f.cases.closeCase({ operationId: randomUUID(), caseId: f.record.id, expectedRevision: f.rev(), closeReason: '原Case明确结束' });
+  states = await f.service.decisionRequests(f.record.id);
+  assert.equal(states.find(row => row.requestId === beforeClose.requestId)!.status, 'superseded');
+  assert.equal(states.find(row => row.requestId === answered.requestId)!.status, 'answered');
+  await assert.rejects(f.service.saveDecisionRequest(f.record.id, f.chooseInput()), { code: 'case_closed' });
+});
+
+test('DW-FINAL-LIFECYCLE-02: real project archive follows original Board feedback admission, preserves answers and restores without replay', async t => {
+  const f = await fixture(t);
+  const projects = new ProjectStore({ dataRoot: path.join(f.root, 'project-control'), projectsRoot: path.join(f.root, 'project-files') }); await projects.init(); t.after(() => projects.close());
+  await projects.create({ reservedId: f.projectId, name: '真实归档准入', configuration: { id: 'synthetic', revision: 1, name: '合成', provider: 'openai-compatible', model: 'synthetic', baseUrl: 'http://localhost:1' } });
+  const assertActive = (project: Awaited<ReturnType<ProjectStore['get']>>) => { if (project.archivedAt) throw Object.assign(Error('project_archived'), { code: 'project_archived', statusCode: 409 }); };
+  const assertActiveProject = async (projectId: string) => { assertActive(await projects.get(projectId)); };
+  const service = createCaseIssueService({ cases: f.cases, board: f.board, projects, assertActive, mutate: async (fn: () => unknown) => fn() } as never);
+  const action = f.action(f.a.id);
+  const answered = await service.saveDecisionRequest(f.record.id, f.observeInput(f.a.id, action));
+  await new Promise(resolve => setTimeout(resolve, 10));
+  const feedback = f.board.saveFeedback(action.taskId, { operationId: randomUUID(), expectedLatestRevisionId: null, adopted: true, outcome: '准确回应', metricDelta: '', review: '', score: null, respondsToRequest: { requestId: answered.requestId, revision: answered.revision, authorizationId: action.authorizationId } });
+  const input = { ...f.observeInput(f.a.id, action), target: { ...f.observeInput(f.a.id, action).target, feedbackBaseRevisionId: feedback.revisionId } };
+  const waiting = await service.saveDecisionRequest(f.record.id, input);
+  await projects.archive(f.projectId);
+  const boardRoutes = createDecisionBoardRoutes({ store: f.board, mutate: async (fn: () => unknown) => fn(), projectOverview: async () => [], projectFiles: async () => [], assertActiveProject, readBody: async () => ({ operationId: randomUUID(), expectedLatestRevisionId: feedback.revisionId, adopted: true, outcome: '归档后观察', metricDelta: '', review: '', score: null, effect: 'unknown', respondsToRequest: { requestId: waiting.requestId, revision: waiting.revision, authorizationId: action.authorizationId } }) } as never);
+  const original = await boardRoutes.routes({ method: 'POST' } as never, new URL(`http://localhost/api/decision-board/tasks/${action.taskId}/feedback`));
+  assert.equal(original!.status, 409); assert.equal((original!.value as any).code, 'project_archived');
+  await assert.rejects(service.saveDecisionRequest(f.record.id, { ...input, operationId: randomUUID(), expectedRevision: f.rev() }), { code: 'project_archived' });
+  const states = await service.decisionRequests(f.record.id);
+  assert.equal(states.find(row => row.requestId === answered.requestId)!.status, 'answered');
+  assert.equal(states.find(row => row.requestId === waiting.requestId)!.status, 'superseded');
+  const daily = createWorkspaceDailyRoutes({ cases: f.cases, board: f.board, assertActiveProject, drafts: createWorkspaceDraftStore({ root: f.root }), adoptGoal: async () => { throw Error('unused'); }, createCase: async () => { throw Error('unused'); } } as never);
+  assert.equal(((await daily({ pathname: '/api/workspace/home-pending', method: 'GET' }))!.body as any).pending.length, 0);
+  assert.deepEqual(await service.saveDecisionRequest(f.record.id, input), waiting, 'completed saved intent remains a read-only receipt while archived');
+  await projects.restore(f.projectId);
+  assert.equal((await service.decisionRequests(f.record.id)).find(row => row.requestId === waiting.requestId)!.status, 'open');
+  assert.equal(((await daily({ pathname: '/api/workspace/home-pending', method: 'GET' }))!.body as any).pending.length, 1);
+  assert.equal(f.board.listFeedbackHistory(action.taskId).length, 1, 'restore does not replay feedback');
+  f.board.setTaskStatus(action.taskId, 'done');
+  f.cases.closeCase({ operationId: randomUUID(), caseId: f.record.id, expectedRevision: f.rev(), closeReason: 'Case结束不撤销原Board观察权' });
+  const responded = await boardRoutes.routes({ method: 'POST' } as never, new URL(`http://localhost/api/decision-board/tasks/${action.taskId}/feedback`));
+  assert.equal(responded!.status, 200, 'original feedback remains permitted for done Board task and closed Case');
+  assert.equal((await service.decisionRequests(f.record.id)).find(row => row.requestId === waiting.requestId)!.status, 'answered');
 });

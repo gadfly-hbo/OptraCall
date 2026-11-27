@@ -875,6 +875,7 @@ export class CaseStore {
         if (ref.caseId !== before.id || ref.caseStoreId !== this.decisionStoreId()) fail('case_decision_scope_mismatch', 409);
         const strategy = this.getDecision(before.id, ref.recordId, ref.revision);
         if (strategy.kind !== 'strategy') fail('case_choice_requires_strategy');
+        if (this.getDecision(before.id, ref.recordId).lifecycle === 'archived') fail('case_decision_archived', 409);
         if (strategy.issueId && strategy.issueId !== issueId) fail('case_issue_scope_mismatch', 409);
       }
       const assignee = { label: previous?.assignee.label ?? null, source: previous?.assignee.source ?? null,

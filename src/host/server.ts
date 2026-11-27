@@ -1880,6 +1880,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     drafts: workspaceDrafts,
     board: boardStore,
     assertBoardItemReadable: item => conclusionHandoff.assertItemReadable(item),
+    assertActiveProject: async projectId => { assertActive(await projects.get(projectId)); },
     readGoal: async ({ goalId, version }) => {
       const goal = strategyGoals.read({ goalId, version });
       await validateStrategyGoal(goal);

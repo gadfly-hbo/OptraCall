@@ -13,6 +13,7 @@ export type WorkspaceDailyRoutesDeps = {
   drafts: WorkspaceDraftStore;
   board?: BoardStore;
   assertBoardItemReadable?: import('./case-decision-service.ts').CaseDecisionServiceDependencies['assertBoardItemReadable'];
+  assertActiveProject?: (projectId: string) => Promise<void>;
   readGoal?: ReadGoalFn;
   adoptGoal: AdoptGoalFn;
   createCase: CreateCaseFn;
@@ -34,7 +35,7 @@ export function createWorkspaceDailyRoutes(deps: WorkspaceDailyRoutesDeps) {
         const choices = deps.cases.getStrategyChoices(record.id);
         const pendingOperations = deps.cases.listPendingProjectOperations(record.id);
         const requestStatuses = Object.fromEntries(await Promise.all(requests
-          .map(async request => [request.requestId, request.kind === 'observe' ? await observationRequestStatus(deps.cases, deps.board, request, deps.assertBoardItemReadable) : chooseRequestStatus(deps.cases, request, choices)])));
+          .map(async request => [request.requestId, request.kind === 'observe' ? await observationRequestStatus(deps.cases, deps.board, request, deps.assertBoardItemReadable, deps.assertActiveProject) : chooseRequestStatus(deps.cases, request, choices)])));
         return { record, issues, requests, choices, requestStatuses, pendingOperations };
       }));
       return { body: projectHomePending({ storeState: 'ready', cases: entries }) };
