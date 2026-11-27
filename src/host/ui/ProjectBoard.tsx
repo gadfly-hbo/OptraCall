@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { CaseList, WorkEvent } from '../case-types.ts';
 import { taskPurpose, taskTypes, type TaskType } from '../task-assignment.ts';
 import type { ClientProject, ClientTask } from './project-types.ts';
@@ -29,11 +29,42 @@ export function ProjectBoard({ onOpenCase, onOpenCollaboration, onOpenPlan, onOp
   const id = useId(), selected = projects.find(project => project.id === selectedId);
   useEffect(() => { if (initialProjectId) { setSelectedId(initialProjectId); setTaskTypeFilter('all'); } }, [initialProjectId, initialProjectSeq]);
   const dismissProject = () => { setSelectedId(null); setTaskTypeFilter('all'); if (initialProjectId && selectedId === initialProjectId) onInitialProjectClose?.(); };
-  const readCases = async () => { try { const state = await api.status(); setCaseState(state.state); if (state.state === 'ready') setCaseData(await api.list()); else setCaseData(null); } catch (error) { setCaseState('unavailable'); setError(caseError(error)); } };
-  useEffect(() => { let alive = true; void api.status().then(async state => { if (!alive) return; setCaseState(state.state); if (state.state === 'ready') { const value = await api.list(); if (alive) setCaseData(value); } }, error => { if (alive) { setCaseState('unavailable'); setError(caseError(error)); } }).catch(error => { if (alive) { setCaseState('unavailable'); setError(caseError(error)); } }); return () => { alive = false; }; }, []);
+  const caseRequest = useRef<AbortController | null>(null);
+  const readCases = useCallback(async () => {
+    caseRequest.current?.abort();
+    const controller = new AbortController();
+    caseRequest.current = controller;
+    const { signal } = controller;
+    setCaseData(null);
+    setCaseState('loading');
+    setError('');
+    try {
+      const storage = await api.status(signal);
+      const data = storage.state === 'ready' ? await api.list(signal) : null;
+      if (!signal.aborted) {
+        setCaseData(data);
+        setCaseState(storage.state);
+      }
+    } catch (error) {
+      if (!signal.aborted) {
+        setCaseState('unavailable');
+        setError(error instanceof api.CaseRequestError && error.status === 403 ? '当前身份无权读取 Case 关联。' : caseError(error));
+      }
+    }
+  }, []);
+  useEffect(() => {
+    void readCases();
+    return () => caseRequest.current?.abort();
+  }, [readCases]);
   const readEvents = async (projectId: string) => { const request = ++eventRequest.current; setEventLoading(true); setEventError(''); try { const result = await api.projectEvents(projectId); if (selectedRef.current === projectId && eventRequest.current === request) setEvents(result.events); } catch (error) { if (selectedRef.current === projectId && eventRequest.current === request) setEventError(caseError(error)); } finally { if (selectedRef.current === projectId && eventRequest.current === request) setEventLoading(false); } };
-  useEffect(() => { setEvents([]); setEventError(''); if (selectedId && caseState === 'ready') void readEvents(selectedId); }, [selectedId, caseState]);
-  const afterSave = async () => { setNotice('项目工作信息已保存，所有关联 Case 共用这次修改。'); try { await onProjectChange(); await readCases(); if (selectedId) await readEvents(selectedId); } catch (error) { setError(`保存已完成，刷新时遇到问题：${caseError(error)}`); } };
+  useEffect(() => {
+    setEvents([]);
+    setEventError('');
+    setEventLoading(false);
+    if (selectedId && caseState === 'ready') void readEvents(selectedId);
+    return () => { eventRequest.current++; };
+  }, [selectedId, caseState]);
+  const afterSave = async () => { setNotice('项目工作信息已保存，所有关联 Case 共用这次修改。'); try { await Promise.all([onProjectChange(), readCases()]); } catch (error) { setError(`保存已完成，刷新时遇到问题：${caseError(error)}`); } };
   const filtered = projects.filter(project => (filter === 'all' || (filter === 'archived' ? Boolean(project.archivedAt) : !project.archivedAt)) && `${project.name}\n${project.work?.workScope ?? ''}\n${project.work?.assignee ?? ''}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   const links = (project: ClientProject) => caseData?.projectLinks.filter(link => link.projectId === project.id) ?? [];
   const countLabel = (project: ClientProject) => caseState === 'ready' && caseData ? `${links(project).length} 个 Case` : caseState === 'uninitialized' ? 'Case 记录未启用' : 'Case 关联暂不可用';
@@ -51,7 +82,7 @@ export function ProjectBoard({ onOpenCase, onOpenCollaboration, onOpenPlan, onOp
   return <section className="case-board project-board" aria-labelledby="project-board-title" onClickCapture={focusCaseButton}>
     <header className="case-board-heading"><div><p className="eyebrow">共享文件，独立任务会话</p><h1 id="project-board-title">Project Map</h1><p>现有项目继续保留原有任务、会话与文件，也可以关联多个 Case。</p></div><button type="button" className="primary-button" onClick={onCreateProject}>＋ 新建项目</button></header>
     <CaseFormError error={error} />{notice && <p className="case-notice" role="status">{notice}</p>}{caseState === 'uninitialized' && <p className="case-message">项目可照常使用。前往 Decision Case启用本机记录后，可编辑项目工作信息并查看 Case 关联。</p>}{caseState === 'unavailable' && <p className="case-message">Case 与项目工作信息暂不可读取。项目、任务与文件仍可按原方式使用。<button type="button" className="text-button" onClick={() => { void readCases(); }}>重新检查</button></p>}
-    <div className="case-board-toolbar"><div className="case-board-filters"><label htmlFor={`${id}-search`} className="sr-only">搜索项目</label><input type="search" id={`${id}-search`} placeholder="搜索项目 / 承接人" value={query} onChange={event => setQuery(event.target.value)} /><label htmlFor={`${id}-filter`} className="sr-only">归档状态</label><select id={`${id}-filter`} value={filter} onChange={event => setFilter(event.target.value as typeof filter)}><option value="active">进行中的项目</option><option value="archived">已归档项目</option><option value="all">全部项目</option></select><button type="button" className="text-button" onClick={async () => { setError(''); try { await onProjectChange(); await readCases(); } catch (error) { setError(caseError(error)); } }}>刷新</button></div><BoardViewSwitch value={mode} onChange={setMode} /></div>
+    <div className="case-board-toolbar"><div className="case-board-filters"><label htmlFor={`${id}-search`} className="sr-only">搜索项目</label><input type="search" id={`${id}-search`} placeholder="搜索项目 / 承接人" value={query} onChange={event => setQuery(event.target.value)} /><label htmlFor={`${id}-filter`} className="sr-only">归档状态</label><select id={`${id}-filter`} value={filter} onChange={event => setFilter(event.target.value as typeof filter)}><option value="active">进行中的项目</option><option value="archived">已归档项目</option><option value="all">全部项目</option></select><button type="button" className="text-button" onClick={async () => { setError(''); try { await Promise.all([onProjectChange(), readCases()]); } catch (error) { setError(caseError(error)); } }}>刷新</button></div><BoardViewSwitch value={mode} onChange={setMode} /></div>
     {!filtered.length ? <div className="case-empty"><h2>{projects.length ? '没有符合条件的项目' : '建立第一个项目空间'}</h2><p>{projects.length ? '调整搜索或归档状态后重试。' : '项目下可创建多个任务，三类文件目录由项目共享。'}</p>{!projects.length && <button type="button" className="secondary-button" onClick={onCreateProject}>新建项目</button>}</div> : mode === 'cards' ? <div className="case-card-grid case-project-grid">{filtered.map(project => <article className="case-project-card" key={project.id}>
       <div className="case-card-top"><span className="case-project-status">{workLabel(project)}</span><span>{project.archivedAt && <span className="case-archive-badge">已归档</span>}<button type="button" className="icon-button" aria-label={`查看 ${project.name} 项目详情`} onClick={() => { setSelectedId(project.id); setTaskTypeFilter('all'); }}>↗</button></span></div>
       <h2><button type="button" onClick={() => { setSelectedId(project.id); setTaskTypeFilter('all'); }}>{project.name}</button></h2><p className="case-project-meta">承接人：{project.workUnavailable ? '暂不可读取' : project.work?.assignee || '未设置'} <span>· {countLabel(project)}</span></p>

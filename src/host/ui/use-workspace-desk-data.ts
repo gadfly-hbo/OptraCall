@@ -12,6 +12,7 @@ import {
   resolveActiveStudioEnterprise,
   summarizeStrategyFoundationSnapshot,
   summarizeStudioFoundationSnapshots,
+  type HomeActionReadState,
   type HomeBoardActionInput,
   type HomeCaseAccessState,
   type HomeFoundationId,
@@ -51,6 +52,7 @@ export interface WorkspaceDeskDataState {
   focusDetail: CaseDetail | null;
   goals: StrategyGoalsIndex | null;
   boardActions: HomeBoardActionInput[];
+  actionReadState: HomeActionReadState;
   enterprises: { id: string; name: string }[];
   activeEnterpriseId: string;
   enterpriseName?: string;
@@ -75,6 +77,7 @@ const PENDING_DESK: DeskSnapshot = {
   focusDetail: null,
   goals: null,
   boardActions: [],
+  actionReadState: 'loading',
   enterprises: [],
   activeEnterpriseId: '',
   enterpriseUnselected: false,
@@ -186,19 +189,28 @@ export function useWorkspaceDeskData({
       if (!isCurrent()) return;
 
       let loadedBoardActions: HomeBoardActionInput[] = [];
+      let actionReadState: HomeActionReadState = 'ready';
       if (boardRes.status === 'fulfilled') {
         const taskIdsByCase = new Map<string, ReadonlySet<string>>();
         if (caseDecisionsRes.status === 'fulfilled') {
           for (const entry of caseDecisionsRes.value) {
             if (entry.status === 'fulfilled') {
               taskIdsByCase.set(entry.value.caseId, entry.value.taskIds);
+            } else if (classifyHttpFailure(entry.reason).state === 'unavailable') {
+              actionReadState = 'partial-unavailable';
+            } else if (actionReadState === 'ready') {
+              actionReadState = 'partial-forbidden';
             }
           }
+        } else {
+          actionReadState = 'partial-unavailable';
         }
         loadedBoardActions = extractHomeBoardActions({
           items: boardRes.value.items,
           caseDecisionTaskIdsByCase: taskIdsByCase,
         });
+      } else {
+        actionReadState = classifyHttpFailure(boardRes.reason).state;
       }
 
       let loadedGoals: StrategyGoalsIndex | null = null;
@@ -299,6 +311,7 @@ export function useWorkspaceDeskData({
           focusDetail: loadedDetail,
           goals: loadedGoals,
           boardActions: loadedBoardActions,
+          actionReadState,
           enterprises: resolvedEnterprises,
           activeEnterpriseId: resolvedEnterpriseId,
           enterpriseName: resolvedEnterpriseName,

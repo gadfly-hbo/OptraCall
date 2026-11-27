@@ -25,6 +25,18 @@ const boardItem = { id: 'item', projectId: 'P', status: 'adopted' as const, task
   },
 }] };
 
+test('incomplete action sources leave the total unknown while retaining verified records', () => {
+  const input = { caseAccessState: 'ready' as const, cases: [makeCase('A')], projects: [project('P')],
+    projectLinks: [projectLink('A', 'P')] };
+  assert.equal(buildWorkspaceHomeModel(input).counts.inProgressActions, 0);
+  assert.equal(buildWorkspaceHomeModel({ ...input, actionReadState: 'unavailable' }).counts.inProgressActions, null);
+  const boardActions = extractHomeBoardActions({ items: [boardItem] });
+  const partial = buildWorkspaceHomeModel({ ...input, boardActions, actionReadState: 'partial-forbidden' });
+  assert.equal(partial.counts.inProgressActions, null);
+  assert.ok(partial.queue.some(row => row.kind === 'action' && row.actionId === 'action'));
+  assert.match(partial.proof.caption, /已核对/);
+});
+
 test('project actions keep their own scope and independent Case references survive shared projects', () => {
   const cases = ['A', 'B', 'C'].map(id => makeCase(id));
   const projects = [project('P')];

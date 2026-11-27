@@ -1,6 +1,7 @@
 import type { ClientProject } from './project-types.ts';
 import { useWorkspaceDeskData } from './use-workspace-desk-data.ts';
 import {
+  actionReadNotice,
   buildWorkspaceHomeModel,
   type HomeActivityTarget,
   type HomeFoundationId,
@@ -95,9 +96,11 @@ export function WorkspaceHome({
     projects,
     goals: desk.goals,
     boardActions: desk.boardActions,
+    actionReadState: desk.actionReadState,
     foundations: desk.foundations,
   });
 
+  const actionNotice = actionReadNotice[desk.actionReadState];
   const dateInfo = todayHeadingLabel();
   const isCaseRestricted = model.caseAccessState === 'forbidden' || model.caseAccessState === 'unavailable';
   const latestActiveTask = projects
@@ -315,6 +318,14 @@ export function WorkspaceHome({
                 <button type="button" className="dh-link-btn" onClick={onOpenStarMap}>查看全部 Case</button>
               )}
             </div>
+            {actionNotice && (
+              <div className="dh-empty" role="status">
+                <strong>{actionNotice}</strong>
+                {desk.actionReadState !== 'loading' && (
+                  <button type="button" className="text-button" onClick={desk.reload}>重新读取行动</button>
+                )}
+              </div>
+            )}
             {model.queue.length ? (
               <ul className="dh-queue-list" aria-label="需要你处理">
                 {model.queue.map(item => (
@@ -347,7 +358,7 @@ export function WorkspaceHome({
                 <p>{model.caseAccessMessage || '可先前往项目地图推进已授权的项目与分析任务。'}</p>
                 <button type="button" className="text-button" onClick={onOpenProjectMap}>打开项目地图</button>
               </div>
-            ) : (
+            ) : actionNotice ? null : (
               <div className="dh-empty">
                 <strong>还没有待处理事项</strong>
                 <p>可以从一个业务问题创建 Case，或到项目地图继续独立分析任务。</p>

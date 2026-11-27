@@ -19,6 +19,17 @@ export function resolveInitialWorkspaceView(locationHref: string): InitialWorksp
 
 export type HomeCaseAccessState = 'loading' | 'ready' | 'empty' | 'forbidden' | 'unavailable';
 
+export type HomeActionReadState = 'ready' | 'loading' | 'forbidden' | 'unavailable' | 'partial-forbidden' | 'partial-unavailable';
+
+export const actionReadNotice: Record<HomeActionReadState, string> = {
+  ready: '',
+  loading: '正在读取看板行动。',
+  forbidden: '看板行动暂无读取权限。',
+  unavailable: '看板行动暂不可读。',
+  'partial-forbidden': '部分 Case 的行动关联无读取权限。',
+  'partial-unavailable': '部分 Case 的行动关联暂不可读。',
+};
+
 export type HomeFoundationId = 'strategy' | 'goals' | 'semantic' | 'analysis';
 
 export interface HomeFoundationSnapshot {
@@ -368,6 +379,7 @@ export interface WorkspaceHomeInput {
   projects: readonly ClientProject[];
   goals?: StrategyGoalsIndex | null;
   boardActions?: readonly HomeBoardActionInput[];
+  actionReadState?: HomeActionReadState;
   foundations?: Partial<Record<HomeFoundationId, HomeFoundationSnapshot>>;
 }
 
@@ -389,7 +401,7 @@ export interface WorkspaceHomeModel {
     totalCases: number;
     activeProjects: number;
     totalProjects: number;
-    inProgressActions: number;
+    inProgressActions: number | null;
   };
   foundations: HomeFoundationTile[];
 }
@@ -505,7 +517,8 @@ export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHom
     const caseIds = linkedCasesOfAction(action);
     return !caseIds.length || caseIds.some(id => activeCaseIds.has(id));
   });
-  const inProgressActions = boardActions.filter(action => action.status === 'doing').length;
+  const actionsComplete = (input.actionReadState ?? 'ready') === 'ready';
+  const inProgressActions = actionsComplete ? boardActions.filter(action => action.status === 'doing').length : null;
 
   const focusActions = !focusCase || focusCase.status === 'closed' ? [] : boardActions.filter(action => {
     const caseIds = linkedCasesOfAction(action);
@@ -590,7 +603,7 @@ export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHom
     ].filter(group => group.count > 0);
     proof = {
       kind: 'grouped',
-      caption: focusActions.some(action => !linkedCasesOfAction(action).length) ? '已关联行动进展（含项目行动）' : '已关联行动进展',
+      caption: (actionsComplete ? '已关联行动进展' : '已核对的关联行动进展') + (focusActions.some(action => !linkedCasesOfAction(action).length) ? '（含项目行动）' : ''),
       total: focusActions.length,
       unit: '项行动',
       portion: Math.round(((doingCount + doneCount) / focusActions.length) * 100),
@@ -700,7 +713,7 @@ export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHom
       statusLabel: CASE_STATUS_LABELS[record.status],
       tone: caseTone(record.status),
       owner,
-      dateLabel: nearestDue ? `行动期限 ${shortDate(nearestDue)}` : '期限待定',
+      dateLabel: nearestDue ? `行动期限 ${shortDate(nearestDue)}` : actionsComplete ? '期限待定' : '行动期限待核对',
     });
   }
 
