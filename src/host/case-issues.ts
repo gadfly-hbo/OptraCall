@@ -67,7 +67,19 @@ export function observationAuthorizationMatches(cases: CaseDecisionServiceDepend
 }
 
 /** One request's read/authorization failure never changes another request's projection. */
-export function observationRequestStatus(cases: CaseDecisionServiceDependencies['cases'], board: Pick<NonNullable<CaseDecisionServiceDependencies['board']>, 'getTask' | 'getItem' | 'listFeedbackHistory' | 'listActionAuthorizations'> | undefined, request: CaseDecisionRequest) {
+export function chooseRequestStatus(cases: CaseDecisionServiceDependencies['cases'], request: CaseDecisionRequest, choices = cases.getStrategyChoices(request.caseId)) {
+  if (request.lifecycle !== 'open') return requestStatus(request, choices, undefined);
+  if (request.target.kind !== 'choose') return 'unverifiable' as const;
+  try {
+    const ref = request.target.strategyRef;
+    if (ref.caseId !== request.caseId || ref.caseStoreId !== cases.getStatus().storeId) return 'unverifiable' as const;
+    const strategy = cases.getDecision(request.caseId, ref.recordId, ref.revision);
+    if (strategy.kind !== 'strategy' || strategy.issueId && strategy.issueId !== request.issueId) return 'unverifiable' as const;
+    return requestStatus(request, choices, undefined);
+  } catch { return 'unverifiable' as const; }
+}
+
+export async function observationRequestStatus(cases: CaseDecisionServiceDependencies['cases'], board: Pick<NonNullable<CaseDecisionServiceDependencies['board']>, 'getTask' | 'getItem' | 'listFeedbackHistory' | 'listActionAuthorizations'> | undefined, request: CaseDecisionRequest, assertBoardItemReadable?: CaseDecisionServiceDependencies['assertBoardItemReadable']) {
   if (request.lifecycle !== 'open') return requestStatus(request, undefined, undefined);
   if (!board || request.target.kind !== 'observe') return 'unverifiable' as const;
   try {
@@ -75,11 +87,16 @@ export function observationRequestStatus(cases: CaseDecisionServiceDependencies[
     if (!cases.listProjectLinks(request.caseId).some(l => l.projectId === target.projectId)) return 'unverifiable' as const;
     const task = board.getTask(target.taskId), item = board.getItem(task.itemId);
     if (item.id !== target.itemId || item.projectId !== target.projectId) return 'unverifiable' as const;
+    if (item.sourceKind === 'report-confirmation') {
+      if (!assertBoardItemReadable) return 'unverifiable' as const;
+      await assertBoardItemReadable(item);
+    }
     const allAuths = board.listActionAuthorizations?.(task.id) ?? [];
     const authorization = allAuths.find(a => a.authorizationId === target.authorizationId);
     if (!authorization || authorization.projectId !== target.projectId || authorization.itemId !== target.itemId || authorization.taskId !== target.taskId
       || !observationAuthorizationMatches(cases, request, authorization)) return 'unverifiable' as const;
     const history = board.listFeedbackHistory(task.id);
+    if (target.feedbackBaseRevisionId !== null && !history.some(row => row.revisionId === target.feedbackBaseRevisionId)) return 'unverifiable' as const;
     const responses: CaseFeedbackResponse[] = history.flatMap((rev, idx) => {
       if (!rev.respondsToRequest) return [];
       const active = authorityAtFeedback(allAuths, rev);
@@ -89,6 +106,7 @@ export function observationRequestStatus(cases: CaseDecisionServiceDependencies[
     });
     const status = requestStatus(request, undefined, responses);
     if (status === 'answered') return status;
+    if ((history.at(-1)?.revisionId ?? null) !== target.feedbackBaseRevisionId) return 'superseded' as const;
     const source = authorization.source;
     const currentChoice = cases.getStrategyChoices(request.caseId).filter(c => c.issueId === request.issueId).at(-1);
     return allAuths.at(-1)?.authorizationId !== authorization.authorizationId || 'kind' in source || currentChoice?.choiceId !== source.choiceId ? 'superseded' as const : status;
@@ -431,8 +449,8 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
       let rows: unknown[];
       if (section === 'issues') rows = cases.listDecisionIssues(caseId);
       else if (section === 'edges') rows = cases.listIssueEdges(caseId, { includeRemoved: true });
-      else if (section === 'requests') rows = cases.listDecisionRequests(caseId).filter(row => row.issueId === issueId)
-        .map(row => ({ ...row, status: row.kind === 'observe' ? observationRequestStatus(cases, deps.board, row) : requestStatus(row, cases.getStrategyChoices(caseId), undefined) }));
+      else if (section === 'requests') rows = await Promise.all(cases.listDecisionRequests(caseId).filter(row => row.issueId === issueId)
+        .map(async row => ({ ...row, status: row.kind === 'observe' ? await observationRequestStatus(cases, deps.board, row, deps.assertBoardItemReadable) : chooseRequestStatus(cases, row) })));
       else if (section === 'choices') rows = cases.getStrategyChoices(caseId).filter(row => row.issueId === issueId).map(row => ({ choiceId: row.choiceId, caseId, issueId, strategyRef: row.strategyRef, choice: row.choice, previousChoiceId: row.previousChoiceId, occurredAt: row.occurredAt, respondsToRequest: row.respondsToRequest }));
       else {
         if (!deps.board?.listActionAuthorizations) return fail('case_decision_board_unavailable', 503);
@@ -476,12 +494,12 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
           source: { kind: src.kind as 'user-declaration' | 'adopted-candidate', ref: typeof src.ref === 'string' ? src.ref : null } }, options);
       });
     },
-    decisionRequests: (caseId: string) => {
+    decisionRequests: async (caseId: string) => {
       const choices = cases.getStrategyChoices(caseId);
-      return cases.listDecisionRequests(caseId).map(request => {
-        if (request.target.kind === 'choose') return { ...request, status: requestStatus(request, choices, undefined) };
-        return { ...request, status: observationRequestStatus(cases, deps.board, request) };
-      });
+      return Promise.all(cases.listDecisionRequests(caseId).map(async request => {
+        if (request.target.kind === 'choose') return { ...request, status: chooseRequestStatus(cases, request, choices) };
+        return { ...request, status: await observationRequestStatus(cases, deps.board, request, deps.assertBoardItemReadable) };
+      }));
     },
     saveDecisionRequest: (caseId: string, input: Record<string, unknown>, options?: import('./case-decision-types.ts').CaseDecisionWriteOptions) => {
       caseDecisionFields(input, ['operationId', 'expectedRevision', 'requestId', 'action', 'issueId', 'kind', 'text', 'source', 'assignee', 'requestedAt', 'dueDate', 'target', 'expectedRequestRevision']);
@@ -493,7 +511,7 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
       if (input.assignee !== undefined && (!assignee || typeof assignee !== 'object' || Array.isArray(assignee)
         || Object.keys(assignee).some(k => k !== 'label' && k !== 'source')
         || [assignee.label, assignee.source].some(value => value !== undefined && value !== null && typeof value !== 'string'))) return fail('invalid_case_decision_request', 400);
-      return deps.mutate(() => {
+      return deps.mutate(async () => {
         const opId = caseDecisionId(input.operationId);
         if (cases.getOperation(opId)?.phase !== 'completed') {
           options?.assertWritable?.();
@@ -505,6 +523,10 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
             if (!cases.listProjectLinks(caseId).some(l => l.projectId === projId)) return fail('project_not_linked', 409);
             const task = deps.board.getTask(taskId), item = deps.board.getItem(task.itemId);
             if (item.id !== itemId || item.projectId !== projId) return fail('case_decision_scope_mismatch', 409);
+            if (item.sourceKind === 'report-confirmation') {
+              if (!deps.assertBoardItemReadable) return fail('confirmation_source_unavailable', 409);
+              await deps.assertBoardItemReadable(item);
+            }
             const allAuths = deps.board.listActionAuthorizations?.(taskId) ?? [];
             const authorization = allAuths.find(a => a.authorizationId === authId);
             const issueId = previous?.issueId ?? caseDecisionId(input.issueId);
@@ -512,6 +534,8 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
               || !observationAuthorizationMatches(cases, { caseId, issueId }, authorization) || allAuths.at(-1)?.authorizationId !== authId) return fail('case_do_authorization_unavailable', 409);
             const source = authorization.source;
             if ('kind' in source || cases.getStrategyChoices(caseId).filter(c => c.issueId === issueId).at(-1)?.choiceId !== source.choiceId) return fail('case_choice_conflict', 409);
+            const baseline = tgt.feedbackBaseRevisionId === null ? null : caseDecisionId(tgt.feedbackBaseRevisionId);
+            if ((deps.board.listFeedbackHistory(taskId).at(-1)?.revisionId ?? null) !== baseline) return fail('case_feedback_conflict', 409);
           }
         }
         return cases.saveDecisionRequest({ caseId, operationId: opId, expectedRevision: options?.currentCaseRevision ? cases.getCase(caseId).revision : caseDecisionRevision(input.expectedRevision),

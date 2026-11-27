@@ -832,10 +832,21 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           return { content: [{ type: 'text', text: result.text }], details: result.details };
         }, caseDecisions: options.caseDecisionsEnabled === false ? undefined : async (action, input, context) => {
           context.assertCurrent();
-          await pair(project.id, task.id, action === 'save');
+          await pair(project.id, task.id, action === 'save' || action === 'save-issue-edge' || action === 'save-decision-request');
           const receipt = cases.getOperation(context.caseOperationId), snapshot = receipt?.result;
           if (context.caseOperationId !== contextOperationId(project.id, task.id, context.requestId) || receipt?.kind !== 'task_context_prepare' || receipt.phase !== 'completed' || receipt.projectId !== project.id || !snapshot || snapshot.projectId !== project.id || snapshot.taskId !== task.id || snapshot.caseId !== receipt.caseId) throw new RequestFault(409, 'case_decision_binding_unavailable');
-          const assertCurrent = () => { context.assertCurrent(); if (closing) throw new RequestFault(409, 'case_decision_run_unavailable'); };
+          const assertCurrent = () => {
+            context.assertCurrent();
+            if (closing) throw new RequestFault(409, 'case_decision_run_unavailable');
+            try {
+              const currentConfiguration = availableConfiguration(_configuration.id, _configuration.revision);
+              if (!currentConfiguration || (['id', 'revision', 'provider', 'name', 'model', 'apiKey', 'api', 'baseUrl', 'thinkingLevel'] as const).some(key => currentConfiguration[key] !== _configuration[key])) throw Error('configuration_changed');
+            } catch {
+              void projectSessions.close(projectSessions.ref(owner), { retryFailed: false }).catch(() => {});
+              throw new RequestFault(409, 'configuration_changed');
+            }
+          };
+          assertCurrent();
           const hex = createHash('sha256').update(JSON.stringify(['case_decision_tool', project.id, task.id, context.requestId, context.sessionId, context.toolCallId])).digest('hex');
           const operationId = `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20,32)}`;
           const authority = { caseStoreId: cases.getStatus().storeId!, caseId: String(snapshot.caseId), projectId: project.id, taskId: task.id, requestId: context.requestId, sessionId: context.sessionId, toolCallId: context.toolCallId, operationId, signal: context.signal, assertCurrent };
@@ -846,16 +857,16 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           if (action === 'save-issue-edge') {
             const { sourceKind, ...rest } = input as Record<string, unknown>;
             const edge = await caseDecisions.saveIssueEdge(authority.caseId, {
-              ...rest, operationId: authority.operationId, expectedRevision: cases.getCase(authority.caseId).revision,
+              ...rest, operationId: authority.operationId,
               source: { kind: sourceKind === 'adopted-candidate' ? 'adopted-candidate' : 'user-declaration', ref: `${authority.sessionId}/${authority.requestId}/${authority.toolCallId}` },
-            }, { assertWritable: () => { assertCurrent(); context.signal.throwIfAborted(); } }); assertCurrent();
+            }, { currentCaseRevision: true, assertWritable: () => { assertCurrent(); context.signal.throwIfAborted(); } }); assertCurrent();
             return { content: [{ type: 'text', text: JSON.stringify(edge) }], details: { type: 'optracall.case-issue-edge-save', edge } };
           }
           if (action === 'save-decision-request') {
             const req = await caseDecisions.saveDecisionRequest(authority.caseId, {
-              ...(input as Record<string, unknown>), operationId: authority.operationId, expectedRevision: cases.getCase(authority.caseId).revision,
+              ...(input as Record<string, unknown>), operationId: authority.operationId,
               source: { kind: 'agent-tool', ref: `${authority.sessionId}/${authority.requestId}/${authority.toolCallId}` },
-            }, { assertWritable: () => { assertCurrent(); context.signal.throwIfAborted(); } }); assertCurrent();
+            }, { currentCaseRevision: true, assertWritable: () => { assertCurrent(); context.signal.throwIfAborted(); } }); assertCurrent();
             return { content: [{ type: 'text', text: JSON.stringify(req) }], details: { type: 'optracall.case-decision-request-save', request: req } };
           }
           const saved = await caseDecisions.saveForAgent(input, authority); assertCurrent();
@@ -1868,6 +1879,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     cases,
     drafts: workspaceDrafts,
     board: boardStore,
+    assertBoardItemReadable: item => conclusionHandoff.assertItemReadable(item),
     readGoal: async ({ goalId, version }) => {
       const goal = strategyGoals.read({ goalId, version });
       await validateStrategyGoal(goal);

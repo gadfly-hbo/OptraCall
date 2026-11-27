@@ -1,6 +1,6 @@
 import type { CaseIssueEdge, CaseDecisionRequest, CaseDecisionRequestStatus } from '../case-decision-types.ts';
 import type { HomePendingProjection } from '../home-pending.ts';
-import type { CaseDirectoryResult } from '../case-directory.ts';
+import type { CaseDirectoryOptions, CaseDirectoryResult } from '../case-directory.ts';
 import type { ThreeBranchCreateInput, ThreeBranchCreateResult } from '../case-creation-orchestrator.ts';
 import type { CarryOverFragmentPayload, IssueDraftPayload, WorkspaceDraftKind, WorkspaceDraftRecord } from '../workspace-draft-store.ts';
 import { CaseRequestError } from './case-client.ts';
@@ -13,10 +13,11 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const readHomePending = () => request<HomePendingProjection>('/api/workspace/home-pending');
-export const readCaseDirectory = (query?: string, limit = 20) => {
+export const readCaseDirectory = (query?: string, limit = 20, options: Omit<CaseDirectoryOptions, 'query'|'limit'> = {}) => {
   const params = new URLSearchParams();
   if (query?.trim()) params.set('query', query.trim());
   params.set('limit', String(limit));
+  for(const [key,value] of Object.entries(options))if(value!==undefined)params.set(key,String(value));
   return request<CaseDirectoryResult>(`/api/workspace/case-directory?${params.toString()}`);
 };
 

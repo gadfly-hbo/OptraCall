@@ -111,7 +111,7 @@ test('DW08/DW09-REQ-02: observe request is only resolved by saveFeedback carryin
   });
 
   const service = createCaseIssueService({ cases: f.cases, board: f.board, mutate: (fn: () => unknown) => fn() } as never);
-  assert.equal(service.decisionRequests(f.record.id)[0]!.status, 'open');
+  assert.equal((await service.decisionRequests(f.record.id))[0]!.status, 'open');
 
   // Wait 5ms so feedback savedAt is strictly after authorization createdAt (authorityAtFeedback ordering)
   await new Promise(r => setTimeout(r, 10));
@@ -121,7 +121,7 @@ test('DW08/DW09-REQ-02: observe request is only resolved by saveFeedback carryin
     operationId: randomUUID(), expectedLatestRevisionId: null, adopted: true, outcome: '初步观察', metricDelta: '', review: '', score: null, effect: 'unknown',
     respondsToRequest: { requestId: req.requestId, revision: req.revision, authorizationId: randomUUID() },
   });
-  assert.equal(service.decisionRequests(f.record.id)[0]!.status, 'open');
+  assert.equal((await service.decisionRequests(f.record.id))[0]!.status, 'superseded');
 
   // Create a second observe request based on wrongAuth.revisionId and answer it accurately under the REAL authorization.
   const req2 = f.cases.saveDecisionRequest({
@@ -136,8 +136,8 @@ test('DW08/DW09-REQ-02: observe request is only resolved by saveFeedback carryin
     operationId: randomUUID(), expectedLatestRevisionId: wrongAuth.revisionId, adopted: true, outcome: '首周复购+4%', metricDelta: '+4%', review: '', score: 4, effect: 'positive',
     respondsToRequest: { requestId: req2.requestId, revision: req2.revision, authorizationId: act.authorizationId },
   });
-  const list = service.decisionRequests(f.record.id);
-  assert.equal(list.find(r => r.requestId === req.requestId)!.status, 'open');
+  const list = await service.decisionRequests(f.record.id);
+  assert.equal(list.find(r => r.requestId === req.requestId)!.status, 'superseded');
   assert.equal(list.find(r => r.requestId === req2.requestId)!.status, 'answered');
 });
 

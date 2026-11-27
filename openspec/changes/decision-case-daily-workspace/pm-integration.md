@@ -25,3 +25,14 @@
 - 开始过完整 `npm run check` 探查；因 PM 修复开始，主动中止为 exit 130，日志 `.local/pm-second/full-check-incoming.log` 保留。该次进程可能读取到进行中的修改，**不作为任一固定候选全量成绩**。最终固定后重新完整检查。
 - 原创建恢复新增两项反例先 0/2、修后 2/2；连同原三分支和草稿回归共 5/5。原日志 `.local/pm-second/create-recovery-{red,green}.log` 保留；永久测试 `tests/case-preparation-recovery.test.ts`。
 - 设备采用、运行服务切换、真实 Provider／业务材料仍不在本轮工程交付中。
+
+### 修后固定候选的第一次独立终检
+
+代码 `7fe8e936d2463e514f2d8b08deae23f8c0467e24` 的全新非作者终检仍检出缺口，原结论和实际反例保留于 [final-initial/](pm-review/final-initial/)。这不是再次向领取方退回，仍由 PM 在本分支直接收尾。
+
+- 后端：专属方案的事项归属、观察基线存在性、原报告确认来源撤权；沿原权威补校验与逐请求异步读取。
+- Runtime：原项目工具的排队版本捕获、Case 配置失效后的迟到写、132 事项的目录超限；复用原生命周期撤销该 owner，准确配置快照含凭据比较，并增加有界目录分页。
+- UI：共享项目的别案／未归属任务混入“全部当前 Case”；改为准确关联集合并保留打开原项目全部任务的入口与来源标签。
+- 原整包检查先因三个新测试使用非字面模块加载而失败（`.local/pm-second/full-check-fixed.log`）。只修测试加载方式，保留全部断言；未更改边界检查器或白名单。修后会话边界通过。
+- Case 配置变更新增真实官方 Pi＋隔离合成 Provider 回归：换线路及仅换凭据均为零迟到落盘、旧 Provider 各只收一次原请求，3/3 目录／配置组通过；目录整页预算另有永久回归。
+- `npm audit --audit-level=high` exit 0；原锁定 Pi 的两项 moderate 提示保留于本地日志，不据此升级用户固定的 SDK 或锁文件。

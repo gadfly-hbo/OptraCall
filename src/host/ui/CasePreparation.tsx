@@ -34,6 +34,18 @@ export type CasePreparationProps = {
   initialGoal?: CaseGoalEntry;
   initialSource?: CaseCreationSource;
 };
+function mergeDirectoryEntries(previous: CaseDirectoryEntry[], incoming: CaseDirectoryEntry[]): CaseDirectoryEntry[] {
+  const byId = new Map(previous.map(entry => [entry.caseId, entry]));
+  for (const entry of incoming) {
+    const old = byId.get(entry.caseId);
+    if (!old) { byId.set(entry.caseId, entry); continue; }
+    const issues = [...new Map([...old.issues, ...entry.issues].map(issue => [issue.issueId, issue])).values()];
+    const through = Math.max(old.nextIssueOffset ?? old.totalIssues, entry.nextIssueOffset ?? entry.totalIssues);
+    const nextIssueOffset = through < entry.totalIssues ? through : null;
+    byId.set(entry.caseId, { ...entry, issues, issuesTruncated: nextIssueOffset !== null, nextIssueOffset });
+  }
+  return [...byId.values()];
+}
 const keyOf = (goal: { goalId: string; version: number }) => `${goal.goalId}@${goal.version}`;
 const preparationText = (p: Pick<Payload, 'title' | 'description' | 'rawInput'>) => [p.title ? `准备名称：${p.title}` : '', p.description ? `问题背景：${p.description}` : '', p.rawInput ? `原输入：${p.rawInput}` : ''].filter(Boolean).join('\n\n');
 const unfinished = (d: WorkspaceDraftRecord<PreparationDraftPayload>) => d.payload.creationState !== 'completed' || Boolean(d.payload.creationReceipt && !(d.payload as Payload).firstIssueReceipt);
@@ -50,6 +62,8 @@ export function CasePreparation({ onOpenCase, onCreateCase, onOpenAllProjects, o
   const [goals, setGoals] = useState<GoalVersion[]>([]), [enterprises, setEnterprises] = useState<{ id: string; name: string }[]>([]);
   const [prepOpen, setPrepOpen] = useState(expanded), [agentOpen, setAgentOpen] = useState(false), [manualOpen, setManualOpen] = useState(false);
   const [matches, setMatches] = useState<CaseDirectoryEntry[] | null>(null), [selectedIssues, setSelectedIssues] = useState<Record<string, string>>({});
+  const [nextCaseOffset, setNextCaseOffset] = useState<number | null>(null), [loadingDirectory, setLoadingDirectory] = useState<string | null>(null);
+  const directoryGeneration = useRef(0);
   const [searching, setSearching] = useState(false), [creating, setCreating] = useState(false), [result, setResult] = useState<ThreeBranchCreateResult | null>(null);
   const busyRef = useRef(false);
   const notify = () => redraw(n => n + 1);
@@ -62,6 +76,7 @@ export function CasePreparation({ onOpenCase, onCreateCase, onOpenAllProjects, o
       onSaved: draft => { remember(draft); notify(); }, onError: failure => { setError(`草稿尚未保存，输入保留；请重试后再离开。${caseError(failure)}`); notify(); },
     });
     if (initial) { sessionRef.current.update(initial); void sessionRef.current.flush(); }
+    directoryGeneration.current++; setNextCaseOffset(null); setLoadingDirectory(null); setSearching(false);
     setResult(null); setMatches(null); setAgentOpen(false); setManualOpen(Boolean(record?.payload.goalDraft || record?.payload.goalAttempt)); notify();
   };
   useEffect(() => {
@@ -99,6 +114,7 @@ export function CasePreparation({ onOpenCase, onCreateCase, onOpenAllProjects, o
     window.addEventListener('beforeunload', guard); return () => window.removeEventListener('beforeunload', guard);
   }, []);
   useEffect(() => registerWorkspaceInputGuard(() => flushRef.current()), []);
+  useEffect(() => () => { directoryGeneration.current++; }, []);
   const snapshot = sessionRef.current?.getSnapshot();
   const payload = (snapshot?.payload ?? emptyPayload) as Payload;
   const draftId = sessionRef.current?.id ?? '';
@@ -129,12 +145,43 @@ export function CasePreparation({ onOpenCase, onCreateCase, onOpenAllProjects, o
     else update({ goalDraft: proposal });
   };
   const newPreparation = async () => { if (await flush()) { install(); setManualOpen(false); setPrepOpen(true); setNotice('已开始另一份独立准备；原草稿及已保存结果保留。'); } };
+  const directoryFailure = (failure: unknown) => {
+    if (failure instanceof goalsApi.CaseRequestError && failure.status === 403) { directoryGeneration.current++; setMatches(null); setNextCaseOffset(null); setLoadingDirectory(null); setSearching(false); }
+    setError(`目录读取未完成，准备输入仍保留。${caseError(failure)}`);
+  };
   const organize = async () => {
     if (!await flush()) return;
+    const generation = ++directoryGeneration.current;
     setSearching(true); setError('');
-    try { const directory = await readCaseDirectory(undefined, 20); setMatches(directory.items); setNotice(directory.truncated ? '已读取最近的获准 Case，可在总览继续查找；这里未作语义推荐。' : '以下为获准 Case 目录，可明确选择原事项；需要推荐时可主动请 Agent 整理。'); }
-    catch (failure) { setError(caseError(failure)); }
-    finally { setSearching(false); }
+    try {
+      const directory = await readCaseDirectory(undefined, 20, { issueLimit: 5 });
+      if (generation !== directoryGeneration.current) return;
+      setMatches(directory.items); setNextCaseOffset(directory.nextOffset ?? null);
+      setNotice(directory.truncated ? '已读取部分获准 Case 或事项，可按需读取更多；这里未作语义推荐。' : '以下为获准 Case 目录，可明确选择原事项；需要推荐时可主动请 Agent 整理。');
+    } catch (failure) { if (generation === directoryGeneration.current) directoryFailure(failure); }
+    finally { if (generation === directoryGeneration.current) setSearching(false); }
+  };
+  const readMoreCases = async () => {
+    if (nextCaseOffset === null || searching || loadingDirectory) return;
+    const generation = directoryGeneration.current;
+    setLoadingDirectory('cases'); setError('');
+    try {
+      const directory = await readCaseDirectory(undefined, 20, { offset: nextCaseOffset, issueLimit: 5 });
+      if (generation !== directoryGeneration.current) return;
+      setMatches(old => mergeDirectoryEntries(old ?? [], directory.items)); setNextCaseOffset(directory.nextOffset ?? null);
+    } catch (failure) { if (generation === directoryGeneration.current) directoryFailure(failure); }
+    finally { if (generation === directoryGeneration.current) setLoadingDirectory(null); }
+  };
+  const readMoreIssues = async (entry: CaseDirectoryEntry) => {
+    if (entry.nextIssueOffset === null || searching || loadingDirectory) return;
+    const generation = directoryGeneration.current;
+    setLoadingDirectory(entry.caseId); setError('');
+    try {
+      const directory = await readCaseDirectory(undefined, 1, { caseId: entry.caseId, issueOffset: entry.nextIssueOffset, issueLimit: 5, includeClosed: true });
+      if (generation !== directoryGeneration.current) return;
+      setMatches(old => mergeDirectoryEntries(old ?? [], directory.items.filter(item => item.caseId === entry.caseId)));
+    } catch (failure) { if (generation === directoryGeneration.current) directoryFailure(failure); }
+    finally { if (generation === directoryGeneration.current) setLoadingDirectory(null); }
   };
   const carry = async (entry: CaseDirectoryEntry) => {
     const issueId = selectedIssues[entry.caseId] ?? '';
@@ -231,7 +278,8 @@ export function CasePreparation({ onOpenCase, onCreateCase, onOpenAllProjects, o
       if (response.branch === 'continue') {
         setNotice(response.isClosed ? '原 Case 已结束，未自动重开；新名称、背景和输入均已保留。' : '这组准确 G/S 已有 Case；新名称、背景和输入均已保留。');
         const originalIssues = await caseIssues(response.existingCase.id).catch(() => null);
-        if (originalIssues) setMatches([{ caseId: response.existingCase.id, title: response.existingCase.title, status: response.existingCase.status, updatedAt: response.existingCase.updatedAt, goalBinding: { goalId: attempt.goal.goalId, version: attempt.goal.version, strategy: attempt.goal.strategy }, issues: originalIssues.issues.map(i => ({ issueId: i.id, title: i.title })) }]);
+        directoryGeneration.current++; setNextCaseOffset(null); setLoadingDirectory(null); setSearching(false);
+        if (originalIssues) setMatches([{ caseId: response.existingCase.id, title: response.existingCase.title, status: response.existingCase.status, updatedAt: response.existingCase.updatedAt, goalBinding: { goalId: attempt.goal.goalId, version: attempt.goal.version, strategy: attempt.goal.strategy }, issues: originalIssues.issues.map(i => ({ issueId: i.id, title: i.title })), totalIssues: originalIssues.issues.length, issuesTruncated: false, nextIssueOffset: null }]);
       } else if (response.branch === 'partial') setNotice('目标采纳结果与原操作已保留；Case 创建未完成。继续会核对原操作，不重复采纳。');
       else {
         setNotice(`Case「${response.createdCase.title}」已创建${response.replayedFromOperation ? '，已核对原操作回执' : ''}；正在核对第一件事项。`);
@@ -269,7 +317,7 @@ export function CasePreparation({ onOpenCase, onCreateCase, onOpenAllProjects, o
     {!ready && <p className="case-help">正在恢复准备草稿…<button type="button" className="text-button" onClick={() => { void listWorkspaceDrafts<PreparationDraftPayload>('prepare').then(({ drafts }) => { setSaved(drafts); install(drafts.find(unfinished)); setReady(true); setError(''); }, failure => setError(caseError(failure))); }}>重新读取</button></p>}
     <textarea id={inputId} rows={2} value={payload.rawInput} disabled={!ready || creating || payload.creationState === 'completed'} onChange={e => update({ rawInput: e.target.value, carryFragmentId: null, carryTarget: null })} placeholder="例如：华东三家门店首周复购波动，想核对是否继续扩围…" />
     <div className="home-daily-actions">
-      <button type="button" className="primary-button" disabled={!ready || searching || !payload.rawInput.trim()} onClick={() => { void organize(); }}>{searching ? '正在查找获准 Case…' : '查找获准 Case'}</button>
+      <button type="button" className="primary-button" disabled={!ready || searching || Boolean(loadingDirectory) || !payload.rawInput.trim()} onClick={() => { void organize(); }}>{searching ? '正在查找获准 Case…' : '查找获准 Case'}</button>
       <button type="button" className="secondary-button" disabled={!ready || creating} onClick={() => { setAgentOpen(v => !v); setPrepOpen(true); }}>{agentOpen ? '收起整理 Agent' : '请 Agent 整理与推荐（可选）'}</button>
       <button type="button" className="text-button" disabled={!ready || creating} onClick={() => { void flush().then(ok => { if (ok) setNotice('准备内容已保存。'); }); }}>重试保存</button>
       {snapshot && (snapshot.revision > 0 || snapshot.dirty) && <button type="button" className="text-button" disabled={creating} onClick={() => { void discard(); }}>放弃这份草稿</button>}
@@ -307,7 +355,13 @@ export function CasePreparation({ onOpenCase, onCreateCase, onOpenAllProjects, o
       {result?.branch === 'continue' && <button type="button" className="secondary-button" onClick={() => { void navigate(() => onOpenCase(result.existingCase.id)); }}>查看原 Case「{result.existingCase.title}」{result.isClosed ? '（已结束）' : ''}</button>}
       {payload.creationReceipt && !result && <button type="button" className="secondary-button" onClick={() => { void navigate(() => onOpenCase(payload.creationReceipt!.caseId, payload.firstIssueReceipt?.issueId)); }}>查看已创建 Case</button>}
     </div>}
-    {matches && <div className="home-daily-matches" aria-label="获准 Case 候选">{matches.length ? matches.map(entry => <div key={entry.caseId} className="home-daily-match-row"><div><strong>{entry.title}</strong>{entry.issues.length ? <label>目标事项<select aria-label={`选择 ${entry.title} 的目标事项`} value={selectedIssues[entry.caseId] ?? ''} onChange={e => setSelectedIssues(old => ({ ...old, [entry.caseId]: e.target.value }))}><option value="">请选择原事项</option>{entry.issues.map(i => <option key={i.issueId} value={i.issueId}>{i.title}</option>)}</select></label> : <p className="case-help">暂无独立事项，进入后可明确建立事项。</p>}</div><div className="home-daily-actions"><button type="button" className="secondary-button" disabled={!payload.rawInput.trim() || !selectedIssues[entry.caseId]} onClick={() => { void carry(entry); }}>带入所选事项</button><button type="button" className="text-button" onClick={() => { void navigate(() => onOpenCase(entry.caseId, selectedIssues[entry.caseId] || undefined)); }}>直接继续</button></div></div>) : <p className="case-help">当前目录无适用 Case，可人工准备新 G/S。</p>}</div>}
+    {matches && <div className="home-daily-matches" aria-label="获准 Case 候选">
+      {matches.length ? matches.map(entry => <div key={entry.caseId} className="home-daily-match-row"><div><strong>{entry.title}</strong>
+        {entry.issues.length ? <label>目标事项<select aria-label={`选择 ${entry.title} 的目标事项`} value={selectedIssues[entry.caseId] ?? ''} onChange={e => setSelectedIssues(old => ({ ...old, [entry.caseId]: e.target.value }))}><option value="">请选择原事项</option>{entry.issues.map(i => <option key={i.issueId} value={i.issueId}>{i.title}</option>)}</select></label> : <p className="case-help">{entry.totalIssues > 0 || entry.issuesTruncated ? '事项尚未读完，可继续读取。' : '暂无独立事项，进入后可明确建立事项。'}</p>}
+        {entry.issuesTruncated && <div className="case-help">已读取 {entry.issues.length} / {entry.totalIssues} 件事项。<button type="button" className="text-button" aria-label={`读取 ${entry.title} 的更多事项`} disabled={searching || Boolean(loadingDirectory)} onClick={() => { void readMoreIssues(entry); }}>{loadingDirectory === entry.caseId ? '正在读取事项…' : '读取更多事项'}</button></div>}
+      </div><div className="home-daily-actions"><button type="button" className="secondary-button" disabled={!payload.rawInput.trim() || !selectedIssues[entry.caseId]} onClick={() => { void carry(entry); }}>带入所选事项</button><button type="button" className="text-button" onClick={() => { void navigate(() => onOpenCase(entry.caseId, selectedIssues[entry.caseId] || undefined)); }}>直接继续</button></div></div>) : <p className="case-help">当前已读目录无适用 Case，可继续查找或人工准备新 G/S。</p>}
+      {nextCaseOffset !== null && <button type="button" className="text-button" disabled={searching || Boolean(loadingDirectory)} onClick={() => { void readMoreCases(); }}>{loadingDirectory === 'cases' ? '正在读取 Case…' : '读取更多 Case'}</button>}
+    </div>}
     {saved.some(d => d.id !== draftId && unfinished(d)) && <details><summary>继续其他准备草稿</summary>{saved.filter(d => d.id !== draftId && unfinished(d)).map(d => <div key={d.id} className="case-message"><strong>{d.payload.title || d.payload.rawInput.slice(0, 60) || '未命名准备'}</strong><button type="button" className="text-button" onClick={() => { void flush().then(ok => { if (ok) { install(d); setPrepOpen(true); } }); }}>恢复这份准备{d.payload.creationState.startsWith('partial') ? '并核对原操作' : ''}</button></div>)}</details>}
   </div>;
 }

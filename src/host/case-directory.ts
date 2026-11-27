@@ -1,5 +1,8 @@
 import type { CaseRecord } from './case-types.ts';
 import type { CaseStore } from './case-store.ts';
+import { CaseStoreError } from './case-types.ts';
+
+export type CaseDirectoryOptions = { query?: string; limit?: number; includeClosed?: boolean; caseId?: string; offset?: number; issueLimit?: number; issueOffset?: number };
 
 export type CaseDirectoryEntry = {
   caseId: string;
@@ -8,6 +11,9 @@ export type CaseDirectoryEntry = {
   updatedAt: string;
   goalBinding: { goalId: string; version: number; strategy: string | null } | null;
   issues: { issueId: string; title: string }[];
+  totalIssues: number;
+  issuesTruncated: boolean;
+  nextIssueOffset: number | null;
 };
 
 export type CaseDirectoryResult = {
@@ -15,6 +21,7 @@ export type CaseDirectoryResult = {
   items: CaseDirectoryEntry[];
   truncated: boolean;
   totalVisible: number;
+  nextOffset: number | null;
 };
 
 /**
@@ -23,17 +30,22 @@ export type CaseDirectoryResult = {
  */
 export function listVisibleCaseDirectory(
   cases: Pick<CaseStore, 'getStatus' | 'listCases' | 'listDecisionIssues' | 'getGoalBinding'>,
-  options: { query?: string; limit?: number; includeClosed?: boolean } = {},
+  options: CaseDirectoryOptions = {},
 ): CaseDirectoryResult {
   const status = cases.getStatus();
   if (status.state !== 'ready') {
-    return { storeState: status.state, items: [], truncated: false, totalVisible: 0 };
+    return { storeState: status.state, items: [], truncated: false, totalVisible: 0, nextOffset: null };
   }
   const limit = Math.max(1, Math.min(50, options.limit ?? 20));
   const query = (options.query ?? '').trim().toLowerCase();
+  const offset = Math.max(0, options.offset ?? 0), issueOffset = Math.max(0, options.issueOffset ?? 0);
+  const issueLimit = Math.max(1, Math.min(20, options.issueLimit ?? 5));
+  if (![offset, issueOffset, issueLimit, limit].every(Number.isSafeInteger)) throw new CaseStoreError('invalid_case_directory_page', 400);
+  if (issueOffset > 0 && !options.caseId) throw new CaseStoreError('case_directory_case_required', 400);
   const all = cases.listCases()
     .filter(record => options.includeClosed || record.status !== 'closed')
-    .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+    .filter(record => !options.caseId || record.id === options.caseId)
+    .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || a.id.localeCompare(b.id));
 
   const entries: CaseDirectoryEntry[] = [];
   for (const record of all) {
@@ -49,13 +61,28 @@ export function listVisibleCaseDirectory(
       status: record.status,
       updatedAt: record.updatedAt,
       goalBinding: binding ? { goalId: binding.primary.goalId, version: binding.primary.version, strategy: binding.strategy ?? null } : null,
-      issues,
+      issues: issues.slice(issueOffset, issueOffset + issueLimit),
+      totalIssues: issues.length,
+      issuesTruncated: issueOffset + issueLimit < issues.length,
+      nextIssueOffset: issueOffset + issueLimit < issues.length ? issueOffset + issueLimit : null,
     });
   }
+  const items: CaseDirectoryEntry[] = [];
+  // Whole rows keep exact identities and source text. A full native tool result
+  // remains below its 30k budget; continue by Case or by the exact Case's issues.
+  for (const entry of entries.slice(offset, offset + limit)) {
+    if (JSON.stringify({ items: [...items, entry] }).length > 28000) {
+      if (!items.length) throw new CaseStoreError('case_directory_entry_too_large', 413);
+      break;
+    }
+    items.push(entry);
+  }
+  const nextOffset = offset + items.length < entries.length ? offset + items.length : null;
   return {
     storeState: 'ready',
-    items: entries.slice(0, limit),
-    truncated: entries.length > limit,
+    items,
+    truncated: nextOffset !== null || items.some(item => item.issuesTruncated),
     totalVisible: entries.length,
+    nextOffset,
   };
 }

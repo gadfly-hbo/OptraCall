@@ -1,7 +1,7 @@
 import { projectHomePending } from './home-pending.ts';
 import { listVisibleCaseDirectory } from './case-directory.ts';
 import { executeThreeBranchCaseCreate, type AdoptGoalFn, type CreateCaseFn, type ReadGoalFn } from './case-creation-orchestrator.ts';
-import { observationRequestStatus } from './case-issues.ts';
+import { chooseRequestStatus, observationRequestStatus } from './case-issues.ts';
 import { WorkspaceDraftError, type WorkspaceDraftKind, type WorkspaceDraftStore } from './workspace-draft-store.ts';
 import type { CaseStore } from './case-store.ts';
 import type { createDecisionBoardStore } from '../../extensions/business-plugins/decision-board/storage/store.ts';
@@ -12,6 +12,7 @@ export type WorkspaceDailyRoutesDeps = {
   cases: CaseStore;
   drafts: WorkspaceDraftStore;
   board?: BoardStore;
+  assertBoardItemReadable?: import('./case-decision-service.ts').CaseDecisionServiceDependencies['assertBoardItemReadable'];
   readGoal?: ReadGoalFn;
   adoptGoal: AdoptGoalFn;
   createCase: CreateCaseFn;
@@ -27,15 +28,15 @@ export function createWorkspaceDailyRoutes(deps: WorkspaceDailyRoutesDeps) {
       if (status.state !== 'ready') {
         return { body: projectHomePending({ storeState: status.state, cases: [] }) };
       }
-      const entries = deps.cases.listCases().map(record => {
+      const entries = await Promise.all(deps.cases.listCases().map(async record => {
         const issues = deps.cases.listDecisionIssues(record.id);
         const requests = deps.cases.listDecisionRequests(record.id);
         const choices = deps.cases.getStrategyChoices(record.id);
         const pendingOperations = deps.cases.listPendingProjectOperations(record.id);
-        const requestStatuses = Object.fromEntries(requests.filter(r => r.kind === 'observe')
-          .map(request => [request.requestId, observationRequestStatus(deps.cases, deps.board, request)]));
+        const requestStatuses = Object.fromEntries(await Promise.all(requests
+          .map(async request => [request.requestId, request.kind === 'observe' ? await observationRequestStatus(deps.cases, deps.board, request, deps.assertBoardItemReadable) : chooseRequestStatus(deps.cases, request, choices)])));
         return { record, issues, requests, choices, requestStatuses, pendingOperations };
-      });
+      }));
       return { body: projectHomePending({ storeState: 'ready', cases: entries }) };
     }
 
@@ -44,7 +45,9 @@ export function createWorkspaceDailyRoutes(deps: WorkspaceDailyRoutesDeps) {
       const rawLimit = searchParams.get('limit');
       const limit = rawLimit && /^\d+$/.test(rawLimit) ? Number(rawLimit) : undefined;
       const includeClosed = searchParams.get('includeClosed') === 'true';
-      return { body: listVisibleCaseDirectory(deps.cases, { query, limit, includeClosed }) };
+      const page: {offset?:number;issueLimit?:number;issueOffset?:number}={};
+      for(const key of ['offset','issueLimit','issueOffset'] as const){const value=searchParams.get(key);if(value!==null){if(!/^\d+$/.test(value)||!Number.isSafeInteger(Number(value)))throw new WorkspaceDraftError('invalid_case_directory_page',400);page[key]=Number(value);}}
+      return { body: listVisibleCaseDirectory(deps.cases, { query, limit, includeClosed, ...page, ...(searchParams.has('caseId')?{caseId:searchParams.get('caseId')!}:{}) }) };
     }
 
     if (pathname === '/api/workspace/drafts/append-fragment' && method === 'POST') {

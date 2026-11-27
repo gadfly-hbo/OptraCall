@@ -1,11 +1,12 @@
+import './fixtures/register-ui.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import { transform } from 'esbuild';
 import { availableObservationRequests, observationRequestContext, validateObservationRequest, type ObservationRequestContext, type ObservationRequestSnapshot } from '../extensions/business-plugins/decision-board/ui/observation-request-model.ts';
 import type { FeedbackInput } from '../extensions/business-plugins/decision-board/ui/decision-board-client.ts';
 import type { BoardActionAuthorization } from '../extensions/business-plugins/decision-board/types.ts';
 import type { CaseDecisionRequestView } from '../src/host/ui/workspace-daily-client.ts';
+
+const client = import('../extensions/business-plugins/decision-board/ui/decision-board-client.ts');
 
 const subject = { projectId: 'project-a', itemId: 'item-a', taskId: 'task-a' };
 const context: ObservationRequestContext = { caseId: 'case-a', issueId: 'issue-a', requestId: 'request-second', revision: 3, target: { kind: 'observe', ...subject, authorizationId: 'authorization-a', feedbackBaseRevisionId: 'feedback-2' } };
@@ -68,9 +69,7 @@ test('DW08/09 only genuinely open observe requests are offered; source text rema
 });
 
 test('DW09 original feedback HTTP save carries exact selected reference; ordinary and lost-ack saves never gain inferred requests or retries', async () => {
-  const source = await readFile(new URL('../extensions/business-plugins/decision-board/ui/decision-board-client.ts', import.meta.url), 'utf8');
-  const compiled = await transform(source, { loader: 'ts', format: 'esm' });
-  const { saveFeedback } = await import(`data:text/javascript;base64,${Buffer.from(compiled.code).toString('base64')}`) as typeof import('../extensions/business-plugins/decision-board/ui/decision-board-client.ts');
+  const { saveFeedback } = await client;
   const oldFetch = globalThis.fetch, calls: { path: string; body: FeedbackInput }[] = [];
   const input: FeedbackInput = { operationId: 'stable-save-intent', expectedLatestRevisionId: 'feedback-2', adopted: true, outcome: '原观察正文', metricDelta: '', review: '仍有未知', score: null, effect: 'unknown' };
   globalThis.fetch = async (path, init) => { calls.push({ path: String(path), body: JSON.parse(String(init?.body)) }); return new Response(JSON.stringify({ feedback: { revisionId: 'feedback-3' } }), { status: 200 }); };

@@ -1,5 +1,6 @@
 import type { CaseDecisionIssue, CaseStrategyChoiceValue } from '../case-decision-types.ts';
 import type { caseIssueTimeline } from './case-decisions-client.ts';
+import type { ClientTask } from './project-types.ts';
 
 export type CaseAuxScope = { mode: 'issue' | 'all'; issueId: string; manual: boolean };
 export type CaseBoardViewState = { tab: 'overview' | 'projects' | 'artifacts' | 'history'; activeIssueId: string; auxScope: CaseAuxScope };
@@ -16,6 +17,15 @@ export function reconcileCaseBoardIssues(view: CaseBoardViewState, issues: reado
   if (!active) return selectCaseBoardIssue(view, issues[0]!.id, 'restore');
   if (view.auxScope.mode === 'issue' && !issues.some(issue => issue.id === view.auxScope.issueId)) return { ...view, auxScope: { mode: 'issue', issueId: view.activeIssueId, manual: false } };
   return view;
+}
+
+/** Sharing a project does not bind its other tasks to a Case. Legacy tasks stay in the original project. */
+export function caseTasksInScope(tasks: readonly ClientTask[], caseId: string, scope: CaseAuxScope): ClientTask[] {
+  if (!caseId || scope.mode === 'issue' && !scope.issueId) return [];
+  return tasks.filter(task => {
+    const binding = task.assignment?.issue;
+    return binding?.caseId === caseId && Boolean(binding.issueId) && (scope.mode === 'all' || binding.issueId === scope.issueId);
+  });
 }
 
 const choiceName: Record<CaseStrategyChoiceValue, string> = { trial: '试行', adjust: '调整', continue: '继续', defer: '暂缓', no_action: '本次不行动', gather_evidence: '补证', reject: '不采用', stop_considering: '停止考虑' };

@@ -5,8 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { CaseStore } from '../src/host/case-store.ts';
-import { createCaseIssueService } from '../src/host/case-issues.ts';
-import { createDecisionBoardStore } from '../extensions/business-plugins/decision-board/storage/store.ts';
+import { chooseRequestStatus, createCaseIssueService, observationRequestStatus } from '../src/host/case-issues.ts';
+import { boardRecordVersion, createDecisionBoardStore } from '../extensions/business-plugins/decision-board/storage/store.ts';
 import { createWorkspaceDailyRoutes } from '../src/host/workspace-daily-routes.ts';
 import { createWorkspaceDraftStore } from '../src/host/workspace-draft-store.ts';
 
@@ -58,7 +58,7 @@ test('DW-SECOND-02: observation save rejects another issue authorization and leg
   const legacy = f.cases.saveDecisionRequest({ ...bad, caseId: f.record.id } as never);
   await new Promise(r => setTimeout(r, 10));
   f.board.saveFeedback(act.taskId, { operationId: randomUUID(), expectedLatestRevisionId: null, adopted: true, outcome: 'A的观察', metricDelta: '', review: '', score: null, respondsToRequest: { requestId: legacy.requestId, revision: legacy.revision, authorizationId: act.authorizationId } });
-  assert.equal(f.service.decisionRequests(f.record.id)[0]!.status, 'unverifiable');
+  assert.equal((await f.service.decisionRequests(f.record.id))[0]!.status, 'unverifiable');
   const home = (await f.daily({ pathname: '/api/workspace/home-pending', method: 'GET' }))!.body as any;
   assert.equal(home.unresolvedRequests[0].status, 'unverifiable'); assert.equal(home.pending.length, 0);
 });
@@ -133,7 +133,7 @@ test('DW-SECOND-07: changing issue round supersedes an unanswered observation an
   const observations = await f.service.readDeclarations(f.record.id, f.a.id, { section: 'observations' }) as any;
   assert.deepEqual(observations.items[0].target, original.target);
   f.action(f.a.id);
-  assert.equal(f.service.decisionRequests(f.record.id)[0]!.status, 'superseded');
+  assert.equal((await f.service.decisionRequests(f.record.id))[0]!.status, 'superseded');
   await assert.rejects(f.service.saveDecisionRequest(f.record.id, { operationId: randomUUID(), expectedRevision: f.rev(), requestId: request.requestId, expectedRequestRevision: request.revision, text: '旧轮继续请求', source: { kind: 'agent-tool', ref: 'new/tool' } }), { code: 'case_choice_conflict' });
   assert.deepEqual(await f.service.saveDecisionRequest(f.record.id, original), request, 'completed original operation stays a read-only receipt after round changes');
   assert.throws(() => f.service.saveDecisionRequest(f.record.id, { ...f.chooseInput(), currentCaseRevision: true }), { code: 'invalid_case_decision_fields' });
@@ -158,4 +158,47 @@ test('DW-SECOND-08: legacy aggregate-revision receipts replay through new Host m
   await assert.rejects(f.service.saveIssueEdge(f.record.id, { ...edgeReplay, explanation: 'changed' }, options), { code: 'operation_conflict' });
   await assert.rejects(f.service.saveDecisionRequest(f.record.id, { ...requestReplay, text: 'changed' }, options), { code: 'operation_conflict' });
   assert.equal(f.rev(), revision);
+});
+
+test('DW-FINAL-AUTH-01: an issue-specific strategy cannot create a choose request for another issue', async t => {
+  const f = await fixture(t);
+  const strategy = f.cases.acceptIssuePlan({ operationId: randomUUID(), caseId: f.record.id, issueId: f.a.id, title: 'A专属方案', proposal: '仅A', source: { type: 'native-reply', projectId: f.projectId, taskId: randomUUID(), sessionId: 'synthetic', messageId: 'source', expectedTextSha256: 'a'.repeat(64) } });
+  const input = { ...f.chooseInput(), issueId: f.b.id, target: { kind: 'choose', strategyRef: { ...f.strategyRef, recordId: strategy.recordId, revision: strategy.revision }, expectedPreviousChoiceId: null } };
+  await assert.rejects(f.service.saveDecisionRequest(f.record.id, input), { code: 'case_issue_scope_mismatch' });
+  assert.equal(f.cases.getOperation(input.operationId), null);
+  assert.equal(chooseRequestStatus(f.cases, { ...input, caseId: f.record.id, lifecycle: 'open' } as never), 'unverifiable', 'historical mismatches do not become pending');
+});
+
+test('DW-FINAL-AUTH-02: observation requests require this task current exact feedback baseline', async t => {
+  const f = await fixture(t); const action = f.action(f.a.id);
+  const input = f.observeInput(f.a.id, action);
+  const invalid = { ...input, target: { ...input.target, feedbackBaseRevisionId: randomUUID() } };
+  await assert.rejects(f.service.saveDecisionRequest(f.record.id, invalid), { code: 'case_feedback_conflict' });
+  assert.equal(await observationRequestStatus(f.cases, f.board, { ...invalid, caseId: f.record.id, lifecycle: 'open' } as never), 'unverifiable');
+  const request = await f.service.saveDecisionRequest(f.record.id, input);
+  f.board.saveFeedback(action.taskId, { operationId: randomUUID(), expectedLatestRevisionId: null, adopted: true, outcome: '普通新观察', metricDelta: '', review: '', score: null });
+  await assert.rejects(f.service.saveDecisionRequest(f.record.id, { ...f.observeInput(f.a.id, action) }), { code: 'case_feedback_conflict' });
+  assert.equal((await f.service.decisionRequests(f.record.id)).find(row => row.requestId === request.requestId)!.status, 'superseded');
+});
+
+test('DW-FINAL-AUTH-03: original report-confirmation read authority governs request save, read and per-request home projection', async t => {
+  const f = await fixture(t);
+  const confirmed = f.board.confirmReportConclusions({ operationId: randomUUID(), projectId: f.projectId, taskId: randomUUID(), reviewId: randomUUID(), report: { relativePath: '060_reports/synthetic.md', sha256: 'a'.repeat(64), bytes: 100, observedSha256: 'a'.repeat(64), observedBytes: 100 }, confirmedBy: 'synthetic-user', conclusions: [{ claimId: 'c1', text: '合成事实', location: 'p1', verdict: 'supported', conditions: [], evidence: [], reason: '仅合成', impact: '观察' }], recommendations: [{ claimId: 'r1', text: '合成建议', location: 'p2', verdict: 'supported', conditions: [], evidence: [], reason: '仅合成', impact: '观察', conclusionClaimIds: ['c1'] }] });
+  const item = f.board.decideItem(confirmed.boardItemIds[0]!, { status: 'adopted' });
+  const choice = f.cases.chooseStrategy({ operationId: randomUUID(), caseStoreId: f.strategyRef.caseStoreId, caseId: f.record.id, issueId: f.a.id, strategyRef: f.strategyRef, choice: 'trial', expectedPreviousChoiceId: null });
+  const action = f.board.arrangeActions({ operationId: randomUUID(), projectId: f.projectId, source: { caseStoreId: f.strategyRef.caseStoreId, caseId: f.record.id, choiceId: choice.choiceId, strategyRef: f.strategyRef }, scope: '观察', title: '原确认来源', checks: [], actions: [{ kind: 'create', itemId: item.id, itemVersion: boardRecordVersion(item), title: '原确认观察' }] }, { confirmedIssueId: f.a.id }).actions[0]!;
+  let readable = true, authorityReads = 0;
+  const assertBoardItemReadable = async () => { authorityReads++; if (!readable) throw Object.assign(Error('source revoked'), { code: 'confirmation_source_unavailable', statusCode: 409 }); };
+  const service = createCaseIssueService({ cases: f.cases, board: f.board, mutate: async (fn: () => unknown) => fn(), assertBoardItemReadable } as never);
+  const originalInput = f.observeInput(f.a.id, action);
+  const request = await service.saveDecisionRequest(f.record.id, originalInput);
+  const normal = await service.saveDecisionRequest(f.record.id, { ...f.chooseInput(), issueId: f.b.id });
+  assert.ok(authorityReads > 0); readable = false; authorityReads = 0;
+  await assert.rejects(service.saveDecisionRequest(f.record.id, f.observeInput(f.a.id, action)), { code: 'confirmation_source_unavailable' });
+  await assert.rejects(service.saveDecisionRequest(f.record.id, { operationId: randomUUID(), expectedRevision: f.rev(), requestId: request.requestId, expectedRequestRevision: request.revision, text: '修订仍核原权威', source: originalInput.source }), { code: 'confirmation_source_unavailable' });
+  assert.deepEqual(await service.saveDecisionRequest(f.record.id, originalInput), request, 'historical completed replay does not reread newly revoked sources or write');
+  assert.equal((await service.decisionRequests(f.record.id)).find(row => row.requestId === request.requestId)!.status, 'unverifiable');
+  const routes = createWorkspaceDailyRoutes({ cases: f.cases, board: f.board, assertBoardItemReadable, drafts: createWorkspaceDraftStore({ root: f.root }), adoptGoal: async () => { throw Error('unused'); }, createCase: async () => { throw Error('unused'); } } as never);
+  const home = (await routes({ pathname: '/api/workspace/home-pending', method: 'GET' }))!.body as any;
+  assert.deepEqual(home.pending.map((row: any) => row.requestId), [normal.requestId]); assert.equal(home.unresolvedRequests[0].status, 'unverifiable'); assert.ok(authorityReads >= 3);
 });

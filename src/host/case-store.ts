@@ -873,7 +873,9 @@ export class CaseStore {
       if (action === 'save' && nextTarget.kind === 'choose') {
         const ref = nextTarget.strategyRef;
         if (ref.caseId !== before.id || ref.caseStoreId !== this.decisionStoreId()) fail('case_decision_scope_mismatch', 409);
-        if (this.getDecision(before.id, ref.recordId, ref.revision).kind !== 'strategy') fail('case_choice_requires_strategy');
+        const strategy = this.getDecision(before.id, ref.recordId, ref.revision);
+        if (strategy.kind !== 'strategy') fail('case_choice_requires_strategy');
+        if (strategy.issueId && strategy.issueId !== issueId) fail('case_issue_scope_mismatch', 409);
       }
       const assignee = { label: previous?.assignee.label ?? null, source: previous?.assignee.source ?? null,
         ...(action === 'save' ? clean.assignee : {}) };

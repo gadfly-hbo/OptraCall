@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { initialCaseBoardView, reconcileCaseBoardIssues, selectCaseBoardIssue, projectCaseRoundSummary, type CaseIssueTimeline } from '../src/host/ui/case-board-navigation-model.ts';
+import { initialCaseBoardView, reconcileCaseBoardIssues, selectCaseBoardIssue, caseTasksInScope, projectCaseRoundSummary, type CaseIssueTimeline } from '../src/host/ui/case-board-navigation-model.ts';
+import type { ClientTask } from '../src/host/ui/project-types.ts';
 
 const issues = ['a', 'b'].map(id => ({ id, caseId: 'A', title: `事项 ${id}`, createdAt: '2026-11-27T12:00:00Z' }));
 test('explicit selection resets a manual auxiliary scope while restoration and ordinary redraw retain it', () => {
@@ -17,6 +18,21 @@ test('an empty Case or a removed issue cannot retain another Case issue scope', 
   const restored = reconcileCaseBoardIssues(selected, issues);
   assert.equal(restored.activeIssueId, 'a');
   assert.deepEqual(restored.auxScope, { mode: 'issue', issueId: 'a', manual: false });
+});
+
+test('all current Case requires an exact task binding and never absorbs foreign or independent project tasks', () => {
+  const task = (id: string, binding?: { caseId: string; issueId: string }): ClientTask => ({ id, name: id, configuration: { id: 'model', name: 'test', provider: 'openai-compatible', api: 'openai-completions', model: 'synthetic', baseUrl: 'http://127.0.0.1', revision: 1 }, draft: '', createdAt: '', updatedAt: '', sessionStorage: 'task', ...(binding ? { assignment: { type: 'plan', skill: null, issue: binding } } : {}) });
+  const tasks = [task('A/a', { caseId: 'A', issueId: 'a' }), task('A/b', { caseId: 'A', issueId: 'b' }), task('B/a', { caseId: 'B', issueId: 'a' }), task('legacy'), { ...task('unbound'), assignment: { type: 'analysis' as const, skill: null } }];
+  const all = { mode: 'all' as const, issueId: '', manual: true };
+  assert.deepEqual(caseTasksInScope(tasks, 'A', all).map(task => task.id), ['A/a', 'A/b']);
+  assert.deepEqual(caseTasksInScope(tasks, 'A', { mode: 'issue', issueId: 'a', manual: false }).map(task => task.id), ['A/a']);
+  assert.deepEqual(caseTasksInScope(tasks, 'empty-case', all), []);
+  assert.deepEqual(caseTasksInScope([], 'A', all), []);
+  assert.deepEqual(caseTasksInScope(tasks, '', all), []);
+  assert.deepEqual(caseTasksInScope(tasks, 'A', { mode: 'issue', issueId: '', manual: false }), []);
+  assert.deepEqual(tasks.map(task => task.id), ['A/a', 'A/b', 'B/a', 'legacy', 'unbound']);
+  assert.equal(tasks[3]!.assignment, undefined);
+  assert.equal(tasks[4]!.assignment?.issue, undefined);
 });
 
 function round(id: string): CaseIssueTimeline['rounds'][number] {

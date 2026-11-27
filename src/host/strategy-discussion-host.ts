@@ -63,7 +63,7 @@ export interface StrategyDiscussionSourcePort {
  verify(discussion:StrategyDiscussion,configuration:Readonly<RuntimeModelConfiguration>,context?:{signal?:AbortSignal;assertCurrent():void;metadataOnly?:boolean}):Promise<void>;
 }
 export type RoleContextReader = (owner: BusinessRoleOwner, configuration: Readonly<RuntimeModelConfiguration> | undefined, writing: boolean, localRead?: boolean) => Promise<unknown>;
-export function createStrategyDiscussionHost(options:{readDecompositionWorkspace?(goalId:string,version:number|undefined,configuration:Readonly<RuntimeModelConfiguration>):Promise<import('./strategy-goal-decomposition-types.ts').GoalWorkspaceView>;goalEnterprises?(projectId?:string):{id:string;name:string}[];verifyPriorRights?:(owner:BusinessRoleOwner,configuration:Readonly<RuntimeModelConfiguration>,rights:ReadonlySet<string>)=>Promise<void>;roleContext?:RoleContextReader;verifyGoalContext?(context:GoalContextSnapshot,configuration?:Readonly<RuntimeModelConfiguration>):Promise<void>;verifyArrangement?(ref:GoalActionArrangement,configuration?:Readonly<RuntimeModelConfiguration>):Promise<void>;mapImports?:()=>import('./strategy-map-import-routes.ts').StrategyMapImportService|undefined;dataRoot:string;codeRoot:string;goals:StrategyGoalsStore;readCaseDirectory?:(opts?:{query?:string;limit?:number})=>import('./case-directory.ts').CaseDirectoryResult;caseDeclarations?:{readDeclarations(caseId:string,issueId:string,input:Record<string,unknown>):unknown;saveIssueEdge(caseId:string,input:Record<string,unknown>,options?:import('./case-decision-types.ts').CaseDecisionWriteOptions):Promise<unknown>;saveDecisionRequest(caseId:string,input:Record<string,unknown>,options?:import('./case-decision-types.ts').CaseDecisionWriteOptions):Promise<unknown>};configuration(id?:string,revision?:number):Readonly<RuntimeModelConfiguration>|null|undefined;defaultUsageContext():Promise<UsageContext|null>;mutate<T>(fn:()=>T|Promise<T>):Promise<T>;isClosing():boolean;sources?:StrategyDiscussionSourcePort;validateGoal(input:GoalDraftInput):void|Promise<void>}){
+export function createStrategyDiscussionHost(options:{readDecompositionWorkspace?(goalId:string,version:number|undefined,configuration:Readonly<RuntimeModelConfiguration>):Promise<import('./strategy-goal-decomposition-types.ts').GoalWorkspaceView>;goalEnterprises?(projectId?:string):{id:string;name:string}[];verifyPriorRights?:(owner:BusinessRoleOwner,configuration:Readonly<RuntimeModelConfiguration>,rights:ReadonlySet<string>)=>Promise<void>;roleContext?:RoleContextReader;verifyGoalContext?(context:GoalContextSnapshot,configuration?:Readonly<RuntimeModelConfiguration>):Promise<void>;verifyArrangement?(ref:GoalActionArrangement,configuration?:Readonly<RuntimeModelConfiguration>):Promise<void>;mapImports?:()=>import('./strategy-map-import-routes.ts').StrategyMapImportService|undefined;dataRoot:string;codeRoot:string;goals:StrategyGoalsStore;readCaseDirectory?:(opts?:import('./case-directory.ts').CaseDirectoryOptions)=>import('./case-directory.ts').CaseDirectoryResult;caseDeclarations?:{readDeclarations(caseId:string,issueId:string,input:Record<string,unknown>):unknown;saveIssueEdge(caseId:string,input:Record<string,unknown>,options?:import('./case-decision-types.ts').CaseDecisionWriteOptions):Promise<unknown>;saveDecisionRequest(caseId:string,input:Record<string,unknown>,options?:import('./case-decision-types.ts').CaseDecisionWriteOptions):Promise<unknown>};configuration(id?:string,revision?:number):Readonly<RuntimeModelConfiguration>|null|undefined;defaultUsageContext():Promise<UsageContext|null>;mutate<T>(fn:()=>T|Promise<T>):Promise<T>;isClosing():boolean;sources?:StrategyDiscussionSourcePort;validateGoal(input:GoalDraftInput):void|Promise<void>}){
  const namespace = options.roleContext ? 'business-role-discussions' : 'strategy-discussions';
  const store=new StrategyDiscussionStore(options.dataRoot, namespace);
  const maps=new StrategyMapStore(store);
@@ -630,6 +630,20 @@ export function createStrategyDiscussionHost(options:{readDecompositionWorkspace
  function payload(value:unknown){const text=JSON.stringify(value);if(text.length>goalToolPayloadLimit)fail('strategy_discussion_materials_too_large',413);return {content:[{type:'text' as const,text}],details:object(value)?value:{result:value}};}
  async function tool(o:StrategyDiscussion,configuration:Readonly<RuntimeModelConfiguration>,action:StrategyDiscussionAction,input:Record<string,unknown>,context:StrategyDiscussionToolContext){
   context.assertCurrent();context.signal.throwIfAborted();o=store.get(o.id);
+  const assertCapturedConfiguration=()=>{
+   try {
+    const current=options.configuration(configuration.id,configuration.revision);
+    // Match the public lifecycle's captured fields, including a credential-only
+    // change. Snapshot lookup alone can return a new key for an old revision.
+    if(!current||(['id','revision','provider','name','model','apiKey','api','baseUrl','thinkingLevel'] as const).some(key=>current[key]!==configuration[key]))throw Error('configuration_changed');
+   } catch {
+    // Revoke this exact owner through the existing lifecycle; never await its
+    // own stop while executing its tool callback or let Pi retry a stale route.
+    void domain.close(domain.ref(o),{retryFailed:false}).catch(()=>{});
+    fail('configuration_changed',409);
+   }
+  };
+  if(action==='case-directory'||action.startsWith('case-'))assertCapturedConfiguration();
   if(action.startsWith('initiative-'))fail('role_action_unavailable',403);
   if(o.businessOwner) {
    const owner=o.businessOwner;
@@ -637,10 +651,10 @@ export function createStrategyDiscussionHost(options:{readDecompositionWorkspace
     if (!options.caseDeclarations || (action !== 'case-read-declarations' && action !== 'case-save-issue-edge' && action !== 'case-save-decision-request')) fail('role_action_unavailable', 403);
     if (action === 'case-read-declarations') {
       const page = await options.caseDeclarations.readDeclarations(owner.caseId, owner.itemId, Object.fromEntries(['section','offset','limit','continuation'].filter(key => input[key] !== undefined).map(key => [key,input[key]])));
-      context.assertCurrent(); context.signal.throwIfAborted();
+      context.assertCurrent(); context.signal.throwIfAborted(); assertCapturedConfiguration();
       return payload({ claim: 'case-declarations-read', page });
     }
-    const assertWritable = () => { context.assertCurrent(); context.signal.throwIfAborted(); if (options.isClosing()) fail('case_decision_run_unavailable', 409); };
+    const assertWritable = () => { context.assertCurrent(); context.signal.throwIfAborted(); assertCapturedConfiguration(); if (options.isClosing()) fail('case_decision_run_unavailable', 409); };
     assertWritable();
     const hex = discussionHash(['business_role_case_tool', owner.caseId, owner.itemId, context.requestId, context.sessionId, context.toolCallId]);
     const operationId = `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20,32)}`;
@@ -736,7 +750,7 @@ export function createStrategyDiscussionHost(options:{readDecompositionWorkspace
       context.assertCurrent(); context.signal.throwIfAborted();
       const query = typeof input.query === 'string' ? input.query.slice(0, 200) : undefined;
       const limit = Number.isSafeInteger(input.limit) ? Math.max(1, Math.min(30, Number(input.limit))) : 20;
-      return payload({ claim: 'visible-case-directory', ...options.readCaseDirectory({ query, limit }) });
+      return payload({ claim: 'visible-case-directory', ...options.readCaseDirectory({ query, limit, ...(typeof input.caseId==='string'?{caseId:input.caseId}:{}), ...(Number.isSafeInteger(input.offset)?{offset:Number(input.offset)}:{}), ...(Number.isSafeInteger(input.issueOffset)?{issueOffset:Number(input.issueOffset)}:{}), ...(Number.isSafeInteger(input.issueLimit)?{issueLimit:Number(input.issueLimit)}:{}), includeClosed:input.includeClosed===true }) });
     }
     if(action==='propose-goal'){
      if(!object(input.draft))fail('role_action_unavailable',403);

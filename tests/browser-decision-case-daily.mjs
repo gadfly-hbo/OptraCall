@@ -213,7 +213,20 @@ async function run() {
       assert.equal(overflow, false, `page must not overflow at ${width}px`);
     }
 
-    console.log('BROWSER_DW_ALL_PASS: 1440/1024/390 + FR04 no heuristic queue + FR06 auto-persist across nav + FR07 pinned G/S, 3-part summary, other-issue selector & preserved manual scope + real composer persistence/remount + keyboard focus + XSS safe');
+    // Theme changes use the normal toolbar after closing the modal.
+    for (const theme of ['dark','light']) {
+      await chrome.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+      await new Promise(r=>setTimeout(r,100));
+      await chrome.evalJs(`document.querySelector('button[aria-label="${theme==='dark'?'切换为深色':'切换为浅色'}"]')?.click()`);
+      assert.equal(await chrome.evalJs(`document.querySelector('.app')?.dataset.theme`),theme);
+      await chrome.evalJs(`Array.from(document.querySelectorAll('button')).filter(b=>b.getClientRects().length).find(b=>b.textContent?.includes(${JSON.stringify(xssTitle)}))?.click()`);
+      await waitForText('树状图');
+      const shot=await chrome.send('Page.captureScreenshot',{format:'png'});
+      await fs.writeFile(`.local/pm-second/screenshots/case-${theme}.png`,Buffer.from(shot.data,'base64'));
+      assert.equal(await chrome.evalJs('document.documentElement.scrollWidth > innerWidth + 2'),false);
+    }
+
+    console.log('BROWSER_DW_ALL_PASS: 1440/1024/390 + FR04 no heuristic queue + FR06 auto-persist across nav + FR07 pinned G/S, 3-part summary, other-issue selector & preserved manual scope + real composer persistence/remount + keyboard focus + light/dark themes + XSS safe');
   } finally {
     if (chrome) await chrome.close();
     await host.close().catch(() => {});

@@ -139,12 +139,17 @@ export const projectDiscussionSourceTool = {
 export const editableGoalTool = {
   name: strategyDiscussionTool.name,
   label:'可编辑 GSA 建议与获准 Case 目录',
-  description:'propose-goal 仅返回由用户核对的目标建议（须使用当前范围、只用有依据内容）。case-directory 只读查询当前获准可见的 Case 与事项摘要目录，供整理用户输入时引用准确 caseId/issueId 并说明匹配理由或明确无匹配；不创建 Case、不采纳目标。',
+  description:'propose-goal 仅返回由用户核对的目标建议（须使用当前范围、只用有依据内容）。case-directory 只读查询获准 Case 与事项；用 nextOffset 续查 Case，用 caseId + nextIssueOffset 续查该 Case 事项，引用准确 caseId/issueId 说明理由或无匹配。不创建 Case、不采纳目标。',
   parameters:Type.Object({
     action:Type.Union([Type.Literal('propose-goal'),Type.Literal('case-directory')]),
     draft:Type.Optional(Type.Record(Type.String(),Type.Unknown())),
     query:Type.Optional(Type.String({maxLength:200})),
     limit:Type.Optional(Type.Integer({minimum:1,maximum:30})),
+    offset:Type.Optional(Type.Integer({minimum:0})),
+    caseId:Type.Optional(Type.String()),
+    issueLimit:Type.Optional(Type.Integer({minimum:1,maximum:20})),
+    issueOffset:Type.Optional(Type.Integer({minimum:0})),
+    includeClosed:Type.Optional(Type.Boolean()),
   },{additionalProperties:false}),
 };
 

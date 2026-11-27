@@ -1,0 +1,47 @@
+{
+  "candidate": "7fe8e936d2463e514f2d8b08deae23f8c0467e24",
+  "gate": [
+    {
+      "status": "fulfilled",
+      "revision": 1
+    },
+    {
+      "status": "rejected",
+      "code": "case_revision_conflict",
+      "message": "case_revision_conflict"
+    }
+  ],
+  "dataRoot": "/workspace/OptraCall-issue149-final/.local/pm-final/runtime-tmp/optracall-host-test-sm9hx9/host",
+  "viewAfterConfigurationChange": {
+    "status": 409,
+    "body": {
+      "code": "configuration_changed",
+      "message": "请求未完成，请检查输入或本地服务后重试。",
+      "fields": {}
+    }
+  },
+  "lateEdge": {
+    "edgeId": "f4542e1c-5f64-4290-a61d-0b29e78b6ee7",
+    "caseId": "aeb2a32a-cc0a-4a8d-804f-cc4eedd51799",
+    "fromIssueId": "9f603a9d-b0d5-4ed3-a05c-bf39fd22d60f",
+    "toIssueId": "7225ec3c-1f01-4e18-b87c-bbdf97743548",
+    "revision": 1,
+    "lifecycle": "active",
+    "explanation": "旧配置迟到关系",
+    "source": {
+      "kind": "user-declaration",
+      "ref": "01a21db2-5b59-74b3-a01a-580af18ca41f/c4146b05-3166-410c-9335-df89d8370829/call_1_0"
+    },
+    "operationId": "c6e430f6-05cd-59a2-1e19-7803563b433d",
+    "createdAt": "2026-11-27T15:49:18.037Z"
+  },
+  "providerRequests": 2,
+  "discussionId": "7b5e9061-57ad-d52b-6695-a392c1ae5265",
+  "native": "/workspace/OptraCall-issue149-final/.local/pm-final/runtime-tmp/optracall-host-test-sm9hx9/host/business-role-discussions/7b5e9061-57ad-d52b-6695-a392c1ae5265/native/2026-11-27T15-49-17-788Z_01a21db2-5b59-74b3-a01a-580af18ca41f.jsonl",
+  "toolResults": [
+    {
+      "isError": false,
+      "text": "{\"claim\":\"case-issue-edge-saved\",\"edge\":{\"edgeId\":\"f4542e1c-5f64-4290-a61d-0b29e78b6ee7\",\"caseId\":\"aeb2a32a-cc0a-4a8d-804f-cc4eedd51799\",\"fromIssueId\":\"9f603a9d-b0d5-4ed3-a05c-bf39fd22d60f\",\"toIssueId\":\"7225ec3c-1f01-4e18-b87c-bbdf97743548\",\"revision\":1,\"lifecycle\":\"active\",\"explanation\":\"旧配置迟到关系\",\"source\":{\"kind\":\"user-declaration\",\"ref\":\"01a21db2-5b59-74b3-a01a-580af18ca41f/c4146b05-3166-410c-9335-df89d8370829/call_1_0\"},\"operationId\":\"c6e430f6-05cd-59a2-1e19-7803563b433d\",\"createdAt\":\"2026-11-27T15:49:18.037Z\"}}"
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
+import { runInNewContext } from 'node:vm';
 import { emptyPreparePayload } from '../src/host/ui/case-preparation-model.ts';
 import type { GoalDraftInput, GoalRoleSuggestionRef } from '../src/host/strategy-goals-types.ts';
 
@@ -9,7 +10,7 @@ const descendants = (node: any): Element[] => !node || typeof node !== 'object' 
 const label = (node: any): string => node == null || node === false ? '' : typeof node === 'string' || typeof node === 'number' ? String(node) : Array.isArray(node) ? node.map(label).join('') : label(node.props?.children);
 let bundle: string | undefined;
 async function harness(fetcher: typeof fetch, initialProps: Record<string, unknown> = {}) {
-  bundle ??= (await build({ entryPoints: ['src/host/ui/CasePreparation.tsx'], bundle: true, write: false, platform: 'browser', format: 'esm', plugins: [{ name: 'isolated-react-hooks', setup(plugin) {
+  bundle ??= (await build({ entryPoints: ['src/host/ui/CasePreparation.tsx'], bundle: true, write: false, platform: 'browser', format: 'iife', globalName: 'PreparationUiTest', plugins: [{ name: 'isolated-react-hooks', setup(plugin) {
     plugin.onResolve({ filter: /^react(?:\/jsx-runtime)?$/ }, args => ({ path: args.path, namespace: 'test-hooks' }));
     plugin.onLoad({ filter: /.*/, namespace: 'test-hooks' }, args => ({ contents: args.path.endsWith('jsx-runtime') ? 'export const jsx=(type,props)=>({type,props}); export const jsxs=jsx; export const Fragment="fragment";' : 'export const useState=(v)=>globalThis.__casePreparationHooks.state(v); export const useRef=(v)=>globalThis.__casePreparationHooks.ref(v); export const useEffect=(f,d)=>globalThis.__casePreparationHooks.effect(f,d); export const useId=()=>globalThis.__casePreparationHooks.id();' }));
     plugin.onResolve({ filter: /BusinessRoleConversation\.tsx$/ }, () => ({ path: 'role-conversation', namespace: 'test-component' }));
@@ -24,17 +25,22 @@ async function harness(fetcher: typeof fetch, initialProps: Record<string, unkno
     id() { return `preparation-${cursor++}`; },
     effect(fn: () => any, next: any[]) { const i = cursor++; if (!deps[i] || next.some((v, n) => v !== deps[i][n])) { deps[i] = next; effects.push(() => { cleanups[i]?.(); cleanups[i] = fn(); }); } },
   };
-  const oldFetch = globalThis.fetch, oldWindow = globalThis.window;
-  globalThis.fetch = fetcher;
-  (globalThis as any).window = { addEventListener() {}, removeEventListener() {} };
-  (globalThis as any).__casePreparationHooks = hooks;
-  const { CasePreparation } = await import(`data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#${Math.random()}`);
+  // Execute only the fixed bundled UI entry inside a browser-like test sandbox.
+  // No module loader, process, filesystem or product Agent capability is exposed.
+  const sandbox: Record<string, any> = {
+    __casePreparationHooks: hooks, fetch: fetcher, structuredClone, crypto,
+    Response, Request, Headers, URL, URLSearchParams,
+    setTimeout, clearTimeout,
+    window: { addEventListener() {}, removeEventListener() {} },
+  };
+  runInNewContext(bundle, sandbox, { filename: 'case-preparation-ui-test.iife.js' });
+  const { CasePreparation } = sandbox.PreparationUiTest;
   let tree: Element;
   const props: any = { onOpenCase() {}, ...initialProps };
   const render = () => { cursor = 0; tree = CasePreparation(props); while (effects.length) effects.shift()!(); return tree; };
   const settle = async () => { for (let i = 0; i < 15; i++) await new Promise(resolve => setImmediate(resolve)); render(); };
   render(); await settle();
-  return { props, render, settle, nodes: () => descendants(tree), find: (type: string, text: string) => descendants(tree).find(n => n.type === type && label(n).includes(text))!, close() { for (const cleanup of cleanups) cleanup?.(); globalThis.fetch = oldFetch; globalThis.window = oldWindow; delete (globalThis as any).__casePreparationHooks; } };
+  return { props, render, settle, nodes: () => descendants(tree), find: (type: string, text: string) => descendants(tree).find(n => n.type === type && label(n).includes(text))!, close() { for (const cleanup of cleanups) cleanup?.();  } };
 }
 function server(initial: any[] = []) {
   const records = new Map(initial.map(d => [d.id, d]));
@@ -120,7 +126,7 @@ test('DW10/FR06: explicit real scope and persisted preparation identity own edit
     const conversation = ui.nodes().find(n => typeof n.type === 'function' && n.type.name === 'BusinessRoleConversation')!;
     assert.ok(conversation); assert.equal(conversation.props.owner.scope.id, 'personal:真实用户');
     assert.equal(conversation.props.owner.draftId, api.writes.at(-1).id);
-    const source: GoalRoleSuggestionRef = { owner: conversation.props.owner, discussionId: 'discussion', sessionId: 'session', entryId: 'entry', sha256: 'a'.repeat(64) };
+    const source: GoalRoleSuggestionRef = { owner: JSON.parse(JSON.stringify(conversation.props.owner)), discussionId: 'discussion', sessionId: 'session', entryId: 'entry', sha256: 'a'.repeat(64) };
     const draft: GoalDraftInput = { title: '建议目标', outcome: '预期结果', strategies: ['建议策略'], perspective: 'personal', scope: source.owner.role === 'goal-draft' ? source.owner.scope : conversation.props.owner.scope, measurement: { kind: 'deliverable', criterion: '核对成果' }, baseline: { state: 'pending', description: '待补' }, responsible: '本人' };
     conversation.props.onGoalDraft(draft, source); await ui.settle();
     const goalName = ui.nodes().find(n => n.type === 'label' && label(n).includes('G · 目标名称'))!;
@@ -208,5 +214,62 @@ test('DW13: conflicting current text is separately saved without overwriting the
     assert.equal(api.records.get(original.id).payload.rawInput, '另一窗口保存的文字');
     const copy = api.writes.at(-1); assert.notEqual(copy.id, original.id); assert.equal(copy.payload.rawInput, '当前窗口仍在编辑的文字');
     assert.equal(copy.payload.preservedOriginalIntent.rawInput, '当前窗口仍在编辑的文字');
+  } finally { ui.close(); }
+});
+
+test('DW10 directory: all Case and issue pages remain reachable without losing the selected issue or preparation input', async () => {
+  const api = server();
+  const calls: string[] = [];
+  let failPage = false, denyPage = false;
+  const entry = (caseId: string, issues: string[], totalIssues: number, nextIssueOffset: number | null) => ({ caseId, title: caseId, status: 'pending', updatedAt: 'now', goalBinding: null, issues: issues.map(issueId => ({ issueId, title: issueId })), totalIssues, issuesTruncated: nextIssueOffset !== null, nextIssueOffset });
+  const fetcher: typeof fetch = async (input, init) => {
+    const url = String(input);
+    if (!url.includes('/workspace/case-directory')) return api.fetcher(input, init);
+    calls.push(url);
+    if (denyPage) return Response.json({ code: 'forbidden' }, { status: 403 });
+    if (failPage) return Response.json({ code: 'unavailable' }, { status: 503 });
+    const query = new URL(url, 'http://test').searchParams;
+    if (query.get('caseId') === 'Case A') return Response.json({ items: [entry('Case A', ['issue-5', 'issue-6'], 132, 7)], nextOffset: null, truncated: true, totalVisible: 1 });
+    if (query.get('offset') === '1') return Response.json({ items: [entry('Case A', ['issue-1'], 132, 5), entry('Case B', [], 0, null)], nextOffset: null, truncated: true, totalVisible: 2 });
+    return Response.json({ items: [entry('Case A', ['issue-1', 'issue-2', 'issue-3', 'issue-4', 'issue-5'], 132, 5)], nextOffset: 1, truncated: true, totalVisible: 2 });
+  };
+  const ui = await harness(fetcher);
+  try {
+    ui.nodes().find(n => n.type === 'textarea')!.props.onChange({ target: { value: '分页期间必须保留的问题' } }); await ui.settle();
+    ui.find('button', '查找获准 Case').props.onClick(); await ui.settle();
+    assert.ok(ui.find('button', '读取更多事项'), 'A Case with 132 issues must expose the unread issue pages');
+    const select = ui.nodes().find(n => n.type === 'select' && n.props['aria-label'] === '选择 Case A 的目标事项')!;
+    select.props.onChange({ target: { value: 'issue-3' } }); ui.render();
+    ui.find('button', '读取更多事项').props.onClick(); await ui.settle();
+    const expanded = ui.nodes().find(n => n.type === 'select' && n.props['aria-label'] === '选择 Case A 的目标事项')!;
+    assert.equal(expanded.props.value, 'issue-3');
+    assert.equal(descendants(expanded).filter(n => n.type === 'option' && n.props.value === 'issue-5').length, 1);
+    assert.ok(descendants(expanded).some(n => n.type === 'option' && n.props.value === 'issue-6'));
+    assert.ok(calls.some(url => { const q = new URL(url, 'http://test').searchParams; return q.get('caseId') === 'Case A' && q.get('issueOffset') === '5'; }));
+    ui.find('button', '读取更多 Case').props.onClick(); await ui.settle();
+    assert.equal(ui.nodes().filter(n => n.type === 'strong' && label(n) === 'Case A').length, 1);
+    assert.ok(ui.nodes().some(n => n.type === 'strong' && label(n) === 'Case B'));
+    const merged = ui.nodes().find(n => n.type === 'select' && n.props['aria-label'] === '选择 Case A 的目标事项')!;
+    assert.equal(merged.props.value, 'issue-3'); assert.ok(descendants(merged).some(n => n.props.value === 'issue-6'));
+    failPage = true; ui.find('button', '读取更多事项').props.onClick(); await ui.settle();
+    assert.ok(ui.nodes().some(n => n.type === 'strong' && label(n) === 'Case A'));
+    assert.equal(ui.nodes().find(n => n.type === 'textarea')!.props.value, '分页期间必须保留的问题');
+    failPage = false; denyPage = true; ui.find('button', '读取更多事项').props.onClick(); await ui.settle();
+    assert.ok(!ui.nodes().some(n => n.props['aria-label'] === '获准 Case 候选'));
+    assert.equal(ui.nodes().find(n => n.type === 'textarea')!.props.value, '分页期间必须保留的问题');
+  } finally { ui.close(); }
+});
+
+test('DW10 directory: an unread nonempty issue page is never described as having no issues', async () => {
+  const api = server();
+  const ui = await harness(async (input, init) => String(input).includes('/workspace/case-directory')
+    ? Response.json({ items: [{ caseId: 'unread-case', title: '未读事项 Case', status: 'pending', updatedAt: 'now', goalBinding: null, issues: [], totalIssues: 132, issuesTruncated: true, nextIssueOffset: 0 }], nextOffset: null, truncated: true, totalVisible: 1 })
+    : api.fetcher(input, init));
+  try {
+    ui.nodes().find(n => n.type === 'textarea')!.props.onChange({ target: { value: '保留问题' } }); await ui.settle();
+    ui.find('button', '查找获准 Case').props.onClick(); await ui.settle();
+    assert.ok(ui.find('button', '读取更多事项'));
+    assert.ok(ui.nodes().some(n => n.type === 'p' && label(n).includes('事项尚未读完')));
+    assert.ok(!ui.nodes().some(n => n.type === 'p' && label(n).includes('暂无独立事项')));
   } finally { ui.close(); }
 });
