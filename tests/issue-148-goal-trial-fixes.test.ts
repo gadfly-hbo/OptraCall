@@ -897,3 +897,362 @@ test('A5: 只读发布预览返回每笔预留用途/负责人与每条补缺策
     await host.close();
   }
 });
+
+test('R1 (A3): 保护人工明确的单位、期间、范围与缺店说明，支持可核单位换算与正常同义表达', async () => {
+  const host = await startTestHost();
+  const provider = await startToolProvider();
+  try {
+    await json(
+      await host.request('/api/configuration', 'PUT', {
+        name: '合成核对模型-R1',
+        provider: 'openai-compatible',
+        baseUrl: provider.baseUrl,
+        apiKey: 'synthetic-key',
+        model: 'synthetic-model',
+      }),
+    );
+    const { goal, gsaPlan, route } = await createAdoptedGoalWithGsa(host, {
+      title: 'R1-A3口径保护反例',
+      targetValue: 120,
+      criterion: '2027年1月全渠道净销售额',
+    });
+    const { draft } = await json(
+      await host.request(`${route}/decomposition/draft`, 'POST', makeNormalDraftPayload(gsaPlan)),
+      201,
+    );
+    const preview = await json(
+      await host.request(`${route}/decomposition/publish-preview`, 'POST', {
+        gsaPlanId: gsaPlan.planId, gsaPlanVersion: gsaPlan.planVersion, gsaPlanSha256: gsaPlan.contentSha256,
+        draftRevision: draft.revision, draftSha256: draft.contentSha256, expectedActiveVersion: null,
+      }),
+    );
+    const { publication } = await json(
+      await host.request(`${route}/decomposition/publish`, 'POST', {
+        operationId: randomUUID(),
+        gsaPlanId: gsaPlan.planId, gsaPlanVersion: gsaPlan.planVersion, gsaPlanSha256: gsaPlan.contentSha256,
+        draftRevision: draft.revision, draftSha256: draft.contentSha256, previewSha256: preview.previewSha256,
+        expectedActiveVersion: null, reason: '发布 v1',
+      }),
+      201,
+    );
+    const period = publication.snapshot.timePlan[1]; // W2: planned 30 万元
+    const runAgentAssess = async (actualId: string, args: Record<string, unknown>) => {
+      provider.setResponder((ctx) =>
+        ctx.recentToolResults.length
+          ? { text: '已完成实绩核对。' }
+          : { calls: [{ name: 'strategy_goals', arguments: { action: 'goal-assess-actual', ...args } }] },
+      );
+      const roleRoute = '/api/business-role?owner=' + encodeURIComponent(JSON.stringify({
+        role: 'goal', goalId: goal.goalId, version: 1, actualId, analysisVariant: 'goal-decomposition',
+      }));
+      await json(
+        await host.request(`${roleRoute}&action=messages`, 'POST', {
+          requestId: randomUUID(), text: '核对这份实绩', expectedRevision: 0,
+        }),
+        202,
+      );
+      for (let i = 0; i < 250; i++) {
+        const ws = await json(await host.request(`${route}/workspace`));
+        const found = ws.checks.find((c: { operationId: string }) => c.operationId === actualId);
+        if (found) return found;
+        await new Promise(r => setTimeout(r, 50));
+      }
+      assert.fail(`timed out waiting for check ${actualId}`);
+    };
+
+    // 1. Unit relabeling attack: 27 元 MUST NOT become 27 万元 (neither via obsBasis nor bogus unitConversion)
+    const reportYuan = '数据截至 2027-01-14。净销售额 27 元（单位确为元）。';
+    const { actual: actYuan } = await json(
+      await host.request(`${route}/decomposition/actuals`, 'POST', {
+        operationId: randomUUID(), publicationVersion: 1, rowId: 'G-TOTAL', checkpointId: period.checkpointId ?? period.periodId,
+        actualSource: {
+          ref: 'pos-yuan.txt', label: '元单位报表', cutoffAt: '2027-01-14', reportText: reportYuan,
+          basis: { metric: '2027年1月全渠道净销售额', unit: '元', scope: '零售事业部 · 全渠道与门店', periodId: period.periodId, coverage: 'complete', maturity: 'closed' },
+        },
+        actualPeriods: [{ periodId: period.periodId, actualValue: 27 }],
+      }),
+      201,
+    );
+    const chkYuan = await runAgentAssess(actYuan.actualId, {
+      comparability: 'comparable',
+      assessmentNote: '尝试将元直接改标签为万元。',
+      observation: {
+        quote: '净销售额 27 元（单位确为元）。',
+        actualValue: 27,
+        basis: { metric: '2027年1月全渠道净销售额', unit: '万元', scope: '零售事业部 · 全渠道与门店', periodId: period.periodId, coverage: 'complete', maturity: 'closed' },
+      },
+    });
+    assert.equal(chkYuan.comparability, 'incomparable', '27 元 must NOT be relabeled as 27 万元');
+    assert.equal(chkYuan.actualSource.basis.unit, '元');
+    assert.equal(chkYuan.overallPending, true);
+    assert.equal(chkYuan.overallVariancePct, null);
+
+    // 2. Period mismatch attack: human W1 MUST NOT be mapped to W2
+    const reportW1 = '数据截至 2027-01-14。第1周净销售额 27 万元，全渠道已结账。';
+    const { actual: actW1 } = await json(
+      await host.request(`${route}/decomposition/actuals`, 'POST', {
+        operationId: randomUUID(), publicationVersion: 1, rowId: 'G-TOTAL', checkpointId: period.checkpointId ?? period.periodId,
+        actualSource: {
+          ref: 'pos-w1.txt', label: '第1周报表', cutoffAt: '2027-01-14', reportText: reportW1,
+          basis: { metric: '2027年1月全渠道净销售额', unit: '万元', scope: '零售事业部 · 全渠道与门店', periodId: 'W1', coverage: 'complete', maturity: 'closed' },
+        },
+        actualPeriods: [{ periodId: period.periodId, actualValue: 27 }],
+      }),
+      201,
+    );
+    const chkW1 = await runAgentAssess(actW1.actualId, {
+      comparability: 'comparable',
+      assessmentNote: '尝试将 W1 映射为 W2。',
+      observation: {
+        quote: '第1周净销售额 27 万元',
+        actualValue: 27,
+        basis: { metric: '2027年1月全渠道净销售额', unit: '万元', scope: '零售事业部 · 全渠道与门店', periodId: 'W2', coverage: 'complete', maturity: 'closed' },
+      },
+    });
+    assert.equal(chkW1.comparability, 'incomparable', 'human W1 must NOT be mapped to W2');
+    assert.equal(chkW1.actualSource.basis.periodId, 'W1');
+    assert.equal(chkW1.overallPending, true);
+
+    // 3. Narrow human scope attack: 华东门店 MUST NOT be mapped to 全渠道与门店
+    const reportEast = '数据截至 2027-01-14。华东门店净销售额 27 万元，华南门店数据尚未到齐。';
+    const { actual: actEast } = await json(
+      await host.request(`${route}/decomposition/actuals`, 'POST', {
+        operationId: randomUUID(), publicationVersion: 1, rowId: 'G-TOTAL', checkpointId: period.checkpointId ?? period.periodId,
+        actualSource: {
+          ref: 'pos-east.txt', label: '华东门店报表', cutoffAt: '2027-01-14', reportText: reportEast,
+          basis: { metric: '2027年1月全渠道净销售额', unit: '万元', scope: '华东门店', periodId: period.periodId, coverage: 'complete', maturity: 'closed' },
+        },
+        actualPeriods: [{ periodId: period.periodId, actualValue: 27 }],
+      }),
+      201,
+    );
+    const chkEast = await runAgentAssess(actEast.actualId, {
+      comparability: 'comparable',
+      assessmentNote: '尝试将华东门店映射为全渠道。',
+      observation: {
+        quote: '华东门店净销售额 27 万元',
+        actualValue: 27,
+        basis: { metric: '2027年1月全渠道净销售额', unit: '万元', scope: '零售事业部 · 全渠道与门店', periodId: period.periodId, coverage: 'complete', maturity: 'closed' },
+        basisMappings: [{ field: 'scope', sourceValue: '华东门店', mappedValue: '零售事业部 · 全渠道与门店', evidenceQuote: '华东门店净销售额 27 万元', rationale: '强行扩范围' }],
+      },
+    });
+    assert.equal(chkEast.comparability, 'incomparable', 'explicit human scope 华东门店 must NOT be overwritten');
+    assert.equal(chkEast.actualSource.basis.scope, '华东门店');
+    assert.equal(chkEast.overallPending, true);
+
+    // 4. Human missingCoverageNote with coverage: unknown MUST NOT be upgraded to complete
+    const { actual: actMissNote } = await json(
+      await host.request(`${route}/decomposition/actuals`, 'POST', {
+        operationId: randomUUID(), publicationVersion: 1, rowId: 'G-TOTAL', checkpointId: period.checkpointId ?? period.periodId,
+        actualSource: {
+          ref: 'pos-miss-note.txt', label: '缺店说明报表', cutoffAt: '2027-01-14', reportText: reportEast,
+          basis: { metric: '2027年1月全渠道净销售额', unit: '万元', scope: '零售事业部 · 全渠道与门店', periodId: period.periodId, coverage: 'unknown', maturity: 'unknown' },
+        },
+        missingCoverageNote: '排除华南2家门店；两店未提供报表',
+        actualPeriods: [{ periodId: period.periodId, actualValue: 27 }],
+      }),
+      201,
+    );
+    const chkMissNote = await runAgentAssess(actMissNote.actualId, {
+      comparability: 'comparable',
+      assessmentNote: '尝试在人填缺店说明时乐观标记 complete。',
+      observation: {
+        quote: '华东门店净销售额 27 万元',
+        actualValue: 27,
+        basis: { metric: '2027年1月全渠道净销售额', unit: '万元', scope: '零售事业部 · 全渠道与门店', periodId: period.periodId, coverage: 'complete', maturity: 'closed' },
+      },
+    });
+    assert.equal(chkMissNote.comparability, 'partial-missing', 'human missingCoverageNote must block optimistic complete upgrade');
+    assert.equal(chkMissNote.overallPending, true);
+    assert.notEqual(chkMissNote.actualSource.basis.coverage, 'complete');
+
+    // 5. Verified unit conversion: 270000 元 -> 27 万元 (factor 0.0001) succeeds and preserves original 270000
+    const report270k = '数据截至 2027-01-14。零售事业部全渠道与门店第2周净销售额 270000 元，全范围门店已结账。';
+    const { actual: act270k } = await json(
+      await host.request(`${route}/decomposition/actuals`, 'POST', {
+        operationId: randomUUID(), publicationVersion: 1, rowId: 'G-TOTAL', checkpointId: period.checkpointId ?? period.periodId,
+        actualSource: {
+          ref: 'pos-270k.txt', label: '元单位可换算报表', cutoffAt: '2027-01-14', reportText: report270k,
+          basis: { metric: '2027年1月全渠道净销售额', unit: '元', scope: '零售事业部 · 全渠道与门店', periodId: period.periodId, coverage: 'unknown', maturity: 'unknown' },
+        },
+        actualPeriods: [{ periodId: period.periodId, actualValue: 270000 }],
+      }),
+      201,
+    );
+    const chk270k = await runAgentAssess(act270k.actualId, {
+      comparability: 'comparable',
+      assessmentNote: '原文为 270000 元，按 1 万元 = 10000 元换算为 27 万元后与冻结计划可比。',
+      observation: {
+        quote: '净销售额 270000 元，全范围门店已结账',
+        actualValue: 27,
+        unitConversion: {
+          sourceValue: 270000,
+          sourceUnit: '元',
+          convertedValue: 27,
+          convertedUnit: '万元',
+          factor: 0.0001,
+          evidenceQuote: '净销售额 270000 元',
+          rationale: '1万元=10000元，270000元换算为27万元',
+        },
+        basis: { metric: '2027年1月全渠道净销售额', unit: '万元', scope: '零售事业部 · 全渠道与门店', periodId: period.periodId, coverage: 'complete', maturity: 'closed' },
+      },
+    });
+    assert.equal(chk270k.comparability, 'comparable', `verified unit conversion must succeed: ${JSON.stringify(chk270k.comparabilityIssues)}`);
+    assert.equal(chk270k.overallPending, false);
+    assert.equal(chk270k.overallAbsoluteDiff, -3);
+    assert.equal(chk270k.overallVariancePct, -10);
+    assert.equal(chk270k.periods[0].actualValue, 27);
+    assert.ok(chk270k.basisResolution?.some((r: { field: string; action: string }) => r.field === 'unit' && r.action === 'mapped'));
+
+    // 6. Full-scope natural wording ("仅统计全部渠道与门店（即本计划完整范围）") must NOT be falsely blocked
+    const reportFull = '数据截至 2027-01-14。仅统计全部渠道与门店（即本计划完整范围），第2周已结账净销售额 27 万元，已完整出数并结账。';
+    const { actual: actFull } = await json(
+      await host.request(`${route}/decomposition/actuals`, 'POST', {
+        operationId: randomUUID(), publicationVersion: 1, rowId: 'G-TOTAL', checkpointId: period.checkpointId ?? period.periodId,
+        actualSource: {
+          ref: 'pos-full.txt', label: '全范围自然表述报表', cutoffAt: '2027-01-14', reportText: reportFull,
+          basis: { metric: '已结账净销售额', unit: '', scope: '', periodId: '', coverage: 'unknown', maturity: 'unknown' },
+        },
+        actualPeriods: [{ periodId: period.periodId, actualValue: 27 }],
+      }),
+      201,
+    );
+    const chkFull = await runAgentAssess(actFull.actualId, {
+      comparability: 'comparable',
+      assessmentNote: '原文明确覆盖本计划完整范围，完成指标同义映射并补齐未知项。',
+      observation: {
+        quote: '仅统计全部渠道与门店（即本计划完整范围），第2周已结账净销售额 27 万元，已完整出数并结账',
+        actualValue: 27,
+        basis: { metric: '2027年1月全渠道净销售额', unit: '万元', scope: '零售事业部 · 全渠道与门店', periodId: period.periodId, coverage: 'complete', maturity: 'closed' },
+        basisMappings: [{
+          field: 'metric', sourceValue: '已结账净销售额', mappedValue: '2027年1月全渠道净销售额',
+          evidenceQuote: '第2周已结账净销售额 27 万元', rationale: '报表已结账净销售额对应计划全渠道净销售额指标',
+        }],
+      },
+    });
+    assert.equal(chkFull.comparability, 'comparable');
+    assert.equal(chkFull.overallPending, false);
+    assert.equal(chkFull.overallVariancePct, -10);
+  } finally {
+    await provider.close();
+    await host.close();
+  }
+});
+
+test('R2 (A1): 核对期间另一端先承接或 G/S 跨目标版再升版，保留本地未保存改稿并暴露冲突出口', async () => {
+  const { resolveUpstreamCarryover } = await import('../src/host/ui/goal-upstream-carryover.ts');
+  const host = await startTestHost();
+  try {
+    const { gsaPlan: plan1, route } = await createAdoptedGoalWithGsa(host, {
+      title: 'R2-并发承接与再升版',
+      targetValue: 120,
+    });
+    const d1 = makeNormalDraftPayload(plan1, { notes: '原草稿-r1' });
+    await json(await host.request(`${route}/decomposition/draft`, 'POST', d1), 201);
+
+    // Upgrade to Goal v2 / GSA v2
+    const { gsaPlan: plan2 } = await json(
+      await host.request(`${route}/gsa-plan/confirm`, 'POST', {
+        operationId: randomUUID(),
+        expectedGoalVersion: 1, expectedAdoptedVersion: 1, expectedPlanVersion: 1,
+        goalRevision: {
+          title: 'R2-并发承接与再升版（v2）', outcome: '净销售额达到 140 万元', perspective: 'profit',
+          scope: { kind: 'department', id: 'retail-dept', name: '零售事业部' },
+          measurement: { kind: 'deliverable', criterion: '净销售额' },
+          baseline: { state: 'known', description: '108万' },
+          responsible: '林负责人', strategies: ['新品陈列与会员回访'], dueAt: '2027-01-31',
+          formalOrigin: { kind: 'manual-exception', reason: '上调v2', period: '2027-01', targetValue: 140, unit: '万元', metricKind: 'amount' },
+        },
+        plannedActions: [{ id: 'A1', summary: '计划v2', checkpoint: '2027-01-31', observationBasis: 'POS' }],
+        decision: '确认 v2', supersedesReason: 'v2 调整',
+      }),
+      201,
+    );
+
+    // Scenario A: Local edits occur during priorDraft carryover -> must return conflict and preserve local input
+    const wsV2BeforeCarry = await json(await host.request(`${route}/workspace`));
+    const resLocalEditPrior = resolveUpstreamCarryover({
+      currentGoalVersion: 2,
+      currentActivePlan: plan2,
+      latestWorkspace: wsV2BeforeCarry,
+      hadLocalEdits: false,
+      startEditSerial: 3,
+      currentEditSerial: 4, // edited during await!
+    });
+    assert.equal(resLocalEditPrior.kind, 'conflict', 'local edits during carryover must not be overwritten');
+
+    // Scenario B: Another client already carried over to GSA v2 (r2) while local user has unsaved input
+    await json(
+      await host.request(`${route}/decomposition/draft`, 'POST', {
+        ...makeNormalDraftPayload(plan2, { expectedDraftRevision: 1, notes: '另一端承接的r2' }),
+        reviewedPreviousPlanVersion: 1,
+      }),
+      201,
+    );
+    const wsAfterOtherClient = await json(await host.request(`${route}/workspace`));
+    const resOtherClientDirty = resolveUpstreamCarryover({
+      currentGoalVersion: 2,
+      currentActivePlan: plan2,
+      latestWorkspace: wsAfterOtherClient,
+      hadLocalEdits: true,
+      startEditSerial: 5,
+      currentEditSerial: 5,
+    });
+    assert.equal(resOtherClientDirty.kind, 'conflict', 'another client carryover must not overwrite dirty local edits');
+    assert.equal(resOtherClientDirty.latestWorkspace.draft?.revision, 2);
+
+    // When no local edits exist, refreshing to already-current draft is safe
+    const resOtherClientClean = resolveUpstreamCarryover({
+      currentGoalVersion: 2,
+      currentActivePlan: plan2,
+      latestWorkspace: wsAfterOtherClient,
+      hadLocalEdits: false,
+      startEditSerial: 5,
+      currentEditSerial: 5,
+    });
+    assert.equal(resOtherClientClean.kind, 'already-current');
+
+    // Scenario C: While reviewing Goal v2 / GSA v2, server upgrades to Goal v3 / GSA v3
+    await json(
+      await host.request(`${route}/gsa-plan/confirm`, 'POST', {
+        operationId: randomUUID(),
+        expectedGoalVersion: 2, expectedAdoptedVersion: 2, expectedPlanVersion: 2,
+        goalRevision: {
+          title: 'R2-并发承接与再升版（v3）', outcome: '净销售额达到 160 万元', perspective: 'profit',
+          scope: { kind: 'department', id: 'retail-dept', name: '零售事业部' },
+          measurement: { kind: 'deliverable', criterion: '净销售额' },
+          baseline: { state: 'known', description: '108万' },
+          responsible: '林负责人', strategies: ['新品陈列与会员回访', '大客户'], dueAt: '2027-01-31',
+          formalOrigin: { kind: 'manual-exception', reason: '上调v3', period: '2027-01', targetValue: 160, unit: '万元', metricKind: 'amount' },
+        },
+        plannedActions: [{ id: 'A1', summary: '计划v3', checkpoint: '2027-01-31', observationBasis: 'POS' }],
+        decision: '确认 v3', supersedesReason: 'v3 调整',
+      }),
+      201,
+    );
+    // Even if historical ?goalVersion=2 were queried, global latestGsaPlanVersion=3 & adoptedVersion=3 must be caught!
+    const wsHistV2 = await json(await host.request(`${route}/workspace?goalVersion=2`));
+    const resUpgradeFromHist = resolveUpstreamCarryover({
+      currentGoalVersion: 2,
+      currentActivePlan: plan2,
+      latestWorkspace: wsHistV2,
+      hadLocalEdits: true,
+      startEditSerial: 6,
+      currentEditSerial: 6,
+    });
+    assert.equal(resUpgradeFromHist.kind, 'gsa-changed', 'historical projection must not mask global v3/GSA3 upgrade');
+
+    const wsGlobalV3 = await json(await host.request(`${route}/workspace`));
+    const resUpgradeFromGlobal = resolveUpstreamCarryover({
+      currentGoalVersion: 2,
+      currentActivePlan: plan2,
+      latestWorkspace: wsGlobalV3,
+      hadLocalEdits: true,
+      startEditSerial: 6,
+      currentEditSerial: 6,
+    });
+    assert.equal(resUpgradeFromGlobal.kind, 'gsa-changed', 'global workspace must detect v3/GSA3 upgrade and preserve local input');
+  } finally {
+    await host.close();
+  }
+});

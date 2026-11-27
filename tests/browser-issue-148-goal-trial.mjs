@@ -130,6 +130,13 @@ try {
     ws.addEventListener('open', resolve);
     ws.addEventListener('error', reject);
   });
+  const pageErrors = [];
+  ws.addEventListener('message', ev => {
+    const msg = JSON.parse(String(ev.data));
+    if (msg.method === 'Runtime.exceptionThrown') {
+      pageErrors.push(msg.params?.exceptionDetails?.text || JSON.stringify(msg.params));
+    }
+  });
   const page = new CdpPage(ws);
   await page.send('Page.enable');
   await page.send('Runtime.enable');
@@ -209,6 +216,7 @@ try {
     startDate: '2027-01-03', endDate: '2027-01-03', targetValue: 10, unit: '万元', status: 'planned', checkpointId: '2027-01-03',
   });
   const { draft: d2 } = await api(`${r2}/decomposition/draft`, 'POST', d2Payload);
+  const d2ShortHash = d2.contentSha256.slice(0, 16);
 
   // Navigate to app and open Goals workspace
   await page.goto(base);
@@ -238,25 +246,34 @@ try {
   await page.clickByText('button', '浏览器A3A4A5核对目标');
   await waitFor(async () => (await page.bodyText()).includes('核对并发布'), 'publish preview button visible');
   await page.clickByText('button', '核对并发布');
-  await waitFor(async () => (await page.bodyText()).includes('华东新品陈列机动预留'), 'A5 reserve purpose visible in preview');
-  const previewText = await page.bodyText();
-  for (const needle of ['120万元', '112万元', '8万元', '已分配 115 + 预留 5万元', '华东新品陈列机动预留', '陈总', '高潜老客定向激活', '企业福利团购增量', '沉睡会员', 'B2B企采']) {
-    assert.ok(previewText.includes(needle), `A5 preview missing: ${needle}`);
+  // R3: Wait strictly for the opened publish preview dialog carrying the exact preview title and draft identity
+  const previewText = await waitFor(async () => {
+    return await page.eval(`(() => {
+      const dlg = document.querySelector('dialog[open]');
+      if (!dlg) return '';
+      const txt = dlg.innerText || '';
+      return txt.includes('核对并发布目标拆解表 v1') && txt.includes(${JSON.stringify(d2ShortHash)}) ? txt : '';
+    })()`);
+  }, 'A5 publish preview dialog opened with exact title and draft identity');
+  for (const needle of ['120万元', '112万元', '8万元', '已分配 115 + 预留 5万元', '华东新品陈列机动预留', '陈总', '高潜老客定向激活', '企业福利团购增量', '沉睡会员', 'B2B企采', d2ShortHash]) {
+    assert.ok(previewText.includes(needle), `A5 preview dialog missing: ${needle}`);
   }
-  // Check 390px mobile + dark mode readability (no JS errors, dialog visible)
+  // Check 390px mobile + dark mode readability inside dialog[open]
   await page.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
   await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
   const mobileDialogOk = await page.eval(`(() => {
     const dlg = document.querySelector('dialog[open]');
     if (!dlg) return false;
     const rect = dlg.getBoundingClientRect();
-    return rect.width > 200 && rect.width <= 390 && dlg.innerText.includes('华东新品陈列机动预留');
+    const txt = dlg.innerText || '';
+    return rect.width > 200 && rect.width <= 390 && txt.includes('核对并发布目标拆解表 v1') && txt.includes('华东新品陈列机动预留') && txt.includes('高潜老客定向激活');
   })()`);
   assert.ok(mobileDialogOk, 'A5 preview dialog must fit 390px dark mode');
   await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'light' }] });
-  // Cancel preview -> zero publish side effects
+  // Cancel preview -> dialog closes and zero publish side effects
   await page.clickByText('button', '返回修改草稿');
+  await waitFor(async () => await page.eval(`!document.querySelector('dialog[open]')`), 'A5 preview dialog closed');
   const wsBeforePub = await api(`${r2}/workspace`);
   assert.equal(wsBeforePub.publications.length, 0, 'cancel preview must have zero publish side effects');
   console.log('Browser A5 PASS');
@@ -310,7 +327,8 @@ try {
   await page.clickByText('button', '立即配置日粒度阈值');
   const selectedGran = await page.eval(`document.querySelector('[aria-label="阈值检查周期"]')?.value`);
   assert.equal(selectedGran, 'day', 'A4 quick setup must switch granularity select to day');
-  console.log('Browser A3 & A4 PASS');
+  assert.equal(pageErrors.length, 0, `unexpected browser page errors: ${JSON.stringify(pageErrors)}`);
+  console.log('Browser A3 & A4 PASS (pageErrors: 0)');
 
   ws.close();
 } catch (err) {

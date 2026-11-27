@@ -24,14 +24,24 @@ export function comparabilityLabel(comparability: ProgressComparability): string
   return '口径/期间不可比';
 }
 
-const EXCLUSION_PATTERN = /(不包含|不包括|未包含|未包括|不含|排除|剔除|未含|未计|扣除|除外|仅含|仅限|仅统计|仅覆盖|只含|只限|只统计|只覆盖|(?<![不未非])仅|excluding|except\b|only\b)/i;
+const UNIT_SCALE_FAMILIES: readonly Record<string, number>[] = [
+  { '元': 1, '千元': 1e3, '万元': 1e4, '亿元': 1e8 },
+  { '件': 1, '千件': 1e3, '万件': 1e4 },
+  { '人': 1, '千人': 1e3, '万人': 1e4 },
+  { '克': 1, 'g': 1, '千克': 1e3, '公斤': 1e3, 'kg': 1e3, '吨': 1e6, 't': 1e6 },
+];
 
-export function hasExplicitExclusionConstraint(submitted: string, expected: string): boolean {
-  const text = submitted.trim();
-  if (!text) return false;
-  if (!EXCLUSION_PATTERN.test(text)) return false;
-  // If the expected scope/metric itself already states the exact same text, it is not an extra exclusion.
-  return !expected.includes(text);
+/** Returns exact arithmetic factor (sourceValue * factor = targetValue) when both units belong to a known scale family; null otherwise. */
+export function knownUnitScale(sourceUnit: string, targetUnit: string): number | null {
+  const src = sourceUnit.trim();
+  const dst = targetUnit.trim();
+  if (!src || !dst) return null;
+  for (const family of UNIT_SCALE_FAMILIES) {
+    if (src in family && dst in family) {
+      return family[src]! / family[dst]!;
+    }
+  }
+  return null;
 }
 
 /** A row checkpoint can fall in a planned reporting period or stand on its own dated milestone. */

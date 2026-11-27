@@ -10,7 +10,7 @@ import { parseUsageContext } from './usage-context-types.ts';
 import { parseGoalBasis } from './strategy-goals-types.ts';
 import type { GoalActionArrangement, GoalArrangementInput } from './strategy-goals-types.ts';
 import type { GoalAdoptionInput, GoalAdoptionProvenance, GoalBasis, GoalContextSnapshot, GoalDraftInput, GoalFeedback, GoalFeedbackInput, GoalMutation, GoalOperationReceipt, GoalRef, GoalRelation, GoalRelationInput, GoalRelationRevisionInput, GoalRelationVersion, GoalRevisionInput, GoalSourceRef, GoalVersion, StrategyGoalRecord, StrategyGoalsIndex } from './strategy-goals-types.ts';
-import { assessProgressEvidenceDetails, checkpointPeriods, comparabilityLabel, granularityLabel, hasExplicitExclusionConstraint, progressMetric } from './strategy-goal-progress.ts';
+import { assessProgressEvidenceDetails, checkpointPeriods, comparabilityLabel, granularityLabel, knownUnitScale, progressMetric } from './strategy-goal-progress.ts';
 import { hasGsaCheckpoint, MAX_GOAL_ACTUAL_REPORT_CHARS } from './strategy-goal-decomposition-types.ts';
 import type { StrategyMapPublicationIdentity } from './strategy-map-types.ts';
 import type {
@@ -1781,15 +1781,66 @@ export class StrategyGoalsStore {
       check.evidenceQuote = quote;
       const value = observation.actualValue;
       const period = actual.input.actualPeriods[0]!;
-      if (value !== undefined) {
+      const extractNumbers = (text: string) =>
+        text.replace(/(?<=\d)[,，](?=\d{3}(?:\D|$))/g, '').match(/[+-]?(?:\d+\.\d+|\d+|\.\d+)/g) ?? [];
+
+      // Optional arithmetically verified unit conversion (never allows relabeling the same number with a different unit).
+      let verifiedConversion: {
+        sourceValue: number;
+        sourceUnit: string;
+        convertedValue: number;
+        convertedUnit: string;
+        factor: number;
+        evidenceQuote: string;
+        rationale: string;
+      } | undefined;
+      if (observation.unitConversion !== undefined) {
+        if (!object(observation.unitConversion)) fail('invalid_progress_evidence', 400);
+        const conv = observation.unitConversion;
+        const sourceValue = conv.sourceValue;
+        const convertedValue = conv.convertedValue;
+        const factor = conv.factor;
+        if (typeof sourceValue !== 'number' || !Number.isFinite(sourceValue) ||
+            typeof convertedValue !== 'number' || !Number.isFinite(convertedValue) ||
+            typeof factor !== 'number' || !Number.isFinite(factor) || factor <= 0) {
+          fail('invalid_progress_evidence', 400);
+        }
+        const sourceUnit = reqText(conv.sourceUnit, 80);
+        const convertedUnit = reqText(conv.convertedUnit, 80);
+        const evidenceQuote = reqText(conv.evidenceQuote, 2000);
+        const rationale = reqText(conv.rationale, 1000);
+        if (!reportText.includes(evidenceQuote)) fail('actual_report_quote_mismatch', 409);
+        if (!extractNumbers(evidenceQuote).some(n => Number(n) === sourceValue)) fail('actual_report_value_mismatch', 409);
+        if (sourceUnit === convertedUnit || Math.abs(factor - 1) <= 1e-9) fail('invalid_progress_evidence', 400);
+        if (Math.abs(sourceValue * factor - convertedValue) > Math.max(1e-6, Math.abs(convertedValue) * 1e-6)) {
+          fail('actual_report_value_mismatch', 409);
+        }
+        const expectedScale = knownUnitScale(sourceUnit, convertedUnit);
+        if (expectedScale !== null && Math.abs(factor - expectedScale) > expectedScale * 1e-6) {
+          fail('actual_report_value_mismatch', 409);
+        }
+        if (period.actualValue !== null && period.actualValue !== sourceValue) {
+          fail('actual_report_value_mismatch', 409);
+        }
+        if (submittedBasis?.unit?.trim() && submittedBasis.unit.trim() !== sourceUnit) {
+          fail('actual_report_value_mismatch', 409);
+        }
+        if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value !== convertedValue)) {
+          fail('actual_report_value_mismatch', 409);
+        }
+        if (!object(observation.basis) || typeof observation.basis.unit !== 'string' || observation.basis.unit.trim() !== convertedUnit) {
+          fail('actual_report_value_mismatch', 409);
+        }
+        verifiedConversion = { sourceValue, sourceUnit, convertedValue, convertedUnit, factor, evidenceQuote, rationale };
+        check.actualPeriods = [{ ...period, actualValue: convertedValue }];
+      } else if (value !== undefined) {
         if (typeof value !== 'number' || !Number.isFinite(value) || (period.actualValue !== null && period.actualValue !== value)) fail('actual_report_value_mismatch', 409);
-        const numbers = quote.replace(/(?<=\d)[,，](?=\d{3}(?:\D|$))/g, '').match(/[+-]?(?:\d+\.\d+|\d+|\.\d+)/g) ?? [];
-        if (!numbers.some(n => Number(n) === value)) fail('actual_report_value_mismatch', 409);
+        if (!extractNumbers(quote).some(n => Number(n) === value)) fail('actual_report_value_mismatch', 409);
         check.actualPeriods = [{...period, actualValue:value}];
       }
 
-      // Parse optional evidence-backed basisMappings; every evidenceQuote must exist verbatim in reportText.
-      const mappingsByField = new Map<'metric' | 'scope' | 'unit' | 'periodId', { sourceValue: string; mappedValue: string; evidenceQuote: string; rationale: string }>();
+      // Parse optional evidence-backed basisMappings; only metric/scope synonym mapping is accepted, never unit/periodId.
+      const mappingsByField = new Map<'metric' | 'scope', { sourceValue: string; mappedValue: string; evidenceQuote: string; rationale: string }>();
       if (observation.basisMappings !== undefined) {
         if (!Array.isArray(observation.basisMappings) || observation.basisMappings.length > 8) fail('invalid_progress_evidence', 400);
         for (const item of observation.basisMappings) {
@@ -1801,13 +1852,17 @@ export class StrategyGoalsStore {
           const evidenceQuote = reqText(item.evidenceQuote, 2000);
           const rationale = reqText(item.rationale, 1000);
           if (!reportText.includes(evidenceQuote)) fail('actual_report_quote_mismatch', 409);
-          mappingsByField.set(field, { sourceValue, mappedValue, evidenceQuote, rationale });
+          // Structural protection (R1): unit and periodId cannot be relabeled via basisMappings.
+          if (field === 'metric' || field === 'scope') {
+            mappingsByField.set(field, { sourceValue, mappedValue, evidenceQuote, rationale });
+          }
         }
       }
 
-      // Merge submitted basis with Agent observation:
-      // - Explicit human exclusions (partial coverage, open maturity, or exclusion wording) are NEVER overridden.
-      // - Unknown/empty fields may be supplemented from reportText; natural wording may be mapped only with verbatim evidenceQuote + rationale.
+      // Merge submitted basis with Agent observation (structural protection, no regex semantic adjudication):
+      // - Explicit human-submitted unit, periodId, scope, partial coverage, open maturity, and missingCoverageNote/coverageNote are ALWAYS protected.
+      // - Unit changes require arithmetically verified unitConversion.
+      // - Empty/unknown fields may be supplemented from reportText; natural metric wording may be synonym-mapped with verbatim evidenceQuote + rationale.
       if (observation.basis !== undefined) {
         if (!object(observation.basis)) fail('invalid_progress_evidence', 400);
         const obs = observation.basis;
@@ -1821,28 +1876,15 @@ export class StrategyGoalsStore {
           coverage: obs.coverage,
           maturity: obs.maturity,
         };
-        const pub = this.readDecompositionPublication(goalId, actual.input.publicationVersion);
-        const row = actual.input.rowId === 'G-TOTAL' ? undefined : pub.snapshot.rows.find(r => r.rowId === actual.input.rowId);
-        const checkpoint = row ? pub.snapshot.frozenCheckpoints.find(c => c.checkpointId === actual.input.checkpointId && c.rowId === actual.input.rowId) : undefined;
-        const periods = checkpoint ? checkpointPeriods(pub.snapshot.timePlan, checkpoint) : pub.snapshot.timePlan;
-        const targetPeriod = periods.find(p => p.periodId === period.periodId);
-        const planned = checkpoint ?? targetPeriod;
-        const frozenGoal = this.read({ goalId, version: pub.snapshot.gsaPlan.goal.version });
-        const expectedFields: Record<'metric' | 'scope' | 'unit' | 'periodId', string> = {
-          metric: progressMetric(pub.snapshot, frozenGoal.measurement),
-          scope: row?.scopeLabel ?? pub.snapshot.estimate.scopeDescription,
-          unit: planned?.unit ?? pub.snapshot.estimate.unit,
-          periodId: targetPeriod?.periodId ?? period.periodId,
-        };
 
-        const resolveTextField = (field: 'metric' | 'scope' | 'unit' | 'periodId'): string => {
-          const subVal = submittedBasis?.[field]?.trim() ?? '';
-          const obsVal = obsBasis[field];
-          const mapping = mappingsByField.get(field);
+        const resolveMetric = (): string => {
+          const subVal = submittedBasis?.metric?.trim() ?? '';
+          const obsVal = obsBasis.metric;
+          const mapping = mappingsByField.get('metric');
           if (!subVal) {
             if (mapping && mapping.mappedValue === obsVal) {
               basisResolution.push({
-                field,
+                field: 'metric',
                 action: 'mapped',
                 sourceValue: mapping.sourceValue,
                 adoptedValue: obsVal,
@@ -1851,18 +1893,18 @@ export class StrategyGoalsStore {
               });
             } else if (submittedBasis) {
               basisResolution.push({
-                field,
+                field: 'metric',
                 action: 'supplemented',
                 adoptedValue: obsVal,
                 evidenceQuote: quote,
-                rationale: '依据实绩原文补齐未填写口径项',
+                rationale: '依据实绩原文补齐未填写指标',
               });
             }
             return obsVal;
           }
-          if (mapping && mapping.sourceValue === subVal && mapping.mappedValue === obsVal && !hasExplicitExclusionConstraint(subVal, expectedFields[field])) {
+          if (mapping && mapping.sourceValue === subVal && mapping.mappedValue === obsVal) {
             basisResolution.push({
-              field,
+              field: 'metric',
               action: 'mapped',
               submittedValue: subVal,
               sourceValue: mapping.sourceValue,
@@ -1875,9 +1917,87 @@ export class StrategyGoalsStore {
           return subVal;
         };
 
+        const resolveScope = (): string => {
+          const subVal = submittedBasis?.scope?.trim() ?? '';
+          const obsVal = obsBasis.scope;
+          // Explicit human-submitted scope is ALWAYS protected from overwrite.
+          if (subVal) return subVal;
+          const mapping = mappingsByField.get('scope');
+          if (mapping && mapping.mappedValue === obsVal) {
+            basisResolution.push({
+              field: 'scope',
+              action: 'mapped',
+              sourceValue: mapping.sourceValue,
+              adoptedValue: obsVal,
+              evidenceQuote: mapping.evidenceQuote,
+              rationale: mapping.rationale,
+            });
+          } else if (submittedBasis) {
+            basisResolution.push({
+              field: 'scope',
+              action: 'supplemented',
+              adoptedValue: obsVal,
+              evidenceQuote: quote,
+              rationale: '依据实绩原文补齐未填写业务范围',
+            });
+          }
+          return obsVal;
+        };
+
+        const resolveUnit = (): string => {
+          const subVal = submittedBasis?.unit?.trim() ?? '';
+          if (verifiedConversion && verifiedConversion.convertedUnit === obsBasis.unit) {
+            basisResolution.push({
+              field: 'unit',
+              action: 'mapped',
+              ...(subVal ? { submittedValue: `${verifiedConversion.sourceValue} ${subVal}` } : {}),
+              sourceValue: `${verifiedConversion.sourceValue} ${verifiedConversion.sourceUnit}`,
+              adoptedValue: `${verifiedConversion.convertedValue} ${verifiedConversion.convertedUnit}`,
+              evidenceQuote: verifiedConversion.evidenceQuote,
+              rationale: `${verifiedConversion.rationale}（系数 ${verifiedConversion.factor}）`,
+            });
+            return verifiedConversion.convertedUnit;
+          }
+          if (subVal) return subVal;
+          if (submittedBasis) {
+            basisResolution.push({
+              field: 'unit',
+              action: 'supplemented',
+              adoptedValue: obsBasis.unit,
+              evidenceQuote: quote,
+              rationale: '依据实绩原文补齐未填写单位',
+            });
+          }
+          return obsBasis.unit;
+        };
+
+        const resolvePeriodId = (): string => {
+          const subVal = submittedBasis?.periodId?.trim() ?? '';
+          // Explicit human-submitted periodId is ALWAYS protected from overwrite.
+          if (subVal) return subVal;
+          if (submittedBasis) {
+            basisResolution.push({
+              field: 'periodId',
+              action: 'supplemented',
+              adoptedValue: obsBasis.periodId,
+              evidenceQuote: quote,
+              rationale: '依据实绩原文补齐未填写归属期间',
+            });
+          }
+          return obsBasis.periodId;
+        };
+
+        const hasHumanCoverageExclusion = Boolean(
+          actual.input.missingCoverageNote?.trim() || actual.input.actualSource.coverageNote?.trim(),
+        );
         let resolvedCoverage: ProgressEvidenceBasis['coverage'];
         if (submittedBasis?.coverage === 'partial') {
           resolvedCoverage = 'partial';
+        } else if (hasHumanCoverageExclusion) {
+          // Explicit human missingCoverageNote / coverageNote blocks optimistic upgrade to 'complete'.
+          resolvedCoverage = submittedBasis?.coverage === 'unknown'
+            ? (obsBasis.coverage === 'partial' ? 'partial' : 'unknown')
+            : (obsBasis.coverage === 'complete' ? 'partial' : obsBasis.coverage);
         } else if (submittedBasis?.coverage === 'complete') {
           resolvedCoverage = 'complete';
         } else {
@@ -1916,10 +2036,10 @@ export class StrategyGoalsStore {
         check.actualSource = {
           ...check.actualSource,
           basis: {
-            metric: resolveTextField('metric'),
-            unit: resolveTextField('unit'),
-            scope: resolveTextField('scope'),
-            periodId: resolveTextField('periodId'),
+            metric: resolveMetric(),
+            unit: resolveUnit(),
+            scope: resolveScope(),
+            periodId: resolvePeriodId(),
             coverage: resolvedCoverage,
             maturity: resolvedMaturity,
           },

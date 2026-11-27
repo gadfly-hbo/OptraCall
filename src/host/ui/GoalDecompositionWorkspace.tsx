@@ -1,5 +1,6 @@
 import { GoalFigures, GoalPlanSheet, GoalSource, GsaWorksheet } from './GoalJourneyViews.tsx';
 import { goalDraftChanges } from './goal-draft-changes.ts';
+import { resolveUpstreamCarryover } from './goal-upstream-carryover.ts';
 import { GoalReviewDraft } from './GoalReviewDraft.tsx';
 import { GoalPlanAssistance } from './GoalPlanAssistance.tsx';
 import { hasGsaCheckpoint } from '../strategy-goal-decomposition-types.ts';
@@ -571,40 +572,42 @@ export function GoalDecompositionWorkspace({
   const upstreamNeedsReview=Boolean(activeGsaPlan&&workspace&&workspace.latestDraftRevision>0&&(!workspace.draft||workspace.draft.gsaPlanVersion!==activeGsaPlan.planVersion)&&draftForm?.reviewedPreviousPlanVersion===undefined);
   const reviewUpstream=async()=>{
     if(!activeGsaPlan||mutationsLocked)return;
+    const startSerial=editSerial.current;
+    const hadLocalEdits=draftDirty;
     setBusy(true);setWsError('');
     try{
-      const full=await api.getWorkspace(record.id, goal.version);
-      const plan=full.activeGsaPlan;
-      if(!plan||plan.contentSha256!==activeGsaPlan.contentSha256)throw new Error('总 GSA 已变化，本地输入已保留；请刷新并重新核对新版总 GSA。');
-      if(full.draftUnavailable)throw new Error('原拆解草稿因权限范围变更暂不可读，本地输入已保留；请在「版本与来源」核对。');
-      if(full.draft&&full.draft.gsaPlanVersion===plan.planVersion){
-        setWorkspace(full);
-        setDraftForm(buildInitialDraft(goal, full));
-        setNotice('当前新版总 GSA 已有拆解草稿，已为您刷新最新草稿。');
+      // Always query the global latest workspace (without historical ?goalVersion=) so newer goal/GSA upgrades cannot be masked.
+      const full=await api.getWorkspace(record.id);
+      const outcome=resolveUpstreamCarryover({
+        currentGoalVersion:goal.version,
+        currentActivePlan:activeGsaPlan,
+        latestWorkspace:full,
+        hadLocalEdits,
+        startEditSerial:startSerial,
+        currentEditSerial:editSerial.current,
+      });
+      if(outcome.kind==='gsa-changed'||outcome.kind==='error'){
+        setWsError(outcome.message);
         return;
       }
-      const prior=full.draft??full.priorDraft;
-      if(!prior)throw new Error('原拆解草稿暂不可读，本地输入已保留；请在「版本与来源」核对后重试。');
-      const sameCaliber=prior.estimate.unit===plan.formalTarget.unit&&prior.estimate.metricKind===plan.formalTarget.metricKind;
-      const nextEstimate:ReachabilityEstimate={
-        ...structuredClone(prior.estimate),
-        formalTargetValue:plan.formalTarget.value,
-        gapValue:prior.estimate.estimatedValue===null||!sameCaliber?null:Number((plan.formalTarget.value-prior.estimate.estimatedValue).toFixed(6)),
-      };
-      setDraftForm({
-        gsaPlanId:plan.planId,gsaPlanVersion:plan.planVersion,gsaPlanSha256:plan.contentSha256,
-        reviewedPreviousPlanVersion:prior.gsaPlanVersion,expectedDraftRevision:prior.revision,
-        estimate:nextEstimate,
-        rows:structuredClone(prior.rows),
-        reserves:structuredClone(prior.reserves),
-        gapStrategies:structuredClone(prior.gapStrategies),
-        views:structuredClone(prior.views),
-        timePlan:structuredClone(prior.timePlan),
-        notes:prior.notes,
-      });
+      if(outcome.kind==='conflict'){
+        setDraftConflict(outcome.latestWorkspace);
+        setDraftSaveState('error');
+        setDraftSaveError(outcome.message);
+        setWsError(outcome.message);
+        return;
+      }
+      if(outcome.kind==='already-current'){
+        setWorkspace(outcome.latestWorkspace);
+        setDraftForm(buildInitialDraft(goal, outcome.latestWorkspace));
+        setDraftDirty(false);setDraftSaveState('saved');setDraftConflict(null);
+        setNotice(outcome.message);
+        return;
+      }
+      setDraftForm(outcome.draftForm);
       editSerial.current++;setDraftDirty(true);setDraftSaveState('unsaved');setPreview(null);
       setEditingDecomposition(true);
-      setNotice(`已按负责人核对承接新版总 GSA（保留原总 GSA v${prior.gsaPlanVersion} 草稿 r${prior.revision}），请继续核对差额、分配与阶段计划后再发布。`);
+      setNotice(outcome.message);
     }catch(fault){setWsError(fault instanceof Error?fault.message:api.goalError(fault));}finally{setBusy(false);}
   };
 

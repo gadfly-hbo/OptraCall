@@ -103,4 +103,5 @@ F9–F12 以真实产品的测试与运行记录勾验。已确认的方案、�
 - [x] I4 A3（P1）：补齐 `assessProgressEvidenceDetails` 具体待核／冲突项、`readRoleContext` 精确 `expectedBasis` 交付、`assessSubmittedActual` 有证据口径映射与未知项补齐（保留原提交与 `basisResolution`，拒绝覆盖人填 `partial`/`open` 或显式排除范围），以及 Host 降级时 `assessmentNote` 与最终状态一致性与前端一键补充／纠正入口。
 - [x] I5 A4（P2）：消除前端阈值跨粒度回退，在最新检查规则、当前检查适用规则、设置摘要、保存回执及 Host `trigger.reason` 明确指标／周期粒度与适用性，提供就地配置当前粒度阈值入口，保持日／周／月流隔离与历史不可变。
 - [x] I6 A5（P2）：只读 `previewDecompositionPublish` 绑定当前准确草稿返回每笔预留（金额／用途／负责人／依据）与每条补缺策略（策略／预期贡献／不重叠范围／依据）；发布预览对话框清晰展示并保持取消零写入与桌面／390px／深色可读。
-- [x] I7 完成受影响回归（57/57 PASS）、真实 Chromium 浏览器验证（A1/A3/A4/A5 PASS）、边界检查与构建（PASS）及非作者独立复核与四原则终检（2 P2 / 2 P3 全部关闭，最终全项 PASS），推送候选分支并在 #148 回执交回 PM Agent。
+- [x] I7 完成首轮受影响回归（57/57 PASS）、真实 Chromium 浏览器验证、边界检查与构建及首轮独立复核并推送 `6a1dc26`，PM 首审退回 R1 / R2 / R3 三项必修（`issuecomment-7215345070`），原结果保留。
+- [x] I8 按 PM 首审退回重新领取（`issuecomment-7215389769`），关闭 R1（结构保护人填单位／期间／范围／缺店说明＋可核 `unitConversion`，移除排除词正则）、R2（全局 GSA／目标升版校验与双分支本地未保存改稿保护及冲突出口）和 R3（浏览器 A5 精确等待 `dialog[open]`＋草稿身份与 `pageErrors === 0`），经全新独立非作者复核（`70a459d1c6262acb0270887e683efa56`）全项 PASS 后提交新候选交 PM 二审。
