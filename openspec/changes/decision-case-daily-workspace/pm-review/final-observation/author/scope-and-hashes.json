@@ -1,0 +1,26 @@
+{
+  "baselineCommit": "a4c563f0632280010e7e12906c69fa6664cffd13",
+  "files": [
+    {
+      "path": "tests/studio-flow.test.ts",
+      "beforeSha256": "328c673a89870be0590bcdf36b63c83604d2df9df473ac1b6c77962f72a94ee8",
+      "afterSha256": "7a3ac39197ff5ff7a617d597aec584511f88f93531b7d67c69d1ea2169d3a99d",
+      "onlyPollingObservationChanged": true,
+      "originalWindowPreserved": true,
+      "delayMilliseconds": 25,
+      "globalWriteHelperAndAllBusinessAssertionsByteIdentical": true
+    },
+    {
+      "path": "tests/v13-project-goal-entry.test.ts",
+      "beforeSha256": "402780d36cb90a2dfc8ce2ce599067d25f375752e881c0437a9ab46b5ce9b443",
+      "afterSha256": "41ba8a8f8c9615334ec558600a065cfd0f9a741da01cb800d5f46430d6af45b9",
+      "onlyPollingObservationChanged": true,
+      "originalWindowPreserved": true,
+      "delayMilliseconds": 25,
+      "globalWriteHelperAndAllBusinessAssertionsByteIdentical": true
+    }
+  ],
+  "productSdkDependencyDiff": [],
+  "temporaryProbe": ".local/pm-observation-fix/inject-first-task-observation.mjs",
+  "permanentNewTestCases": 0
+}

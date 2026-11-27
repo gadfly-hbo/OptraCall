@@ -77,4 +77,6 @@ Case 增量事件／关系／请求沿原存储，旧记录不补造边或请求
 
 ### Git 与结案记录
 
+最终测试观察收尾见 [9900 四文件修正与非作者复核](pm-review/final-observation/README.md)：A4 准确 CI 的完整通过与本地四 FAIL 分别保留；修后只涉及测试观察，生产字节不变。本地受影响四个完整消费者文件 14/14、边界及构建通过，最终新 head 仍走完整 CI，最终结果不由目标绿或旧 head 代替。
+
 [PR #151](https://github.com/gadfly-hbo/OptraCall/pull/151) 为本轮唯一集成 PR。本文和任务文件记录提交时的阶段，实际交付 SHA、PR head 与 main push CI、最终勾选及工程结案以 [Issue #149 的 PM 最终回执](https://github.com/gadfly-hbo/OptraCall/issues/149)为准。未经过门禁的候选不称已合并；设备更新与产品体验另行安排。

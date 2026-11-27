@@ -1,0 +1,14 @@
+{
+  "code": "configuration_changed",
+  "injectionMethod": "GET",
+  "injections": 1,
+  "taskPosts": 1,
+  "armedGets": 1,
+  "observation": {
+    "method": "GET",
+    "route": "/api/projects/49b4177b-51a0-4ccd-a7c6-b84207dc294b/tasks/39580cbf-c127-4624-9c36-a2d67161eafb",
+    "originalStatus": 200,
+    "injectedStatus": 409,
+    "code": "configuration_changed"
+  }
+}

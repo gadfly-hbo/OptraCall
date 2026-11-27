@@ -1,0 +1,14 @@
+{
+  "code": "native_snapshot_incomplete",
+  "injectionMethod": "GET",
+  "injections": 1,
+  "taskPosts": 7,
+  "armedGets": 60,
+  "observation": {
+    "method": "GET",
+    "route": "/api/projects/d629b28c-cdd2-4cd8-8521-27ddf87ea85d/tasks/37cad0fe-08ce-470a-be05-a6aed0e1d549",
+    "originalStatus": 200,
+    "injectedStatus": 409,
+    "code": "native_snapshot_incomplete"
+  }
+}
