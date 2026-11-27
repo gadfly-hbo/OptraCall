@@ -848,14 +848,14 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             const edge = await caseDecisions.saveIssueEdge(authority.caseId, {
               ...rest, operationId: authority.operationId, expectedRevision: cases.getCase(authority.caseId).revision,
               source: { kind: sourceKind === 'adopted-candidate' ? 'adopted-candidate' : 'user-declaration', ref: `${authority.sessionId}/${authority.requestId}/${authority.toolCallId}` },
-            }); assertCurrent();
+            }, { assertWritable: () => { assertCurrent(); context.signal.throwIfAborted(); } }); assertCurrent();
             return { content: [{ type: 'text', text: JSON.stringify(edge) }], details: { type: 'optracall.case-issue-edge-save', edge } };
           }
           if (action === 'save-decision-request') {
             const req = await caseDecisions.saveDecisionRequest(authority.caseId, {
               ...(input as Record<string, unknown>), operationId: authority.operationId, expectedRevision: cases.getCase(authority.caseId).revision,
               source: { kind: 'agent-tool', ref: `${authority.sessionId}/${authority.requestId}/${authority.toolCallId}` },
-            }); assertCurrent();
+            }, { assertWritable: () => { assertCurrent(); context.signal.throwIfAborted(); } }); assertCurrent();
             return { content: [{ type: 'text', text: JSON.stringify(req) }], details: { type: 'optracall.case-decision-request-save', request: req } };
           }
           const saved = await caseDecisions.saveForAgent(input, authority); assertCurrent();
@@ -1248,6 +1248,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   }
   const discussionOptions: Parameters<typeof createStrategyDiscussionHost>[0]={dataRoot,codeRoot:options.cwd,goals:strategyGoals,readDecompositionWorkspace,mapImports:()=>strategyMapImports,
     readCaseDirectory: opts => listVisibleCaseDirectory(cases, opts),
+    caseDeclarations: { saveIssueEdge: (caseId, input, opts) => caseDecisions.saveIssueEdge(caseId, input, opts), saveDecisionRequest: (caseId, input, opts) => caseDecisions.saveDecisionRequest(caseId, input, opts), caseRevision: caseId => cases.getCase(caseId).revision },
     goalEnterprises:projectId=>{
       const directory=studio.enterpriseScopes.list();
       const assigned=projectId&&directory.projectAssignments.find(link=>link.projectId===projectId)?.enterpriseId;
@@ -1867,12 +1868,23 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     cases,
     drafts: workspaceDrafts,
     board: boardStore,
+    readGoal: async ({ goalId, version }) => {
+      const goal = strategyGoals.read({ goalId, version });
+      await validateStrategyGoal(goal);
+      return { goalId: goal.goalId, version: goal.version, status: goal.status, strategies: goal.strategies ?? [] };
+    },
     adoptGoal: async ({ operationId, goalId, expectedVersion, strategy }) => mutate(async () => {
       const ref = { goalId, version: expectedVersion };
-      const goal = strategyGoals.adopt(ref, { operationId, expectedVersion, decision: strategy ? `明确采纳策略「${strategy}」并创建 Case` : '明确采纳目标并创建 Case' });
-      return { goalId: goal.goalId, version: goal.version, strategy: strategy || goal.strategies?.[0] || '', adoptedAt: goal.adoptedAt ?? new Date().toISOString() };
+      const current = strategyGoals.read(ref);
+      await validateStrategyGoal(current);
+      if (!strategy || !(current.strategies ?? []).includes(strategy)) throw new WorkspaceDraftError('invalid_goal_strategy', 400);
+      const goal = strategyGoals.adopt(ref, { operationId, expectedVersion, decision: `明确采纳策略「${strategy}」并创建 Case` });
+      return { goalId: goal.goalId, version: goal.version, strategy, adoptedAt: goal.adoptedAt ?? new Date().toISOString() };
     }),
-    createCase: async ({ operationId, title, description, goalBinding }) => mutate(() => cases.createCase({ operationId, title, description, goalBinding })),
+    createCase: async ({ operationId, title, description, goalBinding }) => {
+      const res = await caseRoutes({ pathname: '/api/cases', method: 'POST', input: { operationId, title, description, goalBinding } });
+      return (res!.body as { case: import('./case-types.ts').CaseRecord }).case;
+    },
   });
   const caseSources = createCaseSourcesService({ cases, projects, assertActive, readReference: caseDecisions.source });
   const caseSourcesRoutes = createCaseSourcesRoutes(caseSources);

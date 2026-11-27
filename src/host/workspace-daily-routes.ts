@@ -1,17 +1,19 @@
 import { projectHomePending } from './home-pending.ts';
 import { listVisibleCaseDirectory } from './case-directory.ts';
-import { executeThreeBranchCaseCreate, type AdoptGoalFn, type CreateCaseFn } from './case-creation-orchestrator.ts';
+import { executeThreeBranchCaseCreate, type AdoptGoalFn, type CreateCaseFn, type ReadGoalFn } from './case-creation-orchestrator.ts';
+import { authorityAtFeedback } from './case-issues.ts';
 import { WorkspaceDraftError, type WorkspaceDraftKind, type WorkspaceDraftStore } from './workspace-draft-store.ts';
 import type { CaseStore } from './case-store.ts';
 import type { CaseFeedbackResponse } from './case-decision-types.ts';
 import type { createDecisionBoardStore } from '../../extensions/business-plugins/decision-board/storage/store.ts';
 
-type BoardStore = Pick<ReturnType<typeof createDecisionBoardStore>, 'getTask' | 'getItem' | 'listFeedbackHistory'>;
+type BoardStore = Pick<ReturnType<typeof createDecisionBoardStore>, 'getTask' | 'getItem' | 'listFeedbackHistory' | 'listActionAuthorizations'>;
 
 export type WorkspaceDailyRoutesDeps = {
   cases: CaseStore;
   drafts: WorkspaceDraftStore;
   board?: BoardStore;
+  readGoal?: ReadGoalFn;
   adoptGoal: AdoptGoalFn;
   createCase: CreateCaseFn;
 };
@@ -37,20 +39,27 @@ export function createWorkspaceDailyRoutes(deps: WorkspaceDailyRoutesDeps) {
           let anyUnreadable = false;
           for (const req of requests) {
             if (req.target.kind !== 'observe') continue;
+            const target = req.target;
             try {
-              const task = deps.board.getTask(req.target.taskId);
+              if (!deps.cases.listProjectLinks(record.id).some(l => l.projectId === target.projectId)) { anyUnreadable = true; continue; }
+              const task = deps.board.getTask(target.taskId);
               const item = deps.board.getItem(task.itemId);
+              if (item.id !== target.itemId || item.projectId !== target.projectId) { anyUnreadable = true; continue; }
+              const allAuths = deps.board.listActionAuthorizations(task.id);
+              if (!allAuths.some(a => a.authorizationId === target.authorizationId && !('kind' in a.source) && a.source.caseId === record.id)) { anyUnreadable = true; continue; }
               const history = deps.board.listFeedbackHistory(task.id);
               for (let idx = 0; idx < history.length; idx++) {
                 const rev = history[idx]!;
                 if (!rev.respondsToRequest) continue;
+                const activeAuth = authorityAtFeedback(allAuths, rev);
+                if (!activeAuth || activeAuth.authority.authorizationId !== rev.respondsToRequest.authorizationId) continue;
                 collected.push({
                   requestId: rev.respondsToRequest.requestId,
                   requestRevision: rev.respondsToRequest.revision,
                   projectId: item.projectId,
                   itemId: item.id,
                   taskId: task.id,
-                  authorizationId: rev.respondsToRequest.authorizationId,
+                  authorizationId: activeAuth.authority.authorizationId,
                   revisionId: rev.revisionId,
                   baseRevisionId: idx === 0 ? null : history[idx - 1]!.revisionId,
                 });
@@ -123,7 +132,7 @@ export function createWorkspaceDailyRoutes(deps: WorkspaceDailyRoutesDeps) {
         throw new WorkspaceDraftError('invalid_create_case_input', 400);
       }
       const result = await executeThreeBranchCaseCreate(
-        { cases: deps.cases, drafts: deps.drafts, adoptGoal: deps.adoptGoal, createCase: deps.createCase },
+        { cases: deps.cases, drafts: deps.drafts, readGoal: deps.readGoal, adoptGoal: deps.adoptGoal, createCase: deps.createCase },
         {
           draftId: body.draftId,
           title: body.title,

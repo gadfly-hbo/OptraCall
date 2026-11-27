@@ -313,7 +313,7 @@ export function WorkspaceHome({
         <div className="dh-sections">
           <section aria-labelledby="my-queue">
             <div className="dh-section-head">
-              <h2 id="my-queue">需要你处理</h2>
+              <h2 id="my-queue">近期动态与待推进项（非明确请求）</h2>
               {isCaseRestricted ? (
                 <button type="button" className="dh-link-btn" onClick={onOpenProjectMap}>查看项目地图</button>
               ) : (
@@ -329,7 +329,7 @@ export function WorkspaceHome({
               </div>
             )}
             {model.queue.length ? (
-              <ul className="dh-queue-list" aria-label="需要你处理">
+              <ul className="dh-queue-list" aria-label="近期动态与待推进项">
                 {model.queue.map(item => (
                   <li key={item.id}>
                     <button

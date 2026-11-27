@@ -763,7 +763,7 @@ export class CaseStore {
     }
     return [...latest.values()].filter(edge => options.includeRemoved || edge.lifecycle === 'active');
   }
-  saveIssueEdge(input: Mutation & { edgeId?: string; fromIssueId?: string; toIssueId?: string; action?: 'save' | 'remove'; explanation?: string; expectedEdgeRevision: number; source: CaseIssueEdgeSource }): CaseIssueEdge {
+  saveIssueEdge(input: Mutation & { edgeId?: string; fromIssueId?: string; toIssueId?: string; action?: 'save' | 'remove'; explanation?: string; expectedEdgeRevision: number; source: CaseIssueEdgeSource }, options?: CaseDecisionWriteOptions): CaseIssueEdge {
     const action = input.action === 'remove' ? 'remove' : 'save';
     const source = input.source;
     if (!source || (source.kind !== 'user-declaration' && source.kind !== 'adopted-candidate')) fail('invalid_case_issue_edge_source');
@@ -772,10 +772,11 @@ export class CaseStore {
       expectedEdgeRevision: revision(input.expectedEdgeRevision, true), ...(input.edgeId ? { edgeId: uuid(input.edgeId) } : {}),
       ...(input.fromIssueId ? { fromIssueId: uuid(input.fromIssueId) } : {}), ...(input.toIssueId ? { toIssueId: uuid(input.toIssueId) } : {}),
       explanation: input.explanation == null ? '' : text(input.explanation, 1000, true),
-      source: { kind: source.kind, ref: source.ref == null ? null : text(source.ref, 400, true, true, true) },
+      source: { kind: source.kind, ref: text(source.ref, 400, true, true, true) },
     };
     const request = { ...clean, op: 'issue-edge' };
     return this.operation('case_update', request, clean.caseId, null, () => {
+      options?.assertWritable?.();
       const before = this.activeCase(clean.caseId, clean.expectedRevision), createdAt = now();
       const all = this.listIssueEdges(before.id, { includeRemoved: true });
       let previous: CaseIssueEdge | undefined;
@@ -812,7 +813,7 @@ export class CaseStore {
     return options.includeHistory ? rows : [...latest.values()];
   }
   saveDecisionRequest(input: Mutation & { requestId?: string; action?: 'save' | 'withdraw' | 'supersede'; issueId?: string; kind?: 'choose' | 'observe'; text?: string; source: CaseDecisionRequestSource;
-    assignee?: { label?: string | null; source?: string | null }; requestedAt?: string; dueDate?: string | null; target?: CaseDecisionRequestTarget; expectedRequestRevision: number }): CaseDecisionRequest {
+    assignee?: { label?: string | null; source?: string | null }; requestedAt?: string; dueDate?: string | null; target?: CaseDecisionRequestTarget; expectedRequestRevision: number }, options?: CaseDecisionWriteOptions): CaseDecisionRequest {
     const action = input.action === 'withdraw' || input.action === 'supersede' ? input.action : 'save';
     const source = input.source;
     if (!source || (source.kind !== 'user-declaration' && source.kind !== 'agent-tool')) fail('invalid_case_decision_request_source');
@@ -856,9 +857,10 @@ export class CaseStore {
       if (!kind || !issueId || !nextTarget || !body || nextTarget.kind !== kind) return fail('invalid_case_decision_request');
       if (clean.kind && previous && clean.kind !== previous.kind || clean.issueId && previous && clean.issueId !== previous.issueId) fail('case_decision_request_conflict', 409);
       this.getDecisionIssue(before.id, issueId);
+      options?.assertWritable?.();
       if (action === 'save' && nextTarget.kind === 'choose') {
         const ref = nextTarget.strategyRef;
-        if (ref.caseId !== before.id) fail('case_decision_scope_mismatch', 409);
+        if (ref.caseId !== before.id || ref.caseStoreId !== this.decisionStoreId()) fail('case_decision_scope_mismatch', 409);
         if (this.getDecision(before.id, ref.recordId, ref.revision).kind !== 'strategy') fail('case_choice_requires_strategy');
       }
       const assignee = action === 'save' ? clean.assignee : previous?.assignee ?? clean.assignee;

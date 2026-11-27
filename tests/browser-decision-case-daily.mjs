@@ -123,24 +123,53 @@ async function run() {
       throw new Error(`timeout waiting for text: ${needle} (got: ${String(last).slice(0, 300)})`);
     };
 
-    // 1. Desktop 1440px: Home shows "Decision Case" nav, "待处理事项（1）", XSS-safe title (window.__xss undefined)
+    // 1. Desktop 1440px: Home shows "Decision Case" nav, "待处理事项（1）", NO old "需要你处理", XSS-safe title
     await chrome.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
     const homeText = await waitForText('待处理事项（1）');
     assert.ok(homeText.includes('Decision Case'));
+    assert.ok(!homeText.includes('需要你处理'), 'legacy heuristic heading must not appear');
     assert.ok(homeText.includes('华东负责人'));
     assert.ok(homeText.includes(xssTitle));
     assert.equal(await chrome.evalJs('Boolean(window.__xss)'), false, 'XSS must never execute');
 
-    // 2. Click "前往原事项回应" -> opens Case detail with issue sidebar, switch to 树状图 -> see multi-predecessor badge
+    // 2. FR06: Type light input WITHOUT clicking save -> navigate to 全部项目 -> return home -> input preserved!
+    await chrome.evalJs(`(() => {
+      const ta = document.querySelector('.home-daily-quick-input textarea');
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+      setter.call(ta, '导航前未点保存的轻输入');
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      ta.dispatchEvent(new Event('blur', { bubbles: true }));
+    })()`);
+    await new Promise(r => setTimeout(r, 600));
+    await chrome.evalJs(`Array.from(document.querySelectorAll('.home-daily-quick-input button')).find(b => b.textContent?.trim() === '全部项目')?.click()`);
+    await waitForText('Browser合成项目');
+    await chrome.evalJs(`Array.from(document.querySelectorAll('nav.primary-nav button')).find(b => b.textContent?.includes('工作台首页'))?.click()`);
+    await waitForText('待处理事项（1）');
+    const restoredVal = await chrome.evalJs(`document.querySelector('.home-daily-quick-input textarea')?.value || ''`);
+    assert.equal(restoredVal, '导航前未点保存的轻输入', 'light input must survive navigation without manual save click');
+
+    // 3. Click "前往原事项回应" -> verify pinned G/S bar, 3-part summary, tree multi-predecessor, and preserved issue+manual scope across tabs
     await chrome.evalJs(`Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('前往原事项回应'))?.click()`);
-    await waitForText('树状图');
+    const caseText = await waitForText('树状图');
+    assert.ok(caseText.includes('目标 / 策略（G/S）'), 'pinned G/S bar must appear');
+    assert.ok(caseText.includes('已明确') && caseText.includes('正在推进') && caseText.includes('接下来'), '3-part round summary must appear');
     await chrome.evalJs(`Array.from(document.querySelectorAll('button')).find(b => b.textContent?.trim() === '树状图')?.click()`);
     const treeText = await waitForText('汇入 · 2 个前驱');
     assert.ok(treeText.includes('扩围取舍'));
 
-    // 3. Switch to 关联项目 tab -> verify scope bar (当前事项 / 全部当前 Case)
+    // Switch to 关联项目 tab -> verify pinned G/S still visible + "按事项筛选" + manual scope preserved back & forth
     await chrome.evalJs(`Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('关联项目'))?.click()`);
+    const projTabText = await waitForText('浏览范围（不改变 Agent 协作上下文）');
+    assert.ok(projTabText.includes('目标 / 策略（G/S）'), 'G/S bar must stay pinned on projects tab');
+    assert.ok(projTabText.includes('按事项筛选'), 'other-issue selector must exist');
+    await chrome.evalJs(`Array.from(document.querySelectorAll('.case-scope-bar button')).find(b => b.textContent?.trim() === '全部当前 Case')?.click()`);
+    await chrome.evalJs(`Array.from(document.querySelectorAll('.case-detail-tabs button')).find(b => b.textContent?.includes('当前工作'))?.click()`);
+    await waitForText('树状图');
+    // Return to 关联项目: manual "全部当前 Case" MUST still be aria-pressed="true"
+    await chrome.evalJs(`Array.from(document.querySelectorAll('.case-detail-tabs button')).find(b => b.textContent?.includes('关联项目'))?.click()`);
     await waitForText('浏览范围（不改变 Agent 协作上下文）');
+    const stillAll = await chrome.evalJs(`Array.from(document.querySelectorAll('.case-scope-bar button')).find(b => b.textContent?.trim() === '全部当前 Case')?.getAttribute('aria-pressed')`);
+    assert.equal(stillAll, 'true', 'manual scope selection must survive tab switches');
 
     // 4. Check 1024px and 390px viewports render cleanly with no crash and readable content
     for (const width of [1024, 390]) {
@@ -150,14 +179,7 @@ async function run() {
       assert.ok(len > 100, `content must remain readable at ${width}px`);
     }
 
-    // 5. Verify Decision Case -> 全部项目 tab switch works
-    await chrome.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
-    await chrome.evalJs(`Array.from(document.querySelectorAll('button')).find(b => b.getAttribute('aria-label') === '关闭' || b.textContent?.trim() === '关闭')?.click()`);
-    await new Promise(r => setTimeout(r, 200));
-    await chrome.evalJs(`Array.from(document.querySelectorAll('.decision-case-tabs button')).find(b => b.textContent?.trim() === '全部项目')?.click()`);
-    await waitForText('Browser合成项目');
-
-    console.log('BROWSER_DW_ALL_PASS: 1440/1024/390 + home pending + XSS safe + issue tree multi-predecessor + scope bar + Decision Case tabs');
+    console.log('BROWSER_DW_ALL_PASS: 1440/1024/390 + FR04 no heuristic queue + FR06 auto-persist across nav + FR07 pinned G/S, 3-part summary, other-issue selector & preserved manual scope + XSS safe');
   } finally {
     if (chrome) await chrome.close();
     await host.close().catch(() => {});

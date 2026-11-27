@@ -27,7 +27,7 @@ export function readPendingBusinessRoleRequest(owner:BusinessRoleOwner):Business
     return {id:input.requestId,text:input.text,...(input.planRequest?{planRequest:input.planRequest}:{}),...(input.reviewRequest?{reviewRequest:input.reviewRequest}:{})};
   }catch{return;}
 }
-type ConversationProps = {
+type ConversationProps = { externalAppend?: { id: string; text: string } | null; onExternalAppended?: (id: string) => void;
   request?:BusinessRoleRequest;
   onResult?:(detail:StrategyDiscussionDetail,requestId:string)=>void;
   onRunning?:(running:boolean)=>void;
@@ -39,16 +39,27 @@ type ConversationProps = {
   onGoalDraft?: (draft: GoalDraftInput, source: GoalRoleSuggestionRef) => void;
   onSettled?: () => void;
 };
-export function BusinessRoleConversation({owner,readOnly,showInlineTitle,openingPrompt,onGoalDraft,onSettled,request,onResult,onRunning,onFailure}:ConversationProps){
+export function BusinessRoleConversation({owner,readOnly,showInlineTitle,openingPrompt,onGoalDraft,onSettled,request,onResult,onRunning,onFailure,externalAppend,onExternalAppended}:ConversationProps){
   const key=JSON.stringify(owner);
-  return <ScopedConversation onFailure={onFailure} request={request} onResult={onResult} onRunning={onRunning} key={key} owner={owner} ownerKey={key} openingPrompt={openingPrompt} readOnly={readOnly} showInlineTitle={showInlineTitle} onGoalDraft={onGoalDraft} onSettled={onSettled}/>;
+  return <ScopedConversation onFailure={onFailure} request={request} onResult={onResult} onRunning={onRunning} externalAppend={externalAppend} onExternalAppended={onExternalAppended} key={key} owner={owner} ownerKey={key} openingPrompt={openingPrompt} readOnly={readOnly} showInlineTitle={showInlineTitle} onGoalDraft={onGoalDraft} onSettled={onSettled}/>;
 }
-function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,openingPrompt,onGoalDraft,onSettled,request,onResult,onRunning,onFailure}:ConversationProps & {ownerKey:string}){
+function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,openingPrompt,onGoalDraft,onSettled,request,onResult,onRunning,onFailure,externalAppend,onExternalAppended}:ConversationProps & {ownerKey:string}){
   const base='/api/business-role?'+new URLSearchParams({owner:ownerKey});
   const title=businessRoleNames[owner.role];
   const inputId=useId();
   const storage=roleStorage(ownerKey);
   const [text,setText]=useState(()=>sessionStorage.getItem(storage+'.draft')??openingPrompt??'');
+  const lastAppendedRef = useRef<string>('');
+  useEffect(() => {
+    if (!externalAppend || !externalAppend.text || lastAppendedRef.current === externalAppend.id) return;
+    lastAppendedRef.current = externalAppend.id;
+    setText(old => {
+      const next = old.trim().length > 0 ? `${old}\n\n${externalAppend.text}` : externalAppend.text;
+      sessionStorage.setItem(storage + '.draft', next);
+      return next;
+    });
+    onExternalAppended?.(externalAppend.id);
+  }, [externalAppend?.id]);
   const [pending,setPending]=useState<StrategyDiscussionMessage|undefined>(()=>{try{return JSON.parse(sessionStorage.getItem(storage+'.request')??'null')??undefined;}catch{return undefined;}});
   const pendingRef=useRef(pending);
   const settledRun=useRef<string|undefined>(undefined);

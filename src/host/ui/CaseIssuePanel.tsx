@@ -7,18 +7,20 @@ import type { TaskCreateIntent } from '../task-assignment.ts';
 import type { ClientProject } from './project-types.ts';
 import { BusinessRoleConversation } from './BusinessRoleConversation.tsx';
 import { CaseIssueTreeSidebar } from './CaseIssueTreeSidebar.tsx';
-import { appendCarryOverFragment, listWorkspaceDrafts, readWorkspaceDraft, saveWorkspaceDraft } from './workspace-daily-client.ts';
+import { appendCarryOverFragment, listWorkspaceDrafts, readDecisionRequests, readWorkspaceDraft, saveWorkspaceDraft, type CaseDecisionRequestView } from './workspace-daily-client.ts';
 import type { CarryOverFragmentPayload, IssueDraftPayload, WorkspaceDraftRecord } from '../workspace-draft-store.ts';
 import { CaseFormError, caseError, useOperationId } from './CaseDialogs.tsx';
 import { caseIssues, caseIssueSources, caseIssueTimeline, createCaseIssue, readCaseDecisions, inspectIssueReply, saveCaseStrategyChoice, writeCaseIssue } from './case-decisions-client.ts';
 
 type IssueRef = { caseId: string; issueId: string };
-type Props = { onTeachReview?(owner:TeachReviewOwner):void; initialIssueId?: string; onSelectIssue?: (issueId: string) => void; record: CaseRecord; projects: ClientProject[]; onChange(): void; onBoard?(target?: import('./FeedbackContextPanel.tsx').FeedbackReviewStart): void; onOpenProject?(project: ClientProject, issue: IssueRef): void; onCreate(project: ClientProject, intent: TaskCreateIntent): void };
+type Props = { onTeachReview?(owner:TeachReviewOwner):void; initialIssueId?: string; selectedIssueId?: string; onSelectIssue?: (issueId: string) => void; record: CaseRecord; projects: ClientProject[]; onChange(): void; onBoard?(target?: import('./FeedbackContextPanel.tsx').FeedbackReviewStart): void; onOpenProject?(project: ClientProject, issue: IssueRef): void; onCreate(project: ClientProject, intent: TaskCreateIntent): void };
 const choiceName: Record<CaseStrategyChoiceValue, string> = { trial: '试行', adjust: '调整', continue: '继续', defer: '暂缓', no_action: '本次不行动', gather_evidence: '补证', reject: '不采用', stop_considering: '停止考虑' };
 
 export function CaseIssuePanel({ children, ...props }: Props & { children?: ReactNode }) {
   const { record, initialIssueId } = props;
-  const [issues, setIssues] = useState<CaseDecisionIssue[]>(), [selected, setSelected] = useState('');
+  const [issues, setIssues] = useState<CaseDecisionIssue[]>(), [selected, setSelected] = useState(props.selectedIssueId ?? '');
+  const [composerAppend, setComposerAppend] = useState<{ id: string; text: string } | null>(null);
+  const [openRequests, setOpenRequests] = useState<CaseDecisionRequestView[]>([]);
   const [title, setTitle] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
   const [fragments, setFragments] = useState<WorkspaceDraftRecord<CarryOverFragmentPayload>[]>([]);
@@ -35,6 +37,7 @@ export function CaseIssuePanel({ children, ...props }: Props & { children?: Reac
       if (!active) return;
       setIssues(current);
       setSelected(id => current.some(i => i.id === id) ? id
+        : props.selectedIssueId && current.some(i => i.id === props.selectedIssueId) ? props.selectedIssueId
         : initialIssueId ? current.find(i => i.id === initialIssueId)?.id ?? '' : current[0]?.id ?? '');
       setError(initialIssueId && !current.some(i => i.id === initialIssueId) ? '原事项暂不可读取，请核对当前 Case。' : '');
     }, e => { if (active) setError(caseError(e)); });
@@ -44,6 +47,7 @@ export function CaseIssuePanel({ children, ...props }: Props & { children?: Reac
   useEffect(() => {
     let active = true;
     const draftKey = `issue:${record.id}:${selected || 'none'}`;
+    void readDecisionRequests(record.id).then(({ requests }) => { if (active) setOpenRequests(requests.filter(r => r.status === 'open')); }, () => {});
     void listWorkspaceDrafts<CarryOverFragmentPayload>('carry-over').then(({ drafts }) => {
       if (active) setFragments(drafts.filter(d => d.payload.targetCaseId === record.id && (!d.payload.targetIssueId || d.payload.targetIssueId === selected)));
     }, () => {});
@@ -87,7 +91,7 @@ export function CaseIssuePanel({ children, ...props }: Props & { children?: Reac
           {!closed && <button type="button" className="secondary-button" onClick={async () => {
             try {
               const res = await appendCarryOverFragment({ fragmentId: frag.id, issueDraftId: `issue:${record.id}:${selected || 'none'}`, caseId: record.id, issueId: selected || null, expectedDraftRevision: issueDraftRev });
-              setIssueDraftText(res.draft.payload.text); setIssueDraftRev(res.draft.revision); setFragments(old => old.map(f => f.id === res.fragment.id ? res.fragment : f));
+              setIssueDraftText(res.draft.payload.text); setIssueDraftRev(res.draft.revision); setFragments(old => old.map(f => f.id === res.fragment.id ? res.fragment : f)); if (!res.alreadyAppended) { setOpen(true); setComposerAppend({ id: frag.id, text: frag.payload.originalText }); }
               setDraftNotice(res.alreadyAppended ? '此片段已追加过，未重复写入。' : '已追加到事项草稿，原文与来处仍保留。');
             } catch (e) { setError(caseError(e)); }
           }}>{frag.payload.appendedAt ? '已追加（再次点击不重复）' : '追加到事项草稿'}</button>}
@@ -104,7 +108,7 @@ export function CaseIssuePanel({ children, ...props }: Props & { children?: Reac
         {draftNotice && <p className="case-notice" role="status">{draftNotice}</p>}
       </div>}
       <div id={conversationId} hidden={!open}>
-        {selected && <BusinessRoleConversation owner={{ role:'case', caseId:record.id, itemId:selected }} readOnly={closed} showInlineTitle={false}/>}
+        {selected && <BusinessRoleConversation owner={{ role:'case', caseId:record.id, itemId:selected }} readOnly={closed} showInlineTitle={false} externalAppend={composerAppend} onExternalAppended={() => setComposerAppend(null)} />}
         {issues?.length === 0 && <p className="case-help">{closed
           ? '此 Case 已关闭，尚无独立决策事项可供查看。'
           : '此 Case 尚无独立决策事项。创建事项后即可开始对话。'}</p>}
@@ -123,7 +127,7 @@ export function CaseIssuePanel({ children, ...props }: Props & { children?: Reac
     {children}
     <section className="case-detail-text"><h3>独立决策事项</h3>
       {issues?.length === 0 && <p>历史取舍可在持续工作记录中回看，所属事项待核。</p>}
-      {selected && <IssueWork key={selected} issueId={selected} {...props}/>}
+      {selected && <IssueWork openRequests={openRequests} key={selected} issueId={selected} {...props}/>}
     </section>
   </>;
 }
@@ -159,7 +163,7 @@ function RoundReview({ round, replies, disabled, inspect, submit }: {
   </details>;
 }
 
-function IssueWork({ record, projects, onChange, onBoard, onOpenProject, onCreate, onTeachReview, issueId }: Props & { issueId: string }) {
+function IssueWork({ openRequests = [], record, projects, onChange, onBoard, onOpenProject, onCreate, onTeachReview, issueId }: Props & { issueId: string; openRequests?: CaseDecisionRequestView[] }) {
   const [refresh,setRefresh] = useState(0);
   const [timeline,setTimeline] = useState<Awaited<ReturnType<typeof caseIssueTimeline>>>();
   const [sources,setSources] = useState<Awaited<ReturnType<typeof caseIssueSources>>>();
@@ -246,7 +250,11 @@ function IssueWork({ record, projects, onChange, onBoard, onOpenProject, onCreat
       <button disabled={!reply} onClick={() => reply && void showSource(reply.source)}>核对原回复</button><button disabled={disabled || reply?.type !== 'plan'} onClick={() => reply && void write('plans',{ source: reply.source })}>将 Plan 候选交回事项</button></details>
     <details><summary>记录本次取舍</summary><label>准确方案<select value={planId} onChange={e => setPlanId(e.target.value)}><option value="">选择方案版本</option>{plans.map(p => <option key={p.recordId} value={p.recordId}>{p.payload.title} v{p.revision}</option>)}</select></label>
       <label>取舍<select value={choice} onChange={e => setChoice(e.target.value as CaseStrategyChoiceValue)}>{Object.entries(choiceName).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label><label>依据与理由<textarea value={reason} onChange={e => setReason(e.target.value)} /></label>
-      <button disabled={disabled || !plan || !reason.trim()} onClick={() => { if (!plan) return; const fields = { caseStoreId: plan.caseStoreId, strategyRef: { type: 'case-decision' as const, caseStoreId:plan.caseStoreId,caseId:record.id,recordId:plan.recordId,revision:plan.revision }, issueId, choice, reason, expectedPreviousChoiceId: current?.choice.choiceId ?? null }; void save('choice',fields, operationId => saveCaseStrategyChoice(record.id,{...fields, operationId})); }}>确认取舍</button></details>
+      {(() => {
+        const matchReq = plan ? openRequests.find(r => r.issueId === issueId && r.target.kind === 'choose' && r.target.strategyRef.recordId === plan.recordId && r.target.strategyRef.revision === plan.revision && r.target.expectedPreviousChoiceId === (current?.choice.choiceId ?? null)) : undefined;
+        return <>{matchReq && <p className="case-notice" role="status">本次取舍将精确回应明确请求：{matchReq.text}（承担人：{matchReq.assignee.label ?? '未声明'}）</p>}
+        <button disabled={disabled || !plan || !reason.trim()} onClick={() => { if (!plan) return; const fields = { caseStoreId: plan.caseStoreId, strategyRef: { type: 'case-decision' as const, caseStoreId:plan.caseStoreId,caseId:record.id,recordId:plan.recordId,revision:plan.revision }, issueId, choice, reason, expectedPreviousChoiceId: current?.choice.choiceId ?? null, ...(matchReq ? { respondsToRequest: { requestId: matchReq.requestId, revision: matchReq.revision } } : {}) }; void save('choice',fields, operationId => saveCaseStrategyChoice(record.id,{...fields, operationId})); }}>确认取舍</button></>;
+      })()}</details>
     {current && !passive && !current.actions.length && !current.historyLimited && <details><summary>授权本次行动</summary><label>看板行动<input value={title} onChange={e => setTitle(e.target.value)}/></label><label>授权范围<textarea value={scope} onChange={e => setScope(e.target.value)}/></label><button disabled={disabled || !project || !title.trim() || !scope.trim()} onClick={() => project && void write('authorize',{ projectId:project.id, choiceId: current.choice.choiceId,title,scope })}>确认授权并进入看板</button></details>}
     {preview && <details open><summary>准确原回复</summary><p className="case-prose">{preview}</p></details>}<CaseFormError error={error}/>
   </div>;

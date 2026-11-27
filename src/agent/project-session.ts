@@ -3,7 +3,7 @@ import { taskSourceDeliveryType, taskSourceDeliveryDetails, tracksTaskSource } f
 import { packageIdentity } from './skill-catalog.ts';
 import { taskPurpose, approvedTaskSkills } from '../host/task-assignment.ts';
 import {goalContextSourceTool} from './goal-context-source.ts';
-import { strategyDiscussionTool, projectDiscussionSourceTool, editableGoalTool, goalEstimateTool, goalDecompositionTool, goalPlanTool, goalReviewTool, explainGoalProposalError, STRATEGY_DISCUSSION_ACTIONS } from './strategy-discussion.ts';
+import { strategyDiscussionTool, projectDiscussionSourceTool, editableGoalTool, caseDeclarationsTool, goalEstimateTool, goalDecompositionTool, goalPlanTool, goalReviewTool, explainGoalProposalError, STRATEGY_DISCUSSION_ACTIONS } from './strategy-discussion.ts';
 import { methodIssueTool } from './method-issue.ts';
 import { quotedDecisionTool } from './quoted-decisions.ts';
 import type { AnalysisDeliveryReceipt } from '../host/analysis-delivery.ts';
@@ -789,7 +789,9 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
       // 止损作用域限于已确认的战略共创全量工具；business-role 的 project-sources/goal-draft 变体不纳入，
       // 避免在未呈现该诊断的消费者处静默取消。顺序执行复用 Pi 原生 executionMode，使批次内逐工具结算计数。
       const loopGuard = !variant;
-      const baseTool = variant === 'project-sources'
+      const baseTool = variant === 'case-declarations'
+        ? caseDeclarationsTool
+        : variant === 'project-sources'
         ? projectDiscussionSourceTool
         : variant === 'goal-draft'
           ? editableGoalTool

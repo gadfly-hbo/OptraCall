@@ -1,7 +1,14 @@
 import type { CaseGoalBindingInput, CaseRecord } from './case-types.ts';
 import type { CaseStore } from './case-store.ts';
-import type { PrepareDraftPayload, WorkspaceDraftRecord, WorkspaceDraftStore } from './workspace-draft-store.ts';
+import { WorkspaceDraftError, type PrepareDraftPayload, type WorkspaceDraftRecord, type WorkspaceDraftStore } from './workspace-draft-store.ts';
 
+export type VerifiedGoalAuthority = {
+  goalId: string;
+  version: number;
+  status: 'candidate' | 'adopted' | 'superseded' | 'archived' | string;
+  strategies: string[];
+};
+export type ReadGoalFn = (ref: { goalId: string; version: number }) => Promise<VerifiedGoalAuthority>;
 export type AdoptGoalFn = (input: { operationId: string; goalId: string; expectedVersion: number; strategy: string }) => Promise<{ goalId: string; version: number; strategy: string; adoptedAt: string }>;
 export type CreateCaseFn = (input: { operationId: string; title: string; description: string; goalBinding: CaseGoalBindingInput }) => Promise<CaseRecord>;
 
@@ -41,17 +48,16 @@ export type ThreeBranchCreateResult =
     };
 
 /**
- * Implements the three creation branches (DW11 / DW14) without altering goal authority:
- * 1. Exact G/S already has a Case -> 'continue' (never creates a duplicate, never auto-reopens closed Case, keeps input in draft).
- * 2. Adopted G/S without Case -> creates Case with operationId idempotency.
- * 3. New G/S candidate -> explicitly adopts first (separate receipt saved immediately), then creates Case.
- *    On partial failure or dropped/unknown response, keeps exact goal version, input, operationIds, and adoption receipt.
- *    Retry checks the original createOperationId first and only continues the unfinished step.
+ * Implements the three creation branches (DW11 / DW14) with strict authority & recovery checks (FR01 / FR02):
+ * - NEVER trusts client `alreadyAdopted`; always verifies real GoalVersion, strategy membership, and adoption status via `readGoal`.
+ * - NEVER borrows a prior partial `adoptionReceipt` for a different (goalId, version, strategy); rejects with 409 `prepare_draft_goal_mismatch` while preserving the original receipt.
+ * - NEVER replays an unrelated completed operation (must be `kind === 'case_create'` matching the exact Case goalBinding/title/description, else 409 `operation_conflict`).
  */
 export async function executeThreeBranchCaseCreate(
   deps: {
     cases: Pick<CaseStore, 'listCases' | 'getGoalBinding' | 'getOperation' | 'getCase'>;
     drafts: WorkspaceDraftStore;
+    readGoal?: ReadGoalFn;
     adoptGoal: AdoptGoalFn;
     createCase: CreateCaseFn;
   },
@@ -60,6 +66,29 @@ export async function executeThreeBranchCaseCreate(
   const existingDraft = await deps.drafts.read<PrepareDraftPayload>('prepare', input.draftId);
   let draftRev = existingDraft?.revision ?? 0;
   let adoptionReceipt = existingDraft?.payload.adoptionReceipt ?? null;
+
+  // FR02: If this draft already holds a partial adoptionReceipt for G/S A, refusing to silently bind A when the user switched to G/S B.
+  if (
+    adoptionReceipt &&
+    (adoptionReceipt.goalId !== input.goal.goalId ||
+      adoptionReceipt.version !== input.goal.version ||
+      adoptionReceipt.strategy !== input.goal.strategy)
+  ) {
+    throw new WorkspaceDraftError('prepare_draft_goal_mismatch', 409);
+  }
+
+  // FR01: Verify exact GoalVersion, strategy membership, and real adoption status from authoritative GoalStore.
+  let realGoalAdopted = input.goal.alreadyAdopted;
+  if (deps.readGoal) {
+    const authoritative = await deps.readGoal({ goalId: input.goal.goalId, version: input.goal.version });
+    if (!input.goal.strategy || !authoritative.strategies.includes(input.goal.strategy)) {
+      throw new WorkspaceDraftError('invalid_goal_strategy', 400);
+    }
+    realGoalAdopted = authoritative.status === 'adopted';
+    if (input.goal.alreadyAdopted && !realGoalAdopted) {
+      throw new WorkspaceDraftError('goal_not_adopted', 409);
+    }
+  }
 
   const saveDraft = async (patch: Partial<PrepareDraftPayload>): Promise<WorkspaceDraftRecord<PrepareDraftPayload>> => {
     const base: PrepareDraftPayload = existingDraft?.payload ?? {
@@ -90,19 +119,34 @@ export async function executeThreeBranchCaseCreate(
     return saved;
   };
 
-  // Step 0: Retry safety — check original createOperationId first before any write!
+  // Step 0 (FR02): Retry safety — verify original createOperationId is genuinely a completed `case_create`
+  // for this exact (goalId, version, strategy, title, description); never impersonate `case_note` or another Case!
   const priorCreate = deps.cases.getOperation(input.createOperationId);
-  if (priorCreate && priorCreate.phase === 'completed' && priorCreate.caseId) {
+  if (priorCreate) {
+    if (priorCreate.kind !== 'case_create' || priorCreate.phase !== 'completed' || !priorCreate.caseId) {
+      throw new WorkspaceDraftError('operation_conflict', 409);
+    }
     const createdCase = deps.cases.getCase(priorCreate.caseId);
+    const bound = deps.cases.getGoalBinding(createdCase.id);
+    if (
+      createdCase.title !== input.title.trim() ||
+      createdCase.description !== input.description ||
+      !bound ||
+      bound.primary.goalId !== input.goal.goalId ||
+      bound.primary.version !== input.goal.version ||
+      (bound.strategy ?? '') !== input.goal.strategy
+    ) {
+      throw new WorkspaceDraftError('operation_conflict', 409);
+    }
     const creationReceipt = { caseId: createdCase.id, operationId: input.createOperationId, createdAt: priorCreate.updatedAt };
     const draft = await saveDraft({ creationReceipt, creationState: 'completed', targetLocation: { caseId: createdCase.id } });
     return { branch: 'created', createdCase, adoptionReceipt, creationReceipt, replayedFromOperation: true, draft };
   }
 
   // Step 1: Check if exact G/S already has a Case (never merge by title, never auto-reopen closed Case).
-  const targetGoalId = adoptionReceipt?.goalId ?? input.goal.goalId;
-  const targetVersion = adoptionReceipt?.version ?? input.goal.version;
-  const targetStrategy = adoptionReceipt?.strategy ?? input.goal.strategy;
+  const targetGoalId = input.goal.goalId;
+  const targetVersion = input.goal.version;
+  const targetStrategy = input.goal.strategy;
   const matched = deps.cases.listCases().find(record => {
     const binding = deps.cases.getGoalBinding(record.id);
     return binding && binding.primary.goalId === targetGoalId && binding.primary.version === targetVersion && (binding.strategy ?? '') === targetStrategy;
@@ -112,8 +156,8 @@ export async function executeThreeBranchCaseCreate(
     return { branch: 'continue', existingCase: matched, isClosed: matched.status === 'closed', preservedDraft };
   }
 
-  // Step 2: Adopt new G/S if not already adopted (and not already recorded in adoptionReceipt).
-  if (!input.goal.alreadyAdopted && !adoptionReceipt) {
+  // Step 2: Adopt new G/S if not yet adopted (and not already recorded in adoptionReceipt).
+  if (!realGoalAdopted && !adoptionReceipt) {
     const adopted = await deps.adoptGoal({
       operationId: input.adoptOperationId,
       goalId: input.goal.goalId,
@@ -127,15 +171,14 @@ export async function executeThreeBranchCaseCreate(
       operationId: input.adoptOperationId,
       adoptedAt: adopted.adoptedAt,
     };
-    // Persist adoption receipt immediately BEFORE Case creation so partial failure never loses it.
     await saveDraft({ adoptionReceipt, selectedGoal: { goalId: adopted.goalId, version: adopted.version, strategy: adopted.strategy } });
   }
 
   // Step 3: Create Case using exact adopted GoalRef + strategy.
   const binding: CaseGoalBindingInput = {
-    primary: { goalId: adoptionReceipt?.goalId ?? input.goal.goalId, version: adoptionReceipt?.version ?? input.goal.version },
+    primary: { goalId: input.goal.goalId, version: input.goal.version },
     related: [],
-    strategy: adoptionReceipt?.strategy ?? input.goal.strategy,
+    strategy: input.goal.strategy,
   };
   try {
     const createdCase = await deps.createCase({

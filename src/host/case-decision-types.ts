@@ -111,7 +111,7 @@ export function requestStatus(request: CaseDecisionRequest, choices: CaseStrateg
     if (!choices) return 'unverifiable';
     const same = choices.filter(c => c.issueId === request.issueId);
     const answered = same.some(c => c.respondsToRequest?.requestId === request.requestId && c.respondsToRequest.revision === request.revision
-      && c.strategyRef.recordId === target.strategyRef.recordId && c.strategyRef.revision === target.strategyRef.revision && c.previousChoiceId === target.expectedPreviousChoiceId);
+      && c.strategyRef.caseStoreId === target.strategyRef.caseStoreId && c.strategyRef.recordId === target.strategyRef.recordId && c.strategyRef.revision === target.strategyRef.revision && c.previousChoiceId === target.expectedPreviousChoiceId);
     if (answered) return 'answered';
     // The issue choice chain moved on without answering this exact request: replaced, not resolved.
     const base = target.expectedPreviousChoiceId;

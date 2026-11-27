@@ -64,15 +64,34 @@ function assertId(id: string): string {
   return id;
 }
 
+// Process-wide per-path mutex queue so concurrent calls (even across two store instances on the same root)
+// serialize strictly around read -> CAS check -> atomic rename.
+const pathLocks = new Map<string, Promise<unknown>>();
+async function withPathLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const prev = pathLocks.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>(resolve => { release = resolve; });
+  const tail = prev.then(() => current, () => current);
+  pathLocks.set(key, tail);
+  await prev.catch(() => {});
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (pathLocks.get(key) === tail) pathLocks.delete(key);
+  }
+}
+
 /**
  * Persistent Host-owned workspace draft store (not sessionStorage, not a second conversation history).
- * Each draft is stored atomically by (kind, id) with optimistic CAS revision checks so conflicts never drop user input.
+ * Each draft is stored atomically by (kind, id) with serialized CAS revision checks so concurrent saves
+ * never overwrite each other and conflicts (409) never drop user input.
  */
 export function createWorkspaceDraftStore(options: { root: string }) {
   const baseDir = path.resolve(options.root, 'workspace-drafts');
   const fileFor = (kind: WorkspaceDraftKind, id: string) => path.join(baseDir, kind, `${encodeURIComponent(assertId(id))}.json`);
 
-  async function read<T = Record<string, unknown>>(kind: WorkspaceDraftKind, id: string): Promise<WorkspaceDraftRecord<T> | null> {
+  async function readUnlocked<T = Record<string, unknown>>(kind: WorkspaceDraftKind, id: string): Promise<WorkspaceDraftRecord<T> | null> {
     assertKind(kind);
     const file = fileFor(kind, id);
     try {
@@ -82,6 +101,30 @@ export function createWorkspaceDraftStore(options: { root: string }) {
       if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return null;
       throw error;
     }
+  }
+
+  async function saveUnlocked<T extends Record<string, unknown>>(kind: WorkspaceDraftKind, id: string, expectedRevision: number, payload: T): Promise<WorkspaceDraftRecord<T>> {
+    assertKind(kind);
+    assertId(id);
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) throw new WorkspaceDraftError('invalid_draft_revision', 400);
+    const existing = await readUnlocked<T>(kind, id);
+    const currentRevision = existing?.revision ?? 0;
+    if (currentRevision !== expectedRevision) throw new WorkspaceDraftError('draft_revision_conflict', 409);
+    const now = new Date().toISOString();
+    const record: WorkspaceDraftRecord<T> = {
+      kind, id, revision: currentRevision + 1, payload,
+      createdAt: existing?.createdAt ?? now, updatedAt: now,
+    };
+    const file = fileFor(kind, id);
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    const tmp = `${file}.${randomUUID()}.tmp`;
+    await fs.writeFile(tmp, JSON.stringify(record, null, 2), 'utf8');
+    await fs.rename(tmp, file);
+    return record;
+  }
+
+  async function read<T = Record<string, unknown>>(kind: WorkspaceDraftKind, id: string): Promise<WorkspaceDraftRecord<T> | null> {
+    return readUnlocked<T>(kind, id);
   }
 
   async function list<T = Record<string, unknown>>(kind: WorkspaceDraftKind): Promise<WorkspaceDraftRecord<T>[]> {
@@ -106,40 +149,28 @@ export function createWorkspaceDraftStore(options: { root: string }) {
 
   async function save<T extends Record<string, unknown>>(kind: WorkspaceDraftKind, id: string, expectedRevision: number, payload: T): Promise<WorkspaceDraftRecord<T>> {
     assertKind(kind);
-    assertId(id);
-    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) throw new WorkspaceDraftError('invalid_draft_revision', 400);
-    const existing = await read<T>(kind, id);
-    const currentRevision = existing?.revision ?? 0;
-    if (currentRevision !== expectedRevision) throw new WorkspaceDraftError('draft_revision_conflict', 409);
-    const now = new Date().toISOString();
-    const record: WorkspaceDraftRecord<T> = {
-      kind, id, revision: currentRevision + 1, payload,
-      createdAt: existing?.createdAt ?? now, updatedAt: now,
-    };
-    const file = fileFor(kind, id);
-    await fs.mkdir(path.dirname(file), { recursive: true });
-    const tmp = `${file}.${randomUUID()}.tmp`;
-    await fs.writeFile(tmp, JSON.stringify(record, null, 2), 'utf8');
-    await fs.rename(tmp, file);
-    return record;
+    const lockKey = fileFor(kind, id);
+    return withPathLock(lockKey, () => saveUnlocked<T>(kind, id, expectedRevision, payload));
   }
 
   /** Explicit discard clears ONLY this draft file and never affects any saved Goal or Case. */
   async function discard(kind: WorkspaceDraftKind, id: string): Promise<{ discarded: boolean }> {
     assertKind(kind);
     const file = fileFor(kind, id);
-    try {
-      await fs.unlink(file);
-      return { discarded: true };
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return { discarded: false };
-      throw error;
-    }
+    return withPathLock(file, async () => {
+      try {
+        await fs.unlink(file);
+        return { discarded: true };
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return { discarded: false };
+        throw error;
+      }
+    });
   }
 
   /**
    * Idempotently appends a carry-over fragment to an issue draft without ever overwriting non-empty text.
-   * Repeated append of the same fragmentId is a no-op; the original fragment & origin remain readable.
+   * Strictly verifies fragment owner (targetCaseId / targetIssueId) matches target draft owner (FR02).
    */
   async function appendCarryOverFragment(input: {
     fragmentId: string;
@@ -148,32 +179,46 @@ export function createWorkspaceDraftStore(options: { root: string }) {
     issueId: string | null;
     expectedDraftRevision: number;
   }): Promise<{ draft: WorkspaceDraftRecord<IssueDraftPayload>; fragment: WorkspaceDraftRecord<CarryOverFragmentPayload>; alreadyAppended: boolean }> {
-    const fragment = await read<CarryOverFragmentPayload>('carry-over', input.fragmentId);
-    if (!fragment) throw new WorkspaceDraftError('carry_over_fragment_not_found', 404);
-    const existing = await read<IssueDraftPayload>('issue-draft', input.issueDraftId);
-    const currentRevision = existing?.revision ?? 0;
-    if (currentRevision !== input.expectedDraftRevision) throw new WorkspaceDraftError('draft_revision_conflict', 409);
-    const existingIds = existing?.payload.appendedFragmentIds ?? [];
-    if (existingIds.includes(input.fragmentId)) {
-      return { draft: existing!, fragment, alreadyAppended: true };
-    }
-    const baseText = existing?.payload.text ?? '';
-    const nextText = baseText.trim().length > 0
-      ? `${baseText}\n\n${fragment.payload.originalText}`
-      : fragment.payload.originalText;
-    const savedDraft = await save<IssueDraftPayload>('issue-draft', input.issueDraftId, currentRevision, {
-      caseId: input.caseId,
-      issueId: input.issueId,
-      text: nextText,
-      appendedFragmentIds: [...existingIds, input.fragmentId],
-    });
-    const savedFragment = fragment.payload.appendedAt
-      ? fragment
-      : await save<CarryOverFragmentPayload>('carry-over', input.fragmentId, fragment.revision, {
-          ...fragment.payload,
-          appendedAt: new Date().toISOString(),
-        });
-    return { draft: savedDraft, fragment: savedFragment, alreadyAppended: false };
+    const draftLock = fileFor('issue-draft', input.issueDraftId);
+    const fragLock = fileFor('carry-over', input.fragmentId);
+    const [firstLock, secondLock] = draftLock < fragLock ? [draftLock, fragLock] : [fragLock, draftLock];
+    return withPathLock(firstLock, () => withPathLock(secondLock, async () => {
+      const fragment = await readUnlocked<CarryOverFragmentPayload>('carry-over', input.fragmentId);
+      if (!fragment) throw new WorkspaceDraftError('carry_over_fragment_not_found', 404);
+      if (fragment.payload.targetCaseId !== input.caseId) {
+        throw new WorkspaceDraftError('carry_over_scope_mismatch', 409);
+      }
+      if (fragment.payload.targetIssueId !== null && fragment.payload.targetIssueId !== input.issueId) {
+        throw new WorkspaceDraftError('carry_over_scope_mismatch', 409);
+      }
+      const existing = await readUnlocked<IssueDraftPayload>('issue-draft', input.issueDraftId);
+      if (existing && (existing.payload.caseId !== input.caseId || existing.payload.issueId !== input.issueId)) {
+        throw new WorkspaceDraftError('carry_over_scope_mismatch', 409);
+      }
+      const currentRevision = existing?.revision ?? 0;
+      if (currentRevision !== input.expectedDraftRevision) throw new WorkspaceDraftError('draft_revision_conflict', 409);
+      const existingIds = existing?.payload.appendedFragmentIds ?? [];
+      if (existingIds.includes(input.fragmentId)) {
+        return { draft: existing!, fragment, alreadyAppended: true };
+      }
+      const baseText = existing?.payload.text ?? '';
+      const nextText = baseText.trim().length > 0
+        ? `${baseText}\n\n${fragment.payload.originalText}`
+        : fragment.payload.originalText;
+      const savedDraft = await saveUnlocked<IssueDraftPayload>('issue-draft', input.issueDraftId, currentRevision, {
+        caseId: input.caseId,
+        issueId: input.issueId,
+        text: nextText,
+        appendedFragmentIds: [...existingIds, input.fragmentId],
+      });
+      const savedFragment = fragment.payload.appendedAt
+        ? fragment
+        : await saveUnlocked<CarryOverFragmentPayload>('carry-over', input.fragmentId, fragment.revision, {
+            ...fragment.payload,
+            appendedAt: new Date().toISOString(),
+          });
+      return { draft: savedDraft, fragment: savedFragment, alreadyAppended: false };
+    }));
   }
 
   return { read, list, save, discard, appendCarryOverFragment };

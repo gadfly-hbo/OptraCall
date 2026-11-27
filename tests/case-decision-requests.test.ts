@@ -87,12 +87,19 @@ test('DW08/DW09-REQ-01: explicit choose request is only resolved by exact respon
   assert.equal(requestStatus(saved, f.cases.getStrategyChoices(f.record.id), undefined), 'superseded');
 });
 
-test('DW08/DW09-REQ-02: observe request is only resolved by saveFeedback carrying exact requestId, revision, authorizationId, and baseRevisionId', async t => {
+test('DW08/DW09-REQ-02: observe request is only resolved by saveFeedback carrying exact requestId, revision, real Case authorizationId, and baseRevisionId', async t => {
   const f = await fixture(t);
-  const item = f.board.addManualItem({ projectId: f.projectId, title: '门店访谈', rationale: '补原始观察' });
-  f.board.decideItem(item.id, { status: 'adopted' });
-  const task = f.board.addTask(item.id, { title: '记录首周客流' });
-  const authId = randomUUID();
+  const choice = f.cases.chooseStrategy({
+    operationId: randomUUID(), caseStoreId: f.caseStoreId, caseId: f.record.id, issueId: f.issue.id,
+    strategyRef: f.strategyRef, choice: 'trial', expectedPreviousChoiceId: null,
+  });
+  const arranged = f.board.arrangeActions({
+    operationId: randomUUID(), projectId: f.projectId,
+    source: { caseStoreId: f.caseStoreId, caseId: f.record.id, choiceId: choice.choiceId, strategyRef: f.strategyRef },
+    scope: '首周门店访谈观察', title: '门店访谈', checks: [],
+    actions: [{ kind: 'create', title: '记录首周客流' }],
+  }, { confirmedIssueId: f.issue.id });
+  const act = arranged.actions[0]!;
   const rev = () => f.cases.getCase(f.record.id).revision;
 
   const req = f.cases.saveDecisionRequest({
@@ -100,30 +107,34 @@ test('DW08/DW09-REQ-02: observe request is only resolved by saveFeedback carryin
     issueId: f.issue.id, kind: 'observe', text: '请补录首周客流原始观察',
     source: { kind: 'user-declaration', ref: 'session-1/msg-8' },
     assignee: { label: '华东运营', source: 'session-1/msg-8' },
-    target: { kind: 'observe', projectId: f.projectId, itemId: item.id, taskId: task.id, authorizationId: authId, feedbackBaseRevisionId: null },
+    target: { kind: 'observe', projectId: f.projectId, itemId: act.itemId, taskId: act.taskId, authorizationId: act.authorizationId, feedbackBaseRevisionId: null },
   });
 
   const service = createCaseIssueService({ cases: f.cases, board: f.board, mutate: (fn: () => unknown) => fn() } as never);
   assert.equal(service.decisionRequests(f.record.id)[0]!.status, 'open');
 
+  // Wait 5ms so feedback savedAt is strictly after authorization createdAt (authorityAtFeedback ordering)
+  await new Promise(r => setTimeout(r, 10));
+
   // Feedback with wrong authorizationId does NOT resolve the request.
-  const wrongAuth = f.board.saveFeedback(task.id, {
+  const wrongAuth = f.board.saveFeedback(act.taskId, {
     operationId: randomUUID(), expectedLatestRevisionId: null, adopted: true, outcome: '初步观察', metricDelta: '', review: '', score: null, effect: 'unknown',
     respondsToRequest: { requestId: req.requestId, revision: req.revision, authorizationId: randomUUID() },
   });
   assert.equal(service.decisionRequests(f.record.id)[0]!.status, 'open');
 
-  // Create a second observe request based on wrongAuth.revisionId and answer it accurately.
+  // Create a second observe request based on wrongAuth.revisionId and answer it accurately under the REAL authorization.
   const req2 = f.cases.saveDecisionRequest({
     operationId: randomUUID(), caseId: f.record.id, expectedRevision: rev(), expectedRequestRevision: 0,
     issueId: f.issue.id, kind: 'observe', text: '请补录第二轮观察',
     source: { kind: 'user-declaration', ref: 'session-1/msg-9' },
     assignee: { label: '华东运营', source: 'session-1/msg-9' },
-    target: { kind: 'observe', projectId: f.projectId, itemId: item.id, taskId: task.id, authorizationId: authId, feedbackBaseRevisionId: wrongAuth.revisionId },
+    target: { kind: 'observe', projectId: f.projectId, itemId: act.itemId, taskId: act.taskId, authorizationId: act.authorizationId, feedbackBaseRevisionId: wrongAuth.revisionId },
   });
-  f.board.saveFeedback(task.id, {
+  await new Promise(r => setTimeout(r, 10));
+  f.board.saveFeedback(act.taskId, {
     operationId: randomUUID(), expectedLatestRevisionId: wrongAuth.revisionId, adopted: true, outcome: '首周复购+4%', metricDelta: '+4%', review: '', score: 4, effect: 'positive',
-    respondsToRequest: { requestId: req2.requestId, revision: req2.revision, authorizationId: authId },
+    respondsToRequest: { requestId: req2.requestId, revision: req2.revision, authorizationId: act.authorizationId },
   });
   const list = service.decisionRequests(f.record.id);
   assert.equal(list.find(r => r.requestId === req.requestId)!.status, 'open');
