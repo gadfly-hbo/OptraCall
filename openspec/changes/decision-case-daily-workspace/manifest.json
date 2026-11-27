@@ -1,5 +1,7 @@
 {
   "baseline": "4132a39d336c22d46c5bc57ae9d9b544a7ebac5f",
+  "confirmedPackageCommit": "5f15cf3b677c743bda0b5b2c3ee0e4b4f57e1af2",
+  "issueUrl": "https://github.com/gadfly-hbo/OptraCall/issues/149",
   "approvedDemoVersion": "v0.6",
   "approvedDemoSha256": "adff576ba604b35b95806ab6a5c0f7bf93de5f0124c1ce0540e14577572bf911",
   "files": [
@@ -19,9 +21,19 @@
       "sha256": "adff576ba604b35b95806ab6a5c0f7bf93de5f0124c1ce0540e14577572bf911"
     },
     {
+      "path": "openspec/changes/decision-case-daily-workspace/dispatch-issue.md",
+      "bytes": 6542,
+      "sha256": "083ba093cd98ae332ff56dbb1557cd1440e55bffaa9e498f8d9d4be1fa51462a"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/dispatch-receipt.md",
+      "bytes": 2019,
+      "sha256": "3b929ce4f70bddf55aff2314ca74da17f7e9da636e281e23d0593ff0046594cb"
+    },
+    {
       "path": "openspec/changes/decision-case-daily-workspace/result.md",
-      "bytes": 4290,
-      "sha256": "01f88737778e80a4a8cb7cdac94daa84967a949720586ebbf37601899fdd477b"
+      "bytes": 4559,
+      "sha256": "fbb6f7c7bd49d9a7b8a4518ae2926c985cdd1069dc2d425bde5e6d7300e79ce4"
     },
     {
       "path": "openspec/changes/decision-case-daily-workspace/spec.md",
