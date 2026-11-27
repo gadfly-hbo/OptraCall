@@ -1,16 +1,19 @@
 import type { CaseArtifactView, CaseDetail, CaseProjectLink, CaseRecord, CaseStatus, WorkEvent } from '../case-types.ts';
+import type { CaseDecisionRevision } from '../case-decision-types.ts';
 import type { StrategyGoalsIndex } from '../strategy-goals-types.ts';
 import { taskPurpose, taskTypes, type TaskType } from '../task-assignment.ts';
 import type { ClientProject, ClientTask } from './project-types.ts';
 
-export type InitialWorkspaceView = 'home' | 'goals' | 'studio' | 'chat' | 'cases';
+export type InitialWorkspaceView = 'home' | 'foundation' | 'goals' | 'studio' | 'chat' | 'cases';
 
 export function resolveInitialWorkspaceView(locationHref: string): InitialWorkspaceView {
-  const params = new URL(locationHref).searchParams;
+  const url = new URL(locationHref);
+  const params = url.searchParams;
   if (params.has('management')) return 'goals';
   if (params.has('studio')) return 'studio';
   if (params.has('project') || params.has('task')) return 'chat';
   if (params.has('returnCase')) return 'cases';
+  if (params.get('view') === 'foundation' || url.hash === '#foundation') return 'foundation';
   return 'home';
 }
 
@@ -33,10 +36,260 @@ export interface HomeFoundationTile {
   detail: string;
 }
 
+export function resolveActiveStudioEnterprise(input: {
+  enterprises: readonly { id: string; name: string }[];
+  selectedEnterpriseId?: string;
+  currentProjectId?: string;
+  projectAssignments?: readonly { projectId?: string; enterpriseId: string }[];
+}): { enterprise: { id: string; name: string } | null; unselected: boolean } {
+  const { enterprises, selectedEnterpriseId, currentProjectId, projectAssignments } = input;
+  if (!enterprises.length) return { enterprise: null, unselected: false };
+  // Explicit empty string means user selected "尚未明确企业" in a multi-enterprise directory.
+  if (selectedEnterpriseId === '') {
+    return enterprises.length === 1
+      ? { enterprise: enterprises[0]!, unselected: false }
+      : { enterprise: null, unselected: true };
+  }
+  if (selectedEnterpriseId) {
+    const matched = enterprises.find(item => item.id === selectedEnterpriseId);
+    if (matched) return { enterprise: matched, unselected: false };
+  }
+  if (currentProjectId && projectAssignments?.length) {
+    const assignedId = projectAssignments.find(item => item.projectId === currentProjectId)?.enterpriseId;
+    const assigned = assignedId ? enterprises.find(item => item.id === assignedId) : undefined;
+    if (assigned) return { enterprise: assigned, unselected: false };
+  }
+  return { enterprise: enterprises[0]!, unselected: false };
+}
+
+export function summarizeStudioFoundationSnapshots(input: {
+  enterprise: { id: string; name: string } | null;
+  unselected?: boolean;
+  systems: readonly { id: string; enterpriseId?: string | null }[];
+  foundationResult:
+    | { ok: true; items: readonly { authority: string; status: string }[] }
+    | { ok: false; state: 'forbidden' | 'unavailable'; message: string }
+    | null;
+}): { semantic: HomeFoundationSnapshot; analysis: HomeFoundationSnapshot } {
+  if (input.foundationResult && !input.foundationResult.ok) {
+    const label = input.foundationResult.state === 'forbidden' ? '无权限' : '暂不可读';
+    const snap: HomeFoundationSnapshot = {
+      state: input.foundationResult.state,
+      status: label,
+      detail: input.foundationResult.message,
+    };
+    return { semantic: snap, analysis: { ...snap } };
+  }
+  if (input.unselected) {
+    return {
+      semantic: { state: 'ready', status: '待选企业', detail: '请先选择当前企业以核对语义资产范围' },
+      analysis: { state: 'ready', status: '待选企业', detail: '请先选择当前企业以核对分析资产范围' },
+    };
+  }
+  if (!input.enterprise) {
+    return {
+      semantic: { state: 'ready', status: '未开始', detail: '尚未建立企业与语义资产' },
+      analysis: { state: 'ready', status: '未开始', detail: '尚未建立企业与分析资产' },
+    };
+  }
+
+  // Strictly count ONLY systems belonging to the active enterprise.
+  const enterpriseSystems = input.systems.filter(system => system.enterpriseId === input.enterprise!.id);
+  const systemCount = enterpriseSystems.length;
+
+  let semanticFormal = 0;
+  let semanticCandidate = 0;
+  let semanticHistory = 0;
+  let analyticsFormal = 0;
+  let analyticsCandidate = 0;
+  let analyticsHistory = 0;
+
+  for (const item of input.foundationResult?.items ?? []) {
+    const isAnalytics = item.authority === 'sap-metric' || item.authority === 'sap-method';
+    if (item.status === 'formal-current') {
+      if (isAnalytics) analyticsFormal += 1;
+      else semanticFormal += 1;
+    } else if (item.status === 'candidate') {
+      if (isAnalytics) analyticsCandidate += 1;
+      else semanticCandidate += 1;
+    } else if (item.status === 'formal-history') {
+      if (isAnalytics) analyticsHistory += 1;
+      else semanticHistory += 1;
+    }
+  }
+
+  const buildDomainSnapshot = (
+    formalCount: number,
+    candidateCount: number,
+    historyCount: number,
+    domainNoun: '语义资产' | '分析资产',
+  ): HomeFoundationSnapshot => {
+    if (formalCount > 0) {
+      return {
+        state: 'ready',
+        status: '已发布',
+        detail: `${formalCount} 项正式${domainNoun}${candidateCount > 0 ? ` · ${candidateCount} 项候选待核` : ''}`,
+      };
+    }
+    if (candidateCount > 0) {
+      return {
+        state: 'ready',
+        status: '候选待发布',
+        detail: `${candidateCount} 项候选待核查发布（尚无当前正式${domainNoun}）`,
+      };
+    }
+    if (systemCount > 0 || historyCount > 0) {
+      return {
+        state: 'ready',
+        status: '建设中',
+        detail: systemCount > 0 ? `${systemCount} 个本企业体系建设中` : `历史版本已停用，尚无当前正式${domainNoun}`,
+      };
+    }
+    return {
+      state: 'ready',
+      status: '未开始',
+      detail: `尚未发布${domainNoun}`,
+    };
+  };
+
+  return {
+    semantic: buildDomainSnapshot(semanticFormal, semanticCandidate, semanticHistory, '语义资产'),
+    analysis: buildDomainSnapshot(analyticsFormal, analyticsCandidate, analyticsHistory, '分析资产'),
+  };
+}
+
+export function summarizeStrategyFoundationSnapshot(input: {
+  initiatives: readonly { id: string }[];
+  publicationChecks: readonly ({ ok: true; hasActive: boolean } | { ok: false; state: 'forbidden' | 'unavailable'; message: string })[];
+}): HomeFoundationSnapshot {
+  const hasPublished = input.publicationChecks.some(res => res.ok && res.hasActive);
+  if (hasPublished) {
+    return {
+      state: 'ready',
+      status: '已发布',
+      detail: '存在已发布战略版本',
+    };
+  }
+  const failedChecks = input.publicationChecks.filter(
+    (res): res is { ok: false; state: 'forbidden' | 'unavailable'; message: string } => !res.ok,
+  );
+  if (input.initiatives.length > 0 && failedChecks.length === input.publicationChecks.length && failedChecks[0]) {
+    const first = failedChecks[0];
+    return {
+      state: first.state,
+      status: first.state === 'forbidden' ? '无权限' : '暂不可读',
+      detail: first.message,
+    };
+  }
+  if (input.initiatives.length > 0) {
+    const partialNote = failedChecks.length > 0 ? `（${failedChecks.length} 项发布状态暂不可读）` : '';
+    return {
+      state: 'ready',
+      status: '进行中',
+      detail: `${input.initiatives.length} 项战略讨论进行中${partialNote}`,
+    };
+  }
+  return {
+    state: 'ready',
+    status: '未开始',
+    detail: '尚未开展战略选择',
+  };
+}
+
+export interface HomeBoardActionInput {
+  id: string;
+  itemId: string;
+  projectId: string;
+  caseId?: string;
+  title: string;
+  owner: string;
+  dueDate: string;
+  status: 'todo' | 'doing' | 'done';
+  updatedAt: string;
+}
+
+export function extractHomeBoardActions(input: {
+  items: readonly {
+    id: string;
+    projectId: string;
+    status: 'suggested' | 'adopted' | 'dismissed';
+    tasks: readonly {
+      id: string;
+      itemId: string;
+      title: string;
+      owner: string | null;
+      dueDate: string | null;
+      status: 'todo' | 'doing' | 'done';
+      updatedAt: string;
+      authorization?: {
+        decision: 'authorize' | 'revoke';
+        source: { caseId: string } | { kind: 'work'; projectId: string };
+      } | null;
+    }[];
+  }[];
+  projectLinks: readonly CaseProjectLink[];
+  caseDecisionTaskIdsByCase?: ReadonlyMap<string, ReadonlySet<string>>;
+}): HomeBoardActionInput[] {
+  const result: HomeBoardActionInput[] = [];
+  for (const item of input.items) {
+    if (item.status === 'dismissed') continue;
+    const projectCaseIds = input.projectLinks.filter(link => link.projectId === item.projectId).map(link => link.caseId);
+    for (const task of item.tasks) {
+      if (task.authorization?.decision === 'revoke') continue;
+      let resolvedCaseId: string | undefined;
+      if (task.authorization?.decision === 'authorize' && 'caseId' in task.authorization.source) {
+        resolvedCaseId = task.authorization.source.caseId;
+      } else if (input.caseDecisionTaskIdsByCase) {
+        for (const [caseId, taskSet] of input.caseDecisionTaskIdsByCase.entries()) {
+          if (taskSet.has(task.id)) {
+            resolvedCaseId = caseId;
+            break;
+          }
+        }
+      }
+      if (!resolvedCaseId && item.status === 'adopted' && projectCaseIds.length === 1) {
+        resolvedCaseId = projectCaseIds[0];
+      }
+      // Include authorized tasks, explicitly Case-linked tasks, or tasks under adopted board items.
+      const isAdoptedOrAuthorized =
+        item.status === 'adopted' ||
+        task.authorization?.decision === 'authorize' ||
+        Boolean(resolvedCaseId);
+      if (!isAdoptedOrAuthorized) continue;
+      result.push({
+        id: task.id,
+        itemId: task.itemId,
+        projectId: item.projectId,
+        caseId: resolvedCaseId,
+        title: task.title,
+        owner: task.owner?.trim() ?? '',
+        dueDate: task.dueDate?.trim() ?? '',
+        status: task.status,
+        updatedAt: task.updatedAt,
+      });
+    }
+  }
+  return result;
+}
+
+export function collectCaseActionTaskIds(decisions: readonly CaseDecisionRevision[]): Set<string> {
+  const ids = new Set<string>();
+  for (const record of decisions) {
+    if (record.lifecycle === 'archived') continue;
+    for (const ref of record.references) {
+      if (ref.relation === 'action' && ref.target.type === 'board-task') {
+        ids.add(ref.target.taskId);
+      }
+    }
+  }
+  return ids;
+}
+
 export type HomeProofSource =
   | { kind: 'report'; label: string; caseId: string; caseTitle: string; projectId: string; taskId: string; relativePath: string; sha256: string }
   | { kind: 'case'; label: string; caseId: string }
-  | { kind: 'projects'; label: string };
+  | { kind: 'projects'; label: string }
+  | { kind: 'decision'; label: string };
 
 export type HomeProofModel =
   | {
@@ -68,6 +321,19 @@ export type HomeQueueItem =
       context: string;
       statusLabel: string;
       tone: 'attention' | 'active' | 'review';
+      owner: string;
+      dateLabel: string;
+    }
+  | {
+      kind: 'action';
+      id: string;
+      actionId: string;
+      projectId: string;
+      caseId?: string;
+      title: string;
+      context: string;
+      statusLabel: string;
+      tone: 'attention' | 'active';
       owner: string;
       dateLabel: string;
     }
@@ -112,6 +378,7 @@ export interface WorkspaceHomeInput {
   focusDetail?: CaseDetail | null;
   projects: readonly ClientProject[];
   goals?: StrategyGoalsIndex | null;
+  boardActions?: readonly HomeBoardActionInput[];
   foundations?: Partial<Record<HomeFoundationId, HomeFoundationSnapshot>>;
 }
 
@@ -163,9 +430,14 @@ const EVENT_LABELS: Record<WorkEvent['eventType'], string> = {
 };
 
 function shortDate(iso?: string | null): string {
-  if (!iso) return '待安排';
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '待安排';
+  if (!iso) return '待定';
+  const trimmed = iso.trim();
+  if (!trimmed) return '待定';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return trimmed.slice(5).replace('-', '/');
+  }
+  const date = new Date(trimmed);
+  if (Number.isNaN(date.getTime())) return trimmed;
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${month}/${day}`;
@@ -189,7 +461,7 @@ function caseTone(status: CaseStatus, hasInProgressAction: boolean): 'attention'
   return 'attention';
 }
 
-function defaultFoundationTile(id: HomeFoundationId, snapshot?: HomeFoundationSnapshot): HomeFoundationTile {
+export function defaultFoundationTile(id: HomeFoundationId, snapshot?: HomeFoundationSnapshot): HomeFoundationTile {
   const meta: Record<HomeFoundationId, { title: string; rhythm: string }> = {
     strategy: { title: '战略选择', rhythm: '年度规划 · 季度或月度回顾' },
     goals: { title: '目标管理', rhythm: '年度设定 · 月度或周度跟进' },
@@ -203,7 +475,7 @@ function defaultFoundationTile(id: HomeFoundationId, snapshot?: HomeFoundationSn
   if (snapshot.state === 'forbidden' || snapshot.state === 'unavailable') {
     return { id, ...info, status: snapshot.status || '暂不可读', tone: 'warn', detail: snapshot.detail };
   }
-  const good = snapshot.status !== '未开始';
+  const good = snapshot.status === '已发布' || snapshot.status === '已采用';
   return { id, ...info, status: snapshot.status, tone: good ? 'good' : 'neutral', detail: snapshot.detail };
 }
 
@@ -217,12 +489,15 @@ function findAvailableReport(detail: CaseDetail | null | undefined): CaseArtifac
 export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHomeModel {
   const activeProjects = input.projects.filter(project => !project.archivedAt);
   const projectMap = new Map(input.projects.map(project => [project.id, project]));
+  const caseMap = new Map(input.cases.map(record => [record.id, record]));
   const activeCases = input.cases
     .filter(item => item.status !== 'closed')
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const preferredFocus = input.focusCaseId ? input.cases.find(item => item.id === input.focusCaseId) : undefined;
   const focusCase =
-    (input.focusCaseId ? input.cases.find(item => item.id === input.focusCaseId) : undefined) ??
+    (preferredFocus && preferredFocus.status !== 'closed' ? preferredFocus : undefined) ??
     activeCases[0] ??
+    preferredFocus ??
     input.cases[0] ??
     null;
 
@@ -235,23 +510,41 @@ export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHom
     .filter((item): item is ClientProject => Boolean(item));
   const linkedProject = focusProjects.find(project => !project.archivedAt) ?? focusProjects[0] ?? null;
 
-  const inProgressActions = input.projects.filter(
-    project => !project.archivedAt && project.work?.workStatus === 'in_progress',
-  ).length;
+  const boardActions = input.boardActions ?? [];
+  const doingBoardActions = boardActions.filter(action => action.status === 'doing');
+  const projectsWithBoardActions = new Set(boardActions.map(action => action.projectId));
+  const inProgressProjectFallbacks = input.projects.filter(
+    project => !project.archivedAt && !projectsWithBoardActions.has(project.id) && project.work?.workStatus === 'in_progress',
+  );
+  const inProgressActions = doingBoardActions.length + inProgressProjectFallbacks.length;
+
+  const focusActions = focusCase
+    ? boardActions.filter(
+        action =>
+          action.caseId === focusCase.id ||
+          (!action.caseId && focusProjects.some(project => project.id === action.projectId)),
+      )
+    : [];
 
   // Resolve exact pinned goal version from goalBinding (never silently switching to latest).
   let goalText = '为眼前的问题确定一个可核对的目标';
   let strategyText = '选择一条值得尝试的策略';
   let hasBinding = false;
   let boundGoalOwner: string | undefined;
-  if (focusDetail?.goalBinding) {
+  if (input.caseAccessState === 'forbidden') {
+    goalText = '当前身份暂无 Case 读取权限，不会展示或推测未授权的目标绑定';
+    strategyText = '已获准的项目、任务与基础建设仍可按各自权限正常访问';
+  } else if (input.caseAccessState === 'unavailable') {
+    goalText = 'Case 存储暂时不可读取，保留原有记录不作覆盖';
+    strategyText = '可先进入项目地图继续任务，待存储恢复后重试读取';
+  } else if (focusDetail?.goalBinding) {
     hasBinding = true;
     const binding = focusDetail.goalBinding;
     const goalRecord = input.goals?.goals.find(item => item.id === binding.primary.goalId);
     const exactVersion = goalRecord?.versions.find(item => item.version === binding.primary.version);
     if (exactVersion) {
       goalText = `${exactVersion.title}（v${exactVersion.version}）`;
-      boundGoalOwner = exactVersion.responsible || undefined;
+      boundGoalOwner = exactVersion.responsible?.trim() || undefined;
       strategyText = binding.strategy || exactVersion.strategies?.[0] || '已绑定目标，策略待补充';
     } else {
       goalText = `目标 ${binding.primary.goalId}（v${binding.primary.version}）`;
@@ -262,7 +555,7 @@ export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHom
     strategyText = focusCase.judgement || '尚未填写当前判断与策略';
   }
 
-  const primaryReport = findAvailableReport(focusDetail);
+  const primaryReport = focusCase && focusCase.status !== 'closed' ? findAvailableReport(focusDetail) : undefined;
   const reportSource: HomeProofSource | null =
     primaryReport && focusCase && primaryReport.taskId && primaryReport.observedSha256
       ? {
@@ -279,23 +572,62 @@ export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHom
         ? { kind: 'case', label: `来源 · Case 修订 v${focusCase.revision}`, caseId: focusCase.id }
         : null;
 
-  // Build proof panel strictly from real records; fall back to 3-item readiness checklist when no grouped data exists.
+  // Build proof panel strictly from real records; ensure Proof source matches the exact data shown!
   let proof: HomeProofModel;
   const activeArtifacts = focusDetail?.artifacts.filter(item => !item.unlinkedAt) ?? [];
-  if (focusCase && focusProjects.length >= 2) {
-    const runningOrInProgress = focusProjects.filter(project => project.work?.workStatus === 'in_progress').length;
-    const awaitingOrOther = focusProjects.length - runningOrInProgress;
+  if (input.caseAccessState === 'forbidden' || input.caseAccessState === 'unavailable') {
+    const label = input.caseAccessState === 'forbidden' ? 'Case 记录受权限限制' : 'Case 记录暂不可读取';
+    proof = {
+      kind: 'readiness',
+      caption: label,
+      completedCount: activeProjects.length > 0 ? 1 : 0,
+      totalCount: 3,
+      portion: activeProjects.length > 0 ? 33 : 0,
+      facts: [
+        { text: '核对 Case 访问权限或存储状态', confirmed: false },
+        { text: '可访问执行项目保持就绪', confirmed: activeProjects.length > 0 },
+        { text: '按权限独立打开项目与任务', confirmed: activeProjects.some(p => p.tasks.length > 0) },
+      ],
+      nextActionLabel: '打开项目地图继续工作',
+      source: { kind: 'projects', label: '打开项目地图继续工作' },
+    };
+  } else if (focusCase && focusActions.length >= 1) {
+    const doingCount = focusActions.filter(a => a.status === 'doing').length;
+    const todoCount = focusActions.filter(a => a.status === 'todo').length;
+    const doneCount = focusActions.filter(a => a.status === 'done').length;
+    const groups = [
+      { label: '执行中', count: doingCount, unit: '项' },
+      { label: '待执行', count: todoCount, unit: '项' },
+      { label: '已完成', count: doneCount, unit: '项' },
+    ].filter(group => group.count > 0);
     proof = {
       kind: 'grouped',
-      caption: '关联项目进展分布',
+      caption: '已关联行动进展',
+      total: focusActions.length,
+      unit: '项行动',
+      portion: Math.round(((doingCount + doneCount) / focusActions.length) * 100),
+      groups: groups.length > 0 ? groups : [{ label: '待执行', count: 0, unit: '项' }],
+      source: { kind: 'decision', label: '来源 · 决策看板行动记录' },
+    };
+  } else if (focusCase && focusProjects.length >= 2) {
+    const inProgressCount = focusProjects.filter(project => project.work?.workStatus === 'in_progress').length;
+    const completedCount = focusProjects.filter(project => project.work?.workStatus === 'completed').length;
+    const cancelledCount = focusProjects.filter(project => project.work?.workStatus === 'cancelled').length;
+    const pendingOrFeedbackCount = focusProjects.length - inProgressCount - completedCount - cancelledCount;
+    const bucketCandidates = [
+      { label: '执行中', count: inProgressCount, unit: '个' },
+      { label: '待推进 / 待反馈', count: pendingOrFeedbackCount, unit: '个' },
+      { label: '已完成', count: completedCount, unit: '个' },
+      { label: '已取消', count: cancelledCount, unit: '个' },
+    ].filter(bucket => bucket.count > 0);
+    proof = {
+      kind: 'grouped',
+      caption: '关联项目工作状态',
       total: focusProjects.length,
       unit: '个项目',
-      portion: Math.round((runningOrInProgress / focusProjects.length) * 100),
-      groups: [
-        { label: '执行中项目', count: runningOrInProgress, unit: '个' },
-        { label: '待推进 / 观察', count: awaitingOrOther, unit: '个' },
-      ],
-      source: reportSource,
+      portion: Math.round(((inProgressCount + completedCount) / focusProjects.length) * 100),
+      groups: bucketCandidates.length > 0 ? bucketCandidates : [{ label: '待推进 / 待反馈', count: focusProjects.length, unit: '个' }],
+      source: { kind: 'projects', label: '来源 · 关联项目工作记录' },
     };
   } else if (focusCase && activeArtifacts.length >= 2) {
     const reports = activeArtifacts.filter(item => item.role === 'report').length;
@@ -328,29 +660,50 @@ export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHom
       facts,
       nextActionLabel: !focusCase
         ? '从业务问题创建首个 Case'
-        : !hasBinding
-          ? '核对目标与策略版本'
-          : focusProjects.length === 0
-            ? '关联或新建执行项目'
-            : '继续在 Case 中补充依据与决定',
+        : focusCase.status === 'closed'
+          ? '新建下一个 Case'
+          : !hasBinding
+            ? '核对目标与策略版本'
+            : focusProjects.length === 0
+              ? '关联或新建执行项目'
+              : '继续在 Case 中补充依据与决定',
       source: reportSource,
     };
   }
 
-  // Build "需要你处理" queue from active Cases + available focus report review.
+  // Build "需要你处理" queue from active Cases + pending/doing Decision Board actions + available focus report review.
   const orderedActiveCases = focusCase && focusCase.status !== 'closed'
     ? [focusCase, ...activeCases.filter(item => item.id !== focusCase.id)]
     : activeCases;
 
-  const queue: HomeQueueItem[] = orderedActiveCases.slice(0, 3).map(record => {
+  const queue: HomeQueueItem[] = [];
+
+  for (const record of orderedActiveCases.slice(0, 2)) {
     const links = input.projectLinks.filter(link => link.caseId === record.id);
     const linked = links.map(link => projectMap.get(link.projectId)).filter((item): item is ClientProject => Boolean(item));
-    const hasInProgress = linked.some(project => project.work?.workStatus === 'in_progress');
+    const caseBoardActions = boardActions.filter(action => action.caseId === record.id && action.status !== 'done');
+    const hasInProgress =
+      caseBoardActions.some(action => action.status === 'doing') ||
+      linked.some(project => project.work?.workStatus === 'in_progress');
+    const distinctAssignees = [
+      ...new Set(
+        linked
+          .filter(project => !project.workUnavailable && project.work?.workStatus !== 'cancelled')
+          .map(project => project.work?.assignee?.trim())
+          .filter((name): name is string => Boolean(name)),
+      ),
+    ];
     const owner =
-      linked.find(project => project.work?.assignee)?.work?.assignee ||
-      (record.id === focusCase?.id ? boundGoalOwner : undefined) ||
-      '待指定';
-    return {
+      distinctAssignees.length === 1
+        ? distinctAssignees[0]!
+        : distinctAssignees.length > 1
+          ? `${distinctAssignees[0]} 等 ${distinctAssignees.length} 人`
+          : (record.id === focusCase?.id ? boundGoalOwner : undefined) || '待定';
+    const nearestDue = caseBoardActions
+      .map(action => action.dueDate)
+      .filter(Boolean)
+      .sort()[0];
+    queue.push({
       kind: 'case',
       id: `case:${record.id}`,
       caseId: record.id,
@@ -359,11 +712,41 @@ export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHom
       statusLabel: hasInProgress && record.status !== 'awaiting_confirmation' ? '执行中' : CASE_STATUS_LABELS[record.status],
       tone: caseTone(record.status, hasInProgress),
       owner,
-      dateLabel: shortDate(record.updatedAt),
-    };
-  });
+      dateLabel: nearestDue ? `期限 ${shortDate(nearestDue)}` : '期限待定',
+    });
+  }
 
-  if (primaryReport && focusCase && primaryReport.taskId && primaryReport.observedSha256) {
+  const pendingBoardActions = boardActions
+    .filter(action => action.status !== 'done' && (!action.caseId || caseMap.get(action.caseId)?.status !== 'closed'))
+    .sort((a, b) => {
+      if (a.status !== b.status) return a.status === 'doing' ? -1 : 1;
+      return b.updatedAt.localeCompare(a.updatedAt);
+    });
+
+  for (const action of pendingBoardActions.slice(0, 2)) {
+    const actionCase = action.caseId ? caseMap.get(action.caseId) : undefined;
+    const actionProject = projectMap.get(action.projectId);
+    queue.push({
+      kind: 'action',
+      id: `action:${action.id}`,
+      actionId: action.id,
+      projectId: action.projectId,
+      caseId: action.caseId,
+      title: action.title,
+      context: [actionCase?.title, actionProject?.name].filter(Boolean).join(' · ') || '决策看板行动',
+      statusLabel: action.status === 'doing' ? '执行中' : '待执行',
+      tone: action.status === 'doing' ? 'active' : 'attention',
+      owner: action.owner.trim() || '待定',
+      dateLabel: action.dueDate.trim() ? shortDate(action.dueDate) : '期限待定',
+    });
+  }
+
+  if (primaryReport && focusCase && focusCase.status !== 'closed' && primaryReport.taskId && primaryReport.observedSha256) {
+    const reportProject = projectMap.get(primaryReport.projectId);
+    const reportOwner =
+      !reportProject?.workUnavailable && reportProject?.work?.assignee?.trim()
+        ? reportProject.work.assignee.trim()
+        : '待定';
     queue.push({
       kind: 'report',
       id: `report:${primaryReport.id}`,
@@ -374,11 +757,11 @@ export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHom
       relativePath: primaryReport.relativePath,
       sha256: primaryReport.observedSha256,
       title: `核对「${primaryReport.displayName || primaryReport.relativePath.split('/').at(-1)}」的依据`,
-      context: `${primaryReport.taskName || primaryReport.projectName || '项目报告'} · ${primaryReport.observedSha256.slice(0, 8)}`,
+      context: `${primaryReport.taskName || primaryReport.projectName || reportProject?.name || '项目报告'} · ${primaryReport.observedSha256.slice(0, 8)}`,
       statusLabel: '待核对',
       tone: 'review',
-      owner: linkedProject?.work?.assignee || '待核对',
-      dateLabel: shortDate(primaryReport.observedAt || primaryReport.updatedAt),
+      owner: reportOwner,
+      dateLabel: primaryReport.observedAt || primaryReport.updatedAt ? `生成 ${shortDate(primaryReport.observedAt || primaryReport.updatedAt)}` : '待定',
     });
   }
 
@@ -410,7 +793,7 @@ export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHom
           kind: 'task',
           projectId: project.id,
           taskId: task.id,
-          ...(focusCase && focusLinks.some(link => link.projectId === project.id)
+          ...(focusCase && focusCase.status !== 'closed' && focusLinks.some(link => link.projectId === project.id)
             ? { caseId: focusCase.id, caseTitle: focusCase.title }
             : {}),
         },
@@ -419,12 +802,28 @@ export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHom
   }
   activityEntries.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
-  const headline = focusCase
-    ? focusCase.nextStep.trim() || focusCase.judgement.trim() || focusCase.title
-    : '从第一个 Case 开始';
+  const headline =
+    input.caseAccessState === 'forbidden'
+      ? '当前身份暂无 Case 读取权限'
+      : input.caseAccessState === 'unavailable'
+        ? 'Decision Case 记录暂不可读取'
+        : focusCase
+          ? focusCase.status === 'closed'
+            ? `${focusCase.title}（已结束）`
+            : focusCase.nextStep.trim() || focusCase.judgement.trim() || focusCase.title
+          : '从第一个 Case 开始';
+
+  const focusStatusLabel =
+    input.caseAccessState === 'forbidden'
+      ? '无权限读取'
+      : input.caseAccessState === 'unavailable'
+        ? '暂不可读'
+        : focusCase
+          ? CASE_STATUS_LABELS[focusCase.status]
+          : '项目可独立开始';
 
   const focusActionBadge =
-    linkedProject?.work?.workStatus === 'in_progress'
+    focusActions.some(action => action.status === 'doing') || linkedProject?.work?.workStatus === 'in_progress'
       ? '关联行动执行中'
       : linkedProject?.work?.workStatus === 'awaiting_feedback'
         ? '关联行动待反馈'
@@ -436,12 +835,12 @@ export function buildWorkspaceHomeModel(input: WorkspaceHomeInput): WorkspaceHom
     enterpriseName: input.enterpriseName || '当前工作区',
     headline,
     focusCase,
-    focusStatusLabel: focusCase ? CASE_STATUS_LABELS[focusCase.status] : '项目可独立开始',
+    focusStatusLabel,
     focusActionBadge,
     linkedProject,
     goalSummary: { goalText, strategyText, hasBinding },
     proof,
-    queue: queue.slice(0, 4),
+    queue: queue.slice(0, 5),
     activities: activityEntries.slice(0, 3),
     counts: {
       activeCases: activeCases.length,
@@ -484,7 +883,7 @@ export function summarizeProjectTaskTypes(tasks: readonly ClientTask[]): Project
 }
 
 export type WorkspaceSearchTarget =
-  | { kind: 'view'; id: string; group: string; title: string; subtitle: string; view: 'home' | 'cases' | 'projects' | 'decision' | 'help' }
+  | { kind: 'view'; id: string; group: string; title: string; subtitle: string; view: 'home' | 'foundation' | 'cases' | 'projects' | 'decision' | 'help' }
   | { kind: 'foundation'; id: string; group: string; title: string; subtitle: string; foundation: HomeFoundationId }
   | { kind: 'settings'; id: string; group: string; title: string; subtitle: string; settingsView: 'usage-context-settings' | 'settings' | 'web-search-settings' | 'automatic-action-settings' | 'skill-settings' | 'connection-settings' | 'personal-materials' | 'model-pack-settings' | 'capability-plans' }
   | { kind: 'case'; id: string; group: string; title: string; subtitle: string; caseId: string }
@@ -496,6 +895,7 @@ const STATIC_SEARCH_ITEMS: readonly WorkspaceSearchTarget[] = [
   { kind: 'view', id: 'nav:cases', group: '日常工作', title: '决策星图', subtitle: 'Decision Case 与项目关联关系', view: 'cases' },
   { kind: 'view', id: 'nav:projects', group: '日常工作', title: '项目地图', subtitle: '查看项目与六类任务', view: 'projects' },
   { kind: 'view', id: 'nav:decision', group: '日常工作', title: '决策工作台', subtitle: '决策看板与反馈复盘', view: 'decision' },
+  { kind: 'view', id: 'nav:foundation', group: '基础建设', title: '基础建设总览', subtitle: '查看战略选择、目标管理、语义资产与分析资产整体状态', view: 'foundation' },
   { kind: 'foundation', id: 'foundation:strategy', group: '基础建设', title: '战略选择', subtitle: '战略共创、检验、发布与版本管理', foundation: 'strategy' },
   { kind: 'foundation', id: 'foundation:goals', group: '基础建设', title: '目标管理', subtitle: '总 GSA、拆解草稿、阶段跟进与到期复盘', foundation: 'goals' },
   { kind: 'foundation', id: 'foundation:semantic', group: '基础建设', title: '语义资产', subtitle: '业务语义、数据映射、企业资料与体系工作台', foundation: 'semantic' },

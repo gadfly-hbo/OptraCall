@@ -20,14 +20,14 @@ export type ProjectBoardProps = {
   onRename: (project: ClientProject, trigger: HTMLElement) => void;
   onArchive: (project: ClientProject) => void; onRestore: (project: ClientProject) => void;
   onProjectChange: () => Promise<void>;
-  initialProjectId?: string; onInitialProjectClose?: () => void;
+  initialProjectId?: string; initialProjectSeq?: number; onInitialProjectClose?: () => void;
 };
-export function ProjectBoard({ onOpenCase, onOpenCollaboration, onOpenPlan, onOpenWorkflow, onAdvancedTask, projects, onOpenTask, onCreateProject, onCreateTask, onRename, onArchive, onRestore, onProjectChange, mode: providedMode, onModeChange, initialProjectId, onInitialProjectClose }: ProjectBoardProps) {
+export function ProjectBoard({ onOpenCase, onOpenCollaboration, onOpenPlan, onOpenWorkflow, onAdvancedTask, projects, onOpenTask, onCreateProject, onCreateTask, onRename, onArchive, onRestore, onProjectChange, mode: providedMode, onModeChange, initialProjectId, initialProjectSeq, onInitialProjectClose }: ProjectBoardProps) {
   const [localMode, setLocalMode] = useState<'cards' | 'list'>('cards'), [filter, setFilter] = useState<'active' | 'archived' | 'all'>('active'), [query, setQuery] = useState(''), [caseData, setCaseData] = useState<CaseList | null>(null), [caseState, setCaseState] = useState<'loading' | 'ready' | 'uninitialized' | 'unavailable'>('loading'), [error, setError] = useState(''), [notice, setNotice] = useState(''), [selectedId, setSelectedId] = useState<string | null>(null), [taskTypeFilter, setTaskTypeFilter] = useState<'all' | TaskType | 'unassigned'>('all'), [editing, setEditing] = useState<{ kind: 'work' | 'note'; project: ClientProject } | null>(null), [events, setEvents] = useState<WorkEvent[]>([]), [eventError, setEventError] = useState(''), [eventLoading, setEventLoading] = useState(false);
   const mode = providedMode ?? localMode; const setMode = (value: 'cards' | 'list') => { setLocalMode(value); onModeChange?.(value); };
   const selectedRef = useRef(selectedId), eventRequest = useRef(0); selectedRef.current = selectedId;
   const id = useId(), selected = projects.find(project => project.id === selectedId);
-  useEffect(() => { if (initialProjectId) { setSelectedId(initialProjectId); setTaskTypeFilter('all'); } }, [initialProjectId]);
+  useEffect(() => { if (initialProjectId) { setSelectedId(initialProjectId); setTaskTypeFilter('all'); } }, [initialProjectId, initialProjectSeq]);
   const dismissProject = () => { setSelectedId(null); setTaskTypeFilter('all'); if (initialProjectId && selectedId === initialProjectId) onInitialProjectClose?.(); };
   const readCases = async () => { try { const state = await api.status(); setCaseState(state.state); if (state.state === 'ready') setCaseData(await api.list()); else setCaseData(null); } catch (error) { setCaseState('unavailable'); setError(caseError(error)); } };
   useEffect(() => { let alive = true; void api.status().then(async state => { if (!alive) return; setCaseState(state.state); if (state.state === 'ready') { const value = await api.list(); if (alive) setCaseData(value); } }, error => { if (alive) { setCaseState('unavailable'); setError(caseError(error)); } }).catch(error => { if (alive) { setCaseState('unavailable'); setError(caseError(error)); } }); return () => { alive = false; }; }, []);

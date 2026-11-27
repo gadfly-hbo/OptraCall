@@ -244,16 +244,234 @@ test('W03: summarizeProjectTaskTypes counts all 6 types plus unassigned without 
   assert.equal(empty.unassigned, 0);
 });
 
-test('W09: filterWorkspaceSearchItems searches across modules, settings, projects, tasks, and cases read-only', () => {
+test('W09: filterWorkspaceSearchItems searches across modules, foundation overview, settings, projects, tasks, and cases read-only', () => {
   const items = filterWorkspaceSearchItems({
     query: '连接',
     projects: [sampleProject()],
     cases: [sampleCase()],
   });
   assert.ok(items.some(item => item.id === 'settings:connection-settings'));
+  const overviewHits = filterWorkspaceSearchItems({ query: '建设总览', projects: [], cases: [] });
+  assert.ok(overviewHits.some(item => item.kind === 'view' && item.view === 'foundation'));
   const caseHits = filterWorkspaceSearchItems({ query: '复购', projects: [sampleProject()], cases: [sampleCase()] });
   assert.ok(caseHits.some(item => item.kind === 'case' && item.caseId === 'case-1'));
   assert.ok(caseHits.some(item => item.kind === 'task' && item.taskId === 'task-1'));
+  const revokedCases = filterWorkspaceSearchItems({ query: '复购', projects: [], cases: [] });
+  assert.equal(revokedCases.some(item => item.kind === 'case'), false);
   const none = filterWorkspaceSearchItems({ query: '不存在的关键词xyz', projects: [sampleProject()], cases: [sampleCase()] });
   assert.equal(none.length, 0);
 });
+
+test('R2 Finding 2: studio foundation aggregation scopes by selected enterprise, counts only formal-current as published, and surfaces 403/500', async () => {
+  const mod = await import('../src/host/ui/workspace-home-model.ts') as typeof import('../src/host/ui/workspace-home-model.ts') & {
+    resolveActiveStudioEnterprise?: (input: {
+      enterprises: readonly { id: string; name: string }[];
+      selectedEnterpriseId?: string;
+      currentProjectId?: string;
+      projectAssignments?: readonly { projectId: string; enterpriseId: string }[];
+    }) => { enterprise: { id: string; name: string } | null; unselected: boolean };
+    summarizeStudioFoundationSnapshots?: (input: {
+      enterprise: { id: string; name: string } | null;
+      unselected?: boolean;
+      systems: readonly { id: string; enterpriseId?: string | null }[];
+      foundationResult:
+        | { ok: true; items: readonly { authority: string; status: string }[] }
+        | { ok: false; state: 'forbidden' | 'unavailable'; message: string }
+        | null;
+    }) => { semantic: import('../src/host/ui/workspace-home-model.ts').HomeFoundationSnapshot; analysis: import('../src/host/ui/workspace-home-model.ts').HomeFoundationSnapshot };
+    summarizeStrategyFoundationSnapshot?: (input: {
+      initiatives: readonly { id: string }[];
+      publicationChecks: readonly ({ ok: true; hasActive: boolean } | { ok: false; state: 'forbidden' | 'unavailable'; message: string })[];
+    }) => import('../src/host/ui/workspace-home-model.ts').HomeFoundationSnapshot;
+  };
+  assert.equal(typeof mod.resolveActiveStudioEnterprise, 'function');
+  assert.equal(typeof mod.summarizeStudioFoundationSnapshots, 'function');
+  assert.equal(typeof mod.summarizeStrategyFoundationSnapshot, 'function');
+
+  const enterprises = [
+    { id: 'ent-1', name: '澄光零售' },
+    { id: 'ent-2', name: '北辰制造' },
+  ];
+  // Switching to ent-2 selects ent-2 (never hardcoded enterprises[0])
+  const picked = mod.resolveActiveStudioEnterprise!({ enterprises, selectedEnterpriseId: 'ent-2' });
+  assert.equal(picked.enterprise?.id, 'ent-2');
+  assert.equal(picked.unselected, false);
+
+  // Explicit empty string means user selected "尚未明确企业" in multi-enterprise directory
+  const cleared = mod.resolveActiveStudioEnterprise!({ enterprises, selectedEnterpriseId: '' });
+  assert.equal(cleared.enterprise, null);
+  assert.equal(cleared.unselected, true);
+
+  // Systems from ent-1 MUST NOT count toward ent-2; candidate SAP metric MUST NOT be labeled 已发布 / 正式资产!
+  const ent2CandidateOnly = mod.summarizeStudioFoundationSnapshots!({
+    enterprise: enterprises[1]!,
+    systems: [
+      { id: 'sys-ent1-a', enterpriseId: 'ent-1' },
+      { id: 'sys-ent1-b', enterpriseId: 'ent-1' },
+    ],
+    foundationResult: {
+      ok: true,
+      items: [
+        { authority: 'sap-metric', status: 'candidate' },
+      ],
+    },
+  });
+  assert.equal(ent2CandidateOnly.semantic.status, '未开始');
+  assert.notEqual(ent2CandidateOnly.analysis.status, '已发布');
+  assert.doesNotMatch(ent2CandidateOnly.analysis.detail, /\d+\s*项正式/);
+  assert.match(ent2CandidateOnly.analysis.detail, /候选/);
+
+  // Only formal-current counts as 已发布
+  const ent1Published = mod.summarizeStudioFoundationSnapshots!({
+    enterprise: enterprises[0]!,
+    systems: [{ id: 'sys-ent1-a', enterpriseId: 'ent-1' }],
+    foundationResult: {
+      ok: true,
+      items: [
+        { authority: 'rap', status: 'formal-current' },
+        { authority: 'sap-metric', status: 'formal-current' },
+        { authority: 'sap-method', status: 'candidate' },
+      ],
+    },
+  });
+  assert.equal(ent1Published.semantic.status, '已发布');
+  assert.match(ent1Published.semantic.detail, /1 项正式语义资产/);
+  assert.equal(ent1Published.analysis.status, '已发布');
+  assert.match(ent1Published.analysis.detail, /1 项正式分析资产/);
+
+  // 403 / 500 on readStudioFoundation must NOT be swallowed into 建设中 or 未开始
+  const forbiddenFoundation = mod.summarizeStudioFoundationSnapshots!({
+    enterprise: enterprises[1]!,
+    systems: [{ id: 'sys-ent2', enterpriseId: 'ent-2' }],
+    foundationResult: { ok: false, state: 'forbidden', message: '无权读取北辰制造资产目录' },
+  });
+  assert.equal(forbiddenFoundation.semantic.state, 'forbidden');
+  assert.equal(forbiddenFoundation.semantic.status, '无权限');
+  assert.equal(forbiddenFoundation.analysis.state, 'forbidden');
+  assert.equal(forbiddenFoundation.analysis.status, '无权限');
+
+  // Strategy initiatives > 5: active publication on the 6th initiative MUST be detected!
+  const sixInitiatives = Array.from({ length: 6 }, (_, i) => ({ id: `init-${i + 1}` }));
+  const strategySnap = mod.summarizeStrategyFoundationSnapshot!({
+    initiatives: sixInitiatives,
+    publicationChecks: sixInitiatives.map((_, idx) => ({ ok: true as const, hasActive: idx === 5 })),
+  });
+  assert.equal(strategySnap.status, '已发布');
+});
+
+test('R2 Finding 2 & 3: forbidden/unavailable Case states avoid empty-Case copy; multi-project completed/cancelled, report owner, and Decision Board actions stay accurate', () => {
+  const forbidden = buildWorkspaceHomeModel({
+    caseAccessState: 'forbidden',
+    caseAccessMessage: '当前身份暂无权读取 Case 记录。',
+    cases: [],
+    projectLinks: [],
+    projects: [sampleProject()],
+  });
+  assert.notEqual(forbidden.headline, '从第一个 Case 开始');
+  assert.match(forbidden.headline, /无权|权限/);
+  assert.equal(forbidden.focusStatusLabel, '无权限读取');
+
+  const unavailable = buildWorkspaceHomeModel({
+    caseAccessState: 'unavailable',
+    caseAccessMessage: 'Case 存储故障',
+    cases: [],
+    projectLinks: [],
+    projects: [sampleProject()],
+  });
+  assert.notEqual(unavailable.headline, '从第一个 Case 开始');
+  assert.equal(unavailable.focusStatusLabel, '暂不可读');
+
+  // Multi-project Case: P1 completed (owner 甲, no report), P2 cancelled (owner unset, has report R2)
+  const cMulti = sampleCase({ id: 'case-multi', title: '多项目状态与归属核对' });
+  const p1 = sampleProject({
+    id: 'p1',
+    name: '一号完成项目',
+    work: { ...sampleProject().work!, projectId: 'p1', workStatus: 'completed', assignee: '甲负责人' },
+  });
+  const p2 = sampleProject({
+    id: 'p2',
+    name: '二号取消项目',
+    work: { ...sampleProject().work!, projectId: 'p2', workStatus: 'cancelled', assignee: '' },
+  });
+  const multiDetail: CaseDetail = {
+    case: cMulti,
+    projectLinks: [
+      { caseId: cMulti.id, projectId: p1.id, linkedAt: '2026-11-25T08:10:00Z' },
+      { caseId: cMulti.id, projectId: p2.id, linkedAt: '2026-11-25T08:12:00Z' },
+    ],
+    artifacts: [{
+      id: 'art-p2', caseId: cMulti.id, projectId: p2.id, taskId: 'task-1', uploadId: null,
+      relativePath: '060_reports/二号项目报告.md', role: 'report', displayName: '二号项目报告',
+      observedSha256: 'b'.repeat(64), observedBytes: 512, observedAt: '2026-11-25T10:30:00Z',
+      createdAt: '2026-11-25T10:30:00Z', updatedAt: '2026-11-25T10:30:00Z', unlinkedAt: null,
+      availability: 'available', projectName: p2.name, taskName: '华东会员复购下滑分析',
+    }],
+    events: [],
+    projectEvents: [],
+    pendingOperations: [],
+  };
+
+  const multiModel = buildWorkspaceHomeModel({
+    caseAccessState: 'ready',
+    cases: [cMulti],
+    projectLinks: multiDetail.projectLinks,
+    focusDetail: multiDetail,
+    projects: [p1, p2],
+  });
+
+  // Proof chart for 2 projects must show 已完成 1 and 已取消 1 (never "待推进 / 观察 2"), and source must be projects (never P2's report!)
+  assert.equal(multiModel.proof.kind, 'grouped');
+  if (multiModel.proof.kind === 'grouped') {
+    assert.deepEqual(
+      multiModel.proof.groups.map(g => `${g.label}:${g.count}`),
+      ['已完成:1', '已取消:1'],
+    );
+    assert.equal(multiModel.proof.source?.kind, 'projects');
+  }
+  // Report queue item owner must come from P2 ('待定'), NEVER from P1 ('甲负责人')!
+  const r2Queue = multiModel.queue.find(item => item.kind === 'report');
+  assert.ok(r2Queue && r2Queue.kind === 'report');
+  assert.equal(r2Queue.owner, '待定');
+
+  // Decision Board actions aggregation: owner, dueDate, doing/todo/done counts, and Proof chart source = decision
+  const withActions = buildWorkspaceHomeModel({
+    caseAccessState: 'ready',
+    cases: [cMulti],
+    projectLinks: multiDetail.projectLinks,
+    focusDetail: multiDetail,
+    projects: [p1, p2],
+    boardActions: [
+      { id: 'act-1', itemId: 'item-1', projectId: p1.id, caseId: cMulti.id, title: '核查三家样板门店货架', owner: '王店长', dueDate: '2026-12-05', status: 'doing', updatedAt: '2026-11-26T09:00:00Z' },
+      { id: 'act-2', itemId: 'item-1', projectId: p1.id, caseId: cMulti.id, title: '提交补货调整单', owner: '', dueDate: '', status: 'todo', updatedAt: '2026-11-26T09:05:00Z' },
+    ],
+  } as Parameters<typeof buildWorkspaceHomeModel>[0]);
+
+  assert.equal(withActions.counts.inProgressActions, 1);
+  assert.equal(withActions.proof.kind, 'grouped');
+  if (withActions.proof.kind === 'grouped') {
+    assert.equal(withActions.proof.caption, '已关联行动进展');
+    assert.equal(withActions.proof.source?.kind, 'decision');
+  }
+  const actionItem = withActions.queue.find(item => item.id === 'action:act-1');
+  assert.ok(actionItem);
+  assert.equal(actionItem.owner, '王店长');
+  assert.equal(actionItem.statusLabel, '执行中');
+  assert.match(actionItem.dateLabel, /12\/05|2026-12-05/);
+  const pendingOwnerAction = withActions.queue.find(item => item.id === 'action:act-2');
+  assert.ok(pendingOwnerAction);
+  assert.equal(pendingOwnerAction.owner, '待定');
+  assert.match(pendingOwnerAction.dateLabel, /待定/);
+
+  // Closed-only Cases: closed Case must not enter queue or push its old report as pending review
+  const closedOnly = sampleCase({ id: 'case-closed-only', title: '已归档结案事项', status: 'closed', closeReason: '目标达成' });
+  const closedModel = buildWorkspaceHomeModel({
+    caseAccessState: 'ready',
+    cases: [closedOnly],
+    projectLinks: [{ caseId: closedOnly.id, projectId: p1.id, linkedAt: '2026-11-25T08:10:00Z' }],
+    focusDetail: { ...multiDetail, case: closedOnly },
+    projects: [p1],
+  });
+  assert.equal(closedModel.counts.activeCases, 0);
+  assert.equal(closedModel.queue.length, 0);
+});
+
