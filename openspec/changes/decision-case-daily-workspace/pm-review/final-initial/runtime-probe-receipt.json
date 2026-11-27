@@ -1,0 +1,46 @@
+{
+  "candidate": "7fe8e936d2463e514f2d8b08deae23f8c0467e24",
+  "ordinary": {
+    "dataRoot": "/workspace/OptraCall-issue149-final/.local/pm-final/runtime-tmp/optracall-host-test-sm9hx9/host",
+    "native": "/workspace/OptraCall-issue149-final/.local/pm-final/runtime-tmp/optracall-host-test-sm9hx9/host/projects/cc69392e-1dd3-403d-ad86-b70895a53772/tasks/946de7ac-ecfa-4a7d-b6b1-24f44a3506b2/sessions/2026-11-27T15-47-23-444Z_01a21db0-9cb2-70b6-a13d-d01ac5efa317.jsonl",
+    "tools": [
+      "read_case_sources",
+      "read_case_relations",
+      "save_case_relation",
+      "read_case_decisions",
+      "save_case_decision_draft",
+      "save_case_issue_edge",
+      "save_case_decision_request"
+    ],
+    "edgeCount": 1,
+    "requestCount": 1,
+    "toolResults": [
+      {
+        "tool": "save_case_issue_edge",
+        "isError": false,
+        "text": "{\"edgeId\":\"8e5a5fa6-a638-4284-9b77-b3f793ea2c93\",\"caseId\":\"aeb2a32a-cc0a-4a8d-804f-cc4eedd51799\",\"fromIssueId\":\"300d83e5-4769-42e1-84a5-f7ad9f71b427\",\"toIssueId\":\"9f603a9d-b0d5-4ed3-a05c-bf39fd22d60f\",\"revision\":1,\"lifecycle\":\"active\",\"explanation\":\"用户明确声明承接\",\"source\":{\"kind\":\"user-declaration\",\"ref\":\"01a21db0-9cb2-70b6-a13d-d01ac5efa317/e53c3ebb-13be-48ba-bca9-38c37733a7b1/call_1_0\"},\"operationId\":\"9f1ac5b3-6045-48cb-7142-a5d3952c8c3f\",\"createdAt\":\"2026-11-27T15:47:23.894Z\"}"
+      },
+      {
+        "tool": "save_case_decision_request",
+        "isError": false,
+        "text": "{\"requestId\":\"df74d75f-3db7-4bb4-baea-3e82d0193549\",\"revision\":1,\"caseId\":\"aeb2a32a-cc0a-4a8d-804f-cc4eedd51799\",\"issueId\":\"9f603a9d-b0d5-4ed3-a05c-bf39fd22d60f\",\"kind\":\"choose\",\"text\":\"请负责人选择\",\"source\":{\"kind\":\"agent-tool\",\"ref\":\"01a21db0-9cb2-70b6-a13d-d01ac5efa317/e53c3ebb-13be-48ba-bca9-38c37733a7b1/call_1_1\"},\"assignee\":{\"label\":\"负责人\",\"source\":\"本轮声明\"},\"requestedAt\":\"2026-11-27T15:47:23.909Z\",\"target\":{\"kind\":\"choose\",\"strategyRef\":{\"type\":\"case-decision\",\"caseStoreId\":\"232bb8dd-2f5f-4682-8b1d-ad6707623a15\",\"caseId\":\"aeb2a32a-cc0a-4a8d-804f-cc4eedd51799\",\"recordId\":\"542a6b5b-1be3-4d0c-a611-fc7264df13f9\",\"revision\":1},\"expectedPreviousChoiceId\":null},\"lifecycle\":\"open\",\"operationId\":\"7d0a14d8-b62f-b13c-87ff-d5fb37fd5b44\",\"createdAt\":\"2026-11-27T15:47:23.909Z\"}"
+      }
+    ]
+  },
+  "directory": {
+    "caseLimit": 1,
+    "items": 1,
+    "issues": 132,
+    "payloadCharacters": 39100,
+    "truncated": false,
+    "hasIssueContinuation": false,
+    "native": "/workspace/OptraCall-issue149-final/.local/pm-final/runtime-tmp/optracall-host-test-sm9hx9/host/business-role-discussions/5f1ea8a6-feac-868b-a71d-1e44573187fe/native/2026-11-27T15-47-28-847Z_01a21db0-b1ce-72c6-86d3-cfaefe0d9c33.jsonl",
+    "toolResults": [
+      {
+        "tool": "strategy_goals",
+        "isError": true,
+        "text": "strategy_discussion_materials_too_large"
+      }
+    ]
+  }
+}

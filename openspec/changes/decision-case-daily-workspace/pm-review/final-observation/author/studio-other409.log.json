@@ -1,0 +1,7 @@
+{
+  "originalFileName": "studio-other409.log",
+  "encoding": "utf-8",
+  "originalBytes": 1331,
+  "originalSha256": "8fb67070695986a9da0b5d8cffd92fa95403df7a3b683b0ee503a3db106907ac",
+  "content": "✖ Studio engineering flow uses real Host/Pi tools to construct sources and original SAP candidates, then publish exact versions (4543.14451ms)\nℹ tests 1\nℹ suites 0\nℹ pass 0\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 4855.663774\n\n✖ failing tests:\n\ntest at tests/studio-flow.test.ts:66:1\n✖ Studio engineering flow uses real Host/Pi tools to construct sources and original SAP candidates, then publish exact versions (4543.14451ms)\n  AssertionError [ERR_ASSERTION]: {\"code\":\"configuration_changed\",\"accepted\":false,\"message\":\"Synthetic one-observation response, original Host already answered.\"}\n  \n  409 !== 200\n  \n      at json (file:///workspace/OptraCall-issue149-final/tests/studio-flow.test.ts:10:81)\n      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n      at async run (file:///workspace/OptraCall-issue149-final/tests/studio-flow.test.ts:29:13)\n      at async TestContext.<anonymous> (file:///workspace/OptraCall-issue149-final/tests/studio-flow.test.ts:76:3)\n      at async Test.run (node:internal/test_runner/test:1208:7)\n      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {\n    generatedMessage: false,\n    code: 'ERR_ASSERTION',\n    actual: 409,\n    expected: 200,\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n"
+}

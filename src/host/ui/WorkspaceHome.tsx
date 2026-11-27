@@ -1,7 +1,8 @@
+import { HomeDailyQuickPanel } from './HomeDailyQuickPanel.tsx';
+import type { HomePendingItem } from '../home-pending.ts';
 import type { ClientProject } from './project-types.ts';
 import { useWorkspaceDeskData } from './use-workspace-desk-data.ts';
 import {
-  actionReadNotice,
   buildWorkspaceHomeModel,
   type HomeActivityTarget,
   type HomeFoundationId,
@@ -27,7 +28,9 @@ export interface WorkspaceHomeProps {
   refreshToken: number;
   preferredCaseId?: string;
   onCreateCase: () => void;
-  onOpenCase: (caseId: string) => void;
+  onOpenCase: (caseId: string, issueId?: string) => void;
+  onOpenRequest?: (item: HomePendingItem) => void;
+  hidePreparation?: boolean;
   onOpenStarMap: () => void;
   onOpenProjectMap: () => void;
   onOpenDecisionBoard: () => void;
@@ -56,6 +59,8 @@ export function WorkspaceHome({
   preferredCaseId,
   onCreateCase,
   onOpenCase,
+  onOpenRequest,
+  hidePreparation,
   onOpenStarMap,
   onOpenProjectMap,
   onOpenDecisionBoard,
@@ -100,7 +105,6 @@ export function WorkspaceHome({
     foundations: desk.foundations,
   });
 
-  const actionNotice = actionReadNotice[desk.actionReadState];
   const dateInfo = todayHeadingLabel();
   const isCaseRestricted = model.caseAccessState === 'forbidden' || model.caseAccessState === 'unavailable';
   const latestActiveTask = projects
@@ -117,6 +121,7 @@ export function WorkspaceHome({
   return (
     <div className="workspace-home-scroll">
       <section className="desk-home" role="region" aria-label="工作台首页">
+        <HomeDailyQuickPanel hidePreparation={hidePreparation} refreshToken={refreshToken} onOpenCase={(caseId: string, issueId?: string) => onOpenCase(caseId, issueId)} onOpenRequest={onOpenRequest} onCreateCase={onCreateCase} onOpenAllProjects={onOpenProjectMap} />
         <header className="dh-head">
           <div>
             <p className="dh-date"><time dateTime={dateInfo.iso}>{dateInfo.text}</time></p>
@@ -309,64 +314,6 @@ export function WorkspaceHome({
         </section>
 
         <div className="dh-sections">
-          <section aria-labelledby="my-queue">
-            <div className="dh-section-head">
-              <h2 id="my-queue">需要你处理</h2>
-              {isCaseRestricted ? (
-                <button type="button" className="dh-link-btn" onClick={onOpenProjectMap}>查看项目地图</button>
-              ) : (
-                <button type="button" className="dh-link-btn" onClick={onOpenStarMap}>查看全部 Case</button>
-              )}
-            </div>
-            {actionNotice && (
-              <div className="dh-empty" role="status">
-                <strong>{actionNotice}</strong>
-                {desk.actionReadState !== 'loading' && (
-                  <button type="button" className="text-button" onClick={desk.reload}>重新读取行动</button>
-                )}
-              </div>
-            )}
-            {model.queue.length ? (
-              <ul className="dh-queue-list" aria-label="需要你处理">
-                {model.queue.map(item => (
-                  <li key={item.id}>
-                    <button
-                      type="button"
-                      className="dh-queue-row"
-                      onClick={() => {
-                        if (item.kind === 'case') onOpenCase(item.caseId);
-                        else if (item.kind === 'action') onOpenDecisionBoard();
-                        else onOpenReport(item);
-                      }}
-                    >
-                      <span className={`dh-status ${item.tone}`}>{item.statusLabel}</span>
-                      <span className="dh-queue-topic">
-                        <strong>{item.title}</strong>
-                        <small>{item.context}</small>
-                      </span>
-                      <span className="dh-owner">
-                        <span>{item.owner}</span>
-                        <small>{item.dateLabel}</small>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : isCaseRestricted ? (
-              <div className="dh-empty">
-                <strong>{model.caseAccessState === 'forbidden' ? '暂无权限读取待处理 Case' : '待处理事项暂不可读取'}</strong>
-                <p>{model.caseAccessMessage || '可先前往项目地图推进已授权的项目与分析任务。'}</p>
-                <button type="button" className="text-button" onClick={onOpenProjectMap}>打开项目地图</button>
-              </div>
-            ) : actionNotice ? null : (
-              <div className="dh-empty">
-                <strong>还没有待处理事项</strong>
-                <p>可以从一个业务问题创建 Case，或到项目地图继续独立分析任务。</p>
-                <button type="button" className="text-button" onClick={onOpenProjectMap}>打开项目地图</button>
-              </div>
-            )}
-          </section>
-
           <section aria-labelledby="recent-activity">
             <div className="dh-section-head">
               <h2 id="recent-activity">最近活动</h2>

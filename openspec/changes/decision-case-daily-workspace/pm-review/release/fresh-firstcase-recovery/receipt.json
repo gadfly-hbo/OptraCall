@@ -1,0 +1,67 @@
+{
+  "head": "6bc7be2849d280e5e6a6e598ee6b7a68dd5e48eb",
+  "scratch": "/tmp/issue149-independent-ui-Eqez3v",
+  "dropAck": true,
+  "steps": [
+    {
+      "name": "VISITED_EMPTY_CASE_OVERVIEW_WITHOUT_INITIALIZING"
+    },
+    {
+      "name": "FRESH_GETS_AND_PREPARATION_DO_NOT_INITIALIZE_CASE_STORAGE"
+    },
+    {
+      "name": "FIRST_CREATE_COMMITTED_BUT_ACK_LOST_INPUT_AND_RECEIPTS_RETAINED",
+      "adopt": {
+        "goalId": "0042345b-41b6-4187-bedf-19cc39533fa8",
+        "version": 1,
+        "strategy": "首用明确具体S",
+        "operationId": "226330da-2db1-4894-ba37-719f5f296011",
+        "adoptedAt": "2026-11-27T16:30:25.454Z"
+      },
+      "create": {
+        "caseId": "6b252894-4f11-45bc-9cdf-7ddc5fef0d40",
+        "operationId": "392e7570-d046-49bc-85fc-fcbce5b2e6f8",
+        "createdAt": "2026-11-27T16:30:25.473Z"
+      }
+    },
+    {
+      "name": "EXPLICIT_FIRST_CREATE_INITIALIZES_AND_SAVES_ONE_CASE_ONE_ISSUE",
+      "caseId": "6b252894-4f11-45bc-9cdf-7ddc5fef0d40",
+      "issueId": "11ea5407-2774-4b43-96b5-b14557915582"
+    },
+    {
+      "name": "FRESH_FIRST_ISSUE_FRAGMENT_AND_REAL_COMPOSER_REOPEN_NO_SEND"
+    },
+    {
+      "name": "SAME_MOUNTED_ISSUE_NEW_FRAGMENT_VISIBLE_WITHOUT_CASE_REVISION_OR_OVERWRITE"
+    },
+    {
+      "name": "SAME_FRAGMENT_REPEAT_ACKNOWLEDGED_WITHOUT_DUPLICATION_OR_STUCK_NOTICE"
+    },
+    {
+      "name": "EXISTING_CASE_DATA_AND_MANUAL_SCOPE_PRESERVED_NO_REINITIALIZATION_OR_SEND"
+    }
+  ],
+  "networkMessages": [],
+  "createRequests": [
+    "{\"draftId\":\"prepare-4a3a8803-692c-4438-a861-8b54cf7ffc66\",\"title\":\"干净首用第一Case\",\"description\":\"干净首用完整背景\",\"rawInput\":\"干净首用原输入 <img src=x onerror=\\\"window.__freshXss=1\\\">\",\"goal\":{\"goalId\":\"0042345b-41b6-4187-bedf-19cc39533fa8\",\"version\":1,\"strategy\":\"首用明确具体S\",\"alreadyAdopted\":false},\"adoptOperationId\":\"226330da-2db1-4894-ba37-719f5f296011\",\"createOperationId\":\"392e7570-d046-49bc-85fc-fcbce5b2e6f8\"}"
+  ],
+  "base": "http://127.0.0.1:36971",
+  "originalReceipts": {
+    "adopt": {
+      "goalId": "0042345b-41b6-4187-bedf-19cc39533fa8",
+      "version": 1,
+      "strategy": "首用明确具体S",
+      "operationId": "226330da-2db1-4894-ba37-719f5f296011",
+      "adoptedAt": "2026-11-27T16:30:25.454Z"
+    },
+    "create": {
+      "caseId": "6b252894-4f11-45bc-9cdf-7ddc5fef0d40",
+      "operationId": "392e7570-d046-49bc-85fc-fcbce5b2e6f8",
+      "createdAt": "2026-11-27T16:30:25.473Z"
+    }
+  },
+  "caseId": "6b252894-4f11-45bc-9cdf-7ddc5fef0d40",
+  "issueId": "11ea5407-2774-4b43-96b5-b14557915582",
+  "result": "PASS"
+}

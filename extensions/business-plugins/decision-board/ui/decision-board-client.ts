@@ -1,5 +1,5 @@
 import type { BoardProjectSummary, BoardReportView, BoardView } from '../api/routes.ts';
-import type { BoardItemRecord, BoardItemView, BoardTaskRecord, BoardTaskView, ExtractionRecord, TaskFeedbackRevision, BoardActionAuthorization } from '../types.ts';
+import type { BoardItemRecord, BoardItemView, BoardTaskRecord, BoardTaskView, ExtractionRecord, TaskFeedbackRevision, BoardActionAuthorization, FeedbackRequestResponseRef } from '../types.ts';
 
 export type { BoardProjectSummary, BoardReportView, BoardView, BoardItemView, BoardTaskView };
 
@@ -20,6 +20,7 @@ const messages: Record<string, string> = {
   feedback_revision_conflict: '反馈已有新版本。当前输入仍保留，请查看历史后重新核对。',
   feedback_operation_conflict: '原保存意图与本次内容不同，请先查询原操作。',
   feedback_intent_required: '请刷新页面后使用带保存意图的新反馈入口。',
+  case_decision_request_conflict: '明确请求已有新修订，当前输入保留，请重读原请求后核对。',
   invalid_text: '输入内容不完整、为空或超过长度限制。',
 };
 export class BoardRequestError extends Error {
@@ -40,7 +41,7 @@ export const dismissItem = (id: string, reason: string) => request<{ item: Board
 export const addManualItem = (input: { projectId: string; title: string; rationale: string; expectedImpact?: string; priority?: string }) => request<{ item: BoardItemRecord }>('items', 'POST', input);
 export const addTask = (itemId: string, input: { title: string; owner?: string; dueDate?: string; priority?: string; note?: string }) => request<{ task: BoardTaskRecord }>(`items/${encodeURIComponent(itemId)}/tasks`, 'POST', input);
 export const setTaskStatus = (taskId: string, status: string) => request<{ task: BoardTaskRecord }>(`tasks/${encodeURIComponent(taskId)}/status`, 'POST', { status });
-export type FeedbackInput = { operationId: string; expectedLatestRevisionId: string | null; adopted: boolean; outcome: string; metricDelta: string; review: string; score: number | null; effect: 'unknown' | 'positive' | 'negative' | 'none' };
+export type FeedbackInput = { operationId: string; expectedLatestRevisionId: string | null; adopted: boolean; outcome: string; metricDelta: string; review: string; score: number | null; effect: 'unknown' | 'positive' | 'negative' | 'none'; respondsToRequest?: FeedbackRequestResponseRef };
 export const saveFeedback = (taskId: string, input: FeedbackInput) => request<{ feedback: TaskFeedbackRevision }>(`tasks/${encodeURIComponent(taskId)}/feedback`, 'POST', input);
 export const feedbackHistory = (taskId: string) => request<{ revisions: TaskFeedbackRevision[] }>(`feedback/history?taskId=${encodeURIComponent(taskId)}`);
 export const feedbackOperation = (operationId: string) => request<{ feedback: TaskFeedbackRevision | null }>(`feedback/operations/${encodeURIComponent(operationId)}`);

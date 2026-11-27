@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { parseUserQuoteProvenance, type UserQuoteProvenance } from '../../../../src/agent/quoted-decisions.ts';
 import type { BoardActionAuthorization, BoardActionAuthorizationInput, BoardAuthorizationSource, BoardArrangeAction, BoardArrangeActionsInput, BoardArrangementReceipt } from '../types.ts';
-import { EVIDENCE_CONFIDENCE, PRIORITIES, EVIDENCE_LEVELS, type ConfirmReportConclusionsInput, type ConfirmedConclusionRecord, type ConfirmedReviewClaim, type ConfirmedReviewEvidence, type ReportConfirmationReceipt, type ReportConfirmationSource, type BoardItemRecord, type BoardTaskRecord, type Evidence, type EvidenceLevel, type ExtractionConfiguration, type ExtractionRecord, type FeedbackEffect, type NormalizedItem, type Priority, type ReportRecord, type SaveFeedbackInput, type TaskFeedbackRevision } from '../types.ts';
+import { EVIDENCE_CONFIDENCE, PRIORITIES, EVIDENCE_LEVELS, type ConfirmReportConclusionsInput, type ConfirmedConclusionRecord, type ConfirmedReviewClaim, type ConfirmedReviewEvidence, type ReportConfirmationReceipt, type ReportConfirmationSource, type BoardItemRecord, type BoardTaskRecord, type Evidence, type EvidenceLevel, type ExtractionConfiguration, type ExtractionRecord, type FeedbackEffect, type NormalizedItem, type Priority, type ReportRecord, type SaveFeedbackInput, type TaskFeedbackRevision, type FeedbackRequestResponseRef } from '../types.ts';
 
 export class DecisionBoardFault extends Error {
   readonly code: string;
@@ -127,6 +127,11 @@ CREATE TABLE arrangement_operations (
 PRAGMA user_version=5;
 `;
 
+const REQUEST_RESPONSE_SCHEMA = `
+ALTER TABLE feedback_revisions ADD COLUMN responds_to_request_json TEXT;
+PRAGMA user_version=6;
+`;
+
 // SQLite cannot ALTER a CHECK constraint. Replace only board_items inside the
 // migration transaction; all original columns and row values are copied intact.
 const CONFIRMATION_ITEMS_SCHEMA = SCHEMA.slice(SCHEMA.indexOf('CREATE TABLE board_items ('), SCHEMA.indexOf('CREATE TABLE board_tasks ('))
@@ -173,9 +178,10 @@ const extraction = (row: Record<string, unknown>): ExtractionRecord => {
   return { ...value, configuration: JSON.parse(String(row.configuration_json)) as ExtractionConfiguration, truncated: Number(row.truncated) === 1 };
 };
 const feedback = (row: Record<string, unknown>): TaskFeedbackRevision => {
-  const record = strip(camel(row), ['quoteProvenanceJson']) as unknown as TaskFeedbackRevision;
+  const record = strip(camel(row), ['quoteProvenanceJson', 'respondsToRequestJson']) as unknown as TaskFeedbackRevision;
   return { ...record, adopted: Number(row.adopted) === 1, createdAt: record.legacyCreatedAt ?? record.savedAt, updatedAt: record.legacyUpdatedAt ?? record.savedAt,
-    ...(row.quote_provenance_json == null ? {} : { quoteProvenance: parseUserQuoteProvenance(JSON.parse(String(row.quote_provenance_json))) }) };
+    ...(row.quote_provenance_json == null ? {} : { quoteProvenance: parseUserQuoteProvenance(JSON.parse(String(row.quote_provenance_json))) }),
+    ...(row.responds_to_request_json == null ? {} : { respondsToRequest: JSON.parse(String(row.responds_to_request_json)) as FeedbackRequestResponseRef }) };
 };
 
 function text(value: unknown, max: number, required = false): string {
@@ -243,6 +249,7 @@ function validateSchema(db: DatabaseSync, version: number): void {
     if (version >= 3) migrateConfirmations(expected);
     if (version >= 4) expected.exec(AUTHORIZATION_SCHEMA);
     if (version >= 5) expected.exec(ARRANGEMENT_SCHEMA);
+    if (version >= 6) expected.exec(REQUEST_RESPONSE_SCHEMA);
     if (JSON.stringify(schemaInventory(db)) !== JSON.stringify(schemaInventory(expected))) fail('unsupported_board_schema');
   } finally { expected.close(); }
   if (db.prepare('PRAGMA integrity_check').get()?.integrity_check !== 'ok' || db.prepare('PRAGMA foreign_key_check').all().length) fail('invalid_board_database');
@@ -262,7 +269,13 @@ function feedbackInput(taskId: string, input: SaveFeedbackInput) {
   };
   // This fixed object order is the canonical payload; absent optional fields
   // normalize to the same explicit values as the corresponding UI controls.
-  return { taskId, operationId, expectedLatestRevisionId, adopted: input.adopted, outcome: bounded(input.outcome, 4000), metricDelta: bounded(input.metricDelta, 1000), review: bounded(input.review, 4000), score, effect: effect as FeedbackEffect };
+  let respondsToRequest: FeedbackRequestResponseRef | undefined;
+  if (input.respondsToRequest !== undefined) {
+    const r = input.respondsToRequest;
+    if (!r || typeof r !== 'object' || !Number.isSafeInteger(r.revision) || r.revision < 1) fail('invalid_feedback');
+    respondsToRequest = { requestId: uuid(r.requestId), revision: r.revision, authorizationId: uuid(r.authorizationId) };
+  }
+  return { taskId, operationId, expectedLatestRevisionId, adopted: input.adopted, outcome: bounded(input.outcome, 4000), metricDelta: bounded(input.metricDelta, 1000), review: bounded(input.review, 4000), score, effect: effect as FeedbackEffect, ...(respondsToRequest ? { respondsToRequest } : {}) };
 }
 
 function confirmationInput(input: ConfirmReportConclusionsInput) {
@@ -311,7 +324,7 @@ export function createDecisionBoardStore(options: { root: string }) {
       if (!after.isFile() || after.isSymbolicLink() || after.nlink !== 1 || stat.ino !== after.ino || stat.dev !== after.dev) fail('unsafe_board_storage');
       db.exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=1000;');
       const version = (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
-      if (![0, 1, 2, 3, 4, 5].includes(version)) fail('unsupported_board_schema');
+      if (![0, 1, 2, 3, 4, 5, 6].includes(version)) fail('unsupported_board_schema');
       validateSchema(db, version);
       db.exec('PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;');
       if (db.prepare('PRAGMA journal_mode').get()?.journal_mode !== 'delete' || db.prepare('PRAGMA synchronous').get()?.synchronous !== 2 || db.prepare('PRAGMA foreign_keys').get()?.foreign_keys !== 1) fail('unsafe_board_storage');
@@ -660,8 +673,19 @@ export function createDecisionBoardStore(options: { root: string }) {
       const latest = database().prepare('SELECT revision_id,revision_number FROM feedback_revisions WHERE task_id=? ORDER BY revision_number DESC LIMIT 1').get(taskId);
       if ((latest?.revision_id ?? null) !== clean.expectedLatestRevisionId) fail('feedback_revision_conflict');
       const revisionId = randomUUID();
-      database().prepare(`INSERT INTO feedback_revisions (revision_id,task_id,revision_number,operation_id,request_sha256,adopted,outcome,metric_delta,review,score,effect,saved_at,origin,legacy_created_at,legacy_updated_at,quote_provenance_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'user-save',NULL,NULL,?)`)
-        .run(revisionId, taskId, Number(latest?.revision_number ?? 0) + 1, clean.operationId, digest, clean.adopted ? 1 : 0, clean.outcome, clean.metricDelta, clean.review, clean.score, clean.effect, now(), clean.quoteProvenance ? JSON.stringify(clean.quoteProvenance) : null);
+      const schemaVersion = Number((database().prepare('PRAGMA user_version').get() as { user_version: number }).user_version);
+      if (clean.respondsToRequest && schemaVersion < 6) {
+        if (schemaVersion < 5) database().exec(ARRANGEMENT_SCHEMA);
+        database().exec(REQUEST_RESPONSE_SCHEMA);
+      }
+      const hasResp = clean.respondsToRequest || schemaVersion >= 6;
+      if (hasResp) {
+        database().prepare(`INSERT INTO feedback_revisions (revision_id,task_id,revision_number,operation_id,request_sha256,adopted,outcome,metric_delta,review,score,effect,saved_at,origin,legacy_created_at,legacy_updated_at,quote_provenance_json,responds_to_request_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'user-save',NULL,NULL,?,?)`)
+          .run(revisionId, taskId, Number(latest?.revision_number ?? 0) + 1, clean.operationId, digest, clean.adopted ? 1 : 0, clean.outcome, clean.metricDelta, clean.review, clean.score, clean.effect, now(), clean.quoteProvenance ? JSON.stringify(clean.quoteProvenance) : null, clean.respondsToRequest ? JSON.stringify(clean.respondsToRequest) : null);
+      } else {
+        database().prepare(`INSERT INTO feedback_revisions (revision_id,task_id,revision_number,operation_id,request_sha256,adopted,outcome,metric_delta,review,score,effect,saved_at,origin,legacy_created_at,legacy_updated_at,quote_provenance_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'user-save',NULL,NULL,?)`)
+          .run(revisionId, taskId, Number(latest?.revision_number ?? 0) + 1, clean.operationId, digest, clean.adopted ? 1 : 0, clean.outcome, clean.metricDelta, clean.review, clean.score, clean.effect, now(), clean.quoteProvenance ? JSON.stringify(clean.quoteProvenance) : null);
+      }
       writes = true;
       return getFeedbackRevision(revisionId)!;
     }, false, () => { if (writes) options?.assertWritable?.(); });

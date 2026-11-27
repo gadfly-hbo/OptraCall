@@ -1,0 +1,503 @@
+{
+  "candidate": "6bc7be2849d280e5e6a6e598ee6b7a68dd5e48eb",
+  "hostScratch": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-followup-probes/tmp/optracall-host-test-NftfiT",
+  "dataRoot": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-followup-probes/tmp/optracall-host-test-NftfiT/host",
+  "results": [
+    "strategy_candidate_fields_invalid：候选保存仅接受 operationId、candidateBlocks 和可选 candidateGoals；候选版本身份（如 candidateId、no、version）由 Host 绑定，请移除不允许字段后重试；本次未写入。：{\"issues\":[{\"reason\":\"unknown_field\",\"path\":\"version\"},{\"reason\":\"unknown_field\",\"path\":\"no\"}]}",
+    "strategy_candidate_operation_invalid：缺少必填的 operationId（标准小写 UUID 字符串）；请补充稳定操作编号后重试；本次未写入。：{\"issues\":[{\"reason\":\"required\",\"path\":\"operationId\"}]}",
+    "strategy_candidate_schema_invalid：候选章节 candidateBlocks 校验失败，请按 details.issues 的 path/reason 修正（需 1–20 项，每项含唯一 id ^[A-Za-z0-9_-]{1,40}$、非空 label ≤ 200 字、非空 text ≤ 20000 字）；本次未写入。：{\"issues\":[{\"reason\":\"too_few\",\"path\":\"candidateBlocks\"}]}",
+    "strategy_candidate_schema_invalid：候选章节 candidateBlocks 校验失败，请按 details.issues 的 path/reason 修正（需 1–20 项，每项含唯一 id ^[A-Za-z0-9_-]{1,40}$、非空 label ≤ 200 字、非空 text ≤ 20000 字）；本次未写入。：{\"issues\":[{\"reason\":\"duplicate_id\",\"path\":\"candidateBlocks[1].id\"}]}",
+    "strategy_candidate_schema_invalid：候选章节 candidateBlocks 校验失败，请按 details.issues 的 path/reason 修正（需 1–20 项，每项含唯一 id ^[A-Za-z0-9_-]{1,40}$、非空 label ≤ 200 字、非空 text ≤ 20000 字）；本次未写入。：{\"issues\":[{\"reason\":\"invalid_id\",\"path\":\"candidateBlocks[0].id\"}]}",
+    "Validation failed for tool \"strategy_goals\":\n  - candidateGoals.0: must be string\n\nReceived arguments:\n{\n  \"action\": \"initiative-save-candidate\",\n  \"operationId\": \"05475b60-ca21-4f72-9312-65b9a8d656b6\",\n  \"candidateBlocks\": [\n    {\n      \"id\": \"B1\",\n      \"label\": \"战略定位与增长路径\",\n      \"text\": \"对象目标：深耕现有门店，先验证再推广。\"\n    },\n    {\n      \"id\": \"B2\",\n      \"label\": \"三年目标与里程碑\",\n      \"text\": \"2027 试点，2028 推广，2029 达成核心指标。\"\n    },\n    {\n      \"id\": \"B3\",\n      \"label\": \"资源分配与明确不做\",\n      \"text\": \"优先配置试点工时，暂缓大规模开店。\"\n    }\n  ],\n  \"candidateGoals\": [\n    {\n      \"title\": \"非法对象目标\"\n    }\n  ]\n}",
+    "{\"candidate\":{\"candidateId\":\"37675ad9-373e-4c38-bf79-dd4c4cb982a9\",\"no\":1,\"contentSha256\":\"e062d010bc388420aa24a61c59b8ddcaa0fc1d5f18f870314d4d36724b065795\"},\"receipt\":{\"operationId\":\"0937f37e-263f-42f0-9260-1708d559824d\",\"contentSha256\":\"e062d010bc388420aa24a61c59b8ddcaa0fc1d5f18f870314d4d36724b065795\",\"at\":\"2026-11-27T17:04:20.345Z\",\"requestId\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\"},\"claim\":\"draft-saved-lock-by-decision-maker\"}",
+    "{\"candidate\":{\"candidateId\":\"37675ad9-373e-4c38-bf79-dd4c4cb982a9\",\"no\":1,\"contentSha256\":\"d78bd68d6750a4fa3bea1435b76ff2476e23d9d8f089127f7f5a8c92e0e9ae92\"},\"receipt\":{\"operationId\":\"f570aff9-1b47-4073-ae35-cd579b25c914\",\"contentSha256\":\"d78bd68d6750a4fa3bea1435b76ff2476e23d9d8f089127f7f5a8c92e0e9ae92\",\"at\":\"2026-11-27T17:04:20.393Z\",\"requestId\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\"},\"claim\":\"draft-saved-lock-by-decision-maker\"}"
+  ],
+  "snapshots": [
+    {
+      "step": 0,
+      "capturedAt": "2026-11-27T17:04:20.103Z",
+      "sha256": "6d97310c3b0a106299516557429a66a4253c914f75ed09081df968903d2fcbaa",
+      "bytes": "{\"formatVersion\":1,\"candidates\":[{\"initiativeId\":\"0f1446af-950e-4676-8f30-420f251e860f\",\"candidateId\":\"37675ad9-373e-4c38-bf79-dd4c4cb982a9\",\"no\":1,\"scopeKey\":\"department:ent-1:east-retail\",\"title\":\"校验修正候选\",\"anchor\":{\"reportNo\":1,\"contentSha256\":\"f9343b91a02ed55898cd644be2123797214c17946afeb12c3d0f23bcae0b868b\"},\"blocks\":[],\"goals\":[],\"contentSha256\":\"42fde8d63b57d1c8072e4b7db4a0fc8502a86981551f08a11bfd7dff1115f41d\",\"configurationId\":\"9c6daaca-534f-4aa8-b848-58c51653da39\",\"configurationRevision\":1,\"revision\":2,\"createOperationId\":\"9b5b302b-ba10-49d8-984c-4750cd860b0f\",\"instruction\":\"测试校验定位并修正保存。\",\"createdAt\":\"2026-11-27T17:04:18.670Z\",\"updatedAt\":\"2026-11-27T17:04:18.674Z\",\"lastRun\":{\"id\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\",\"fingerprint\":\"a15aaf8c582d50a930be89f821041028226c8f76f6ff9fd9f68a91294b216e88\",\"status\":\"accepted\"},\"pendingInput\":{\"requestId\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\",\"text\":\"测试校验定位并修正保存。\",\"expectedRevision\":1},\"sessionFile\":\"/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-followup-probes/tmp/optracall-host-test-NftfiT/host/strategy-initiatives/0f1446af-950e-4676-8f30-420f251e860f/native/cand-f0e020ca1678b505/2026-11-27T17-04-19-896Z_01a21df7-0db6-771e-bbf5-304081eb4d3d.jsonl\",\"createRequestId\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\"}],\"proposals\":[]}\n",
+      "value": {
+        "formatVersion": 1,
+        "candidates": [
+          {
+            "initiativeId": "0f1446af-950e-4676-8f30-420f251e860f",
+            "candidateId": "37675ad9-373e-4c38-bf79-dd4c4cb982a9",
+            "no": 1,
+            "scopeKey": "department:ent-1:east-retail",
+            "title": "校验修正候选",
+            "anchor": {
+              "reportNo": 1,
+              "contentSha256": "f9343b91a02ed55898cd644be2123797214c17946afeb12c3d0f23bcae0b868b"
+            },
+            "blocks": [],
+            "goals": [],
+            "contentSha256": "42fde8d63b57d1c8072e4b7db4a0fc8502a86981551f08a11bfd7dff1115f41d",
+            "configurationId": "9c6daaca-534f-4aa8-b848-58c51653da39",
+            "configurationRevision": 1,
+            "revision": 2,
+            "createOperationId": "9b5b302b-ba10-49d8-984c-4750cd860b0f",
+            "instruction": "测试校验定位并修正保存。",
+            "createdAt": "2026-11-27T17:04:18.670Z",
+            "updatedAt": "2026-11-27T17:04:18.674Z",
+            "lastRun": {
+              "id": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9",
+              "fingerprint": "a15aaf8c582d50a930be89f821041028226c8f76f6ff9fd9f68a91294b216e88",
+              "status": "accepted"
+            },
+            "pendingInput": {
+              "requestId": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9",
+              "text": "测试校验定位并修正保存。",
+              "expectedRevision": 1
+            },
+            "sessionFile": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-followup-probes/tmp/optracall-host-test-NftfiT/host/strategy-initiatives/0f1446af-950e-4676-8f30-420f251e860f/native/cand-f0e020ca1678b505/2026-11-27T17-04-19-896Z_01a21df7-0db6-771e-bbf5-304081eb4d3d.jsonl",
+            "createRequestId": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9"
+          }
+        ],
+        "proposals": []
+      }
+    },
+    {
+      "step": 1,
+      "capturedAt": "2026-11-27T17:04:20.166Z",
+      "sha256": "6d97310c3b0a106299516557429a66a4253c914f75ed09081df968903d2fcbaa",
+      "bytes": "{\"formatVersion\":1,\"candidates\":[{\"initiativeId\":\"0f1446af-950e-4676-8f30-420f251e860f\",\"candidateId\":\"37675ad9-373e-4c38-bf79-dd4c4cb982a9\",\"no\":1,\"scopeKey\":\"department:ent-1:east-retail\",\"title\":\"校验修正候选\",\"anchor\":{\"reportNo\":1,\"contentSha256\":\"f9343b91a02ed55898cd644be2123797214c17946afeb12c3d0f23bcae0b868b\"},\"blocks\":[],\"goals\":[],\"contentSha256\":\"42fde8d63b57d1c8072e4b7db4a0fc8502a86981551f08a11bfd7dff1115f41d\",\"configurationId\":\"9c6daaca-534f-4aa8-b848-58c51653da39\",\"configurationRevision\":1,\"revision\":2,\"createOperationId\":\"9b5b302b-ba10-49d8-984c-4750cd860b0f\",\"instruction\":\"测试校验定位并修正保存。\",\"createdAt\":\"2026-11-27T17:04:18.670Z\",\"updatedAt\":\"2026-11-27T17:04:18.674Z\",\"lastRun\":{\"id\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\",\"fingerprint\":\"a15aaf8c582d50a930be89f821041028226c8f76f6ff9fd9f68a91294b216e88\",\"status\":\"accepted\"},\"pendingInput\":{\"requestId\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\",\"text\":\"测试校验定位并修正保存。\",\"expectedRevision\":1},\"sessionFile\":\"/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-followup-probes/tmp/optracall-host-test-NftfiT/host/strategy-initiatives/0f1446af-950e-4676-8f30-420f251e860f/native/cand-f0e020ca1678b505/2026-11-27T17-04-19-896Z_01a21df7-0db6-771e-bbf5-304081eb4d3d.jsonl\",\"createRequestId\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\"}],\"proposals\":[]}\n",
+      "value": {
+        "formatVersion": 1,
+        "candidates": [
+          {
+            "initiativeId": "0f1446af-950e-4676-8f30-420f251e860f",
+            "candidateId": "37675ad9-373e-4c38-bf79-dd4c4cb982a9",
+            "no": 1,
+            "scopeKey": "department:ent-1:east-retail",
+            "title": "校验修正候选",
+            "anchor": {
+              "reportNo": 1,
+              "contentSha256": "f9343b91a02ed55898cd644be2123797214c17946afeb12c3d0f23bcae0b868b"
+            },
+            "blocks": [],
+            "goals": [],
+            "contentSha256": "42fde8d63b57d1c8072e4b7db4a0fc8502a86981551f08a11bfd7dff1115f41d",
+            "configurationId": "9c6daaca-534f-4aa8-b848-58c51653da39",
+            "configurationRevision": 1,
+            "revision": 2,
+            "createOperationId": "9b5b302b-ba10-49d8-984c-4750cd860b0f",
+            "instruction": "测试校验定位并修正保存。",
+            "createdAt": "2026-11-27T17:04:18.670Z",
+            "updatedAt": "2026-11-27T17:04:18.674Z",
+            "lastRun": {
+              "id": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9",
+              "fingerprint": "a15aaf8c582d50a930be89f821041028226c8f76f6ff9fd9f68a91294b216e88",
+              "status": "accepted"
+            },
+            "pendingInput": {
+              "requestId": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9",
+              "text": "测试校验定位并修正保存。",
+              "expectedRevision": 1
+            },
+            "sessionFile": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-followup-probes/tmp/optracall-host-test-NftfiT/host/strategy-initiatives/0f1446af-950e-4676-8f30-420f251e860f/native/cand-f0e020ca1678b505/2026-11-27T17-04-19-896Z_01a21df7-0db6-771e-bbf5-304081eb4d3d.jsonl",
+            "createRequestId": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9"
+          }
+        ],
+        "proposals": []
+      }
+    },
+    {
+      "step": 2,
+      "capturedAt": "2026-11-27T17:04:20.211Z",
+      "sha256": "6d97310c3b0a106299516557429a66a4253c914f75ed09081df968903d2fcbaa",
+      "bytes": "{\"formatVersion\":1,\"candidates\":[{\"initiativeId\":\"0f1446af-950e-4676-8f30-420f251e860f\",\"candidateId\":\"37675ad9-373e-4c38-bf79-dd4c4cb982a9\",\"no\":1,\"scopeKey\":\"department:ent-1:east-retail\",\"title\":\"校验修正候选\",\"anchor\":{\"reportNo\":1,\"contentSha256\":\"f9343b91a02ed55898cd644be2123797214c17946afeb12c3d0f23bcae0b868b\"},\"blocks\":[],\"goals\":[],\"contentSha256\":\"42fde8d63b57d1c8072e4b7db4a0fc8502a86981551f08a11bfd7dff1115f41d\",\"configurationId\":\"9c6daaca-534f-4aa8-b848-58c51653da39\",\"configurationRevision\":1,\"revision\":2,\"createOperationId\":\"9b5b302b-ba10-49d8-984c-4750cd860b0f\",\"instruction\":\"测试校验定位并修正保存。\",\"createdAt\":\"2026-11-27T17:04:18.670Z\",\"updatedAt\":\"2026-11-27T17:04:18.674Z\",\"lastRun\":{\"id\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\",\"fingerprint\":\"a15aaf8c582d50a930be89f821041028226c8f76f6ff9fd9f68a91294b216e88\",\"status\":\"accepted\"},\"pendingInput\":{\"requestId\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\",\"text\":\"测试校验定位并修正保存。\",\"expectedRevision\":1},\"sessionFile\":\"/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-followup-probes/tmp/optracall-host-test-NftfiT/host/strategy-initiatives/0f1446af-950e-4676-8f30-420f251e860f/native/cand-f0e020ca1678b505/2026-11-27T17-04-19-896Z_01a21df7-0db6-771e-bbf5-304081eb4d3d.jsonl\",\"createRequestId\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\"}],\"proposals\":[]}\n",
+      "value": {
+        "formatVersion": 1,
+        "candidates": [
+          {
+            "initiativeId": "0f1446af-950e-4676-8f30-420f251e860f",
+            "candidateId": "37675ad9-373e-4c38-bf79-dd4c4cb982a9",
+            "no": 1,
+            "scopeKey": "department:ent-1:east-retail",
+            "title": "校验修正候选",
+            "anchor": {
+              "reportNo": 1,
+              "contentSha256": "f9343b91a02ed55898cd644be2123797214c17946afeb12c3d0f23bcae0b868b"
+            },
+            "blocks": [],
+            "goals": [],
+            "contentSha256": "42fde8d63b57d1c8072e4b7db4a0fc8502a86981551f08a11bfd7dff1115f41d",
+            "configurationId": "9c6daaca-534f-4aa8-b848-58c51653da39",
+            "configurationRevision": 1,
+            "revision": 2,
+            "createOperationId": "9b5b302b-ba10-49d8-984c-4750cd860b0f",
+            "instruction": "测试校验定位并修正保存。",
+            "createdAt": "2026-11-27T17:04:18.670Z",
+            "updatedAt": "2026-11-27T17:04:18.674Z",
+            "lastRun": {
+              "id": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9",
+              "fingerprint": "a15aaf8c582d50a930be89f821041028226c8f76f6ff9fd9f68a91294b216e88",
+              "status": "accepted"
+            },
+            "pendingInput": {
+              "requestId": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9",
+              "text": "测试校验定位并修正保存。",
+              "expectedRevision": 1
+            },
+            "sessionFile": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-followup-probes/tmp/optracall-host-test-NftfiT/host/strategy-initiatives/0f1446af-950e-4676-8f30-420f251e860f/native/cand-f0e020ca1678b505/2026-11-27T17-04-19-896Z_01a21df7-0db6-771e-bbf5-304081eb4d3d.jsonl",
+            "createRequestId": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9"
+          }
+        ],
+        "proposals": []
+      }
+    },
+    {
+      "step": 3,
+      "capturedAt": "2026-11-27T17:04:20.260Z",
+      "sha256": "6d97310c3b0a106299516557429a66a4253c914f75ed09081df968903d2fcbaa",
+      "bytes": "{\"formatVersion\":1,\"candidates\":[{\"initiativeId\":\"0f1446af-950e-4676-8f30-420f251e860f\",\"candidateId\":\"37675ad9-373e-4c38-bf79-dd4c4cb982a9\",\"no\":1,\"scopeKey\":\"department:ent-1:east-retail\",\"title\":\"校验修正候选\",\"anchor\":{\"reportNo\":1,\"contentSha256\":\"f9343b91a02ed55898cd644be2123797214c17946afeb12c3d0f23bcae0b868b\"},\"blocks\":[],\"goals\":[],\"contentSha256\":\"42fde8d63b57d1c8072e4b7db4a0fc8502a86981551f08a11bfd7dff1115f41d\",\"configurationId\":\"9c6daaca-534f-4aa8-b848-58c51653da39\",\"configurationRevision\":1,\"revision\":2,\"createOperationId\":\"9b5b302b-ba10-49d8-984c-4750cd860b0f\",\"instruction\":\"测试校验定位并修正保存。\",\"createdAt\":\"2026-11-27T17:04:18.670Z\",\"updatedAt\":\"2026-11-27T17:04:18.674Z\",\"lastRun\":{\"id\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\",\"fingerprint\":\"a15aaf8c582d50a930be89f821041028226c8f76f6ff9fd9f68a91294b216e88\",\"status\":\"accepted\"},\"pendingInput\":{\"requestId\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\",\"text\":\"测试校验定位并修正保存。\",\"expectedRevision\":1},\"sessionFile\":\"/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-followup-probes/tmp/optracall-host-test-NftfiT/host/strategy-initiatives/0f1446af-950e-4676-8f30-420f251e860f/native/cand-f0e020ca1678b505/2026-11-27T17-04-19-896Z_01a21df7-0db6-771e-bbf5-304081eb4d3d.jsonl\",\"createRequestId\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\"}],\"proposals\":[]}\n",
+      "value": {
+        "formatVersion": 1,
+        "candidates": [
+          {
+            "initiativeId": "0f1446af-950e-4676-8f30-420f251e860f",
+            "candidateId": "37675ad9-373e-4c38-bf79-dd4c4cb982a9",
+            "no": 1,
+            "scopeKey": "department:ent-1:east-retail",
+            "title": "校验修正候选",
+            "anchor": {
+              "reportNo": 1,
+              "contentSha256": "f9343b91a02ed55898cd644be2123797214c17946afeb12c3d0f23bcae0b868b"
+            },
+            "blocks": [],
+            "goals": [],
+            "contentSha256": "42fde8d63b57d1c8072e4b7db4a0fc8502a86981551f08a11bfd7dff1115f41d",
+            "configurationId": "9c6daaca-534f-4aa8-b848-58c51653da39",
+            "configurationRevision": 1,
+            "revision": 2,
+            "createOperationId": "9b5b302b-ba10-49d8-984c-4750cd860b0f",
+            "instruction": "测试校验定位并修正保存。",
+            "createdAt": "2026-11-27T17:04:18.670Z",
+            "updatedAt": "2026-11-27T17:04:18.674Z",
+            "lastRun": {
+              "id": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9",
+              "fingerprint": "a15aaf8c582d50a930be89f821041028226c8f76f6ff9fd9f68a91294b216e88",
+              "status": "accepted"
+            },
+            "pendingInput": {
+              "requestId": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9",
+              "text": "测试校验定位并修正保存。",
+              "expectedRevision": 1
+            },
+            "sessionFile": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-followup-probes/tmp/optracall-host-test-NftfiT/host/strategy-initiatives/0f1446af-950e-4676-8f30-420f251e860f/native/cand-f0e020ca1678b505/2026-11-27T17-04-19-896Z_01a21df7-0db6-771e-bbf5-304081eb4d3d.jsonl",
+            "createRequestId": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9"
+          }
+        ],
+        "proposals": []
+      }
+    },
+    {
+      "step": 4,
+      "capturedAt": "2026-11-27T17:04:20.290Z",
+      "sha256": "6d97310c3b0a106299516557429a66a4253c914f75ed09081df968903d2fcbaa",
+      "bytes": "{\"formatVersion\":1,\"candidates\":[{\"initiativeId\":\"0f1446af-950e-4676-8f30-420f251e860f\",\"candidateId\":\"37675ad9-373e-4c38-bf79-dd4c4cb982a9\",\"no\":1,\"scopeKey\":\"department:ent-1:east-retail\",\"title\":\"校验修正候选\",\"anchor\":{\"reportNo\":1,\"contentSha256\":\"f9343b91a02ed55898cd644be2123797214c17946afeb12c3d0f23bcae0b868b\"},\"blocks\":[],\"goals\":[],\"contentSha256\":\"42fde8d63b57d1c8072e4b7db4a0fc8502a86981551f08a11bfd7dff1115f41d\",\"configurationId\":\"9c6daaca-534f-4aa8-b848-58c51653da39\",\"configurationRevision\":1,\"revision\":2,\"createOperationId\":\"9b5b302b-ba10-49d8-984c-4750cd860b0f\",\"instruction\":\"测试校验定位并修正保存。\",\"createdAt\":\"2026-11-27T17:04:18.670Z\",\"updatedAt\":\"2026-11-27T17:04:18.674Z\",\"lastRun\":{\"id\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\",\"fingerprint\":\"a15aaf8c582d50a930be89f821041028226c8f76f6ff9fd9f68a91294b216e88\",\"status\":\"accepted\"},\"pendingInput\":{\"requestId\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\",\"text\":\"测试校验定位并修正保存。\",\"expectedRevision\":1},\"sessionFile\":\"/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-followup-probes/tmp/optracall-host-test-NftfiT/host/strategy-initiatives/0f1446af-950e-4676-8f30-420f251e860f/native/cand-f0e020ca1678b505/2026-11-27T17-04-19-896Z_01a21df7-0db6-771e-bbf5-304081eb4d3d.jsonl\",\"createRequestId\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\"}],\"proposals\":[]}\n",
+      "value": {
+        "formatVersion": 1,
+        "candidates": [
+          {
+            "initiativeId": "0f1446af-950e-4676-8f30-420f251e860f",
+            "candidateId": "37675ad9-373e-4c38-bf79-dd4c4cb982a9",
+            "no": 1,
+            "scopeKey": "department:ent-1:east-retail",
+            "title": "校验修正候选",
+            "anchor": {
+              "reportNo": 1,
+              "contentSha256": "f9343b91a02ed55898cd644be2123797214c17946afeb12c3d0f23bcae0b868b"
+            },
+            "blocks": [],
+            "goals": [],
+            "contentSha256": "42fde8d63b57d1c8072e4b7db4a0fc8502a86981551f08a11bfd7dff1115f41d",
+            "configurationId": "9c6daaca-534f-4aa8-b848-58c51653da39",
+            "configurationRevision": 1,
+            "revision": 2,
+            "createOperationId": "9b5b302b-ba10-49d8-984c-4750cd860b0f",
+            "instruction": "测试校验定位并修正保存。",
+            "createdAt": "2026-11-27T17:04:18.670Z",
+            "updatedAt": "2026-11-27T17:04:18.674Z",
+            "lastRun": {
+              "id": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9",
+              "fingerprint": "a15aaf8c582d50a930be89f821041028226c8f76f6ff9fd9f68a91294b216e88",
+              "status": "accepted"
+            },
+            "pendingInput": {
+              "requestId": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9",
+              "text": "测试校验定位并修正保存。",
+              "expectedRevision": 1
+            },
+            "sessionFile": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-followup-probes/tmp/optracall-host-test-NftfiT/host/strategy-initiatives/0f1446af-950e-4676-8f30-420f251e860f/native/cand-f0e020ca1678b505/2026-11-27T17-04-19-896Z_01a21df7-0db6-771e-bbf5-304081eb4d3d.jsonl",
+            "createRequestId": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9"
+          }
+        ],
+        "proposals": []
+      }
+    },
+    {
+      "step": 5,
+      "capturedAt": "2026-11-27T17:04:20.311Z",
+      "sha256": "6d97310c3b0a106299516557429a66a4253c914f75ed09081df968903d2fcbaa",
+      "bytes": "{\"formatVersion\":1,\"candidates\":[{\"initiativeId\":\"0f1446af-950e-4676-8f30-420f251e860f\",\"candidateId\":\"37675ad9-373e-4c38-bf79-dd4c4cb982a9\",\"no\":1,\"scopeKey\":\"department:ent-1:east-retail\",\"title\":\"校验修正候选\",\"anchor\":{\"reportNo\":1,\"contentSha256\":\"f9343b91a02ed55898cd644be2123797214c17946afeb12c3d0f23bcae0b868b\"},\"blocks\":[],\"goals\":[],\"contentSha256\":\"42fde8d63b57d1c8072e4b7db4a0fc8502a86981551f08a11bfd7dff1115f41d\",\"configurationId\":\"9c6daaca-534f-4aa8-b848-58c51653da39\",\"configurationRevision\":1,\"revision\":2,\"createOperationId\":\"9b5b302b-ba10-49d8-984c-4750cd860b0f\",\"instruction\":\"测试校验定位并修正保存。\",\"createdAt\":\"2026-11-27T17:04:18.670Z\",\"updatedAt\":\"2026-11-27T17:04:18.674Z\",\"lastRun\":{\"id\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\",\"fingerprint\":\"a15aaf8c582d50a930be89f821041028226c8f76f6ff9fd9f68a91294b216e88\",\"status\":\"accepted\"},\"pendingInput\":{\"requestId\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\",\"text\":\"测试校验定位并修正保存。\",\"expectedRevision\":1},\"sessionFile\":\"/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-followup-probes/tmp/optracall-host-test-NftfiT/host/strategy-initiatives/0f1446af-950e-4676-8f30-420f251e860f/native/cand-f0e020ca1678b505/2026-11-27T17-04-19-896Z_01a21df7-0db6-771e-bbf5-304081eb4d3d.jsonl\",\"createRequestId\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\"}],\"proposals\":[]}\n",
+      "value": {
+        "formatVersion": 1,
+        "candidates": [
+          {
+            "initiativeId": "0f1446af-950e-4676-8f30-420f251e860f",
+            "candidateId": "37675ad9-373e-4c38-bf79-dd4c4cb982a9",
+            "no": 1,
+            "scopeKey": "department:ent-1:east-retail",
+            "title": "校验修正候选",
+            "anchor": {
+              "reportNo": 1,
+              "contentSha256": "f9343b91a02ed55898cd644be2123797214c17946afeb12c3d0f23bcae0b868b"
+            },
+            "blocks": [],
+            "goals": [],
+            "contentSha256": "42fde8d63b57d1c8072e4b7db4a0fc8502a86981551f08a11bfd7dff1115f41d",
+            "configurationId": "9c6daaca-534f-4aa8-b848-58c51653da39",
+            "configurationRevision": 1,
+            "revision": 2,
+            "createOperationId": "9b5b302b-ba10-49d8-984c-4750cd860b0f",
+            "instruction": "测试校验定位并修正保存。",
+            "createdAt": "2026-11-27T17:04:18.670Z",
+            "updatedAt": "2026-11-27T17:04:18.674Z",
+            "lastRun": {
+              "id": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9",
+              "fingerprint": "a15aaf8c582d50a930be89f821041028226c8f76f6ff9fd9f68a91294b216e88",
+              "status": "accepted"
+            },
+            "pendingInput": {
+              "requestId": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9",
+              "text": "测试校验定位并修正保存。",
+              "expectedRevision": 1
+            },
+            "sessionFile": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-followup-probes/tmp/optracall-host-test-NftfiT/host/strategy-initiatives/0f1446af-950e-4676-8f30-420f251e860f/native/cand-f0e020ca1678b505/2026-11-27T17-04-19-896Z_01a21df7-0db6-771e-bbf5-304081eb4d3d.jsonl",
+            "createRequestId": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9"
+          }
+        ],
+        "proposals": []
+      }
+    },
+    {
+      "step": 6,
+      "capturedAt": "2026-11-27T17:04:20.335Z",
+      "sha256": "6d97310c3b0a106299516557429a66a4253c914f75ed09081df968903d2fcbaa",
+      "bytes": "{\"formatVersion\":1,\"candidates\":[{\"initiativeId\":\"0f1446af-950e-4676-8f30-420f251e860f\",\"candidateId\":\"37675ad9-373e-4c38-bf79-dd4c4cb982a9\",\"no\":1,\"scopeKey\":\"department:ent-1:east-retail\",\"title\":\"校验修正候选\",\"anchor\":{\"reportNo\":1,\"contentSha256\":\"f9343b91a02ed55898cd644be2123797214c17946afeb12c3d0f23bcae0b868b\"},\"blocks\":[],\"goals\":[],\"contentSha256\":\"42fde8d63b57d1c8072e4b7db4a0fc8502a86981551f08a11bfd7dff1115f41d\",\"configurationId\":\"9c6daaca-534f-4aa8-b848-58c51653da39\",\"configurationRevision\":1,\"revision\":2,\"createOperationId\":\"9b5b302b-ba10-49d8-984c-4750cd860b0f\",\"instruction\":\"测试校验定位并修正保存。\",\"createdAt\":\"2026-11-27T17:04:18.670Z\",\"updatedAt\":\"2026-11-27T17:04:18.674Z\",\"lastRun\":{\"id\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\",\"fingerprint\":\"a15aaf8c582d50a930be89f821041028226c8f76f6ff9fd9f68a91294b216e88\",\"status\":\"accepted\"},\"pendingInput\":{\"requestId\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\",\"text\":\"测试校验定位并修正保存。\",\"expectedRevision\":1},\"sessionFile\":\"/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-followup-probes/tmp/optracall-host-test-NftfiT/host/strategy-initiatives/0f1446af-950e-4676-8f30-420f251e860f/native/cand-f0e020ca1678b505/2026-11-27T17-04-19-896Z_01a21df7-0db6-771e-bbf5-304081eb4d3d.jsonl\",\"createRequestId\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\"}],\"proposals\":[]}\n",
+      "value": {
+        "formatVersion": 1,
+        "candidates": [
+          {
+            "initiativeId": "0f1446af-950e-4676-8f30-420f251e860f",
+            "candidateId": "37675ad9-373e-4c38-bf79-dd4c4cb982a9",
+            "no": 1,
+            "scopeKey": "department:ent-1:east-retail",
+            "title": "校验修正候选",
+            "anchor": {
+              "reportNo": 1,
+              "contentSha256": "f9343b91a02ed55898cd644be2123797214c17946afeb12c3d0f23bcae0b868b"
+            },
+            "blocks": [],
+            "goals": [],
+            "contentSha256": "42fde8d63b57d1c8072e4b7db4a0fc8502a86981551f08a11bfd7dff1115f41d",
+            "configurationId": "9c6daaca-534f-4aa8-b848-58c51653da39",
+            "configurationRevision": 1,
+            "revision": 2,
+            "createOperationId": "9b5b302b-ba10-49d8-984c-4750cd860b0f",
+            "instruction": "测试校验定位并修正保存。",
+            "createdAt": "2026-11-27T17:04:18.670Z",
+            "updatedAt": "2026-11-27T17:04:18.674Z",
+            "lastRun": {
+              "id": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9",
+              "fingerprint": "a15aaf8c582d50a930be89f821041028226c8f76f6ff9fd9f68a91294b216e88",
+              "status": "accepted"
+            },
+            "pendingInput": {
+              "requestId": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9",
+              "text": "测试校验定位并修正保存。",
+              "expectedRevision": 1
+            },
+            "sessionFile": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-followup-probes/tmp/optracall-host-test-NftfiT/host/strategy-initiatives/0f1446af-950e-4676-8f30-420f251e860f/native/cand-f0e020ca1678b505/2026-11-27T17-04-19-896Z_01a21df7-0db6-771e-bbf5-304081eb4d3d.jsonl",
+            "createRequestId": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9"
+          }
+        ],
+        "proposals": []
+      }
+    },
+    {
+      "step": 7,
+      "capturedAt": "2026-11-27T17:04:20.369Z",
+      "sha256": "ad4da37cc976667d3f31e2261fed277801b9fb1546402bc78d178093e3f9570a",
+      "bytes": "{\"formatVersion\":1,\"candidates\":[{\"initiativeId\":\"0f1446af-950e-4676-8f30-420f251e860f\",\"candidateId\":\"37675ad9-373e-4c38-bf79-dd4c4cb982a9\",\"no\":1,\"scopeKey\":\"department:ent-1:east-retail\",\"title\":\"校验修正候选\",\"anchor\":{\"reportNo\":1,\"contentSha256\":\"f9343b91a02ed55898cd644be2123797214c17946afeb12c3d0f23bcae0b868b\"},\"blocks\":[{\"id\":\"B1\",\"label\":\"战略定位与增长路径\",\"text\":\"无目标合法稿：深耕现有门店，先验证再推广。\"},{\"id\":\"B2\",\"label\":\"三年目标与里程碑\",\"text\":\"2027 试点，2028 推广，2029 达成核心指标。\"},{\"id\":\"B3\",\"label\":\"资源分配与明确不做\",\"text\":\"优先配置试点工时，暂缓大规模开店。\"}],\"goals\":[],\"contentSha256\":\"e062d010bc388420aa24a61c59b8ddcaa0fc1d5f18f870314d4d36724b065795\",\"configurationId\":\"9c6daaca-534f-4aa8-b848-58c51653da39\",\"configurationRevision\":1,\"revision\":2,\"createOperationId\":\"9b5b302b-ba10-49d8-984c-4750cd860b0f\",\"instruction\":\"测试校验定位并修正保存。\",\"createdAt\":\"2026-11-27T17:04:18.670Z\",\"updatedAt\":\"2026-11-27T17:04:20.345Z\",\"lastRun\":{\"id\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\",\"fingerprint\":\"a15aaf8c582d50a930be89f821041028226c8f76f6ff9fd9f68a91294b216e88\",\"status\":\"accepted\"},\"pendingInput\":{\"requestId\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\",\"text\":\"测试校验定位并修正保存。\",\"expectedRevision\":1},\"sessionFile\":\"/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-followup-probes/tmp/optracall-host-test-NftfiT/host/strategy-initiatives/0f1446af-950e-4676-8f30-420f251e860f/native/cand-f0e020ca1678b505/2026-11-27T17-04-19-896Z_01a21df7-0db6-771e-bbf5-304081eb4d3d.jsonl\",\"createRequestId\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\",\"saveReceipts\":[{\"operationId\":\"0937f37e-263f-42f0-9260-1708d559824d\",\"contentSha256\":\"e062d010bc388420aa24a61c59b8ddcaa0fc1d5f18f870314d4d36724b065795\",\"at\":\"2026-11-27T17:04:20.345Z\",\"requestId\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\"}],\"lastSave\":{\"operationId\":\"0937f37e-263f-42f0-9260-1708d559824d\",\"contentSha256\":\"e062d010bc388420aa24a61c59b8ddcaa0fc1d5f18f870314d4d36724b065795\",\"at\":\"2026-11-27T17:04:20.345Z\",\"requestId\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\"}}],\"proposals\":[]}\n",
+      "value": {
+        "formatVersion": 1,
+        "candidates": [
+          {
+            "initiativeId": "0f1446af-950e-4676-8f30-420f251e860f",
+            "candidateId": "37675ad9-373e-4c38-bf79-dd4c4cb982a9",
+            "no": 1,
+            "scopeKey": "department:ent-1:east-retail",
+            "title": "校验修正候选",
+            "anchor": {
+              "reportNo": 1,
+              "contentSha256": "f9343b91a02ed55898cd644be2123797214c17946afeb12c3d0f23bcae0b868b"
+            },
+            "blocks": [
+              {
+                "id": "B1",
+                "label": "战略定位与增长路径",
+                "text": "无目标合法稿：深耕现有门店，先验证再推广。"
+              },
+              {
+                "id": "B2",
+                "label": "三年目标与里程碑",
+                "text": "2027 试点，2028 推广，2029 达成核心指标。"
+              },
+              {
+                "id": "B3",
+                "label": "资源分配与明确不做",
+                "text": "优先配置试点工时，暂缓大规模开店。"
+              }
+            ],
+            "goals": [],
+            "contentSha256": "e062d010bc388420aa24a61c59b8ddcaa0fc1d5f18f870314d4d36724b065795",
+            "configurationId": "9c6daaca-534f-4aa8-b848-58c51653da39",
+            "configurationRevision": 1,
+            "revision": 2,
+            "createOperationId": "9b5b302b-ba10-49d8-984c-4750cd860b0f",
+            "instruction": "测试校验定位并修正保存。",
+            "createdAt": "2026-11-27T17:04:18.670Z",
+            "updatedAt": "2026-11-27T17:04:20.345Z",
+            "lastRun": {
+              "id": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9",
+              "fingerprint": "a15aaf8c582d50a930be89f821041028226c8f76f6ff9fd9f68a91294b216e88",
+              "status": "accepted"
+            },
+            "pendingInput": {
+              "requestId": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9",
+              "text": "测试校验定位并修正保存。",
+              "expectedRevision": 1
+            },
+            "sessionFile": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-followup-probes/tmp/optracall-host-test-NftfiT/host/strategy-initiatives/0f1446af-950e-4676-8f30-420f251e860f/native/cand-f0e020ca1678b505/2026-11-27T17-04-19-896Z_01a21df7-0db6-771e-bbf5-304081eb4d3d.jsonl",
+            "createRequestId": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9",
+            "saveReceipts": [
+              {
+                "operationId": "0937f37e-263f-42f0-9260-1708d559824d",
+                "contentSha256": "e062d010bc388420aa24a61c59b8ddcaa0fc1d5f18f870314d4d36724b065795",
+                "at": "2026-11-27T17:04:20.345Z",
+                "requestId": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9"
+              }
+            ],
+            "lastSave": {
+              "operationId": "0937f37e-263f-42f0-9260-1708d559824d",
+              "contentSha256": "e062d010bc388420aa24a61c59b8ddcaa0fc1d5f18f870314d4d36724b065795",
+              "at": "2026-11-27T17:04:20.345Z",
+              "requestId": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9"
+            }
+          }
+        ],
+        "proposals": []
+      }
+    },
+    {
+      "step": 8,
+      "capturedAt": "2026-11-27T17:04:20.406Z",
+      "sha256": "8acc121bde9d6c9517e29a4583b6e925629457ab24269d1d44bc55948067b4f4",
+      "bytes": "{\"formatVersion\":1,\"candidates\":[{\"initiativeId\":\"0f1446af-950e-4676-8f30-420f251e860f\",\"candidateId\":\"37675ad9-373e-4c38-bf79-dd4c4cb982a9\",\"no\":1,\"scopeKey\":\"department:ent-1:east-retail\",\"title\":\"校验修正候选\",\"anchor\":{\"reportNo\":1,\"contentSha256\":\"f9343b91a02ed55898cd644be2123797214c17946afeb12c3d0f23bcae0b868b\"},\"blocks\":[{\"id\":\"B1\",\"label\":\"战略定位与增长路径\",\"text\":\"带目标合法稿：深耕现有门店，先验证再推广。\"},{\"id\":\"B2\",\"label\":\"三年目标与里程碑\",\"text\":\"2027 试点，2028 推广，2029 达成核心指标。\"},{\"id\":\"B3\",\"label\":\"资源分配与明确不做\",\"text\":\"优先配置试点工时，暂缓大规模开店。\"}],\"goals\":[\"90天二购率提升至12%\",\"试点门店导购覆盖率达到80%\"],\"contentSha256\":\"d78bd68d6750a4fa3bea1435b76ff2476e23d9d8f089127f7f5a8c92e0e9ae92\",\"configurationId\":\"9c6daaca-534f-4aa8-b848-58c51653da39\",\"configurationRevision\":1,\"revision\":2,\"createOperationId\":\"9b5b302b-ba10-49d8-984c-4750cd860b0f\",\"instruction\":\"测试校验定位并修正保存。\",\"createdAt\":\"2026-11-27T17:04:18.670Z\",\"updatedAt\":\"2026-11-27T17:04:20.393Z\",\"lastRun\":{\"id\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\",\"fingerprint\":\"a15aaf8c582d50a930be89f821041028226c8f76f6ff9fd9f68a91294b216e88\",\"status\":\"accepted\"},\"pendingInput\":{\"requestId\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\",\"text\":\"测试校验定位并修正保存。\",\"expectedRevision\":1},\"sessionFile\":\"/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-followup-probes/tmp/optracall-host-test-NftfiT/host/strategy-initiatives/0f1446af-950e-4676-8f30-420f251e860f/native/cand-f0e020ca1678b505/2026-11-27T17-04-19-896Z_01a21df7-0db6-771e-bbf5-304081eb4d3d.jsonl\",\"createRequestId\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\",\"saveReceipts\":[{\"operationId\":\"0937f37e-263f-42f0-9260-1708d559824d\",\"contentSha256\":\"e062d010bc388420aa24a61c59b8ddcaa0fc1d5f18f870314d4d36724b065795\",\"at\":\"2026-11-27T17:04:20.345Z\",\"requestId\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\"},{\"operationId\":\"f570aff9-1b47-4073-ae35-cd579b25c914\",\"contentSha256\":\"d78bd68d6750a4fa3bea1435b76ff2476e23d9d8f089127f7f5a8c92e0e9ae92\",\"at\":\"2026-11-27T17:04:20.393Z\",\"requestId\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\"}],\"lastSave\":{\"operationId\":\"f570aff9-1b47-4073-ae35-cd579b25c914\",\"contentSha256\":\"d78bd68d6750a4fa3bea1435b76ff2476e23d9d8f089127f7f5a8c92e0e9ae92\",\"at\":\"2026-11-27T17:04:20.393Z\",\"requestId\":\"f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9\"}}],\"proposals\":[]}\n",
+      "value": {
+        "formatVersion": 1,
+        "candidates": [
+          {
+            "initiativeId": "0f1446af-950e-4676-8f30-420f251e860f",
+            "candidateId": "37675ad9-373e-4c38-bf79-dd4c4cb982a9",
+            "no": 1,
+            "scopeKey": "department:ent-1:east-retail",
+            "title": "校验修正候选",
+            "anchor": {
+              "reportNo": 1,
+              "contentSha256": "f9343b91a02ed55898cd644be2123797214c17946afeb12c3d0f23bcae0b868b"
+            },
+            "blocks": [
+              {
+                "id": "B1",
+                "label": "战略定位与增长路径",
+                "text": "带目标合法稿：深耕现有门店，先验证再推广。"
+              },
+              {
+                "id": "B2",
+                "label": "三年目标与里程碑",
+                "text": "2027 试点，2028 推广，2029 达成核心指标。"
+              },
+              {
+                "id": "B3",
+                "label": "资源分配与明确不做",
+                "text": "优先配置试点工时，暂缓大规模开店。"
+              }
+            ],
+            "goals": [
+              "90天二购率提升至12%",
+              "试点门店导购覆盖率达到80%"
+            ],
+            "contentSha256": "d78bd68d6750a4fa3bea1435b76ff2476e23d9d8f089127f7f5a8c92e0e9ae92",
+            "configurationId": "9c6daaca-534f-4aa8-b848-58c51653da39",
+            "configurationRevision": 1,
+            "revision": 2,
+            "createOperationId": "9b5b302b-ba10-49d8-984c-4750cd860b0f",
+            "instruction": "测试校验定位并修正保存。",
+            "createdAt": "2026-11-27T17:04:18.670Z",
+            "updatedAt": "2026-11-27T17:04:20.393Z",
+            "lastRun": {
+              "id": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9",
+              "fingerprint": "a15aaf8c582d50a930be89f821041028226c8f76f6ff9fd9f68a91294b216e88",
+              "status": "accepted"
+            },
+            "pendingInput": {
+              "requestId": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9",
+              "text": "测试校验定位并修正保存。",
+              "expectedRevision": 1
+            },
+            "sessionFile": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-followup-probes/tmp/optracall-host-test-NftfiT/host/strategy-initiatives/0f1446af-950e-4676-8f30-420f251e860f/native/cand-f0e020ca1678b505/2026-11-27T17-04-19-896Z_01a21df7-0db6-771e-bbf5-304081eb4d3d.jsonl",
+            "createRequestId": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9",
+            "saveReceipts": [
+              {
+                "operationId": "0937f37e-263f-42f0-9260-1708d559824d",
+                "contentSha256": "e062d010bc388420aa24a61c59b8ddcaa0fc1d5f18f870314d4d36724b065795",
+                "at": "2026-11-27T17:04:20.345Z",
+                "requestId": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9"
+              },
+              {
+                "operationId": "f570aff9-1b47-4073-ae35-cd579b25c914",
+                "contentSha256": "d78bd68d6750a4fa3bea1435b76ff2476e23d9d8f089127f7f5a8c92e0e9ae92",
+                "at": "2026-11-27T17:04:20.393Z",
+                "requestId": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9"
+              }
+            ],
+            "lastSave": {
+              "operationId": "f570aff9-1b47-4073-ae35-cd579b25c914",
+              "contentSha256": "d78bd68d6750a4fa3bea1435b76ff2476e23d9d8f089127f7f5a8c92e0e9ae92",
+              "at": "2026-11-27T17:04:20.393Z",
+              "requestId": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9"
+            }
+          }
+        ],
+        "proposals": []
+      }
+    }
+  ],
+  "createAckEvidence": {
+    "at": "2026-11-27T17:04:20.094Z",
+    "requestId": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9",
+    "candidateId": "37675ad9-373e-4c38-bf79-dd4c4cb982a9",
+    "createRequestId": "f1f2936c-b60b-4eb8-ac2b-c6dab0d5e9a9"
+  },
+  "providerErrors": [],
+  "requestCount": 9,
+  "hostOutput": {
+    "stdout": "{\"kind\":\"host-ready\",\"port\":41387,\"sdkVersion\":\"1.4.0\",\"transportVersion\":\"8.12.2\"}\n",
+    "stderr": "{\"kind\":\"host-shutdown-start\",\"at\":\"2026-11-27T17:04:20.461Z\",\"pid\":151120,\"signal\":\"SIGTERM\"}\n{\"kind\":\"host-shutdown-complete\",\"at\":\"2026-11-27T17:04:20.493Z\",\"pid\":151120,\"signal\":\"SIGTERM\",\"exitCode\":0}\n{\"kind\":\"host-process-exit\",\"at\":\"2026-11-27T17:04:20.493Z\",\"pid\":151120,\"exitCode\":0,\"reason\":\"signal_sigterm\"}\n"
+  }
+}

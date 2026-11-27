@@ -1,0 +1,21 @@
+✔ actual Pi direct short declaration retains the exact original receipt and dispatches one original IR follow-up (5800.492205ms)
+ℹ /workspace/OptraCall-issue149-final/.local/overall-architecture-upgrade/development/delivery-native-repair/direct-short-aD4ekr
+✔ actual Pi nested short declaration retains the exact original receipt and dispatches one original IR follow-up (4765.244551ms)
+ℹ /workspace/OptraCall-issue149-final/.local/overall-architecture-upgrade/development/delivery-native-repair/nested-short-Iio187
+✔ actual Pi direct 11KB declaration retains the exact original receipt and dispatches one original IR follow-up (4870.331121ms)
+ℹ /workspace/OptraCall-issue149-final/.local/overall-architecture-upgrade/development/delivery-native-repair/direct-long-BikF3n
+✔ actual Pi nested 11KB declaration retains the exact original receipt and dispatches one original IR follow-up (4903.524982ms)
+ℹ /workspace/OptraCall-issue149-final/.local/overall-architecture-upgrade/development/delivery-native-repair/nested-long-NsYPim
+✔ a schema-valid over-budget declaration is rejected before saving; repeated rejection and a corrected same-request save leave one bound reusable original (3508.807679ms)
+ℹ /workspace/OptraCall-issue149-final/.local/overall-architecture-upgrade/development/delivery-native-repair/payload-budget-STVm3U
+✔ reviewBasis referencing a nonexistent file returns a safe locatable error; corrected declaration succeeds (5507.714811ms)
+ℹ /workspace/OptraCall-issue149-final/.local/overall-architecture-upgrade/development/delivery-native-repair/basis-unavailable-fVqPWl
+✔ DW-PI-LOOP-01: real Host -> official Pi 1.4.0 -> synthetic Provider invokes case-directory on goal-draft and save-issue-edge/save-decision-request on {role:case} (8162.35116ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 38902.10884

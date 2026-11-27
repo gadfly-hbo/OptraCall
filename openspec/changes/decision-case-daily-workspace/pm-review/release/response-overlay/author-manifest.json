@@ -1,0 +1,17 @@
+{
+  "base": "6bc7be2849d280e5e6a6e598ee6b7a68dd5e48eb",
+  "branch": "codex/issue149-ui-followup",
+  "worktree": "/workspace/OptraCall-issue149-ui-followup",
+  "files": [
+    {
+      "path": "src/host/ui/CaseIssuePanel.tsx",
+      "sha256": "d331165f038a5ac09042bf1cea0e72395ead14eefd9e2554943629c9591c8799"
+    },
+    {
+      "path": "tests/case-request-response-ui.test.ts",
+      "sha256": "668ce0ba804ade4a43c20ca4f62e047777f135fa49a1802ec46d8d41ad7a40cb"
+    }
+  ],
+  "dependencyReuse": "node_modules symlink to /workspace/OptraCall-issue149-final/node_modules; no install or writes",
+  "committed": false
+}

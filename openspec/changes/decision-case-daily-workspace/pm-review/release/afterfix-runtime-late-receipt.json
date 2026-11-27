@@ -1,0 +1,32 @@
+{
+  "candidate": "7fe8e9-plus-runtime-fixes",
+  "gate": [
+    {
+      "status": "fulfilled",
+      "revision": 1
+    },
+    {
+      "status": "fulfilled",
+      "revision": 1
+    }
+  ],
+  "dataRoot": "/workspace/OptraCall-issue149-final/.local/pm-final/runtime-tmp/optracall-host-test-vimHXT/host",
+  "viewAfterConfigurationChange": {
+    "status": 409,
+    "body": {
+      "code": "configuration_changed",
+      "message": "请求未完成，请检查输入或本地服务后重试。",
+      "fields": {}
+    }
+  },
+  "lateEdge": null,
+  "providerRequests": 1,
+  "discussionId": "ac18885c-98ff-e7ad-f443-c681077e8b1f",
+  "native": "/workspace/OptraCall-issue149-final/.local/pm-final/runtime-tmp/optracall-host-test-vimHXT/host/business-role-discussions/ac18885c-98ff-e7ad-f443-c681077e8b1f/native/2026-11-27T15-58-32-819Z_01a21dba-d36b-757c-a59f-f6cf89cfa69d.jsonl",
+  "toolResults": [
+    {
+      "isError": true,
+      "text": "personal_context_run_unavailable"
+    }
+  ]
+}

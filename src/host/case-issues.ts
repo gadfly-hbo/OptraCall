@@ -3,8 +3,9 @@ import type { BoardActionAuthorization, TaskFeedbackRevision } from '../../exten
 import { quotedFeedbackMatches } from './quoted-feedback-origins.ts';
 import { caseChoicePermitsAction } from './case-decision-types.ts';
 import { CaseStoreError } from './case-types.ts';
-import { caseDecisionFields, caseDecisionId, caseDecisionRevision, caseDecisionText, parseCaseDecisionTarget } from './case-decision-validation.ts';
-import type { CaseDecisionRef, CaseDecisionRevision, CaseIssueReply, CaseIssueReview, CaseStrategyChoice } from './case-decision-types.ts';
+import { caseDecisionFields, caseDecisionId, caseDecisionRevision, caseDecisionText, parseCaseDecisionRef, parseCaseDecisionTarget } from './case-decision-validation.ts';
+import type { CaseDecisionRef, CaseDecisionRevision, CaseIssueReply, CaseIssueReview, CaseStrategyChoice, CaseDecisionRequest, CaseFeedbackResponse } from './case-decision-types.ts';
+import { requestStatus } from './case-decision-types.ts';
 import type { CaseDecisionServiceDependencies } from './case-decision-service.ts';
 import { listTaskResultSources, ProjectTaskResultSourceError, type TaskBoundReportsOptions } from './project-task-result-sources.ts';
 import { createNativeSnapshotReadBudget, NativeSnapshotError } from './native-session-snapshot.ts';
@@ -51,6 +52,85 @@ export function authorityAtFeedback(rows: BoardActionAuthorization[], feedback: 
   return before < 0 ? null : { authority:rows[before]!, observedAt:observedAt! };
 }
 
+/** The action's original choice, strategy and issue must all belong to this exact Case owner. */
+export function observationAuthorizationMatches(cases: CaseDecisionServiceDependencies['cases'], request: Pick<CaseDecisionRequest, 'caseId' | 'issueId'>, authorization: BoardActionAuthorization) {
+  const source = authorization.source;
+  if ('kind' in source || authorization.decision !== 'authorize' || source.caseId !== request.caseId || source.caseStoreId !== cases.getStatus().storeId) return false;
+  try {
+    const choice = cases.getStrategyChoice(request.caseId, source.choiceId), ref = choice.strategyRef, supplied = source.strategyRef;
+    if (choice.issueId !== request.issueId || !caseChoicePermitsAction(choice.choice) || supplied.type !== 'case-decision'
+      || ref.caseStoreId !== source.caseStoreId || ref.caseId !== request.caseId || supplied.caseStoreId !== ref.caseStoreId || supplied.caseId !== ref.caseId
+      || supplied.recordId !== ref.recordId || supplied.revision !== ref.revision) return false;
+    const strategy = cases.getDecision(request.caseId, ref.recordId, ref.revision);
+    return strategy.kind === 'strategy' && (!strategy.issueId || strategy.issueId === request.issueId);
+  } catch { return false; }
+}
+
+/** One request's read/authorization failure never changes another request's projection. */
+function planSources(strategy: CaseDecisionRevision): CaseIssueReply[] {
+  if (!strategy.issueId) return [];
+  return strategy.references.flatMap(ref => ref.relation === 'derived_from' && ref.target.type === 'source' && ref.target.source.type === 'native-reply' ? [ref.target.source] : []);
+}
+export async function chooseRequestStatus(cases: CaseDecisionServiceDependencies['cases'], request: CaseDecisionRequest, choices = cases.getStrategyChoices(request.caseId), checkPlan?: (reference: CaseDecisionRef) => Promise<void>) {
+  if (request.lifecycle !== 'open') return requestStatus(request, choices, undefined);
+  if (request.target.kind !== 'choose') return 'unverifiable' as const;
+  try {
+    const ref = request.target.strategyRef;
+    if (ref.caseId !== request.caseId || ref.caseStoreId !== cases.getStatus().storeId) return 'unverifiable' as const;
+    const strategy = cases.getDecision(request.caseId, ref.recordId, ref.revision);
+    if (strategy.kind !== 'strategy' || strategy.issueId && strategy.issueId !== request.issueId) return 'unverifiable' as const;
+    const status = requestStatus(request, choices, undefined);
+    if (status === 'answered') return status;
+    try { cases.assertStrategyChoiceTarget({ caseStoreId: ref.caseStoreId, caseId: request.caseId, issueId: request.issueId, strategyRef: ref, expectedPreviousChoiceId: request.target.expectedPreviousChoiceId, allowHistorical: true }); }
+    catch (error) {
+      const code = (error as { code?: string })?.code;
+      if (code === 'case_closed' || code === 'case_decision_archived') return 'superseded' as const;
+      if (code === 'case_choice_conflict') return status === 'unverifiable' ? status : 'superseded' as const;
+      return 'unverifiable' as const;
+    }
+    if (checkPlan) await checkPlan(ref);
+    else if (planSources(strategy).length) return 'unverifiable' as const;
+    return status;
+  } catch { return 'unverifiable' as const; }
+}
+
+export async function observationRequestStatus(cases: CaseDecisionServiceDependencies['cases'], board: Pick<NonNullable<CaseDecisionServiceDependencies['board']>, 'getTask' | 'getItem' | 'listFeedbackHistory' | 'listActionAuthorizations'> | undefined, request: CaseDecisionRequest, assertBoardItemReadable?: CaseDecisionServiceDependencies['assertBoardItemReadable'], assertActiveProject?: (projectId: string) => Promise<void>) {
+  if (request.lifecycle !== 'open') return requestStatus(request, undefined, undefined);
+  if (!board || request.target.kind !== 'observe') return 'unverifiable' as const;
+  try {
+    const target = request.target;
+    if (!cases.listProjectLinks(request.caseId).some(l => l.projectId === target.projectId)) return 'unverifiable' as const;
+    const task = board.getTask(target.taskId), item = board.getItem(task.itemId);
+    if (item.id !== target.itemId || item.projectId !== target.projectId) return 'unverifiable' as const;
+    if (item.sourceKind === 'report-confirmation') {
+      if (!assertBoardItemReadable) return 'unverifiable' as const;
+      await assertBoardItemReadable(item);
+    }
+    const allAuths = board.listActionAuthorizations?.(task.id) ?? [];
+    const authorization = allAuths.find(a => a.authorizationId === target.authorizationId);
+    if (!authorization || authorization.projectId !== target.projectId || authorization.itemId !== target.itemId || authorization.taskId !== target.taskId
+      || !observationAuthorizationMatches(cases, request, authorization)) return 'unverifiable' as const;
+    const history = board.listFeedbackHistory(task.id);
+    if (target.feedbackBaseRevisionId !== null && !history.some(row => row.revisionId === target.feedbackBaseRevisionId)) return 'unverifiable' as const;
+    const responses: CaseFeedbackResponse[] = history.flatMap((rev, idx) => {
+      if (!rev.respondsToRequest) return [];
+      const active = authorityAtFeedback(allAuths, rev);
+      if (!active || active.authority.authorizationId !== rev.respondsToRequest.authorizationId || !observationAuthorizationMatches(cases, request, active.authority)) return [];
+      return [{ requestId: rev.respondsToRequest.requestId, requestRevision: rev.respondsToRequest.revision, projectId: item.projectId, itemId: item.id,
+        taskId: task.id, authorizationId: active.authority.authorizationId, revisionId: rev.revisionId, baseRevisionId: idx === 0 ? null : history[idx - 1]!.revisionId }];
+    });
+    const status = requestStatus(request, undefined, responses);
+    if (status === 'answered') return status;
+    if (!assertActiveProject) return 'unverifiable' as const;
+    try { await assertActiveProject(target.projectId); }
+    catch (error) { return (error as { code?: string })?.code === 'project_archived' ? 'superseded' as const : 'unverifiable' as const; }
+    if ((history.at(-1)?.revisionId ?? null) !== target.feedbackBaseRevisionId) return 'superseded' as const;
+    const source = authorization.source;
+    const currentChoice = cases.getStrategyChoices(request.caseId).filter(c => c.issueId === request.issueId).at(-1);
+    return allAuths.at(-1)?.authorizationId !== authorization.authorizationId || 'kind' in source || currentChoice?.choiceId !== source.choiceId ? 'superseded' as const : status;
+  } catch { return 'unverifiable' as const; }
+}
+
 /** Issue identity belongs to Case. Sources, human authorizations, actions and observations keep their original owners. */
 export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
   const { cases } = deps;
@@ -88,9 +168,7 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
   async function checkPlan(reference: CaseDecisionRef) {
     const strategy = cases.getDecision(reference.caseId, reference.recordId, reference.revision);
     if (!strategy.issueId) return;
-    for (const ref of strategy.references) {
-      if (ref.relation !== 'derived_from' || ref.target.type !== 'source' || ref.target.source.type !== 'native-reply') continue;
-      const source = ref.target.source;
+    for (const source of planSources(strategy)) {
       const actual = await readReply(strategy.caseId, strategy.issueId, source, 'plan');
       await deps.qualifyPlanReply?.(strategy.caseId, strategy.issueId, source, actual.requestId);
     }
@@ -365,5 +443,133 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
     });
   }
   return {verifyPriorProjectRoundRights, checkDoAuthorization, checkPlan, currentTeachRights, issueModelContext, issueTimeline, issueSources, inspectIssueReply, issueWrite, issueList: (caseId: string) => cases.listDecisionIssues(caseId),
+    /** Bounded original identities for the narrow Case discussion tool; owner is Host-bound. */
+    readDeclarations: async (caseId: string, issueId: string, input: Record<string, unknown>) => {
+      caseDecisionFields(input, ['section', 'offset', 'limit', 'continuation']);
+      issue(caseId, issueId);
+      const section = input.section;
+      if (!['issues', 'edges', 'requests', 'strategies', 'choices', 'observations'].includes(String(section))) return fail('invalid_case_declarations_section', 400);
+      const offset = input.offset ?? 0, limit = input.limit ?? 10;
+      if (!Number.isSafeInteger(offset) || Number(offset) < 0 || Number(offset) > 100000 || !Number.isSafeInteger(limit) || Number(limit) < 1 || Number(limit) > 20) return fail('invalid_case_declarations_page', 400);
+      const base = { caseStoreId: cases.getStatus().storeId!, caseId, issueId, caseRevision: cases.getCase(caseId).revision, section };
+      if (section === 'strategies') {
+        if (offset !== 0 || input.continuation !== undefined && typeof input.continuation !== 'string') return fail('invalid_case_declarations_page', 400);
+        const page = cases.listDecisions(caseId, { pageSize: Number(limit), continuation: input.continuation as string | undefined });
+        const items = page.items.filter(row => row.kind === 'strategy' && (!row.issueId || row.issueId === issueId)).map(row => ({
+          strategyRef: { type: 'case-decision' as const, caseStoreId: row.caseStoreId, caseId, recordId: row.recordId, revision: row.revision },
+          issueId: row.issueId ?? null, title: row.payload.title, lifecycle: row.lifecycle,
+        }));
+        return { ...base, items, continuation: page.continuation, partial: page.continuation !== null };
+      }
+      if (input.continuation !== undefined) return fail('invalid_case_declarations_page', 400);
+      let rows: unknown[];
+      if (section === 'issues') rows = cases.listDecisionIssues(caseId);
+      else if (section === 'edges') rows = cases.listIssueEdges(caseId, { includeRemoved: true });
+      else if (section === 'requests') rows = await Promise.all(cases.listDecisionRequests(caseId).filter(row => row.issueId === issueId)
+        .map(async row => ({ ...row, status: row.kind === 'observe' ? await observationRequestStatus(cases, deps.board, row, deps.assertBoardItemReadable, async projectId => { await linkedProject(caseId, projectId); }) : await chooseRequestStatus(cases, row, undefined, checkPlan) })));
+      else if (section === 'choices') rows = cases.getStrategyChoices(caseId).filter(row => row.issueId === issueId).map(row => ({ choiceId: row.choiceId, caseId, issueId, strategyRef: row.strategyRef, choice: row.choice, previousChoiceId: row.previousChoiceId, occurredAt: row.occurredAt, respondsToRequest: row.respondsToRequest }));
+      else {
+        if (!deps.board?.listActionAuthorizations) return fail('case_decision_board_unavailable', 503);
+        const linked = new Set(cases.listProjectLinks(caseId).map(link => link.projectId));
+        const currentChoice = cases.getStrategyChoices(caseId).filter(row => row.issueId === issueId).at(-1);
+        rows = (await Promise.all(deps.board.listTasks().map(async task => {
+          const item = deps.board!.getItem(task.itemId), authorization = deps.board!.listActionAuthorizations!(task.id).at(-1);
+          if (!linked.has(item.projectId) || !authorization || !observationAuthorizationMatches(cases, { caseId, issueId }, authorization)
+            || 'kind' in authorization.source || authorization.source.choiceId !== currentChoice?.choiceId) return [];
+          try { await linkedProject(caseId, item.projectId); } catch { return []; }
+          if (item.sourceKind === 'report-confirmation') {
+            try { if (!deps.assertBoardItemReadable) return []; await deps.assertBoardItemReadable(item); } catch { return []; }
+          }
+          return [{ title: task.title, target: { kind: 'observe', projectId: item.projectId, itemId: item.id, taskId: task.id,
+            authorizationId: authorization.authorizationId, feedbackBaseRevisionId: deps.board!.listFeedbackHistory(task.id).at(-1)?.revisionId ?? null },
+            choiceId: authorization.source.choiceId, strategyRef: authorization.source.strategyRef }];
+        }))).flat();
+      }
+      // Preserve whole rows and exact IDs; the next page carries any remaining body.
+      const items: unknown[] = [];
+      for (const row of rows.slice(Number(offset), Number(offset) + Number(limit))) {
+        if (JSON.stringify([...items, row]).length > 24000) break;
+        items.push(row);
+      }
+      const nextOffset = Number(offset) + items.length < rows.length ? Number(offset) + items.length : null;
+      return { ...base, items, offset, limit, total: rows.length, nextOffset, partial: nextOffset !== null };
+    },
+    issueEdges: (caseId: string, includeRemoved = false) => cases.listIssueEdges(caseId, { includeRemoved }),
+    saveIssueEdge: (caseId: string, input: Record<string, unknown>, options?: import('./case-decision-types.ts').CaseDecisionWriteOptions) => {
+      caseDecisionFields(input, ['operationId', 'expectedRevision', 'edgeId', 'fromIssueId', 'toIssueId', 'action', 'explanation', 'expectedEdgeRevision', 'source']);
+      if (input.action !== undefined && input.action !== 'save' && input.action !== 'remove') return fail('invalid_case_issue_edge', 400);
+      const src = input.source as { kind?: unknown; ref?: unknown } | undefined;
+      if (!src || (src.kind !== 'user-declaration' && src.kind !== 'adopted-candidate')) return fail('invalid_case_issue_edge_source', 400);
+      return deps.mutate(() => {
+        const opId = caseDecisionId(input.operationId);
+        if (cases.getOperation(opId)?.phase !== 'completed') options?.assertWritable?.();
+        return cases.saveIssueEdge({ caseId, operationId: opId, expectedRevision: options?.currentCaseRevision ? cases.getCase(caseId).revision : caseDecisionRevision(input.expectedRevision),
+          ...(input.edgeId !== undefined ? { edgeId: caseDecisionId(input.edgeId) } : {}), ...(input.fromIssueId !== undefined ? { fromIssueId: caseDecisionId(input.fromIssueId) } : {}),
+          ...(input.toIssueId !== undefined ? { toIssueId: caseDecisionId(input.toIssueId) } : {}), ...(input.action ? { action: input.action as 'save' | 'remove' } : {}),
+          ...(input.explanation !== undefined ? { explanation: caseDecisionText(input.explanation, 1000, true) } : {}),
+          expectedEdgeRevision: Number.isSafeInteger(input.expectedEdgeRevision) && Number(input.expectedEdgeRevision) >= 0 ? Number(input.expectedEdgeRevision) : fail('invalid_revision', 400),
+          source: { kind: src.kind as 'user-declaration' | 'adopted-candidate', ref: typeof src.ref === 'string' ? src.ref : null } }, options);
+      });
+    },
+    decisionRequests: async (caseId: string) => {
+      const choices = cases.getStrategyChoices(caseId);
+      return Promise.all(cases.listDecisionRequests(caseId).map(async request => {
+        if (request.target.kind === 'choose') return { ...request, status: await chooseRequestStatus(cases, request, choices, checkPlan) };
+        return { ...request, status: await observationRequestStatus(cases, deps.board, request, deps.assertBoardItemReadable, async projectId => { await linkedProject(caseId, projectId); }) };
+      }));
+    },
+    saveDecisionRequest: (caseId: string, input: Record<string, unknown>, options?: import('./case-decision-types.ts').CaseDecisionWriteOptions) => {
+      caseDecisionFields(input, ['operationId', 'expectedRevision', 'requestId', 'action', 'issueId', 'kind', 'text', 'source', 'assignee', 'requestedAt', 'dueDate', 'target', 'expectedRequestRevision']);
+      if (input.action !== undefined && input.action !== 'save' && input.action !== 'withdraw' && input.action !== 'supersede') return fail('invalid_case_decision_request', 400);
+      if (input.kind !== undefined && input.kind !== 'choose' && input.kind !== 'observe') return fail('invalid_case_decision_request', 400);
+      const src = input.source as { kind?: unknown; ref?: unknown } | undefined;
+      if (!src || (src.kind !== 'user-declaration' && src.kind !== 'agent-tool') || typeof src.ref !== 'string' || !src.ref.trim()) return fail('invalid_case_decision_request_source', 400);
+      const assignee = input.assignee as { label?: unknown; source?: unknown } | undefined;
+      if (input.assignee !== undefined && (!assignee || typeof assignee !== 'object' || Array.isArray(assignee)
+        || Object.keys(assignee).some(k => k !== 'label' && k !== 'source')
+        || [assignee.label, assignee.source].some(value => value !== undefined && value !== null && typeof value !== 'string'))) return fail('invalid_case_decision_request', 400);
+      return deps.mutate(async () => {
+        const opId = caseDecisionId(input.operationId);
+        if (cases.getOperation(opId)?.phase !== 'completed') {
+          options?.assertWritable?.();
+          const previous = input.requestId === undefined ? undefined : cases.listDecisionRequests(caseId).find(r => r.requestId === caseDecisionId(input.requestId));
+          const tgt = (input.target ?? previous?.target) as Record<string, unknown> | undefined;
+          if ((!input.action || input.action === 'save') && tgt?.kind === 'choose') {
+            const strategyRef = parseCaseDecisionRef(tgt.strategyRef);
+            cases.assertStrategyChoiceTarget({ caseStoreId: cases.getStatus().storeId!, caseId, issueId: previous?.issueId ?? caseDecisionId(input.issueId), strategyRef,
+              expectedPreviousChoiceId: tgt.expectedPreviousChoiceId === null ? null : caseDecisionId(tgt.expectedPreviousChoiceId), allowHistorical: true });
+            await checkPlan(strategyRef);
+          }
+          if ((!input.action || input.action === 'save') && tgt?.kind === 'observe') {
+            if (!deps.board) return fail('case_decision_board_unavailable', 503);
+            const projId = caseDecisionId(tgt.projectId), itemId = caseDecisionId(tgt.itemId), taskId = caseDecisionId(tgt.taskId), authId = caseDecisionId(tgt.authorizationId);
+            await linkedProject(caseId, projId);
+            const task = deps.board.getTask(taskId), item = deps.board.getItem(task.itemId);
+            if (item.id !== itemId || item.projectId !== projId) return fail('case_decision_scope_mismatch', 409);
+            if (item.sourceKind === 'report-confirmation') {
+              if (!deps.assertBoardItemReadable) return fail('confirmation_source_unavailable', 409);
+              await deps.assertBoardItemReadable(item);
+            }
+            const allAuths = deps.board.listActionAuthorizations?.(taskId) ?? [];
+            const authorization = allAuths.find(a => a.authorizationId === authId);
+            const issueId = previous?.issueId ?? caseDecisionId(input.issueId);
+            if (!authorization || authorization.projectId !== projId || authorization.itemId !== itemId || authorization.taskId !== taskId
+              || !observationAuthorizationMatches(cases, { caseId, issueId }, authorization) || allAuths.at(-1)?.authorizationId !== authId) return fail('case_do_authorization_unavailable', 409);
+            const source = authorization.source;
+            if ('kind' in source || cases.getStrategyChoices(caseId).filter(c => c.issueId === issueId).at(-1)?.choiceId !== source.choiceId) return fail('case_choice_conflict', 409);
+            const baseline = tgt.feedbackBaseRevisionId === null ? null : caseDecisionId(tgt.feedbackBaseRevisionId);
+            if ((deps.board.listFeedbackHistory(taskId).at(-1)?.revisionId ?? null) !== baseline) return fail('case_feedback_conflict', 409);
+          }
+        }
+        return cases.saveDecisionRequest({ caseId, operationId: opId, expectedRevision: options?.currentCaseRevision ? cases.getCase(caseId).revision : caseDecisionRevision(input.expectedRevision),
+          ...(input.requestId !== undefined ? { requestId: caseDecisionId(input.requestId) } : {}), ...(input.action ? { action: input.action as 'save' | 'withdraw' | 'supersede' } : {}),
+          ...(input.issueId !== undefined ? { issueId: caseDecisionId(input.issueId) } : {}), ...(input.kind ? { kind: input.kind as 'choose' | 'observe' } : {}),
+          ...(input.text !== undefined ? { text: caseDecisionText(input.text, 4000, true) } : {}), ...(input.requestedAt !== undefined ? { requestedAt: String(input.requestedAt) } : {}),
+          ...(input.dueDate !== undefined ? { dueDate: input.dueDate as string | null } : {}), ...(input.target !== undefined ? { target: input.target as never } : {}),
+          ...(assignee !== undefined ? { assignee: { ...(assignee.label !== undefined ? { label: assignee.label as string | null } : {}), ...(assignee.source !== undefined ? { source: assignee.source as string | null } : {}) } } : {}),
+          expectedRequestRevision: Number.isSafeInteger(input.expectedRequestRevision) && Number(input.expectedRequestRevision) >= 0 ? Number(input.expectedRequestRevision) : fail('invalid_revision', 400),
+          source: { kind: src.kind as 'user-declaration' | 'agent-tool', ref: String(src.ref).trim() } }, options);
+      });
+    },
     createIssue: (caseId: string, input: Record<string, unknown>) => deps.mutate(() => cases.createDecisionIssue({ caseId, operationId: caseDecisionId(input.operationId), expectedRevision: caseDecisionRevision(input.expectedRevision), title: caseDecisionText(input.title, 240, true) })) };
 }

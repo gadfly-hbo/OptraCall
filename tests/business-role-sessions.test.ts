@@ -118,7 +118,9 @@ test('Case Agent runs without a Project on an exact issue, rejects cross-Case us
     const inputs=ctx.messages.filter(m=>m.role==='user').map(m=>providerMessageText(m.content)).join(' ');
     assert.match(inputs,/先联系哪些客户/);assert.match(inputs,/核对本次议题的原资料/);
     assert.doesNotMatch(inputs,/独立问题保密标记/);
-    assert.deepEqual(ctx.availableTools,[]);return {text:'所选事项沿本轮准确 G 与 S 讨论。'};
+    // DW03/08 adds only the owner-bound declaration/read tool. No project,
+    // filesystem, command or generic Goal-write capability is granted.
+    assert.deepEqual(ctx.availableTools,['strategy_goals']);return {text:'所选事项沿本轮准确 G 与 S 讨论。'};
   });
   const requestId=randomUUID();
   await req(path+'&action=messages','POST',{requestId,text:'讨论所选事项',expectedRevision:0},202);

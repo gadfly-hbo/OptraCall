@@ -1,0 +1,9 @@
+{
+  "diff": [
+    {
+      "path": ".candidates[0].createRequestId",
+      "before": "<missing>",
+      "after": "06668ada-ceaa-43fd-8b72-775ffa760591"
+    }
+  ]
+}

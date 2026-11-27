@@ -91,6 +91,9 @@ import { CaseStore, CaseStoreError } from './case-store.ts';
 import { createCaseRoutes, CaseRouteError } from './case-routes.ts';
 import { createCaseDecisionService } from './case-decision-service.ts';
 import { createCaseDecisionRoutes } from './case-decision-routes.ts';
+import { createWorkspaceDraftStore, WorkspaceDraftError } from './workspace-draft-store.ts';
+import { createWorkspaceDailyRoutes } from './workspace-daily-routes.ts';
+import { listVisibleCaseDirectory } from './case-directory.ts';
 import { createCaseSourcesService } from './case-sources-service.ts';
 import { createCaseSourcesRoutes } from './case-sources-routes.ts';
 import { createCaseRelationsService } from './case-relations-service.ts';
@@ -829,16 +832,42 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           return { content: [{ type: 'text', text: result.text }], details: result.details };
         }, caseDecisions: options.caseDecisionsEnabled === false ? undefined : async (action, input, context) => {
           context.assertCurrent();
-          await pair(project.id, task.id, action === 'save');
+          await pair(project.id, task.id, action === 'save' || action === 'save-issue-edge' || action === 'save-decision-request');
           const receipt = cases.getOperation(context.caseOperationId), snapshot = receipt?.result;
           if (context.caseOperationId !== contextOperationId(project.id, task.id, context.requestId) || receipt?.kind !== 'task_context_prepare' || receipt.phase !== 'completed' || receipt.projectId !== project.id || !snapshot || snapshot.projectId !== project.id || snapshot.taskId !== task.id || snapshot.caseId !== receipt.caseId) throw new RequestFault(409, 'case_decision_binding_unavailable');
-          const assertCurrent = () => { context.assertCurrent(); if (closing) throw new RequestFault(409, 'case_decision_run_unavailable'); };
+          const assertCurrent = () => {
+            context.assertCurrent();
+            if (closing) throw new RequestFault(409, 'case_decision_run_unavailable');
+            try {
+              const currentConfiguration = availableConfiguration(_configuration.id, _configuration.revision);
+              if (!currentConfiguration || (['id', 'revision', 'provider', 'name', 'model', 'apiKey', 'api', 'baseUrl', 'thinkingLevel'] as const).some(key => currentConfiguration[key] !== _configuration[key])) throw Error('configuration_changed');
+            } catch {
+              void projectSessions.close(projectSessions.ref(owner), { retryFailed: false }).catch(() => {});
+              throw new RequestFault(409, 'configuration_changed');
+            }
+          };
+          assertCurrent();
           const hex = createHash('sha256').update(JSON.stringify(['case_decision_tool', project.id, task.id, context.requestId, context.sessionId, context.toolCallId])).digest('hex');
           const operationId = `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20,32)}`;
           const authority = { caseStoreId: cases.getStatus().storeId!, caseId: String(snapshot.caseId), projectId: project.id, taskId: task.id, requestId: context.requestId, sessionId: context.sessionId, toolCallId: context.toolCallId, operationId, signal: context.signal, assertCurrent };
           if (action === 'read') {
             const result = await caseDecisions.readForAgent(input, authority); assertCurrent();
             return { content: [{ type: 'text', text: result.text }], details: result.details };
+          }
+          if (action === 'save-issue-edge') {
+            const { sourceKind, ...rest } = input as Record<string, unknown>;
+            const edge = await caseDecisions.saveIssueEdge(authority.caseId, {
+              ...rest, operationId: authority.operationId,
+              source: { kind: sourceKind === 'adopted-candidate' ? 'adopted-candidate' : 'user-declaration', ref: `${authority.sessionId}/${authority.requestId}/${authority.toolCallId}` },
+            }, { currentCaseRevision: true, assertWritable: () => { assertCurrent(); context.signal.throwIfAborted(); } }); assertCurrent();
+            return { content: [{ type: 'text', text: JSON.stringify(edge) }], details: { type: 'optracall.case-issue-edge-save', edge } };
+          }
+          if (action === 'save-decision-request') {
+            const req = await caseDecisions.saveDecisionRequest(authority.caseId, {
+              ...(input as Record<string, unknown>), operationId: authority.operationId,
+              source: { kind: 'agent-tool', ref: `${authority.sessionId}/${authority.requestId}/${authority.toolCallId}` },
+            }, { currentCaseRevision: true, assertWritable: () => { assertCurrent(); context.signal.throwIfAborted(); } }); assertCurrent();
+            return { content: [{ type: 'text', text: JSON.stringify(req) }], details: { type: 'optracall.case-decision-request-save', request: req } };
           }
           const saved = await caseDecisions.saveForAgent(input, authority); assertCurrent();
           return { content: [{ type: 'text', text: JSON.stringify(saved) }], details: { type: 'optracall.case-decision-save', ...saved } };
@@ -1229,6 +1258,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     return ws;
   }
   const discussionOptions: Parameters<typeof createStrategyDiscussionHost>[0]={dataRoot,codeRoot:options.cwd,goals:strategyGoals,readDecompositionWorkspace,mapImports:()=>strategyMapImports,
+    readCaseDirectory: opts => listVisibleCaseDirectory(cases, opts),
+    caseDeclarations: { readDeclarations: (caseId, issueId, input) => caseDecisions.readDeclarations(caseId, issueId, input), saveIssueEdge: (caseId, input, opts) => caseDecisions.saveIssueEdge(caseId, input, opts), saveDecisionRequest: (caseId, input, opts) => caseDecisions.saveDecisionRequest(caseId, input, opts) },
     goalEnterprises:projectId=>{
       const directory=studio.enterpriseScopes.list();
       const assigned=projectId&&directory.projectAssignments.find(link=>link.projectId===projectId)?.enterpriseId;
@@ -1843,6 +1874,33 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       await qualifyIssueReply({caseId,issueId},availableConfiguration(task.configuration.id,task.configuration.revision) ?? undefined,{projectId:source.projectId,taskId:source.taskId})(source,requestId);
     }, readSource: readPersonalSource, personalContext, board: boardStore, assertBoardItemReadable: item => conclusionHandoff.assertItemReadable(item), requirements: { readRelease: requirementPlugin.review.assertReleaseReadable }, readHandoff: id => decisionFeedback.store.getHandoff(id) });
   const caseDecisionRoutes = createCaseDecisionRoutes(caseDecisions);
+  const workspaceDrafts = createWorkspaceDraftStore({ root: dataRoot });
+  const workspaceDailyRoutes = createWorkspaceDailyRoutes({
+    cases,
+    drafts: workspaceDrafts,
+    board: boardStore,
+    assertBoardItemReadable: item => conclusionHandoff.assertItemReadable(item),
+    assertActiveProject: async projectId => { assertActive(await projects.get(projectId)); },
+    checkPlan: caseDecisions.checkPlan,
+    initializeCases: async () => { await caseRoutes({pathname:'/api/cases/storage/initialize',method:'POST',input:{}}); },
+    readGoal: async ({ goalId, version }) => {
+      const goal = strategyGoals.read({ goalId, version });
+      await validateStrategyGoal(goal);
+      return { goalId: goal.goalId, version: goal.version, status: goal.status, strategies: goal.strategies ?? [] };
+    },
+    adoptGoal: async ({ operationId, goalId, expectedVersion, strategy }) => mutate(async () => {
+      const ref = { goalId, version: expectedVersion };
+      const current = strategyGoals.read(ref);
+      await validateStrategyGoal(current);
+      if (!strategy || !(current.strategies ?? []).includes(strategy)) throw new WorkspaceDraftError('invalid_goal_strategy', 400);
+      const goal = strategyGoals.adopt(ref, { operationId, expectedVersion, decision: `明确采纳策略「${strategy}」并创建 Case` });
+      return { goalId: goal.goalId, version: goal.version, strategy, adoptedAt: goal.adoptedAt ?? new Date().toISOString() };
+    }),
+    createCase: async ({ operationId, title, description, goalBinding, creationSource, goalIntent }) => {
+      const res = await caseRoutes({ pathname: '/api/cases', method: 'POST', input: { operationId, title, description, goalBinding, ...(creationSource ? { creationSource } : {}), ...(goalIntent ? { goalIntent } : {}) } });
+      return (res!.body as { case: import('./case-types.ts').CaseRecord }).case;
+    },
+  });
   const caseSources = createCaseSourcesService({ cases, projects, assertActive, readReference: caseDecisions.source });
   const caseSourcesRoutes = createCaseSourcesRoutes(caseSources);
   const caseRelations = createCaseRelationsService({ cases, projects, mutate, assertActive,
@@ -3267,6 +3325,11 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         if (!result) throw new RequestFault(404, 'not_found');
         json(response, result.status ?? 200, result.body); return;
       }
+      if (url.pathname.startsWith('/api/workspace/')) {
+        const result = await workspaceDailyRoutes({ pathname: url.pathname, method: request.method ?? 'GET', searchParams: url.searchParams, ...(['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method ?? '') ? { input: await body(request, 262_144) } : {}) });
+        if (!result) throw new RequestFault(404, 'not_found');
+        json(response, result.status ?? 200, result.body); return;
+      }
       if (/^\/api\/cases\/[a-f0-9-]+\/decisions(?:\/|$)/.test(url.pathname)) {
         const result = await caseDecisionRoutes({ pathname: url.pathname, method: request.method ?? 'GET', searchParams: url.searchParams, ...(['POST', 'PATCH', 'DELETE'].includes(request.method ?? '') ? { input: await body(request, 262_144) } : {}) });
         if (!result) throw new RequestFault(404, 'not_found');
@@ -3943,7 +4006,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         json(response, error.status, { code: error.code, ...rejectedSend(error.status), message: messages[error.code] ?? '企业业务资料未能取得，请刷新核对明确修订和来源；未替换为最新版。' });
         return;
       }
-      const originalCode = error instanceof SemanticReadFault || error instanceof SemanticContextFault || error instanceof AutomaticVerificationStoreError || error instanceof VerificationStoreError || error instanceof RequestFault || error instanceof ProjectHistoryError || error instanceof CaseRouteError || error instanceof CaseStoreError || error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault || error instanceof ProjectRuntimeError ? error.code : 'host_request_failed';
+      const originalCode = error instanceof SemanticReadFault || error instanceof SemanticContextFault || error instanceof AutomaticVerificationStoreError || error instanceof VerificationStoreError || error instanceof RequestFault || error instanceof ProjectHistoryError || error instanceof CaseRouteError || error instanceof CaseStoreError || error instanceof WorkspaceDraftError || error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault || error instanceof ProjectRuntimeError ? error.code : 'host_request_failed';
       if (error instanceof RequestFault && ['project_plan_context_changed', 'requirement_unavailable', 'requirement_history_source_unavailable', 'report_calculation_history_source_unavailable'].includes(originalCode)) {
         json(response, error.status, {
           code: originalCode, accepted: false,
@@ -3958,7 +4021,7 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
         return;
       }
       const code = originalCode === 'ui_request_expired' ? 'ui_request_unavailable' : originalCode;
-      const status = error instanceof SemanticReadFault || error instanceof SemanticContextFault || error instanceof AutomaticVerificationStoreError || error instanceof VerificationStoreError ? error.status : error instanceof CaseStoreError || error instanceof CaseRouteError ? error.statusCode : error instanceof RequestFault || error instanceof ProjectHistoryError ? error.status : code.includes('required') || code.includes('busy') || code.includes('exists') || code.includes('changed') || ['project_archived', 'runtime_closed', 'ui_request_unavailable', 'unmanaged_execution_unknown'].includes(code) ? 409 : code.includes('not_found') ? 404 : error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault ? 400 : 500;
+      const status = error instanceof SemanticReadFault || error instanceof SemanticContextFault || error instanceof AutomaticVerificationStoreError || error instanceof VerificationStoreError ? error.status : error instanceof CaseStoreError || error instanceof CaseRouteError || error instanceof WorkspaceDraftError ? error.statusCode : error instanceof RequestFault || error instanceof ProjectHistoryError ? error.status : code.includes('required') || code.includes('busy') || code.includes('exists') || code.includes('changed') || ['project_archived', 'runtime_closed', 'ui_request_unavailable', 'unmanaged_execution_unknown'].includes(code) ? 409 : code.includes('not_found') ? 404 : error instanceof ConfigurationStoreError || error instanceof ProjectStoreFault ? 400 : 500;
       if (code === 'member_pack_connector_restricted') { json(response, status, { code, ...rejectedSend(status), message: '该项目受企业会员包资源授权约束，数据库直连和外部连接器不可用。请使用当前获准的 read_input/受控工具；如需更多明细，请到企业 Studio「三层资源授权」，由原权责维护主体核对准确用途、门店、期间和 allowedDataPaths。' }); return; }
       if (code === 'task_skill_version_changed' || code === 'task_skill_unavailable') { json(response, status, { code, ...rejectedSend(status), message: code === 'task_skill_version_changed' ? taskSkillVersionChangedMessage : '默认 Skill 当前不可用。请在分析资产中核对安装，或编辑任务并明确取消该 Skill 后重试。' }); return; }
       if (conclusionReviewMessages[code]) { json(response, status, { code, ...rejectedSend(status), message: conclusionReviewMessages[code] }); return; }

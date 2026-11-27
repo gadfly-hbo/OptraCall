@@ -1,0 +1,16 @@
+{
+  "head": "be1fd36ad449d89d2fc21655ccbbb61cf8b6bdbf",
+  "run": 46029647747,
+  "job": 140609918782,
+  "url": "https://github.com/gadfly-hbo/OptraCall/actions/runs/46029647747",
+  "conclusion": "failure",
+  "summary": [
+    "2026-11-27T16:19:37.0170523Z ℹ tests 3596",
+    "2026-11-27T16:19:37.0171084Z ℹ pass 3397",
+    "2026-11-27T16:19:37.0171356Z ℹ fail 2",
+    "2026-11-27T16:19:37.0171664Z ℹ cancelled 0",
+    "2026-11-27T16:19:37.0171958Z ℹ skipped 197",
+    "2026-11-27T16:19:37.0172543Z ℹ duration_ms 1211197.962922"
+  ],
+  "failures": "2026-11-27T16:19:37.0172906Z ✖ failing tests:\n2026-11-27T16:19:37.0173071Z \n2026-11-27T16:19:37.0173346Z test at tests/business-role-sessions.test.ts:100:1\n2026-11-27T16:19:37.0174309Z ✖ Case Agent runs without a Project on an exact issue, rejects cross-Case use and preserves the closed record (10462.095969ms)\n2026-11-27T16:19:37.0174932Z   AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n2026-11-27T16:19:37.0175263Z   + actual - expected\n2026-11-27T16:19:37.0175526Z   \n2026-11-27T16:19:37.0175757Z   + 'accepted'\n2026-11-27T16:19:37.0176172Z   - 'completed'\n2026-11-27T16:19:37.0176418Z   \n2026-11-27T16:19:37.0177071Z       at TestContext.<anonymous> (file:///home/runner/work/OptraCall/OptraCall/tests/business-role-sessions.test.ts:127:10)\n2026-11-27T16:19:37.0177961Z       at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n2026-11-27T16:19:37.0178574Z       at async Test.run (node:internal/test_runner/test:1208:7)\n2026-11-27T16:19:37.0179180Z       at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {\n2026-11-27T16:19:37.0179752Z     generatedMessage: true,\n2026-11-27T16:19:37.0180031Z     code: 'ERR_ASSERTION',\n2026-11-27T16:19:37.0180234Z     actual: 'accepted',\n2026-11-27T16:19:37.0180432Z     expected: 'completed',\n2026-11-27T16:19:37.0180673Z     operator: 'strictEqual',\n2026-11-27T16:19:37.0180882Z     diff: 'simple'\n2026-11-27T16:19:37.0181138Z   }\n2026-11-27T16:19:37.0181301Z \n2026-11-27T16:19:37.0181602Z test at tests/fr01-03-05-repro.test.ts:108:1\n2026-11-27T16:19:37.0182835Z ✖ FR03-REPRO: Board saveFeedback with respondsToRequest reopens cleanly (schema v6); forged caseStoreId/authorizationId rejected (153.509771ms)\n2026-11-27T16:19:37.0183692Z   AssertionError [ERR_ASSERTION]: Missing expected exception.\n2026-11-27T16:19:37.0184483Z       at TestContext.<anonymous> (file:///home/runner/work/OptraCall/OptraCall/tests/fr01-03-05-repro.test.ts:149:10)\n2026-11-27T16:19:37.0185238Z       at async Test.run (node:internal/test_runner/test:1208:7)\n2026-11-27T16:19:37.0186029Z       at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {\n2026-11-27T16:19:37.0186575Z     generatedMessage: false,\n2026-11-27T16:19:37.0186879Z     code: 'ERR_ASSERTION',\n2026-11-27T16:19:37.0187171Z     actual: undefined,\n2026-11-27T16:19:37.0187523Z     expected: { code: 'project_not_linked' },\n2026-11-27T16:19:37.0187881Z     operator: 'throws',\n2026-11-27T16:19:37.0188143Z     diff: 'simple'\n2026-11-27T16:19:37.0188374Z   }"
+}

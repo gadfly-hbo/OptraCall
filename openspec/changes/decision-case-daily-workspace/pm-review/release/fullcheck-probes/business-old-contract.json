@@ -1,0 +1,2617 @@
+{
+  "scope": "SYNTHETIC_REAL_HOST_6BC_WITH_BE1_STALE_TOOLS_FIXTURE_AND_ORIGINAL_BUSY_PREDICATE",
+  "requestId": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+  "samples": [
+    {
+      "elapsedMs": 232,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 323,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 409,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 491,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 542,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 613,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 684,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 737,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 820,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 913,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 996,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 1055,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 1109,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 1162,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 1213,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 1261,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 1330,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 1397,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 1445,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 1525,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 1605,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 1661,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 1720,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 1849,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 1907,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 1987,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 2036,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 2109,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 2153,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 1
+    },
+    {
+      "elapsedMs": 2215,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 2313,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 2392,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 2492,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 2555,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 2608,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 2659,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 2718,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 2760,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 2803,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 2859,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 2899,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 2946,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 3087,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 3130,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 3169,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 3294,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 3404,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 3449,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 3517,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 3566,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 3612,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 3651,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 3714,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 3792,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 3840,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 4013,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 4128,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 4450,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 4616,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 4700,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 4748,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 4895,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 4932,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 4969,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 5022,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 5062,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 5105,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 5146,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 5192,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 5230,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 5280,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 5320,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 5361,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 5431,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 5509,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 5585,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 5647,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 5725,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 5815,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 5860,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 5897,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 5938,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 6013,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 6057,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 6102,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 6144,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 6199,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 2
+    },
+    {
+      "elapsedMs": 6243,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 6315,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 6354,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 6447,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 6484,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 6529,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 6565,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 6617,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 6678,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 6739,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 6810,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 7003,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 7213,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 7388,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 7451,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 7485,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 7521,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 7556,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 7594,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 7630,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 7676,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 7719,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 7800,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 7844,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 7879,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 7917,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 7958,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 8013,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 8057,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 8108,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 8146,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 8181,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 8218,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 8255,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 8300,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 8343,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 8388,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 8432,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 8471,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 8519,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 8563,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 8615,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 8659,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 8722,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 8758,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 8797,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 8834,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 8868,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 8901,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 8936,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 8973,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 9016,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 9067,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 9101,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 9134,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 9166,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 9201,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 9234,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 9272,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 9326,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 9359,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 9392,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 9424,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 9490,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 9548,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 9833,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 10052,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 10406,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 10448,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 10537,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 10623,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 10662,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 10697,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 10733,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 10797,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 10834,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 10903,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 10951,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 11010,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 11049,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 11095,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 11135,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 11213,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 11260,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 11414,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 11484,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 11522,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 11561,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 11600,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 11636,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 11690,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 11729,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 11792,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    },
+    {
+      "elapsedMs": 11831,
+      "busy": true,
+      "lastRun": {
+        "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+        "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+        "status": "accepted"
+      },
+      "providerErrors": [
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+        "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+      ],
+      "requestCount": 3
+    }
+  ],
+  "finalBusy": true,
+  "finalRun": {
+    "id": "18cc9a6d-6daf-4cb0-a354-903df6e8a866",
+    "fingerprint": "27763a0267159b7ca5565197b1536d6ed7173798ad82a002274fca31d94cea0f",
+    "status": "accepted"
+  },
+  "providerErrors": [
+    "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+    "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n",
+    "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'strategy_goals'\n+ ]\n- []\n"
+  ],
+  "requestCount": 3
+}

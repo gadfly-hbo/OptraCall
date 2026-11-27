@@ -202,7 +202,9 @@ test('真实 Host+Pi：候选自读保存回执并从冲突中有限纠正', {ti
 
 test('I131-B 真实 Host+Pi：候选保存角色字段／操作身份／块与目标校验定位、自修保存及旧 lastSave 兼容', {timeout: 180_000}, async t => {
   const provider = await startToolProvider(), host = await startTestHost();
-  t.after(async () => { await host.close(); await provider.close(); });
+  let releaseAdmission!: () => void;
+  const admission = new Promise<void>(resolve => { releaseAdmission = resolve; });
+  t.after(async () => { releaseAdmission(); await host.close(); await provider.close(); });
   const req = async (route: string, method = 'GET', body?: unknown, status = 200): Promise<any> => {
     const r = await host.request(route, method, body);
     assert.equal(r.status, status, await r.clone().text());
@@ -224,6 +226,9 @@ test('I131-B 真实 Host+Pi：候选保存角色字段／操作身份／块与�
     const step = ctx.recentToolResults.length;
     if (step > 0) results[step - 1] = providerMessageText(ctx.recentToolResults.at(-1)?.content);
     if (step === 0) {
+      // Freeze after the original create acknowledgement has persisted its
+      // createRequestId; that normal admission write is not an invalid save.
+      await admission;
       bytesBefore = createHash('sha256').update(await readFile(candidateFile)).digest('hex');
       // Role-disallowed fields: version & no
       return {calls: [{name: 'strategy_goals', arguments: {action: 'initiative-save-candidate', operationId: randomUUID(), version: 1, no: 1, candidateBlocks: blocksFor('夹带字段')}}]};
@@ -266,6 +271,7 @@ test('I131-B 真实 Host+Pi：候选保存角色字段／操作身份／块与�
   });
 
   const created = await req(`${base}/candidates`, 'POST', {operationId: randomUUID(), scope: stores, title: '校验修正候选', instruction: '测试校验定位并修正保存。'}, 202);
+  releaseAdmission();
   const cid = created.candidate.candidateId;
   let detail: any;
   for (let n = 0; n < 500; n++) { detail = await req(`${base}/candidates/${cid}/versions/1`); if (detail.candidate.lastRun?.status === 'completed') break; await delay(20); }

@@ -1,0 +1,116 @@
+{
+  "mode": "actual full inline script in Node VM with DOM stubs; no browser rendering/real keyboard",
+  "sha256": "adff576ba604b35b95806ab6a5c0f7bf93de5f0124c1ce0540e14577572bf911",
+  "checks": [
+    {
+      "name": "v0.5 migration preserves complete nonempty Case work states",
+      "passed": true
+    },
+    {
+      "name": "v0.5 migration preserves global project search and filter",
+      "passed": true
+    },
+    {
+      "name": "accepted Decision Case navigation and local four tabs remain",
+      "passed": true
+    },
+    {
+      "name": "v0.6 first entry is homepage and later reload preserves deliberate route",
+      "passed": true
+    },
+    {
+      "name": "homepage separates explicit requests, external waiting and continuing work",
+      "passed": true
+    },
+    {
+      "name": "opening request and its source has no completion or work-record side effects",
+      "passed": true
+    },
+    {
+      "name": "unrelated, wrong-request, wrong-round and wrong-type records do not complete request",
+      "passed": true
+    },
+    {
+      "name": "saving response through original choice form resolves only its exact request",
+      "passed": true
+    },
+    {
+      "name": "saving exact feedback response resolves request without completing external action",
+      "passed": true
+    },
+    {
+      "name": "input and simulated arrangement create no Case, adoption or sent messages",
+      "passed": true
+    },
+    {
+      "name": "inserting example preserves existing text and original arrangement",
+      "passed": true
+    },
+    {
+      "name": "continuing Case protects nonempty draft and messages, queuing one separate input",
+      "passed": true
+    },
+    {
+      "name": "transfer append is explicit, retains original input and is idempotent without sending",
+      "passed": true
+    },
+    {
+      "name": "preparation edits and navigation stay drafts until explicit commit",
+      "passed": true
+    },
+    {
+      "name": "manual route is usable without model or foundation prerequisites",
+      "passed": true
+    },
+    {
+      "name": "new G/S adoption and Case creation preserve original input and candidate with one identity",
+      "passed": true
+    },
+    {
+      "name": "existing adopted G/S without Case creates once without another adoption",
+      "passed": true
+    },
+    {
+      "name": "exact existing G/S uses reference identity and continues with new name/input retained",
+      "passed": true
+    },
+    {
+      "name": "editing an adopted G/S candidate clears inherited identity before adoption",
+      "passed": true
+    },
+    {
+      "name": "interrupted creation preserves adoption and input, retry creates only Case",
+      "passed": true
+    },
+    {
+      "name": "discarding interrupted draft preserves adopted result and other Case drafts",
+      "passed": true
+    },
+    {
+      "name": "new Case sources reflect its own G/S and original input, with no borrowed retail body",
+      "passed": true
+    },
+    {
+      "name": "dynamic Case and adopted history survive reload, reset clears only demo state",
+      "passed": true
+    },
+    {
+      "name": "draft markup escapes user HTML in homepage, preparation, transfers and Case source",
+      "passed": true
+    },
+    {
+      "name": "transfer provenance and original text remain readable after append, send and reload",
+      "passed": true
+    },
+    {
+      "name": "analysis foundation reminder distinguishes reusable assets from Case report output",
+      "passed": true
+    },
+    {
+      "name": "explicit G/S revision stores a new version without losing old source or original input",
+      "passed": true
+    }
+  ],
+  "total": 27,
+  "passed": 27
+}

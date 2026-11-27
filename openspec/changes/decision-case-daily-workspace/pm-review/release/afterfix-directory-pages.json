@@ -1,0 +1,57 @@
+{
+  "expectedIssues": 132,
+  "readIssues": 132,
+  "uniqueIssues": 132,
+  "pages": [
+    {
+      "offset": 0,
+      "items": 20,
+      "next": 20,
+      "partial": true,
+      "characters": 5852
+    },
+    {
+      "offset": 20,
+      "items": 20,
+      "next": 40,
+      "partial": true,
+      "characters": 6326
+    },
+    {
+      "offset": 40,
+      "items": 20,
+      "next": 60,
+      "partial": true,
+      "characters": 6326
+    },
+    {
+      "offset": 60,
+      "items": 20,
+      "next": 80,
+      "partial": true,
+      "characters": 6326
+    },
+    {
+      "offset": 80,
+      "items": 20,
+      "next": 100,
+      "partial": true,
+      "characters": 6327
+    },
+    {
+      "offset": 100,
+      "items": 20,
+      "next": 120,
+      "partial": true,
+      "characters": 6345
+    },
+    {
+      "offset": 120,
+      "items": 12,
+      "next": null,
+      "partial": false,
+      "characters": 3966
+    }
+  ],
+  "revisionUnchanged": true
+}

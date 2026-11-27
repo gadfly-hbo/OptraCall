@@ -1,0 +1,51 @@
+{
+  "scope": "Independent package and prototype review only; VM uses DOM substitutes, not browser/product/SDK validation",
+  "checks": [
+    {
+      "name": "frozen approved UI identity",
+      "status": "PASS"
+    },
+    {
+      "name": "issue selection defaults both auxiliary views and manual choices survive tab navigation",
+      "status": "PASS"
+    },
+    {
+      "name": "explicit multiple predecessors converge and no title or order infers edges",
+      "status": "PASS"
+    },
+    {
+      "name": "global project identity stays unique across Cases with shared original project",
+      "status": "PASS"
+    },
+    {
+      "name": "global independent and archived filters preserve all-project counts",
+      "status": "PASS"
+    },
+    {
+      "name": "empty Case has no inherited artifacts despite shared project association",
+      "status": "PASS"
+    },
+    {
+      "name": "zero task project remains globally available",
+      "status": "PASS"
+    },
+    {
+      "name": "project and Case round trip preserves search and source Case draft and scope",
+      "status": "PASS"
+    },
+    {
+      "name": "unrelated readable report does not create or resolve request",
+      "status": "PASS"
+    },
+    {
+      "name": "frozen prototype has no external script styles images or network API",
+      "status": "PASS"
+    },
+    {
+      "name": "all Markdown local references in confirmed package resolve",
+      "status": "PASS"
+    }
+  ],
+  "total": 11,
+  "passed": 11
+}

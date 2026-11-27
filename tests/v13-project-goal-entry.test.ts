@@ -30,7 +30,12 @@ async function fixture(t: import('node:test').TestContext) {
   async function run(route:string,isRole=false,revision=0) {
     const requestId=randomUUID();
     await call(route+(isRole?'&action=messages':'/messages'),'POST',{text:'核查本次交接',requestId,expectedRevision:revision},202);
-    for(let i=0;i<300;i++){const state=await call(route);const run=(isRole?state.discussion:state.task)?.lastRun;if(run?.status==='failed')assert.fail(JSON.stringify(run));
+    for(let i=0;i<300;i++){
+      const response=await host.request(route),state=await response.json();
+      // Observe again within the same window while the running SDK has an incomplete native append.
+      if(response.status===409&&state.code==='native_snapshot_incomplete'){await delay(25);continue;}
+      assert.equal(response.status,200,JSON.stringify({route,result:state}));
+      const run=(isRole?state.discussion:state.task)?.lastRun;if(run?.status==='failed')assert.fail(JSON.stringify(run));
       if(run?.id===requestId&&run.status==='completed')return {state,prompt:prompt()};await delay(25);}
     assert.fail('Expected synthetic run to complete');
   }

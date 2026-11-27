@@ -49,17 +49,20 @@ export type SaveFeedbackInput = {
   operationId: string; expectedLatestRevisionId: string | null;
   adopted: boolean; outcome: string; metricDelta: string; review: string; score: number | null;
   effect?: FeedbackEffect;
+  respondsToRequest?: FeedbackRequestResponseRef;
 };
 export type TaskFeedbackRecord = {
   taskId: string; adopted: boolean; outcome: string; metricDelta: string; review: string; score: number | null;
   effect: FeedbackEffect;
   createdAt: string; updatedAt: string;
 };
+export type FeedbackRequestResponseRef = { requestId: string; revision: number; authorizationId: string };
 export type TaskFeedbackRevision = TaskFeedbackRecord & {
   revisionId: string; revisionNumber: number; operationId: string | null; requestSha256: string | null;
   savedAt: string; origin: 'user-save' | 'legacy-current';
   legacyCreatedAt: string | null; legacyUpdatedAt: string | null;
   quoteProvenance?: UserQuoteProvenance;
+  respondsToRequest?: FeedbackRequestResponseRef;
 };
 export type BoardCaseAuthorizationSource = { caseStoreId: string; caseId: string; choiceId: string;
   strategyRef: { type: 'case-decision'; caseStoreId: string; caseId: string; recordId: string; revision: number } };

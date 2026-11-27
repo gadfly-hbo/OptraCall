@@ -1,0 +1,12 @@
+{
+  "scope": "ORIGINAL_HOST_STARTUP_BOUNDARY_UNCHANGED_10000MS",
+  "startedAt": 1795797988689,
+  "pid": 132815,
+  "scratch": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/tmp/optracall-host-test-xBOmIk",
+  "dataRoot": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/tmp/optracall-host-test-xBOmIk/host",
+  "projectsRoot": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/tmp/optracall-host-test-xBOmIk/projects",
+  "elapsedMs": 3924,
+  "port": 35497,
+  "stdout": "{\"kind\":\"host-ready\",\"port\":35497,\"sdkVersion\":\"1.4.0\",\"transportVersion\":\"8.12.2\"}\n",
+  "stderr": ""
+}

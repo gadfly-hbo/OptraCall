@@ -1,0 +1,72 @@
+{
+  "baseline": "4132a39d336c22d46c5bc57ae9d9b544a7ebac5f",
+  "approvedDemoVersion": "v0.6",
+  "approvedDemoSha256": "adff576ba604b35b95806ab6a5c0f7bf93de5f0124c1ce0540e14577572bf911",
+  "files": [
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/decisions.md",
+      "bytes": 3792,
+      "sha256": "a1609c3ba8e6150f6f6356ed97c8da49f6aa3462b4f073be2f8bf7c0bb9a9088"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/demo-guide.md",
+      "bytes": 2560,
+      "sha256": "a5967e4198061e604c080553c90fa5d45f83b497b6b0516251dab21daf38e54a"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/demo.html",
+      "bytes": 208858,
+      "sha256": "adff576ba604b35b95806ab6a5c0f7bf93de5f0124c1ce0540e14577572bf911"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/result.md",
+      "bytes": 4290,
+      "sha256": "01f88737778e80a4a8cb7cdac94daa84967a949720586ebbf37601899fdd477b"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/spec.md",
+      "bytes": 23201,
+      "sha256": "834399d514fd9093d6dc93e5a897381d7ed83605499a16827e4dbac57468cc9f"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/tasks.md",
+      "bytes": 4785,
+      "sha256": "6ed1d3865d7312599b321b95a4dfb08868dbe2f2b2a1dd68ba52b8fa63fc71e7"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/verification/check-demo.mjs",
+      "bytes": 16407,
+      "sha256": "04d7b532fd3a0b70e67ed0a1befb239bc69244d66e37840d3cafd98e229a1206"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/verification/dispatch-review.md",
+      "bytes": 5368,
+      "sha256": "e31cf274c31180cd751ea94ca6c011eb55f756fba41b512cbfbde0f2bab78d8e"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/verification/independent-check-receipt.json",
+      "bytes": 1477,
+      "sha256": "b097270bd8264306835c5f2b516a24b580cf3ba8e9b398c06c4040c91858af80"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/verification/prototype-check-receipt.json",
+      "bytes": 3674,
+      "sha256": "8f958e67d84c693576c969c0ee34266e0c4a157a418e1c698ed7b7970191f909"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/verification/title-xss-original-fail.json",
+      "bytes": 247,
+      "sha256": "aab60e9165df6aebd4da679bf656f153645e2b08866d504c089eea7b746a43f2"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/verification/v0.5-state.json",
+      "bytes": 18096,
+      "sha256": "cba2a506c9c1c2e11fc5dd38eb4803b79ecc405000a6de1e3977ac0e6d68a60f"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/verification/vm-harness.mjs",
+      "bytes": 3407,
+      "sha256": "f5a86afd1174fc2809ead46885876292c9dd1cff97e76ab77df751b299d3a3c8"
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "head": "6bc7be2849d280e5e6a6e598ee6b7a68dd5e48eb",
+  "scratch": "/tmp/issue149-independent-ui-wqKfKo",
+  "dropAck": false,
+  "steps": [
+    {
+      "name": "VISITED_EMPTY_CASE_OVERVIEW_WITHOUT_INITIALIZING"
+    },
+    {
+      "name": "FRESH_GETS_AND_PREPARATION_DO_NOT_INITIALIZE_CASE_STORAGE"
+    },
+    {
+      "name": "EXPLICIT_FIRST_CREATE_INITIALIZES_AND_SAVES_ONE_CASE_ONE_ISSUE",
+      "caseId": "590b28c8-2433-409e-be2a-b59ccd952c6a",
+      "issueId": "f227507e-c62a-4a55-84db-6afabaecf24c"
+    },
+    {
+      "name": "HOME_HISTORICAL_V1_REQUEST_HAS_ONLY_LATEST_V2_UI_OPTION",
+      "requestId": "30303121-5598-4fdd-a631-1868d1d77534",
+      "options": [
+        {
+          "value": "",
+          "text": "选择方案版本"
+        },
+        {
+          "value": "6e4e86a2-4627-4240-b3f2-f3c366b3aacb",
+          "text": "准确方案A新版 v2"
+        },
+        {
+          "value": "fcfed9b8-6a4e-47d5-8926-4489b3459170",
+          "text": "准确方案B v1"
+        }
+      ]
+    },
+    {
+      "name": "A_INITIAL_REQUEST_FOCUS_BLOCKS_B_SINGLE_REQUEST_ASSOCIATION",
+      "requestB": "db6ace19-2a80-4e1f-afc4-7a1728adf995",
+      "choice": {
+        "choiceId": "10f76269-5ad2-4cc8-b4ab-e528ee1fb1c7",
+        "caseId": "590b28c8-2433-409e-be2a-b59ccd952c6a",
+        "issueId": "40cc8ed2-789d-4cf2-88ab-4cddc0f7e271",
+        "goalBinding": {
+          "primary": {
+            "goalId": "a4219e23-8d56-4228-ae28-997f03b05ce9",
+            "version": 1
+          },
+          "related": [],
+          "strategy": "首用明确具体S",
+          "caseId": "590b28c8-2433-409e-be2a-b59ccd952c6a",
+          "caseRevision": 1,
+          "confirmedAt": "2026-11-27T16:37:57.202Z",
+          "operationId": "12eb17a1-af49-4829-a84c-f29518b146ae"
+        },
+        "strategyRef": {
+          "type": "case-decision",
+          "caseStoreId": "df3ca809-eba9-4d57-923f-36d2da5e42cd",
+          "caseId": "590b28c8-2433-409e-be2a-b59ccd952c6a",
+          "recordId": "fcfed9b8-6a4e-47d5-8926-4489b3459170",
+          "revision": 1
+        },
+        "choice": "trial",
+        "reason": "明确回应事项B的原请求",
+        "previousChoiceId": null,
+        "operationId": "9ff8aee8-93f5-46a6-818e-0905d51cd890",
+        "occurredAt": "2026-11-27T16:37:59.033Z",
+        "actorKind": "user"
+      },
+      "status": "superseded"
+    },
+    {
+      "name": "ORIGINAL_API_CAN_ACCURATELY_RESPOND_TO_V1_WITH_ALLOW_HISTORICAL",
+      "choiceId": "b57bbde1-a34c-4326-a419-596e4e152265"
+    }
+  ],
+  "networkMessages": [],
+  "createRequests": [
+    "{\"draftId\":\"prepare-394d747f-3794-4a5c-9b6e-2e77ba37a3e0\",\"title\":\"干净首用第一Case\",\"description\":\"干净首用完整背景\",\"rawInput\":\"干净首用原输入 <img src=x onerror=\\\"window.__freshXss=1\\\">\",\"goal\":{\"goalId\":\"a4219e23-8d56-4228-ae28-997f03b05ce9\",\"version\":1,\"strategy\":\"首用明确具体S\",\"alreadyAdopted\":false},\"adoptOperationId\":\"8909d8ad-8d38-4a82-bf88-075629247fa7\",\"createOperationId\":\"12eb17a1-af49-4829-a84c-f29518b146ae\"}"
+  ],
+  "base": "http://127.0.0.1:33329",
+  "caseId": "590b28c8-2433-409e-be2a-b59ccd952c6a",
+  "issueId": "f227507e-c62a-4a55-84db-6afabaecf24c",
+  "result": "CONFIRMED_HISTORICAL_PLAN_AND_REQUEST_FOCUS_UI_DEFECTS"
+}

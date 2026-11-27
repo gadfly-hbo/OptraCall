@@ -1,0 +1,177 @@
+{
+  "candidate": "6bc7be2849d280e5e6a6e598ee6b7a68dd5e48eb",
+  "root": "/workspace/OptraCall-issue149-final/.local/pm-final/backend/matrix-gsdUfm",
+  "outputs": [
+    {
+      "name": "strategy-archived-unanswered",
+      "lifecycle": "archived",
+      "statuses": [
+        {
+          "requestId": "d3dca303-c84d-41af-86a3-8f848387a921",
+          "status": "superseded"
+        }
+      ],
+      "newRequestCode": "case_decision_archived",
+      "originalChooseCode": "case_decision_archived"
+    },
+    {
+      "name": "strategy-restored-no-write-replay",
+      "statuses": [
+        {
+          "requestId": "d3dca303-c84d-41af-86a3-8f848387a921",
+          "status": "open"
+        }
+      ],
+      "choicesUnchanged": true
+    },
+    {
+      "name": "closed-case-unanswered-choose",
+      "statuses": [
+        {
+          "requestId": "d49216c0-4303-43c8-854b-0a44d2c68c17",
+          "status": "superseded"
+        }
+      ],
+      "pending": [],
+      "newRequestCode": "case_closed",
+      "originalChooseCode": "case_closed"
+    },
+    {
+      "name": "archived-project-observe",
+      "projectArchived": true,
+      "unanswered": "7e4dc103-6917-4467-a0b1-c0f76ec456e4",
+      "answered": "92415fea-53b7-45ca-9cb7-747a905fa4ab",
+      "priorAnswerStatus": 200,
+      "statuses": [
+        {
+          "requestId": "7e4dc103-6917-4467-a0b1-c0f76ec456e4",
+          "status": "superseded"
+        },
+        {
+          "requestId": "92415fea-53b7-45ca-9cb7-747a905fa4ab",
+          "status": "answered"
+        }
+      ],
+      "pending": [],
+      "newRequestCode": "project_archived",
+      "newRequestAccepted": false,
+      "originalFeedback": {
+        "status": 409,
+        "value": {
+          "code": "project_archived",
+          "message": "项目已归档，请先恢复后继续操作。"
+        }
+      }
+    },
+    {
+      "name": "restored-project-observe",
+      "statuses": [
+        {
+          "requestId": "7e4dc103-6917-4467-a0b1-c0f76ec456e4",
+          "status": "open"
+        },
+        {
+          "requestId": "92415fea-53b7-45ca-9cb7-747a905fa4ab",
+          "status": "answered"
+        }
+      ],
+      "originalFeedback": {
+        "status": 200,
+        "value": {
+          "feedback": {
+            "revisionId": "535737da-d098-4d20-892e-6ddb3bc5bb55",
+            "taskId": "b19a7b6c-bcf6-4ff2-8b1e-0fec5c968115",
+            "revisionNumber": 1,
+            "operationId": "8bf8157a-15bb-4049-b9ac-396089f3e88c",
+            "requestSha256": "2b0f4f44fd02a43509be1e52b961f77828e05ddf593d4f3827c87ff21cef22fb",
+            "adopted": true,
+            "outcome": "Synthetic observation",
+            "metricDelta": "",
+            "review": "",
+            "score": null,
+            "effect": "unknown",
+            "savedAt": "2026-11-27T16:32:04.280Z",
+            "origin": "user-save",
+            "legacyCreatedAt": null,
+            "legacyUpdatedAt": null,
+            "createdAt": "2026-11-27T16:32:04.280Z",
+            "updatedAt": "2026-11-27T16:32:04.280Z",
+            "respondsToRequest": {
+              "requestId": "7e4dc103-6917-4467-a0b1-c0f76ec456e4",
+              "revision": 1,
+              "authorizationId": "17c28d01-5589-4603-abe6-f577fc8f79ab"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "done-task-closed-case-observe-still-legal",
+      "taskStatus": "done",
+      "originalFeedbackStatus": 200,
+      "statuses": [
+        {
+          "requestId": "b8084d3f-cb5d-4d89-a711-913438e99213",
+          "status": "answered"
+        }
+      ]
+    },
+    {
+      "name": "explicit-board-authorization-revoke",
+      "unanswered": "efcd5ef2-0f7b-4953-a060-ba620124da56",
+      "answered": "47b95f7a-2cb2-4718-ab2c-2fc1aae2be93",
+      "latestDecisions": [
+        "revoke",
+        "revoke"
+      ],
+      "statuses": [
+        {
+          "requestId": "efcd5ef2-0f7b-4953-a060-ba620124da56",
+          "status": "superseded"
+        },
+        {
+          "requestId": "47b95f7a-2cb2-4718-ab2c-2fc1aae2be93",
+          "status": "answered"
+        }
+      ],
+      "newRequestCode": "case_do_authorization_unavailable"
+    },
+    {
+      "name": "new-choice-replaces-old-authority",
+      "unanswered": "7d43fbb6-c4b5-4e43-9291-e48ed661f934",
+      "answered": "263c05a7-ea54-4a3e-8a9e-7d2a75f77676",
+      "statuses": [
+        {
+          "requestId": "7d43fbb6-c4b5-4e43-9291-e48ed661f934",
+          "status": "superseded"
+        },
+        {
+          "requestId": "263c05a7-ea54-4a3e-8a9e-7d2a75f77676",
+          "status": "answered"
+        }
+      ],
+      "newRequestCode": "case_choice_conflict"
+    },
+    {
+      "name": "active-strategy-revision-history-still-legal",
+      "newerRevision": 2,
+      "originalDefaultCode": "case_decision_revision_conflict",
+      "historicalChoiceAllowed": true,
+      "statuses": [
+        {
+          "requestId": "25341802-b5d8-4398-9fd8-40913ec9362c",
+          "status": "answered"
+        }
+      ]
+    },
+    {
+      "name": "answered-choose-survives-later-archive-and-close",
+      "statuses": [
+        {
+          "requestId": "be53e376-b738-4900-9caf-09af5b150c53",
+          "status": "answered"
+        }
+      ]
+    }
+  ]
+}

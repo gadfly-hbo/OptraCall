@@ -1,0 +1,79 @@
+(node:190004) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+{
+  "base": "a4c563f0632280010e7e12906c69fa6664cffd13",
+  "scope": "actual complete helper text extracted verbatim and type-stripped with Node; run only in isolated VM; fake host/clock/native bytes; no product/SDK imports or Host/Provider/test runner",
+  "rows": [
+    {
+      "case": "old helper wrongly accepts first assistant tool-progress",
+      "expected": "RED reproduced",
+      "status": "PASS",
+      "reads": 1
+    },
+    {
+      "case": "new helper waits for exact completed request and !busy",
+      "status": "PASS",
+      "reads": 3
+    },
+    {
+      "case": "wrong completed request is not accepted",
+      "status": "PASS",
+      "reads": 2
+    },
+    {
+      "case": "only wrong request reaches original 20s deadline without success",
+      "status": "PASS",
+      "simulatedMs": 20000
+    },
+    {
+      "case": "exact failed fails immediately",
+      "status": "PASS"
+    },
+    {
+      "case": "exact cancelled fails immediately",
+      "status": "PASS"
+    },
+    {
+      "case": "exact unknown fails immediately",
+      "status": "PASS"
+    },
+    {
+      "case": "one raw partial prefix is unavailable; later complete bytes required",
+      "status": "PASS",
+      "unavailable": 1,
+      "nativeEntries": 2
+    },
+    {
+      "case": "only explicit 409/session_history_unavailable is unavailable",
+      "status": "PASS"
+    },
+    {
+      "case": "only explicit 409/native_snapshot_incomplete is unavailable",
+      "status": "PASS"
+    },
+    {
+      "case": "HTTP JSON SyntaxError is not swallowed",
+      "status": "PASS"
+    },
+    {
+      "case": "other 409 is not swallowed",
+      "status": "PASS"
+    },
+    {
+      "case": "non-SyntaxError filesystem failure is not swallowed",
+      "status": "PASS"
+    },
+    {
+      "case": "persistent malformed JSON never supplies success at original 6s budget; raw final read still rejects",
+      "status": "PASS",
+      "unavailable": 300,
+      "simulatedMs": 6000
+    }
+  ],
+  "fileHashes": {
+    "tests/analysis-delivery-native-v020.test.ts": "a83d69c24082534c3732ad052bac015c93018d4d026f665ae3c73ebe01c7d8d6",
+    "tests/workspace-daily-pi-loop.test.ts": "4b7d336d15dd2c23d952449b9c217bd6825a7b623fe376a8b250df2e067317b3",
+    "tests/studio-flow.test.ts": "7a3ac39197ff5ff7a617d597aec584511f88f93531b7d67c69d1ea2169d3a99d",
+    "tests/v13-project-goal-entry.test.ts": "41ba8a8f8c9615334ec558600a065cfd0f9a741da01cb800d5f46430d6af45b9"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "scope": "SYNTHETIC_REAL_HOST_CURRENT_6BC_TEST_ONLY_OLD_BUSY_PREDICATE",
+  "requestId": "33ee323d-52cf-477b-a684-bad94403e5b1",
+  "samples": [
+    {
+      "elapsedMs": 148,
+      "busy": false,
+      "lastRun": {
+        "id": "33ee323d-52cf-477b-a684-bad94403e5b1",
+        "fingerprint": "e3c58273a683be9f48dd30680df1936be4e5482abeca2f2cb25f07f88f1f4c14",
+        "status": "completed"
+      },
+      "providerErrors": [],
+      "requestCount": 1
+    }
+  ],
+  "finalBusy": false,
+  "finalRun": {
+    "id": "33ee323d-52cf-477b-a684-bad94403e5b1",
+    "fingerprint": "e3c58273a683be9f48dd30680df1936be4e5482abeca2f2cb25f07f88f1f4c14",
+    "status": "completed"
+  },
+  "providerErrors": [],
+  "requestCount": 1
+}

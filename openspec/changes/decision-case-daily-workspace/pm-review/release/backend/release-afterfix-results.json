@@ -1,0 +1,122 @@
+{
+  "candidate": "6bc7be2849d280e5e6a6e598ee6b7a68dd5e48eb",
+  "root": "/workspace/OptraCall-issue149-final/.local/pm-final/backend/afterfix-run-QlKjRV",
+  "outputs": [
+    {
+      "name": "cross-issue-choose-request",
+      "rejected": "case_issue_scope_mismatch",
+      "noOperationReceipt": true,
+      "validRequestStatus": "open"
+    },
+    {
+      "name": "nonexistent-observation-baseline",
+      "rejected": "case_feedback_conflict",
+      "noOperationReceipt": true,
+      "historicalBadBaseStatus": "unverifiable",
+      "validRequestAfterExactReply": "answered"
+    },
+    {
+      "name": "revoked-confirmation-authority",
+      "sourceKind": "report-confirmation",
+      "rejectedNewSave": "source_revoked",
+      "statuses": [
+        {
+          "requestId": "5513680f-3282-4ddd-88ca-e7c71a632763",
+          "status": "unverifiable"
+        },
+        {
+          "requestId": "3ae65693-79e4-4e27-beff-25431398b9f6",
+          "status": "open"
+        }
+      ],
+      "homePending": [
+        "3ae65693-79e4-4e27-beff-25431398b9f6"
+      ],
+      "authorityCallsByCaseAndHome": 3,
+      "originalBoardRead": {
+        "status": 409,
+        "value": {
+          "code": "confirmation_source_unavailable",
+          "message": "确认来源当前不可读取。"
+        }
+      },
+      "authorityReadsTotal": 5,
+      "restoredStatus": "open"
+    },
+    {
+      "name": "two-store-CAS",
+      "outcomes": [
+        {
+          "status": "fulfilled",
+          "revision": 1
+        },
+        {
+          "status": "rejected",
+          "code": "draft_revision_conflict"
+        }
+      ]
+    },
+    {
+      "name": "fragment-ownership-and-idempotence",
+      "text": "Existing input\n\nOriginal carry text",
+      "originalText": "Original carry text",
+      "origin": {
+        "kind": "home-input",
+        "label": "Synthetic home",
+        "ref": "home-1"
+      },
+      "repeated": true,
+      "crossOwner": "carry_over_scope_mismatch"
+    },
+    {
+      "name": "immutable-create-recovery",
+      "originalTitle": "Original create title",
+      "currentTitle": "Later edited title",
+      "sameIdentity": true,
+      "replay": true,
+      "changedCode": "operation_conflict"
+    },
+    {
+      "name": "actual-UNKNOWN-contract",
+      "createStatus": "unknown",
+      "creationState": "partial_unknown"
+    },
+    {
+      "name": "real-goal-admission-and-historical-continue",
+      "gateOutcomes": [
+        {
+          "name": "candidate-client-adopted",
+          "code": "goal_not_adopted"
+        },
+        {
+          "name": "missing-goal",
+          "code": "strategy_goal_not_found"
+        },
+        {
+          "name": "nonmember-strategy",
+          "code": "invalid_goal_strategy"
+        }
+      ],
+      "originalCandidate": {
+        "code": "goal_not_adopted"
+      },
+      "newCreate": "created",
+      "adoptionReceipt": true,
+      "oldVersionStatus": "adopted",
+      "currentAdoptedVersion": 2,
+      "continueBranch": "continue",
+      "sameCase": true,
+      "isClosed": true
+    },
+    {
+      "name": "real-partial-adoption-owner-and-resumption",
+      "partialStatus": "failed",
+      "originalAdoptionId": "744d10ac-7e61-42b5-bf24-fd33ce7604fd",
+      "changedGoalCode": "prepare_draft_goal_mismatch",
+      "alternateGoalStillCandidate": true,
+      "resumedBranch": "created",
+      "originalAdoptionReceiptPreserved": true,
+      "unrelatedNoteOperationCode": "operation_conflict"
+    }
+  ]
+}

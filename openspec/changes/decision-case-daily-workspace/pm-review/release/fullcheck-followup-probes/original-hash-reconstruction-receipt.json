@@ -1,0 +1,22 @@
+{
+  "source": "/tmp/optracall-host-test-CoKaGo/host/strategy-initiatives/ea5f193f-6963-4a8c-8e7d-3886d5298419/candidates.json",
+  "finalReencodingExact": true,
+  "targetBefore": "96de66eb8b625e636aef147af91e40847fad21c19663af60970b6b29e2e00d6a",
+  "targetAfter": "73417a181d833cc589eaf6662ca33af2ef61b2b3bb5ace89239f270e5bfeefc7",
+  "found": [
+    {
+      "sha256": "96de66eb8b625e636aef147af91e40847fad21c19663af60970b6b29e2e00d6a",
+      "updatedAt": "2026-11-27T16:50:37.616Z",
+      "sessionFilePresent": true,
+      "createRequestIdPresent": false,
+      "artifact": ".local/pm-final/fullcheck-followup-probes/original-before-reconstructed.json"
+    },
+    {
+      "sha256": "73417a181d833cc589eaf6662ca33af2ef61b2b3bb5ace89239f270e5bfeefc7",
+      "updatedAt": "2026-11-27T16:50:37.616Z",
+      "sessionFilePresent": true,
+      "createRequestIdPresent": true,
+      "artifact": ".local/pm-final/fullcheck-followup-probes/original-after-failures-reconstructed.json"
+    }
+  ]
+}

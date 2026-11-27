@@ -1,0 +1,194 @@
+{
+  "repo": "gadfly-hbo/OptraCall",
+  "run_id": 46039907153,
+  "job_id": 140644693925,
+  "run_url": "https://github.com/gadfly-hbo/OptraCall/actions/runs/46039907153",
+  "expected_head": "a4c563f0632280010e7e12906c69fa6664cffd13",
+  "actual_head": "a4c563f0632280010e7e12906c69fa6664cffd13",
+  "event": "pull_request",
+  "run_attempt": 1,
+  "status": "completed",
+  "conclusion": "success",
+  "source_commit_time": "2026-11-27T17:11:36Z",
+  "run_created_at": "2026-11-27T17:12:00Z",
+  "run_started_at": "2026-11-27T17:12:00Z",
+  "run_updated_at": "2026-11-27T17:39:29Z",
+  "observed_at": "2026-11-27T17:39:41.249Z",
+  "tests": {
+    "tests": 3607,
+    "suites": 0,
+    "pass": 3410,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 197,
+    "todo": 0,
+    "duration_ms": 1612350.074955
+  },
+  "audit": {
+    "level": "high",
+    "step": {
+      "name": "Run npm audit --audit-level=high",
+      "status": "completed",
+      "conclusion": "success",
+      "number": 7
+    },
+    "summary_lines": [
+      "Run npm audit --audit-level=high",
+      "2026-11-27T17:39:26.4662551Z \u001b[36;1mnpm audit --audit-level=high\u001b[0m",
+      "2026-11-27T17:39:27.0514854Z Severity: moderate",
+      "2026-11-27T17:39:27.0520911Z 2 moderate severity vulnerabilities"
+    ]
+  },
+  "steps": [
+    {
+      "name": "Set up job",
+      "status": "completed",
+      "conclusion": "success",
+      "number": 1
+    },
+    {
+      "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "status": "completed",
+      "conclusion": "success",
+      "number": 2
+    },
+    {
+      "name": "Select validation scope",
+      "status": "completed",
+      "conclusion": "success",
+      "number": 3
+    },
+    {
+      "name": "Run actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+      "status": "completed",
+      "conclusion": "success",
+      "number": 4
+    },
+    {
+      "name": "Run npm ci --ignore-scripts",
+      "status": "completed",
+      "conclusion": "success",
+      "number": 5
+    },
+    {
+      "name": "Run npm run check",
+      "status": "completed",
+      "conclusion": "success",
+      "number": 6
+    },
+    {
+      "name": "Run npm audit --audit-level=high",
+      "status": "completed",
+      "conclusion": "success",
+      "number": 7
+    },
+    {
+      "name": "Post Run actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+      "status": "completed",
+      "conclusion": "success",
+      "number": 13
+    },
+    {
+      "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "status": "completed",
+      "conclusion": "success",
+      "number": 14
+    },
+    {
+      "name": "Complete job",
+      "status": "completed",
+      "conclusion": "success",
+      "number": 15
+    }
+  ],
+  "log_characters": 596577,
+  "watch_changes": [
+    {
+      "observed_at": "2026-11-27T17:39:38.829Z",
+      "poll": 31,
+      "head": "a4c563f0632280010e7e12906c69fa6664cffd13",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success",
+      "updated_at": "2026-11-27T17:39:29Z",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Select validation scope",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3
+        },
+        {
+          "name": "Run actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4
+        },
+        {
+          "name": "Run npm ci --ignore-scripts",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5
+        },
+        {
+          "name": "Run npm run check",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6
+        },
+        {
+          "name": "Run npm audit --audit-level=high",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7
+        },
+        {
+          "name": "Post Run actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15
+        }
+      ]
+    }
+  ],
+  "job_started_at": "2026-11-27T17:12:03Z",
+  "job_completed_at": "2026-11-27T17:39:29Z",
+  "job_head_sha": "a4c563f0632280010e7e12906c69fa6664cffd13",
+  "job_run_id": 46039907153,
+  "job_conclusion": "success",
+  "job_metadata_source": "GET /actions/runs/46039907153/jobs",
+  "direct_job_endpoint_note": "One generic /actions/jobs/:id read was unsupported (INVALID_ARGUMENT/400); full metadata verified through approved run/jobs subresource.",
+  "relevant_long_declaration_lines": [
+    "2026-11-27T17:13:27.6571338Z ✔ actual Pi direct 11KB declaration retains the exact original receipt and dispatches one original IR follow-up (7180.051587ms)",
+    "2026-11-27T17:13:27.6573632Z ℹ /home/runner/work/OptraCall/OptraCall/.local/overall-architecture-upgrade/development/delivery-native-repair/direct-long-lUfntg",
+    "2026-11-27T17:13:27.6576025Z ✔ actual Pi nested 11KB declaration retains the exact original receipt and dispatches one original IR follow-up (8031.479936ms)"
+  ],
+  "build_evidence_lines": [
+    "2026-11-27T17:39:17.4601679Z > optracall@0.1.0-mvp.4 build",
+    "2026-11-27T17:39:17.4602865Z > tsc --noEmit && node scripts/frontend.mjs build && node scripts/stamp-build.mjs"
+  ]
+}

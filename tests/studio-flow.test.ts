@@ -22,7 +22,12 @@ async function run(host: Host, provider: Provider, projectId: string, taskId: st
   const route = `/api/projects/${projectId}/tasks/${taskId}`;
   await json(await host.request(`${route}/messages`, 'POST', { requestId: randomUUID(), text: '仅用本项目获准资料与准确资产完成本轮合成工程检查；专业正确性另验。', studioContext: { systemId, purpose } }), 202);
   const start = Date.now(); let state: any;
-  do { state = await json(await host.request(route)); if (state.task.lastRun?.status === 'completed' && JSON.stringify(state.snapshot.messages).includes(marker)) break; if (state.task.lastRun && ['failed','cancelled'].includes(state.task.lastRun.status)) break; await new Promise(resolve => setTimeout(resolve, 25)); } while (Date.now() - start < 40_000);
+  do {
+    const response = await host.request(route);
+    // The running SDK can be between native appends; only this exact GET observation is temporarily unreadable.
+    if (response.status === 409 && (await response.clone().json()).code === 'native_snapshot_incomplete') { await new Promise(resolve => setTimeout(resolve, 25)); continue; }
+    state = await json(response); if (state.task.lastRun?.status === 'completed' && JSON.stringify(state.snapshot.messages).includes(marker)) break; if (state.task.lastRun && ['failed','cancelled'].includes(state.task.lastRun.status)) break; await new Promise(resolve => setTimeout(resolve, 25));
+  } while (Date.now() - start < 40_000);
   assert.equal(state.task.lastRun?.status, 'completed', JSON.stringify(state)); assert.match(JSON.stringify(state.snapshot.messages), new RegExp(marker)); assert.deepEqual(provider.errors, []); const lastUser = state.snapshot.messages.findLastIndex((message: any) => message.role === 'user'); const executed = state.snapshot.messages.slice(lastUser + 1).filter((message: any) => message.role === 'toolResult'); assert.equal(executed.length, steps.length, JSON.stringify(executed)); assert.equal(executed.some((message: any) => message.isError), false, JSON.stringify(executed.filter((message: any) => message.isError))); return state;
 }
 
