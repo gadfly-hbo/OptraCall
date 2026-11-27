@@ -44,23 +44,47 @@ export function knownUnitScale(sourceUnit: string, targetUnit: string): number |
   return null;
 }
 
+// Treat a contiguous number-like atom as a whole. Number() can accept supported literals;
+// malformed expressions/unsupported atoms remain NaN rather than exposing a numeric fragment.
+const MEASUREMENT_NUMBER = /[+-]?(?:\d|\.\d)[\da-fA-F_xXoOeE.+-]*/g;
+
+function normalizedMeasurementText(original: string): { text: string; rawOffsets: number[] } {
+  const translated = original.replace(/[！-～]/g, char => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+    .replace(/[−﹣]/g, '-').replace(/﹢/g, '+').replace(/[․﹒]/g, '.');
+  const groups = new Set([...translated.matchAll(/(?<=\d)[, '\u00a0\u202f\u2009’ʼ](?=\d{3}(?:\D|$))/g)].map(match => match.index!));
+  let text = '';
+  const rawOffsets: number[] = [];
+  for (let i = 0; i < translated.length; i++) {
+    if (groups.has(i)) continue;
+    text += translated[i];
+    rawOffsets.push(i);
+  }
+  return { text, rawOffsets };
+}
+
+export function measurementNumberTokens(text: string): string[] {
+  return [...normalizedMeasurementText(text).text.matchAll(MEASUREMENT_NUMBER)].map(match => match[0]);
+}
+
 /** Verify literal source spans against their full-report boundaries, not a semantic scope/metric classifier. */
 export function quotedMeasurementEvidence(quote: string, value: number, reportText: string): { hasExactValue: boolean; units: string[] } {
-  const normalize = (text: string) => text.replace(/(?<=\d)[,，](?=\d{3}(?:\D|$))/g, '');
-  const text = normalize(reportText), excerpt = normalize(quote);
+  const report = normalizedMeasurementText(reportText), excerpt = normalizedMeasurementText(quote);
   const names = [...new Set(UNIT_SCALE_FAMILIES.flatMap(family => Object.keys(family)))].sort((a, b) => b.length - a.length);
-  const numbers = /[+-]?(?:\d+\.\d+|\d+|\.\d+)/g;
-  const fullNumbers = new Map([...text.matchAll(numbers)].map(match => [match.index!, match[0]]));
-  const quotedNumbers = [...excerpt.matchAll(numbers)].filter(match => Number(match[0]) === value);
+  const fullNumbers = new Map([...report.text.matchAll(MEASUREMENT_NUMBER)].map(match => [report.rawOffsets[match.index!]!, {
+    rawEnd: report.rawOffsets[match.index! + match[0].length - 1]! + 1,
+    normalizedEnd: match.index! + match[0].length, value: Number(match[0]),
+  }]));
+  const quotedNumbers = [...excerpt.text.matchAll(MEASUREMENT_NUMBER)].filter(match => Number(match[0]) === value);
   const found = new Set<string>();
   let hasExactValue = false;
-  for (let offset = text.indexOf(excerpt); excerpt && offset >= 0; offset = text.indexOf(excerpt, offset + 1)) {
+  // Only original, verbatim occurrences qualify; normalized lookalikes elsewhere cannot supply proof.
+  for (let offset = reportText.indexOf(quote); quote && offset >= 0; offset = reportText.indexOf(quote, offset + 1)) {
     for (const match of quotedNumbers) {
-      const start = offset + match.index!;
-      if (fullNumbers.get(start) !== match[0]) continue;
+      const number = fullNumbers.get(offset + excerpt.rawOffsets[match.index!]!);
+      if (!number || number.value !== value || number.rawEnd > offset + quote.length) continue;
       hasExactValue = true;
       // Inspect the full source even when the chosen excerpt ends before /人, an exponent, etc.
-      const suffix = text.slice(start + match[0].length).trimStart();
+      const suffix = report.text.slice(number.normalizedEnd).trimStart();
       const unit = names.find(name => suffix.startsWith(name));
       if (!unit) continue;
       const next = suffix.slice(unit.length);

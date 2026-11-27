@@ -10,7 +10,7 @@ import { parseUsageContext } from './usage-context-types.ts';
 import { parseGoalBasis } from './strategy-goals-types.ts';
 import type { GoalActionArrangement, GoalArrangementInput } from './strategy-goals-types.ts';
 import type { GoalAdoptionInput, GoalAdoptionProvenance, GoalBasis, GoalContextSnapshot, GoalDraftInput, GoalFeedback, GoalFeedbackInput, GoalMutation, GoalOperationReceipt, GoalRef, GoalRelation, GoalRelationInput, GoalRelationRevisionInput, GoalRelationVersion, GoalRevisionInput, GoalSourceRef, GoalVersion, StrategyGoalRecord, StrategyGoalsIndex } from './strategy-goals-types.ts';
-import { assessProgressEvidenceDetails, checkpointPeriods, comparabilityLabel, granularityLabel, knownUnitScale, progressMetric, quotedMeasurementEvidence } from './strategy-goal-progress.ts';
+import { assessProgressEvidenceDetails, checkpointPeriods, comparabilityLabel, granularityLabel, knownUnitScale, measurementNumberTokens, progressMetric, quotedMeasurementEvidence } from './strategy-goal-progress.ts';
 import { hasGsaCheckpoint, MAX_GOAL_ACTUAL_REPORT_CHARS } from './strategy-goal-decomposition-types.ts';
 import type { StrategyMapPublicationIdentity } from './strategy-map-types.ts';
 import type {
@@ -1783,8 +1783,7 @@ export class StrategyGoalsStore {
       check.evidenceQuote = quote;
       const value = observation.actualValue;
       const period = actual.input.actualPeriods[0]!;
-      const extractNumbers = (text: string) =>
-        text.replace(/(?<=\d)[,，](?=\d{3}(?:\D|$))/g, '').match(/[+-]?(?:\d+\.\d+|\d+|\.\d+)/g) ?? [];
+      const extractNumbers = measurementNumberTokens;
 
       // Optional arithmetically verified unit conversion (never allows relabeling the same number with a different unit).
       let verifiedConversion: {
@@ -1846,7 +1845,8 @@ export class StrategyGoalsStore {
         check.actualPeriods = [{ ...period, actualValue: convertedValue }];
       } else if (value !== undefined) {
         if (typeof value !== 'number' || !Number.isFinite(value) || (period.actualValue !== null && period.actualValue !== value)) fail('actual_report_value_mismatch', 409);
-        if (!extractNumbers(quote).some(n => Number(n) === value)) fail('actual_report_value_mismatch', 409);
+        if (!extractNumbers(quote).some(n => Number(n) === value) ||
+            !quotedMeasurementEvidence(quote, value, reportText).hasExactValue) fail('actual_report_value_mismatch', 409);
         check.actualPeriods = [{...period, actualValue:value}];
       }
 
@@ -1887,6 +1887,17 @@ export class StrategyGoalsStore {
           coverage: obs.coverage,
           maturity: obs.maturity,
         };
+
+        // Omitting unitConversion cannot make a literal source unit disappear. Explicit
+        // human units still follow resolveUnit below and remain pending when inconsistent.
+        const sourceValue = value ?? period.actualValue;
+        if (!verifiedConversion && !submittedBasis?.unit?.trim() && sourceValue !== null && sourceValue !== undefined &&
+            knownUnitScale(obsBasis.unit, obsBasis.unit) === 1) {
+          const evidence = quotedMeasurementEvidence(quote, sourceValue, reportText);
+          if (!evidence.hasExactValue || evidence.units.some(unit => knownUnitScale(unit, obsBasis.unit) !== 1)) {
+            fail('actual_report_value_mismatch', 409);
+          }
+        }
 
         const resolveMetric = (): string => {
           const subVal = submittedBasis?.metric?.trim() ?? '';

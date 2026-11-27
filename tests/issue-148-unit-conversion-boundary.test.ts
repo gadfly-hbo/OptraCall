@@ -40,7 +40,7 @@ function fixture(t: test.TestContext) {
     return { run, original: input, readOriginal: () => store.readSubmittedActual(goal.goalId, actual.actualId).input,
       checkCount: () => store.getGoalWorkspace(goal.goalId).checks.length };
   }
-  return { assess };
+  return { assess, store, goalId: goal.goalId, basis, period };
 }
 
 test('PM R1: a declared conversion source unit must belong to the quoted measurement when the submitter left its unit unknown', t => {
@@ -92,4 +92,51 @@ test('PM R1: a report with no quoted unit can use the submitter\'s explicit orig
   assert.equal(known.run().check?.comparability, 'comparable');
   const unknown = assess({ report, value: 270000, sourceUnit: '元', convertedValue: 27, factor: 0.0001 });
   assert.throws(unknown.run, /actual_report_value_mismatch|invalid_progress_evidence/);
+});
+
+test('PM R1: exact source values cannot be fragments of scientific, signed, decimal or grouped numeric tokens', t => {
+  const { assess } = fixture(t);
+  const fragments = [
+    { report: '净销售额2.7e5元。', value: 5, evidenceQuote: '5元' },
+    { report: '净销售额270000e-2元。', value: 270000, evidenceQuote: '270000' },
+    { report: '净销售额27.e+4元。', value: 4, evidenceQuote: '4元' },
+    { report: '净销售额2.7E−5元。', value: 5, evidenceQuote: '5元' },
+    { report: '净销售额−270000元。', value: 270000, evidenceQuote: '270000元' },
+    { report: '净销售额－270000元。', value: 270000, evidenceQuote: '270000元' },
+    { report: '净销售额﹣270000元。', value: 270000, evidenceQuote: '270000元' },
+    { report: '净销售额270000．9元。', value: 270000, evidenceQuote: '270000' },
+    { report: "净销售额270'000元。", value: 0, evidenceQuote: '000元' },
+    { report: '净销售额270\u00a0000元。', value: 0, evidenceQuote: '000元' },
+    { report: '净销售额270\u202f000元。', value: 0, evidenceQuote: '000元' },
+  ];
+  for (const fragment of fragments) {
+    const f = assess({ ...fragment, sourceUnit: '元', submittedUnit: '元', convertedValue: fragment.value * 0.0001, factor: 0.0001 });
+    const count = f.checkCount();
+    assert.throws(f.run, /actual_report_value_mismatch|invalid_progress_evidence/, fragment.report);
+    assert.equal(f.checkCount(), count);
+  }
+  for (const report of ['净销售额2.7e5元。', '净销售额27.e+4元。', '净销售额２７０，０００元。', "净销售额270'000元。", '净销售额270\u202f000元。']) {
+    const f = assess({ report, value: 270000, sourceUnit: '元', convertedValue: 27, factor: 0.0001 });
+    assert.equal(f.run().check?.overallVariancePct, -10, 'a complete supported number still converts');
+    assert.deepEqual(f.readOriginal(), f.original);
+  }
+});
+
+test('PM R1: omitting conversion cannot relabel a known quoted unit or accept a clipped numeric value', t => {
+  const { store, goalId, basis, period } = fixture(t);
+  for (const sample of [
+    { report: '净销售额27元，完整已结账。', value: 27, quote: '27元' },
+    { report: '净销售额2.7e5万元，完整已结账。', value: 5, quote: '5万元' },
+  ]) {
+    const input = { operationId: randomUUID(), publicationVersion: 1, rowId: 'G-TOTAL', checkpointId: period.checkpointId!,
+      actualSource: { ref: 'synthetic-no-conversion', label: '无换算原报表', cutoffAt: '2027-01-14', reportText: sample.report },
+      actualPeriods: [{ periodId: period.periodId, actualValue: sample.value }] };
+    const { actual } = store.submitActual(goalId, input);
+    const count = store.getGoalWorkspace(goalId).checks.length;
+    assert.throws(() => store.assessSubmittedActual(goalId, actual.actualId, 'comparable', '未声明换算', {
+      quote: sample.quote, actualValue: sample.value, basis,
+    }), /actual_report_value_mismatch|invalid_progress_evidence/);
+    assert.equal(store.getGoalWorkspace(goalId).checks.length, count);
+    assert.deepEqual(store.readSubmittedActual(goalId, actual.actualId).input, input);
+  }
 });

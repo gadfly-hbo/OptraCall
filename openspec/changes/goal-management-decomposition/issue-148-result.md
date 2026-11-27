@@ -1,5 +1,7 @@
 # Issue #148 目标管理试用修正工程记录（A1 / A3 / A4 / A5）
 
+当前交付以 **§5 PM 接收后的最终候选**为准。§1–4保留外部作者两次交付时的实现、声明和检查结果；其中旧排除词实现及“全项 PASS”等历史结论不代表 PM 终审结论。
+
 - **工单**：[#148](https://github.com/gadfly-hbo/OptraCall/issues/148)
 - **领取方**：Antigravity
 - **任务分支**：`work/antigravity/issue-148-goal-trial-fixes`
@@ -117,10 +119,10 @@ PM从origin读回 `736f44abd162fc7228d9c1843622bc18aa1a4b25`，10项文件摘要
 | 恢复原产品RED | `recovery/red-browser.log`及119测算变体：736真实UI在dirty冲突后合并，current draft仍null、prior在、Provider零请求、页面空初稿却显示已保存。截图／DOM／状态保留。 |
 | 恢复Host／官方Pi | `recovery/host-native-tests-final.log`：2PASS／0FAIL，真实Host→官方Pi1.4.0→合成Provider→原保存工具；保留Agent直接跨GSA承接409，负责人承接后准确合并保存。 |
 | 原工单专项 | `recovery/original-issue148-regression.log`：原6项测试不改，6PASS。 |
-| 恢复及范围浏览器 | `recovery/green-browser-v3.log`、对应summary：8案PASS，实际读回两条成功合并、新输入／取消／失败／无保存／晚回保稿、普通CAS、范围建议仅预填且零写入；page errors为0。桌面截图与原工作区布局一致。 |
+| 恢复及范围浏览器 | `recovery/green-browser-v3.log`、对应summary：8案PASS，实际读回两条成功合并、新输入／取消／失败／无保存／晚回保稿、普通CAS、范围建议仅预填且零写入。该脚本未监听运行时异常，不据此声明 page errors 为0。后续准确原提交整组回填加入第9案，见下文。 |
 | 构建／审计 | `recovery/candidate-build-v3.log`构建PASS；`audit.log` high audit PASS，2项既有moderate保留，无依赖升级。 |
-| 完整check | 运行中，结果按最终日志补齐；不得将专项或合成模型结果当作全量／专业验收。 |
-| 最终固定候选独立复核 | 全新非作者正在按14个产品／测试摘要核验，结果按实际报告补齐。 |
+| 候选1完整check | `full-check.log`：在冻结候选 `0f862227a8289c5145ae78552822614b88a0b17d` 执行 `npm run check`，3524项中3328PASS／196SKIP／0FAIL，构建通过，进程退出0。任务隔离subreaper只回收本任务测试后代，无产品／SDK改写；该结果不覆盖后续候选2／3增量，最终准确head完整CI另核。 |
+| 最终固定候选独立复核 | 全新非作者按候选3的14个产品／测试摘要复验，代码及受影响工程范围PASS；完整报告与公开记录一致性检查见下文，不据此提前认定远端CI或产品验收。 |
 
 恢复作者的中间错误同样保留：最初将仅assistant投影具备的nativeEntryId要求在人消息上，实际原生保存r3已成功但UI未采纳；改为按原requestReceipt及原生工具保存回执核验后通过。另有测试fixture类型、单份当前草稿被误当不可变revision史、ES2022兼容等夹具错误均单列，不能伪装产品RED或删弱旧Goal／GSA／原稿正文保全断言。根新增单位测试的初次类型检查需给已有fixture明确DecompositionDraftInput类型，修正不改变原RED运行行为。
 
@@ -130,4 +132,24 @@ Host仍管理准确引用、源／单位／算术及权限／CAS／保存资格�
 
 新字段均为schema4可选增量，不改原实绩／历史检查及正式表，不回写原生会话；禁写回退保留。真实模型质量、报告问题#2及未复现configured:false线索仍待核，未操作MacBook／Mac mini或真实业务／Provider。最终准确提交、PR实际head完整CI、后续合并授权与main CI在同一#148记录，不由本地PASS提前关单。
 
-固定PM候选1的全新非作者复核又发现：`元 / 人`等空白变体尚可被当成纯金额单位；单位换算与范围建议组合时，原单位与换算后数值可能在纠正表单混用。当前完整check在候选1原目录继续运行，原内容冻结；最后增量将在新独立工作树修正并复验，不把候选1的检查冒称覆盖之后的代码。原发现及失败保留，待最终候选独立复核关闭。
+固定PM候选1的全新非作者复核又发现：`元 / 人`等空白变体尚可被当成纯金额单位；单位换算与范围建议组合时，原单位与换算后数值可能在纠正表单混用。候选1完整check在原冻结目录运行完成；Codex在新独立工作树 `/workspace/scratch/issue148-pm-final`、分支 `codex/issue-148-pm-final` 继续收尾，原Antigravity分支及integration目录不再改写。
+
+### 5.4 最后增量与固定候选3
+
+候选2已修空白／数学复合单位及准确原提交回填；随后独立批量复验发现科学计数、Unicode负号、全角小数点和数字分组仍能被截成片段。保留 `final-review/candidate1-review.md`、`candidate2-review.md` 与原批次全部结果，不将后续通过覆盖原失败。
+
+候选3仅在数字证据合同内核对完整数字原子及原文字面位置：常见格式规范化保留原始偏移；完整来源含指数、符号或分组时，窄引句不能把其中片段核成准确原值。省略 `unitConversion` 也不能绕过已知原单位／数值核对；负责人明确原填单位仍走保护路径形成待核检查。Host不求值表达式、不判断业务语义，原工具／owner／schema4可选增量及Pi公共入口保持。纠正表单恢复同一原提交的270000元整组资料，缺原记录时不反解说明、不借其他提交。
+
+| 最后检查 | 实际结果与身份 |
+| --- | --- |
+| 新增前置RED | `units/whitespace-red.log`、`quote-context-red.log`、`numeric-token-red.log`、`no-conversion-red.log`保留各次真实Store拒绝边界失败；与夹具错误分开。 |
+| 完整数值与省略换算 | `units/numeric-token-final-green.log`：6项单位测试＋1项范围测试，7PASS／0FAIL；包含完整科学计数／全角／分组数字正常换算和片段拒绝，原提交不改且拒绝不落半份检查。 |
+| 准确原提交回填浏览器 | `recovery/final-tuple-green-browser.log`及对应summary：9案PASS，两个入口都回填原270000元，旧27万元检查保持，缺原提交留空；此作者脚本不声明运行时异常计数。 |
+| 独立真实浏览器 | `final-review/browser-v2/probe.log`：5案PASS，包含合并前与保存前GSA更替、旧行撤权零请求、270000元整组回填及负责人提交后经官方Pi原工具形成新27万元可比检查；原检查深相等，无自动发布，实际监听运行时异常为0。相关UI／恢复文件在候选3未再变化。 |
+| 候选2定向与构建 | `final-targeted.log`：66PASS／0FAIL／0SKIP，`final-build.log`及session boundary通过；与候选3增量分别记录。 |
+| 候选3定向／构建 | `final3-targeted.log`49项＋`final3-store-regression.log`20项，合计69PASS／0FAIL／0SKIP；后者补核原目标Store历史／权限与保存，前者比原清单多含1项目标入口检查。`final3-build.log`、`final3-typecheck.log`、`final3-session-boundary.log`均PASS，14项产品／测试摘要见索引。 |
+| 候选3独立复验 | [非作者完整报告](issue-148-pm-review.md)：本次代码／工程范围、四原则及IN01–IN07限范围PASS，无剩余已发现阻塞。原36案36/36通过；原26案中25个保持原预期，唯一完整 `2.7e5元` 在新实现合法换成27万元，原脚本仍预期拒绝而出现1项差异，原raw结果及独立裁定分别保留。新增无换算声明4/4对照通过，人工明确单位冲突仍不可比。初末14个摘要一致；候选2→3仅progress／Store／单位测试变化，前述UI／恢复证据按精确差异保持适用。 |
+
+最终本地检查、非作者复核和PR实际head完整CI分别核定。未进行真实Provider专业质量评估、真实业务或设备服务操作；原报告第2项及单次 `configured:false` 线索仍待证，不包含在本次已确认修正中。
+
+最终候选在独立分支推送后，PR／准确head完整CI与后续合并授权、main push CI统一续记于 #148，不为预写未来结果制造新的候选。Issue在上述工程关口完成前保持Open；兼容回退仍沿现有 `--disable-goal-decomposition` 禁写路径，保留新旧引用与原业务数据，旧代码不保证可编辑本轮新增字段。
