@@ -4,6 +4,7 @@ import type { RunDiagnostic } from '../../agent/run-diagnostics.ts';
 export type { PublicModelConfiguration };
 export type ProjectConfiguration = Omit<PublicModelConfiguration, 'hasApiKey'>;
 export type ClientTask = {
+  serviceConnections?: import('../service-connection-types.ts').TaskServiceBindings;
   assignment?: import('../task-assignment.ts').TaskAssignment;
   id: string; name: string; draft: string; configuration: ProjectConfiguration;
   createdAt: string; updatedAt: string; sessionStorage: 'legacy' | 'task'; sessionFile?: string;

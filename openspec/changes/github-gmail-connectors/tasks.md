@@ -14,13 +14,13 @@
 
 ## 确认后发单与实施
 
-- [ ] 推送确认版 spec 和 Demo，发布引用完整 SHA 及演示入口的正式开发 Issue。
-- [ ] 在 Issue 记录领取、基线、分支与当前阶段。
-- [ ] 先验证 Gmail 新协议公开传输适配、原生 OAuth 和 BrowserUI 续接的兼容路径。
-- [ ] 按 GG01–GG05 开发连接管理、账号绑定和任务授权。
-- [ ] 按 GG06–GG09 接入 GitHub、Gmail 的工具调用、审批和未知结果恢复。
-- [ ] 按 GG16–GG21 接入腾讯邮箱、飞书及四服务隔离、协议错误和调用恢复。
-- [ ] 按 GG10–GG13 覆盖受限 profile、生命周期、合成凭据保密与正常产品入口。
+- [x] 推送确认版 spec 和 Demo，发布引用完整 SHA 及演示入口的正式开发 Issue。确认版为 `0346bcd1307576ed348a358a3dd239910ade3b0b`，见 [Issue #145](https://github.com/gadfly-hbo/OptraCall/issues/145)。
+- [x] 在 Issue 记录领取、基线、分支与当前阶段。领取回执位于同一 Issue，实施分支为 `codex/github-gmail-connectors`。
+- [x] 先验证 Gmail 新协议公开传输适配、原生 OAuth 和 BrowserUI 续接的兼容路径。
+- [x] 按 GG01–GG05 开发连接管理、账号绑定和任务授权。
+- [x] 按 GG06–GG09 接入 GitHub、Gmail 的工具调用、审批和未知结果恢复。
+- [x] 按 GG16–GG21 接入腾讯邮箱、飞书及四服务隔离、协议错误和调用恢复。
+- [x] 按 GG10–GG13 覆盖受限 profile、生命周期、合成凭据保密与正常产品入口。
 - [ ] 完成当前定义的全量适用检查，固定完整候选并交回 PM Agent。
 - [ ] 按 Issue 的首审／二审终审规则处理发现，完成非作者最终复核。
 - [ ] 核对 PR 实际 head CI，通过后按授权 squash 合并。

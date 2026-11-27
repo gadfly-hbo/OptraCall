@@ -6,6 +6,7 @@ import { constants, lstatSync, unlinkSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { isProjectUploadName, PROJECT_TEXT_UPLOAD_EXTENSIONS, PROJECT_UPLOAD_MAX_BYTES } from './project-upload.ts';
 import { isTaskCapability, type TaskCapability } from './task-capabilities.ts';
+import { validateTaskServiceBindings, type ServiceId, type TaskServiceBinding, type TaskServiceBindings } from './service-connection-types.ts';
 
 export const PROJECT_DIRECTORIES = ['010_draw', '020_clean', '060_reports'] as const;
 export type ProjectDirectory = typeof PROJECT_DIRECTORIES[number];
@@ -14,7 +15,7 @@ export interface ProjectRun { id: string; status: 'running' | 'completed' | 'can
 export interface UploadedFile { id: string; originalName: string; path: string; bytes: number; sha256: string; uploadedAt: string; source: { kind: 'upload' | 'copy' | 'user-save-report'; from?: string } }
 export interface FeedbackTaskOrigin { handoffId: string; operationId: string; requestHash: string }
 export interface PlanTaskOrigin { confirmationId: string; taskKey: string; requestHash: string }
-export interface TaskRecord { createRequestFingerprint?: string; createFingerprint?: string; assignment?: TaskAssignment; id: string; name: string; createdAt: string; updatedAt: string; draft: string; configuration: ProjectConfiguration; sessionStorage: 'legacy' | 'task'; sessionFile?: string; lastRun?: ProjectRun; sessionDirectory: string; simulationTools?: boolean; tradeAreaTools?: boolean; weatherTools?: boolean; modelTools?: boolean; feedbackOrigin?: FeedbackTaskOrigin; reviewDraftIds?: string[]; archivedAt?: string | null; planOrigin?: PlanTaskOrigin }
+export interface TaskRecord { serviceConnections?: TaskServiceBindings; createRequestFingerprint?: string; createFingerprint?: string; assignment?: TaskAssignment; id: string; name: string; createdAt: string; updatedAt: string; draft: string; configuration: ProjectConfiguration; sessionStorage: 'legacy' | 'task'; sessionFile?: string; lastRun?: ProjectRun; sessionDirectory: string; simulationTools?: boolean; tradeAreaTools?: boolean; weatherTools?: boolean; modelTools?: boolean; feedbackOrigin?: FeedbackTaskOrigin; reviewDraftIds?: string[]; archivedAt?: string | null; planOrigin?: PlanTaskOrigin }
 export interface ProjectDecompositionHandoffOrigin {
   goalId: string;
   handoffId: string;
@@ -191,6 +192,9 @@ export class ProjectStore {
       if (input.simulationTools !== undefined) { if (typeof input.simulationTools !== 'boolean') return fail('invalid_project_metadata'); task.simulationTools = input.simulationTools; }
       if (input.weatherTools !== undefined) { if (typeof input.weatherTools !== 'boolean') return fail('invalid_project_metadata'); task.weatherTools = input.weatherTools; }
       if (input.tradeAreaTools !== undefined) { if (typeof input.tradeAreaTools !== 'boolean') return fail('invalid_project_metadata'); task.tradeAreaTools = input.tradeAreaTools; }
+      if (input.serviceConnections !== undefined) {
+        try { task.serviceConnections = validateTaskServiceBindings(input.serviceConnections); } catch { return fail('invalid_project_metadata'); }
+      }
       if (input.modelTools !== undefined) { if (typeof input.modelTools !== 'boolean') return fail('invalid_project_metadata'); task.modelTools = input.modelTools; }
       if (input.createRequestFingerprint !== undefined) {
         if (typeof input.createRequestFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(input.createRequestFingerprint)) return fail('invalid_project_metadata');
@@ -473,6 +477,14 @@ export class ProjectStore {
   setTaskCapability(projectId: string, taskId: string, capability: TaskCapability, enabled: boolean): Promise<TaskRecord> {
     if (!isTaskCapability(capability) || typeof enabled !== 'boolean') return Promise.reject(new ProjectStoreFault('invalid_task_capability'));
     return this.#updateTask(projectId, taskId, task => ({ ...task, [capability]: enabled || undefined }));
+  }
+  setTaskServiceConnection(projectId: string, taskId: string, service: ServiceId, binding: TaskServiceBinding | undefined): Promise<TaskRecord> {
+    return this.#updateTask(projectId, taskId, task => {
+      const bindings = { ...task.serviceConnections };
+      if (binding) bindings[service] = binding; else delete bindings[service];
+      const checked = validateTaskServiceBindings(bindings);
+      return { ...task, serviceConnections: Object.keys(checked).length ? checked : undefined };
+    });
   }
   async #validateSession(projectId: string, task: StoredTask, file: string): Promise<void> {
     const relative = path.relative(this.#taskDirectory(projectId, task), file);
