@@ -7,13 +7,13 @@ import { readJson } from './fixtures/joint-context.ts';
 import { withCaseGoal } from './fixtures/case-goal.ts';
 import { CaseStore } from '../src/host/case-store.ts';
 
-async function waitForRoleIdle(host: Awaited<ReturnType<typeof startTestHost>>, ownerParam: string, timeoutMs = 20_000) {
+async function waitForRoleIdle(host: Awaited<ReturnType<typeof startTestHost>>, ownerParam: string, requestId: string, timeoutMs = 20_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const view = await readJson(await host.request(`/api/business-role?owner=${encodeURIComponent(ownerParam)}`));
-    const running = view.snapshot?.running;
-    const msgs = view.snapshot?.messages ?? [];
-    if (!running && msgs.some((m: { role?: string }) => m.role === 'assistant')) return view;
+    const run = view.discussion?.lastRun;
+    if (run?.id === requestId && ['failed', 'cancelled', 'unknown'].includes(run.status)) assert.fail(JSON.stringify(run));
+    if (!view.busy && run?.id === requestId && run.status === 'completed') return view;
     await new Promise(r => setTimeout(r, 200));
   }
   throw new Error('timeout waiting for Pi business-role completion');
@@ -67,10 +67,11 @@ test('DW-PI-LOOP-01: real Host -> official Pi 1.4.0 -> synthetic Provider invoke
   });
 
   const draftOwner = JSON.stringify({ role: 'goal-draft', draftId: randomUUID(), scope: { kind: 'personal', id: 'pi-scope', name: 'Pi测试' } });
+  const directoryRequestId = randomUUID();
   await readJson(await host.request(`/api/business-role?owner=${encodeURIComponent(draftOwner)}&action=messages`, 'POST', {
-    requestId: randomUUID(), text: '华东三家门店复购波动，帮我找相关 Case', expectedRevision: 0,
+    requestId: directoryRequestId, text: '华东三家门店复购波动，帮我找相关 Case', expectedRevision: 0,
   }), 202);
-  await waitForRoleIdle(host, draftOwner);
+  await waitForRoleIdle(host, draftOwner, directoryRequestId);
   assert.ok(directoryToolResult.includes(record.id), `expected case-directory tool result to include ${record.id}, got ${directoryToolResult}`);
   assert.ok(directoryToolResult.includes(a.id));
 
@@ -105,10 +106,11 @@ test('DW-PI-LOOP-01: real Host -> official Pi 1.4.0 -> synthetic Provider invoke
   });
 
   const caseOwner = JSON.stringify({ role: 'case', caseId: record.id, itemId: b.id });
+  const caseRequestId = randomUUID();
   await readJson(await host.request(`/api/business-role?owner=${encodeURIComponent(caseOwner)}&action=messages`, 'POST', {
-    requestId: randomUUID(), text: '把试点范围承接到扩围取舍，并请华东负责人对先扩三家方案作取舍', expectedRevision: 0,
+    requestId: caseRequestId, text: '把试点范围承接到扩围取舍，并请华东负责人对先扩三家方案作取舍', expectedRevision: 0,
   }), 202);
-  await waitForRoleIdle(host, caseOwner);
+  await waitForRoleIdle(host, caseOwner, caseRequestId);
 
   // Verify real persisted edge, real persisted request, and real home-pending projection!
   const { edges } = await readJson(await host.request(`/api/cases/${record.id}/decisions/issue-edges`));

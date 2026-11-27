@@ -29,9 +29,15 @@ async function environment(t: TestContext, name: string, nodes: { ir?: boolean; 
     const response = await host.request(route), state = await response.json();
     // A fail-closed native snapshot can be unavailable while the owned run is
     // still appending. This is an observation, never a successful source read.
-    if (response.status === 409 && state.code === 'session_history_unavailable') { unavailableSnapshotReads++; return undefined; }
+    if (response.status === 409 && ['session_history_unavailable', 'native_snapshot_incomplete'].includes(state.code)) { unavailableSnapshotReads++; return undefined; }
     assert.equal(response.status, 200, JSON.stringify(state));
-    return readState(state);
+    try { return await readState(state); }
+    catch (error) {
+      // The raw JSONL read follows the HTTP snapshot and may overlap the next
+      // native append. It is an unavailable observation, never a valid receipt.
+      if (!(error instanceof SyntaxError)) throw error;
+      unavailableSnapshotReads++; return undefined;
+    }
   };
   return { root, provider, host, request, project, task, route, requestId, read, pollRead, unavailableSnapshotReads: () => unavailableSnapshotReads };
 }
@@ -96,7 +102,7 @@ test('a schema-valid over-budget declaration is rejected before saving; repeated
   });
   await f.request(f.route + '/messages', 'POST', { requestId: f.requestId, text: '明确结束整理；预算失败不得先写报告。' }, 202);
   let saved: Awaited<ReturnType<typeof f.read>> | undefined; const deadline = Date.now() + 15_000;
-  do { saved = await f.read(); if (saved.state.task.lastRun?.status !== 'running' && saved.state.snapshot.status === 'idle') break; await delay(20); } while (Date.now() < deadline);
+  do { const current = await f.pollRead(); if (current) saved = current; if (saved && saved.state.task.lastRun?.status !== 'running' && saved.state.snapshot.status === 'idle') break; await delay(20); } while (Date.now() < deadline);
   assert.equal(saved!.state.task.lastRun?.status, 'completed'); assert.deepEqual(filesAfterRejected, [], 'no report may be created before both rejected oversized callbacks');
   assert.equal(replies.length, 4);
   for (const reply of replies.slice(0, 2)) {
@@ -125,7 +131,7 @@ test('reviewBasis referencing a nonexistent file returns a safe locatable error;
   });
   await f.request(f.route + '/messages', 'POST', { requestId: f.requestId, text: '声明交付；reviewBasis 引用不存在的文件。' }, 202);
   let saved: Awaited<ReturnType<typeof f.read>> | undefined; const deadline = Date.now() + 15_000;
-  do { saved = await f.read(); if (saved.state.task.lastRun?.status !== 'running' && saved.state.snapshot.status === 'idle') break; await delay(20); } while (Date.now() < deadline);
+  do { const current = await f.pollRead(); if (current) saved = current; if (saved && saved.state.task.lastRun?.status !== 'running' && saved.state.snapshot.status === 'idle') break; await delay(20); } while (Date.now() < deadline);
   assert.equal(saved!.state.task.lastRun?.status, 'completed');
   assert.equal(replies.length, 2);
   assert.match(replies[0], /analysis_delivery_basis_unavailable/);
