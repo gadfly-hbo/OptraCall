@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { CaseStoreError } from './case-types.ts';
 export { CaseStoreError } from './case-types.ts';
-import type { CaseDecisionIssue, CaseIssueReview, CaseIssueReply, CaseDecisionDraftInput, CaseDecisionGovernanceInput, CaseDecisionOrigin, CaseDecisionRevision, CaseDecisionList, CaseDecisionListOptions, CaseDecisionWriteOptions, CaseStrategyChoice, CaseStrategyChoiceInput } from './case-decision-types.ts';
+import type { CaseDecisionIssue, CaseIssueEdge, CaseIssueEdgeSource, CaseIssueReview, CaseIssueReply, CaseDecisionDraftInput, CaseDecisionGovernanceInput, CaseDecisionOrigin, CaseDecisionRevision, CaseDecisionList, CaseDecisionListOptions, CaseDecisionWriteOptions, CaseStrategyChoice, CaseStrategyChoiceInput } from './case-decision-types.ts';
 import { parseCaseDecisionDraft, parseCaseDecisionGovernance, parseCaseDecisionOrigin, parseCaseStrategyChoice } from './case-decision-validation.ts';
 import { parseUserQuoteProvenance, type UserQuoteProvenance } from '../agent/quoted-decisions.ts';
 import type { CaseRelationList, CaseRelationListOptions, CaseRelationRevision, CaseRelationWriteInput, CaseRelationSource } from './case-relation-types.ts';
@@ -751,6 +751,52 @@ export class CaseStore {
       this.put('cases', 'id', after);
       this.event('case', before.id, after.revision, 'case_updated', clean.operationId, { decisionIssue: { before: null, after: issue } }, createdAt);
       return issue;
+    }, { decisions: true });
+  }
+  /** Issue-to-issue承接 edges are append-only Case events; the latest revision per edgeId is current. */
+  listIssueEdges(caseId: string, options: { includeRemoved?: boolean } = {}): CaseIssueEdge[] {
+    this.getCase(caseId);
+    const latest = new Map<string, CaseIssueEdge>();
+    for (const event of this.getEvents('case', caseId)) {
+      const edge = event.changes.issueEdge?.after as CaseIssueEdge | undefined;
+      if (edge) latest.set(edge.edgeId, edge);
+    }
+    return [...latest.values()].filter(edge => options.includeRemoved || edge.lifecycle === 'active');
+  }
+  saveIssueEdge(input: Mutation & { edgeId?: string; fromIssueId?: string; toIssueId?: string; action?: 'save' | 'remove'; explanation?: string; expectedEdgeRevision: number; source: CaseIssueEdgeSource }): CaseIssueEdge {
+    const action = input.action === 'remove' ? 'remove' : 'save';
+    const source = input.source;
+    if (!source || (source.kind !== 'user-declaration' && source.kind !== 'adopted-candidate')) fail('invalid_case_issue_edge_source');
+    const clean = {
+      operationId: uuid(input.operationId), caseId: uuid(input.caseId), expectedRevision: revision(input.expectedRevision), action,
+      expectedEdgeRevision: revision(input.expectedEdgeRevision, true), ...(input.edgeId ? { edgeId: uuid(input.edgeId) } : {}),
+      ...(input.fromIssueId ? { fromIssueId: uuid(input.fromIssueId) } : {}), ...(input.toIssueId ? { toIssueId: uuid(input.toIssueId) } : {}),
+      explanation: input.explanation == null ? '' : text(input.explanation, 1000, true),
+      source: { kind: source.kind, ref: source.ref == null ? null : text(source.ref, 400, true, true, true) },
+    };
+    return this.operation('case_update', { ...clean, action: `issue-edge-${action}` }, clean.caseId, null, () => {
+      const before = this.activeCase(clean.caseId, clean.expectedRevision), createdAt = now();
+      const all = this.listIssueEdges(before.id, { includeRemoved: true });
+      let previous: CaseIssueEdge | undefined;
+      if (clean.edgeId) {
+        previous = all.find(edge => edge.edgeId === clean.edgeId);
+        if (!previous) fail('case_issue_edge_not_found', 404);
+        if (previous.revision !== clean.expectedEdgeRevision) fail('case_issue_edge_conflict', 409);
+      } else if (clean.expectedEdgeRevision !== 0 || action === 'remove') fail('case_issue_edge_conflict', 409);
+      const fromIssueId = previous?.fromIssueId ?? clean.fromIssueId, toIssueId = previous?.toIssueId ?? clean.toIssueId;
+      if (!fromIssueId || !toIssueId) fail('invalid_case_issue_edge');
+      if (fromIssueId === toIssueId) fail('invalid_case_issue_edge');
+      this.getDecisionIssue(before.id, fromIssueId); this.getDecisionIssue(before.id, toIssueId);
+      if (!previous && all.some(edge => edge.lifecycle === 'active' && edge.fromIssueId === fromIssueId && edge.toIssueId === toIssueId)) fail('case_issue_edge_duplicate', 409);
+      const edge: CaseIssueEdge = {
+        edgeId: previous?.edgeId ?? randomUUID(), caseId: before.id, fromIssueId, toIssueId, revision: (previous?.revision ?? 0) + 1,
+        lifecycle: action === 'remove' ? 'removed' : 'active', explanation: action === 'remove' ? (previous?.explanation ?? '') : clean.explanation,
+        source: clean.source, operationId: clean.operationId, createdAt,
+      };
+      const after = { ...before, revision: before.revision + 1, updatedAt: createdAt };
+      this.put('cases', 'id', after);
+      this.event('case', before.id, after.revision, 'case_updated', clean.operationId, { issueEdge: { before: previous ?? null, after: edge } }, createdAt);
+      return edge;
     }, { decisions: true });
   }
   saveIssueReview(input: Omit<CaseIssueReview, 'createdAt'> & { expectedRevision: number }, observedAuthorizationId?: string): CaseIssueReview {

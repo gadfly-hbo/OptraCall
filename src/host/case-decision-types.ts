@@ -53,6 +53,10 @@ export type CaseDecisionGovernanceInput = {
   operationId: string; caseStoreId: string; caseId: string; recordId: string; expectedRevision: number;
   action: 'archive' | 'restore' | 'add_reference' | 'remove_reference'; reference?: CaseDecisionReference;
 };
+export type CaseIssueEdgeSource = { kind: 'user-declaration' | 'adopted-candidate'; ref: string | null };
+/** Explicit directed承接 from one Case issue to another; not inferred, not necessarily single-parent or acyclic. */
+export type CaseIssueEdge = { edgeId: string; caseId: string; fromIssueId: string; toIssueId: string; revision: number; lifecycle: 'active' | 'removed';
+  explanation: string; source: CaseIssueEdgeSource; operationId: string; createdAt: string };
 export type CaseDecisionIssue = { id: string; caseId: string; title: string; createdAt: string };
 export type CaseIssueReply = Extract<PersonalSourceRef, { type: 'native-reply' }>;
 export type CaseIssueReview = { caseId: string; issueId: string; choiceId: string; operationId: string; createdAt: string; reply: CaseIssueReply;
