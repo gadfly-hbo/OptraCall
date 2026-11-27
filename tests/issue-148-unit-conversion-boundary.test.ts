@@ -26,7 +26,7 @@ function fixture(t: test.TestContext) {
   const { publication } = store.publishDecomposition(goal.goalId, { ...intent, operationId: randomUUID(), previewSha256: preview.previewSha256 });
   const period = publication.snapshot.timePlan[1]!;
   const basis = { metric, unit: '万元', scope: draft.estimate.scopeDescription, periodId: period.periodId, coverage: 'complete' as const, maturity: 'closed' as const };
-  function assess(params: { report: string; value: number; sourceUnit: string; convertedValue: number; factor: number; submittedUnit?: string }) {
+  function assess(params: { report: string; value: number; sourceUnit: string; convertedValue: number; factor: number; submittedUnit?: string; evidenceQuote?: string }) {
     const input = { operationId: randomUUID(), publicationVersion: 1, rowId: 'G-TOTAL', checkpointId: period.checkpointId!,
       actualSource: { ref: 'synthetic-unit-report', label: '合成单位报表', cutoffAt: '2027-01-14', reportText: params.report,
         ...(params.submittedUnit === undefined ? {} : { basis: { ...basis, unit: params.submittedUnit } }) },
@@ -35,7 +35,7 @@ function fixture(t: test.TestContext) {
     const run = () => store.assessSubmittedActual(goal.goalId, actual.actualId, 'comparable', '合成核对', {
       quote: params.report, actualValue: params.convertedValue, basis,
       unitConversion: { sourceValue: params.value, sourceUnit: params.sourceUnit, convertedValue: params.convertedValue, convertedUnit: '万元', factor: params.factor,
-        evidenceQuote: params.report, rationale: '合成换算，仅核边界' },
+        evidenceQuote: params.evidenceQuote ?? params.report, rationale: '合成换算，仅核边界' },
     });
     return { run, original: input, readOriginal: () => store.readSubmittedActual(goal.goalId, actual.actualId).input,
       checkCount: () => store.getGoalWorkspace(goal.goalId).checks.length };
@@ -52,6 +52,10 @@ test('PM R1: a declared conversion source unit must belong to the quoted measure
     assert.equal(f.checkCount(), count, 'rejected conversion cannot create a partial check');
     assert.deepEqual(f.readOriginal(), f.original);
   }
+  const clipped = assess({ report: '实绩270000元 / 人，完整已结账。', value: 270000, sourceUnit: '元', submittedUnit: '元', convertedValue: 27, factor: 0.0001, evidenceQuote: '270000元' });
+  assert.throws(clipped.run, /actual_report_value_mismatch|invalid_progress_evidence/, 'a clipped quote cannot hide the rest of a compound source unit');
+  const partialNumber = assess({ report: '实绩270000元，完整已结账。', value: 27, sourceUnit: '元', submittedUnit: '元', convertedValue: 0.0027, factor: 0.0001, evidenceQuote: '27' });
+  assert.throws(partialNumber.run, /actual_report_value_mismatch|invalid_progress_evidence/, 'a quote cannot select only the first digits of the source value');
 });
 
 test('PM R1: cross-dimension or unverified unit factors cannot become comparable sales by arithmetic alone', t => {
@@ -63,14 +67,15 @@ test('PM R1: cross-dimension or unverified unit factors cannot become comparable
     assert.equal(f.checkCount(), count);
     assert.deepEqual(f.readOriginal(), f.original);
   }
-  const compound = assess({ report: '实绩270000元/人，完整出数并已结账。', value: 270000,
-    sourceUnit: '元', submittedUnit: '元', convertedValue: 27, factor: 0.0001 });
-  assert.throws(compound.run, /actual_report_value_mismatch|invalid_progress_evidence/, 'a quoted per-person rate is not a plain currency scale');
+  for (const report of ['实绩270000元/人，完整已结账。', '实绩270000元 / 人，完整已结账。', '实绩270000元\n/ 人，完整已结账。', '实绩270000元　／　人，完整已结账。', '实绩270000元·人，完整已结账。', '实绩270000元²，完整已结账。']) {
+    const compound = assess({ report, value: 270000, sourceUnit: '元', submittedUnit: '元', convertedValue: 27, factor: 0.0001 });
+    assert.throws(compound.run, /actual_report_value_mismatch|invalid_progress_evidence/, 'a quoted per-person rate is not a plain currency scale');
+  }
 });
 
 test('PM R1: known money conversion works from a quoted value/unit pair without asking the user to retype metadata', t => {
   const { assess } = fixture(t);
-  for (const report of ['净销售额270000元，完整出数并已结账。', '净销售额270,000 元，完整出数并已结账。']) {
+  for (const report of ['净销售额270000元，完整出数并已结账。', '净销售额270,000 元，完整出数并已结账。', '净销售额270000元 total sales, closed.']) {
     const f = assess({ report, value: 270000, sourceUnit: '元', convertedValue: 27, factor: 0.0001 });
     const res = f.run();
     assert.equal(res.check?.comparability, 'comparable');

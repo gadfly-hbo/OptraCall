@@ -44,23 +44,31 @@ export function knownUnitScale(sourceUnit: string, targetUnit: string): number |
   return null;
 }
 
-/** Literal value/unit pairs are evidence for conversion, not a semantic scope/metric classifier. */
-export function quotedMeasurementUnits(quote: string, value: number): string[] {
-  const text = quote.replace(/(?<=\d)[,，](?=\d{3}(?:\D|$))/g, '');
+/** Verify literal source spans against their full-report boundaries, not a semantic scope/metric classifier. */
+export function quotedMeasurementEvidence(quote: string, value: number, reportText: string): { hasExactValue: boolean; units: string[] } {
+  const normalize = (text: string) => text.replace(/(?<=\d)[,，](?=\d{3}(?:\D|$))/g, '');
+  const text = normalize(reportText), excerpt = normalize(quote);
   const names = [...new Set(UNIT_SCALE_FAMILIES.flatMap(family => Object.keys(family)))].sort((a, b) => b.length - a.length);
+  const numbers = /[+-]?(?:\d+\.\d+|\d+|\.\d+)/g;
+  const fullNumbers = new Map([...text.matchAll(numbers)].map(match => [match.index!, match[0]]));
+  const quotedNumbers = [...excerpt.matchAll(numbers)].filter(match => Number(match[0]) === value);
   const found = new Set<string>();
-  for (const match of text.matchAll(/[+-]?(?:\d+\.\d+|\d+|\.\d+)/g)) {
-    if (Number(match[0]) !== value) continue;
-    const suffix = text.slice(match.index! + match[0].length).trimStart();
-    const unit = names.find(name => suffix.startsWith(name));
-    if (!unit) continue;
-    // Keep a compound/prefix as conflicting evidence instead of treating its unit as absent
-    // and silently falling back to manually submitted plain-unit metadata.
-    const next = suffix.slice(unit.length);
-    const compound = next.match(/^[A-Za-z/%／]+/);
-    found.add(compound ? unit + compound[0] : unit);
+  let hasExactValue = false;
+  for (let offset = text.indexOf(excerpt); excerpt && offset >= 0; offset = text.indexOf(excerpt, offset + 1)) {
+    for (const match of quotedNumbers) {
+      const start = offset + match.index!;
+      if (fullNumbers.get(start) !== match[0]) continue;
+      hasExactValue = true;
+      // Inspect the full source even when the chosen excerpt ends before /人, an exponent, etc.
+      const suffix = text.slice(start + match[0].length).trimStart();
+      const unit = names.find(name => suffix.startsWith(name));
+      if (!unit) continue;
+      const next = suffix.slice(unit.length);
+      const compound = next.match(/^[A-Za-z/%／·⋅×*^²³⁻⁰¹⁴⁵⁶⁷⁸⁹]+/) ?? next.trimStart().match(/^[/%／·⋅×*^²³⁻⁰¹⁴⁵⁶⁷⁸⁹]+/);
+      found.add(compound ? unit + compound[0] : unit);
+    }
   }
-  return [...found];
+  return { hasExactValue, units: [...found] };
 }
 
 /** A row checkpoint can fall in a planned reporting period or stand on its own dated milestone. */

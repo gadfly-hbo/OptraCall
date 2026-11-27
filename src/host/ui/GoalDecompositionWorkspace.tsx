@@ -2208,18 +2208,25 @@ export function GoalDecompositionWorkspace({
                         workspace.activePublication?.version===chk.publicationVersion?workspace.activePublication:
                         (await api.readDecompositionPublication(record.id,chk.publicationVersion)).publication;
                       if(!mounted.current||draftOwnerRef.current!==ownerKey)return;
-                      const sourceBasis=chk.submittedBasis??chk.actualSource.basis??emptyActualInput.checkBasis;
                       const periodId=chk.periods[0]?.periodId??'';
+                      const originalInput=workspace.submittedActuals.find(actual=>actual.actualId===chk.operationId&&actual.input.operationId===chk.operationId&&
+                        actual.input.publicationVersion===chk.publicationVersion&&actual.input.rowId===chk.rowId&&actual.input.checkpointId===chk.checkpointId)?.input;
+                      const originalPeriod=originalInput?.actualPeriods.find(period=>period.periodId===periodId);
+                      const source=originalInput?.actualSource??chk.actualSource;
+                      // Keep the original numeric/unit/report tuple together; checked values may already be converted.
+                      const sourceBasis=originalInput?originalInput.actualSource.basis??emptyActualInput.checkBasis:
+                        chk.submittedBasis??chk.actualSource.basis??emptyActualInput.checkBasis;
                       const key=JSON.stringify([chk.publicationVersion,chk.rowId,chk.checkpointId,periodId]);
                       setSelectedCheckPub(publication);setCheckPubVersion(chk.publicationVersion);setCheckRowId(chk.rowId);setCheckCheckpointId(chk.checkpointId);setCheckPeriodId(periodId);
                       setActualInputs(inputs=>({...inputs,[key]:{
                         ...emptyActualInput,...inputs[key],uploadedName:'',
-                        reportText:chk.actualSource.reportText??'',checkSourceRef:chk.actualSource.ref,checkSourceLabel:chk.actualSource.label,
-                        checkCutoffAt:chk.actualSource.cutoffAt,checkActualVal:chk.periods[0]?.actualValue!=null?String(chk.periods[0].actualValue):'',
+                        reportText:source.reportText??'',checkSourceRef:source.ref,checkSourceLabel:source.label,
+                        checkCutoffAt:source.cutoffAt,checkActualVal:originalPeriod?.actualValue!=null?String(originalPeriod.actualValue):'',
                         checkBasis:{...sourceBasis,...(scopeSuggestion!==undefined?{scope:scopeSuggestion}:{})},
-                        checkMissingNote:chk.missingCoverageNote??chk.actualSource.coverageNote??'',supplementCheck:chk.checkId,
+                        checkMissingNote:originalInput?originalInput.missingCoverageNote??source.coverageNote??'':chk.missingCoverageNote??source.coverageNote??'',supplementCheck:chk.checkId,
                       }}));
                       setActualReportOpen(true);setActualBasisOpen(true);
+                      if(!originalPeriod)setNotice('原实绩提交或该期间数值暂不可读，数值已留空待核；请核对原报表后再提交。');
                       const selector=focusFieldSelector(scopeSuggestion!==undefined?'scope':chk.comparabilityIssues?.[0]?.field);
                       setTimeout(()=>{if(draftOwnerRef.current===ownerKey)document.querySelector<HTMLElement>(selector)?.focus();},60);
                     }catch(fault){if(mounted.current&&draftOwnerRef.current===ownerKey)setWsError(api.goalError(fault));}

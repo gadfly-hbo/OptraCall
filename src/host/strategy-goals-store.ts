@@ -10,7 +10,7 @@ import { parseUsageContext } from './usage-context-types.ts';
 import { parseGoalBasis } from './strategy-goals-types.ts';
 import type { GoalActionArrangement, GoalArrangementInput } from './strategy-goals-types.ts';
 import type { GoalAdoptionInput, GoalAdoptionProvenance, GoalBasis, GoalContextSnapshot, GoalDraftInput, GoalFeedback, GoalFeedbackInput, GoalMutation, GoalOperationReceipt, GoalRef, GoalRelation, GoalRelationInput, GoalRelationRevisionInput, GoalRelationVersion, GoalRevisionInput, GoalSourceRef, GoalVersion, StrategyGoalRecord, StrategyGoalsIndex } from './strategy-goals-types.ts';
-import { assessProgressEvidenceDetails, checkpointPeriods, comparabilityLabel, granularityLabel, knownUnitScale, progressMetric, quotedMeasurementUnits } from './strategy-goal-progress.ts';
+import { assessProgressEvidenceDetails, checkpointPeriods, comparabilityLabel, granularityLabel, knownUnitScale, progressMetric, quotedMeasurementEvidence } from './strategy-goal-progress.ts';
 import { hasGsaCheckpoint, MAX_GOAL_ACTUAL_REPORT_CHARS } from './strategy-goal-decomposition-types.ts';
 import type { StrategyMapPublicationIdentity } from './strategy-map-types.ts';
 import type {
@@ -1827,7 +1827,9 @@ export class StrategyGoalsStore {
           fail('actual_report_value_mismatch', 409);
         }
         const submittedUnit = submittedBasis?.unit?.trim();
-        const quotedUnits = quotedMeasurementUnits(evidenceQuote, sourceValue);
+        const evidence = quotedMeasurementEvidence(evidenceQuote, sourceValue, reportText);
+        if (!evidence.hasExactValue) fail('actual_report_value_mismatch', 409);
+        const quotedUnits = evidence.units;
         if (quotedUnits.length > 0 && (quotedUnits.length !== 1 || quotedUnits[0] !== sourceUnit)) {
           fail('actual_report_value_mismatch', 409);
         }
