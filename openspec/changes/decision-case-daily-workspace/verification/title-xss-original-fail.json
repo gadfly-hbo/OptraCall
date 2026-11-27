@@ -1,0 +1,6 @@
+{
+  "candidateSha256": "d71bbca48c77daa5947958c4dc72d1a9eba72d163e60058365274e2986bf6d58",
+  "test": "CW22 custom Case name escapes in Projects tab",
+  "pass": false,
+  "snippet": "<span class=\"scope-badge\"><img src=x onerror=alert(1)></span>"
+}
