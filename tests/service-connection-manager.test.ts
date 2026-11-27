@@ -36,6 +36,25 @@ function context(overrides: Partial<ServiceConnectionCallContext> = {}): Service
 }
 const input = { service: 'github' as const, toolName: write.name, args: { owner: 'owner', repo: 'one', body: 'exact content' } };
 
+test('Tencent source-based reply and forward require an explicit task read grant before any adapter access', async t => {
+  const tools: ServiceTool[] = ['reply', 'forward'].map(action => ({ name: `tencent_mail_${action}`, semanticName: action, scope: 'send', action: 'send', write: true, requiresConfirmation: true, inputSchema: { type: 'object', properties: {}, additionalProperties: true } }));
+  let adapterCalls = 0;
+  const { manager } = await fixture(t, { mail: {
+    verify: async () => ({ status: 'verified', accountId: 'verified-mailbox', accountLabel: 'sender@qq.com', scopes: ['read', 'send'], tools }),
+    call: async () => { adapterCalls++; return { status: 'accepted', messageId: '<synthetic-source-reply@example.invalid>' }; },
+  } });
+  const saved = await manager.save('tencent', { expectedRevision: 0, config: { scopes: ['read', 'send'], mailboxType: 'qq', email: 'sender@qq.com' }, credentials: { authorizationCode: 'synthetic-source-auth' } });
+  const verified = await manager.verify('tencent', saved.connection.revision);
+  const sendOnly = await manager.binding('tencent', { expectedConnectionRevision: verified.connection.revision, scopes: ['send'] });
+  const arguments_ = { source: { folder: 'INBOX', uidValidity: '1', uid: 2 }, to: ['recipient@example.invalid'], subject: 'Exact subject', text: 'Exact content' };
+  for (const tool of tools) await assert.rejects(manager.port('project', 'task', { tencent: sendOnly }).call({ service: 'tencent', toolName: tool.name, args: arguments_ }, context({ toolCallId: tool.name })), error => (error as { code?: string }).code === 'service_mail_source_unavailable');
+  assert.equal(adapterCalls, 0, 'no IMAP source metadata or SMTP operation is reachable without the read grant');
+  assert.equal((await manager.store.listOperations({ projectId: 'project', taskId: 'task' })).total, 0);
+  const both = await manager.binding('tencent', { expectedConnectionRevision: verified.connection.revision, scopes: ['read', 'send'] });
+  for (const tool of tools) await manager.port('project', 'task', { tencent: both }).call({ service: 'tencent', toolName: tool.name, args: arguments_ }, context({ toolCallId: tool.name }));
+  assert.equal(adapterCalls, 2);
+});
+
 test('GG04/05 manager supplies narrowed immutable task grants and no public credentials', async t => {
   const { manager, port, calls, binding } = await fixture(t);
   const snapshot = await manager.snapshot('github'); assert.ok(!JSON.stringify(snapshot).includes('synthetic-secret'));

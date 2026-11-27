@@ -369,6 +369,7 @@ export class ServiceConnectionManager {
     if (!binding || context.projectId !== projectId || context.taskId !== taskId) throw new ServiceConnectionError('service_binding_changed', 403);
     let tool = binding.tools.find(item => item.name === input.toolName);
     if (!tool || !binding.scopes.includes(tool.scope)) throw new ServiceConnectionError('service_permission_missing', 403);
+    if (service === 'tencent' && ['tencent_mail_reply', 'tencent_mail_forward'].includes(tool.name) && !binding.scopes.includes('read')) throw new ServiceConnectionError('service_mail_source_unavailable', 403);
     let args = parseServiceJson(input.args, 4 * 1024 * 1024); validateServiceConnectionToolArguments(tool, args);
     const epoch = this.#epochs.get(service) ?? 0;
     const current = () => { context.signal.throwIfAborted(); context.assertCurrent(); this.#eligible(service); if (epoch !== (this.#epochs.get(service) ?? 0)) throw new ServiceConnectionError('service_binding_changed', 409); };

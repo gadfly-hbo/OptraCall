@@ -15,6 +15,8 @@ OptraCall 使用自己保存的账号连接。当前聊天平台或其他 Agent 
 
 Gmail 的发送、回复、转发及部分更新工具目前需要 Google partner access，尚未普遍开放。以 [Google 当前官方说明](https://developers.google.com/workspace/gmail/api/guides/quotas)和账号实际开放的工具为准。读取可用不代表发送已获准。Gmail 发信按绑定邮箱账号确认，不提供独立 send-as 身份选择，真实使用时还需核对 Gmail 的默认发件身份。
 
+腾讯邮箱的回复和转发会核对原邮件的稳定来源，需要同时开启读取与发送；单独发新邮件可仅授予发送。
+
 QQ／Foxmail 需先在邮箱设置中启用 IMAP／SMTP 并生成客户端授权码，具体核验方式以当前账号界面为准。腾讯企业邮使用管理员允许的客户端凭据。两类邮箱的服务器分别固定，不互相代替。参见 [QQ 邮箱官方帮助](https://help.mail.qq.com/detail/106/985)。
 
 飞书的工具由企业管理员及当前授权共同决定。当前用户、企业或应用身份未核实时保持不可用。已有文档修改还要求实际工具提供明确版本前置条件；未提供该条件的覆盖工具不会开放。参见 [飞书官方接入说明](https://open.larkoffice.com/document/mcp_open_tools/end-user-use-remote-mcp-server)。
