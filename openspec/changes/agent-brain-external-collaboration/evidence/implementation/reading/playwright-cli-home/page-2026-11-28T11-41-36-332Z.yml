@@ -1,0 +1,177 @@
+- generic [active] [ref=e1]:
+  - link "跳到主要内容" [ref=e2] [cursor=pointer]:
+    - /url: "#main"
+  - complementary "工作台导航" [ref=e3]:
+    - link "OptraCall 持续做出更好的决策" [ref=e4] [cursor=pointer]:
+      - /url: "#home"
+      - generic [ref=e6]:
+        - text: OptraCall
+        - generic [ref=e7]: 持续做出更好的决策
+    - generic [ref=e8]:
+      - generic [ref=e9]: ▣
+      - generic [ref=e10]:
+        - strong [ref=e11]: 当前工作区
+        - generic [ref=e12]: Case 与项目工作空间
+    - generic [ref=e13]: 日常工作
+    - navigation [ref=e14]:
+      - link "▦ 工作台首页" [ref=e15] [cursor=pointer]:
+        - /url: "#home"
+        - generic [ref=e16]: ▦
+        - text: 工作台首页
+      - link "◫ Decision Case" [ref=e17] [cursor=pointer]:
+        - /url: "#cases"
+        - generic [ref=e18]: ◫
+        - text: Decision Case
+    - group [ref=e19]:
+      - generic "基础建设总览" [ref=e20] [cursor=pointer]
+      - button "战略选择" [ref=e21] [cursor=pointer]
+      - button "目标管理" [ref=e22] [cursor=pointer]
+      - button "语义资产" [ref=e23] [cursor=pointer]
+      - button "分析资产" [ref=e24] [cursor=pointer]
+    - generic [ref=e25]: 项目空间 (1)
+    - navigation [ref=e26]:
+      - link "▱ 四店会员资料核查" [ref=e27] [cursor=pointer]:
+        - /url: "#project"
+        - generic [ref=e28]: ▱
+        - text: 四店会员资料核查
+      - link "◉ 四店资料一致性核查" [ref=e29] [cursor=pointer]:
+        - /url: "#task/analysis"
+        - generic [ref=e30]: ◉
+        - text: 四店资料一致性核查
+    - generic [ref=e31]:
+      - link "⚙ 设置与连接" [ref=e32] [cursor=pointer]:
+        - /url: "#setup"
+      - button "v0.3 · 合成原型说明 ↗" [ref=e33] [cursor=pointer]
+  - generic [ref=e34]:
+    - banner [ref=e35]:
+      - generic [ref=e37]:
+        - generic [aria-hidden] [ref=e38]: ◫
+        - generic [ref=e39]: 工作台首页
+      - navigation "工作方式" [ref=e40]:
+        - link "分析" [ref=e41] [cursor=pointer]:
+          - /url: "#task/analysis"
+        - link "决策" [ref=e42] [cursor=pointer]:
+          - /url: "#cases"
+      - generic [ref=e43]:
+        - button "切换明暗主题" [ref=e44] [cursor=pointer]: 明 / 暗
+        - link "GitHub核心就绪 · 模拟" [ref=e45] [cursor=pointer]:
+          - /url: "#setup"
+    - generic [ref=e48]:
+      - generic [ref=e49]:
+        - generic [ref=e50]: ◈
+        - strong [ref=e51]: v0.3 · 合成资料 / 交互演示
+        - generic [ref=e52]: 不连接真实账号
+      - generic [ref=e53]:
+        - generic [ref=e54]: 演示控制
+        - combobox "演示场景" [ref=e55]:
+          - option "工单已发布，等待通用Agent领取"
+          - option "正常：完整闭环（模拟就绪）" [selected]
+          - option "首次：未完成接入"
+          - option "异常：模型忙，交付待处理"
+          - option "验收：需补充一次"
+          - option "介入：范围扩大待决定"
+          - option "异常：发布结果 UNKNOWN"
+          - option "异常：重复领取"
+          - option "占用：等待同一执行者"
+          - option "异常：执行者身份变化"
+          - option "异常：资产 MCP 离线"
+          - option "异常：授权到期"
+          - option "异常：回传校验失败"
+          - option "异常：停止后迟到回传"
+        - button "重置演示" [ref=e56] [cursor=pointer]
+    - main [ref=e57]:
+      - generic [ref=e58]:
+        - generic [ref=e59]:
+          - generic [ref=e60]:
+            - generic [ref=e61]: YOUR WORK · OPTRACALL
+            - heading "今天，先推进一件重要的事" [level=1] [ref=e62]
+            - paragraph [ref=e63]: 云杉零售 · 合成工作区 / 1 个 Case 正在推进 · 已有待回应 2 项
+          - generic [ref=e64]:
+            - generic [ref=e65]: 11 月 28 日 · 星期六
+            - button "刷新" [ref=e66] [cursor=pointer]
+        - generic [ref=e67]:
+          - generic [ref=e68]:
+            - heading "ϟ 有什么想推进的？" [level=2] [ref=e69]
+            - generic [ref=e70]: 先说一句话，不必先填完整计划
+          - generic [ref=e71]:
+            - generic [ref=e72]: 日常工作草稿
+            - textbox "日常工作草稿" [ref=e73]:
+              - /placeholder: 说说你想解决的问题，或给已有工作补充一个新想法…
+            - generic [ref=e74]:
+              - generic [ref=e75]:
+                - button "整理与查找" [ref=e76] [cursor=pointer]
+                - button "直接准备新 Case" [ref=e77] [cursor=pointer]
+              - generic [ref=e78]:
+                - text: 输入保留，切换页面不用重填
+                - button "放弃这段草稿" [ref=e79] [cursor=pointer]
+          - generic [ref=e80]:
+            - generic [ref=e81]: 新想法与已有进展都可先写下；整理不自动新建 Case。
+            - link "全部项目 →" [ref=e82] [cursor=pointer]:
+              - /url: "#projects"
+        - generic [ref=e83]:
+          - generic [ref=e84]:
+            - region "待处理事项" [ref=e85]:
+              - generic [ref=e86]:
+                - heading "待处理事项 2" [level=2] [ref=e87]:
+                  - text: 待处理事项
+                  - generic [ref=e88]: "2"
+                - generic [ref=e89]: 有明确来源的回应请求
+              - article [ref=e90]:
+                - generic [ref=e91]:
+                  - heading "作取舍 · 核定资料修订范围" [level=3] [ref=e92]
+                  - text: 会员资料治理 / 核定资料修订范围 · 第 2 轮 · 策略 v1
+                  - paragraph [ref=e93]: 记录本轮资料修订范围的取舍
+                  - text: 原请求 · 2026-11-27 · 承担人 业务负责人
+                - button "去记录取舍" [ref=e94] [cursor=pointer]
+              - article [ref=e95]:
+                - generic [ref=e96]:
+                  - heading "补原始观察 · 修订后资料观察" [level=3] [ref=e97]
+                  - text: 会员资料治理 / 修订后资料观察 · 第 1 轮
+                  - paragraph [ref=e98]: 补记四店反馈的实际观察与来源
+                  - text: 原请求 · 2026-11-26 · 承担人 业务负责人
+                - button "去回录观察" [ref=e99] [cursor=pointer]
+            - generic [ref=e100]:
+              - generic [ref=e101]:
+                - heading "继续工作" [level=2] [ref=e102]
+                - link "全部 Case" [ref=e103] [cursor=pointer]:
+                  - /url: "#cases"
+              - article [ref=e104]:
+                - generic [ref=e105]: ▱
+                - generic [ref=e106]:
+                  - link "会员资料治理" [ref=e107] [cursor=pointer]:
+                    - /url: "#case/current"
+                  - paragraph [ref=e108]: 当前事项：资料一致性核查 · 打开 Case 继续原工作
+              - article [ref=e109]:
+                - generic [ref=e110]: ▱
+                - generic [ref=e111]:
+                  - link "四店会员资料核查" [ref=e112] [cursor=pointer]:
+                    - /url: "#project"
+                  - paragraph [ref=e113]: 原共享项目 · 6 个原任务 · 可独立打开
+          - complementary [ref=e114]:
+            - region "外部等待" [ref=e115]:
+              - generic [ref=e116]:
+                - heading "进展关注" [level=2] [ref=e117]
+                - generic [ref=e118]: 外部等待
+              - article [ref=e119]:
+                - heading "四店会员资料核查" [level=3] [ref=e120]
+                - paragraph [ref=e121]: 等待门店补充修订后的实际观察资料
+                - generic [ref=e122]: 来源：原项目工作记录 · 等待反馈承担人：业务负责人 · 原记录保存于 2026-11-27 17:30
+                - link "查看原项目记录" [ref=e123] [cursor=pointer]:
+                  - /url: "#project"
+            - generic [ref=e124]:
+              - generic [ref=e125]:
+                - heading "基础建设提醒" [level=2] [ref=e126]
+                - generic [ref=e127]: 按需查看
+              - button "战略选择 年度规划 · 季度或月度回顾" [ref=e128] [cursor=pointer]:
+                - strong [ref=e129]: 战略选择
+                - generic [ref=e130]: 年度规划 · 季度或月度回顾
+              - button "目标管理 原目标 v1 已关联 · 实绩尚未核定" [ref=e131] [cursor=pointer]:
+                - strong [ref=e132]: 目标管理
+                - generic [ref=e133]: 原目标 v1 已关联 · 实绩尚未核定
+              - button "语义资产 按需建设业务口径" [ref=e134] [cursor=pointer]:
+                - strong [ref=e135]: 语义资产
+                - generic [ref=e136]: 按需建设业务口径
+              - button "分析资产 方法候选沿原核定发布流程" [ref=e137] [cursor=pointer]:
+                - strong [ref=e138]: 分析资产
+                - generic [ref=e139]: 方法候选沿原核定发布流程
+        - paragraph [ref=e140]: 待处理依据原请求的承担人与回应记录汇总。普通建议、外部等待与 Task 外派状态不自动成为“你的待办”。
