@@ -1,0 +1,50 @@
+✔ goal draft uses the scoped native Pi role, retains replies across close, and rejects a forged owner (5427.621704ms)
+✔ zero-task Project uses only its scoped source reader, keeps exact replies after restart and can stop without affecting peers (6567.159863ms)
+✔ Case Agent runs without a Project on an exact issue, rejects cross-Case use and preserves the closed record (8002.090523ms)
+✔ a handed strategy version reaches the Goal system turn, whose native editable suggestion is checked on human save (11071.676732ms)
+✔ DW13/16: recovery readback is bound to its exact owner and backup ID; late previous-version responses never replace the new source (118.011266ms)
+✔ DW16: forbidden or misbound recovery reads remove source content and cannot be presented as the requested version (12.858112ms)
+✔ DW13: conflict replacement requires a successful preservation receipt before explicitly flushing my draft (7.530887ms)
+✔ a Case detail exposes its collaboration entry before any independent issue has been selected (31.659444ms)
+✔ DW02: overview current round includes only the exact open choice request that follows the latest saved choice (123.271251ms)
+✔ DW04: a restored selected issue beyond the directory first 20 is read by exact ID, never replaced by the first issue (6.667573ms)
+✔ DW16: an unreadable restored issue is not silently replaced by the first readable issue (9.995582ms)
+✔ DW03: tree mode survives tab unmount/remount and remains isolated by Case identity (9.520147ms)
+✔ DW02: other owners, answered requests and nonmatching previous choices never create a pending round on the overview (24.538806ms)
+✔ DW16: unreadable request projection remains unknown instead of claiming the latest saved round is the current round (3.150077ms)
+✔ DW09/FUI-02: a selected open historical request loads its exact strategy revision and requires explicit historical confirmation (129.40719ms)
+✔ DW09/FUI-03: explicitly switching from request A to issue B restores B single-request matching (14.863906ms)
+✔ DW09/FUI-02: denied exact historical read never silently substitutes the latest version for the original request (6.352298ms)
+✔ DW09: current-version choices retain the normal one-request path without historical opt-in (9.252913ms)
+✔ DW09/FUI-02: unauthorized, archived or owner-mismatched original revisions cannot be used for a new choice (21.156649ms)
+✔ D13: recording a choice opens a same-page dialog; cancellation preserves its unsaved reason (11.029837ms)
+✔ D13/DW13: an untouched editor can cancel after draft GET 503 while business save stays disabled (5.863634ms)
+✔ D13/DW09: a cancelled choice reopens for a fresh entry sequence without replacing the original draft (4.70818ms)
+✔ D13: an unknown choice keeps its exact operation and resolves through the original timeline without a second write (9.517312ms)
+✔ DW13/B2: full remount preserves an explicitly changed or cleared plan instead of reapplying the historical-request default (19.686896ms)
+✔ DW13/B2: an explicitly unlinked request association stays unlinked after full remount (20.245178ms)
+✔ DW13/B3: viewing a closed Case original request cannot initialize or autosave a new choice draft (364.547817ms)
+✔ DW13/B3: a closed Case can restore its existing uncertain choice input without changing that draft or replaying its operation (369.151042ms)
+✔ D13/D14: automatic request entry captures the current-work action as the shared dialog return focus (15.592319ms)
+✔ DW02/D18: history uses the exact issue choice chain and pending request, never strategy revision as round number (87.534108ms)
+✔ DW02/D12: returning from a historical round only navigates; it never accesses composer or draft endpoints (5.187423ms)
+✔ DW16: switching to denied history clears old issue contents and an open source before another read completes (6.5937ms)
+✔ DW16: a late response from a previous issue cannot overwrite the selected issue history (4.002553ms)
+✔ D14: historical observation date and source stay distinct from recording time; legacy dates remain unknown (4.131603ms)
+✔ Case and Task goal entry binds the original revision or native reply and fails closed on source loss (8713.665716ms)
+✔ v1.2 direct strategy discussion persists exact purpose, native candidate and authorized adoption in original GoalStore (12740.520853ms)
+ℹ /tmp/optracall-host-test-7DBZQj
+✔ v1.2 stopped discussion remains stopped and another discussion continues without a project or BSC (6591.605517ms)
+✔ v1.2 pre-dispatch failure preserves the only original input across Host reopen and is not a native receipt (19.292441ms)
+✔ v1.2 unknown acknowledgment after terminal persistence remains UNKNOWN while native completion is preserved (2107.936356ms)
+✔ a role finishing during source checks returns its newly verified reply with completed status (19.230707ms)
+✔ Project keeps the original issue session across choices while all earlier Plan sources remain readable (13254.874618ms)
+ℹ /workspace/OptraCall-issue154-second-review/.local/product-v13/pm-repair/case/round-Xaidwm
+ℹ tests 40
+ℹ suites 0
+ℹ pass 40
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 45052.684238

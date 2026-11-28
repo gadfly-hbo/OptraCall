@@ -84,11 +84,11 @@ async (page) => {
   await page.getByRole('status').filter({ hasText: '上传已保存到分析区' }).waitFor();
   checks.push('Two tasks in one project use separate models, native histories and drafts while sharing project files; task A stays running in the background.');
   const menu = () => page.getByLabel(`项目操作 ${projectName}`, { exact: true });
-  await menu().click(); await page.getByRole('button', { name: '归档项目', exact: true }).click();
+  await menu().click(); await page.getByRole('button', { name: `归档项目 ${projectName}`, exact: true }).click();
   await page.getByRole('alert').filter({ hasText: /运行|停止|等待/ }).waitFor();
   assert(!(await projects()).find(project => project.id === projectId).archivedAt, 'A running task prevents archive without implicitly stopping it.');
   await page.getByRole('button', { name: '关闭提示', exact: true }).click();
-  await menu().click(); await page.getByRole('button', { name: '重命名', exact: true }).click();
+  await menu().click(); await page.getByRole('button', { name: `重命名项目 ${projectName}`, exact: true }).click();
   const rename = page.getByRole('dialog', { name: '重命名项目', exact: true }), renamed = projectName + ' 已改名';
   await rename.getByRole('textbox', { name: '项目名称', exact: true }).fill(' '); await rename.getByRole('button', { name: '保存名称', exact: true }).click(); await rename.getByRole('alert').waitFor();
   await rename.getByRole('textbox', { name: '项目名称', exact: true }).fill(renamed); await rename.getByRole('button', { name: '保存名称', exact: true }).click(); await rename.waitFor({ state: 'detached' });
@@ -112,7 +112,7 @@ async (page) => {
   let releaseArchive, archiveStored;
   const heldArchive = new Promise(resolve => { releaseArchive = resolve; }), storedArchive = new Promise(resolve => { archiveStored = resolve; });
   await page.route(archiveRoute, async route => { const response = await route.fetch(); archiveStored(response.status()); await heldArchive; await route.fulfill({ response }); });
-  await page.getByLabel(`项目操作 ${renamed}`, { exact: true }).click(); await page.getByRole('button', { name: '归档项目', exact: true }).click();
+  await page.getByLabel(`项目操作 ${renamed}`, { exact: true }).click(); await page.getByRole('button', { name: `归档项目 ${renamed}`, exact: true }).click();
   try {
     assert(await storedArchive === 200, 'The delayed archive response belongs to a committed successful archive.');
     await page.getByRole('status').filter({ hasText: '任务连接待恢复' }).waitFor();

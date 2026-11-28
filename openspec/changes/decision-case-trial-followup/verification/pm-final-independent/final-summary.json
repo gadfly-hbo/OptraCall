@@ -1,0 +1,112 @@
+{
+  "at": "2026-11-28T13:06:28.897Z",
+  "result": "PASS_WITH_EXPLICIT_SCOPE",
+  "candidate": "a643bf00e79cba01933cbaa49a1616ecb675cf12",
+  "productSourceEquivalentTo": "b88af4aa6dfd7f998bfb3e5e119b87820b287d99",
+  "reviewerIsNonAuthor": true,
+  "blockingFindingsRemaining": 0,
+  "priorFindings": {
+    "count": 3,
+    "originalRedRetained": true,
+    "unchangedCauseProbeGreen": true,
+    "permanentRegressionPassed": true
+  },
+  "personallyRun": {
+    "finalTargetTests": {
+      "tests": 71,
+      "pass": 71,
+      "fail": 0,
+      "skip": 0,
+      "cancelled": 0,
+      "sourceCommit": "b88af4aa6dfd7f998bfb3e5e119b87820b287d99"
+    },
+    "agentSessionsBoundary": "PASS",
+    "typecheck": "PASS",
+    "frozenHttpBrowser": {
+      "states": 5,
+      "personallyViewed": true
+    },
+    "productionReadOnlyBrowser": {
+      "states": 8,
+      "writes": [],
+      "pageErrors": [],
+      "viewports": [
+        1440,
+        1024,
+        390
+      ],
+      "runtime": {
+        "instanceId": "61e609cf-6867-40a9-920e-dd14996176bc",
+        "pid": 364066,
+        "codeRoot": "/workspace/OptraCall-issue154-second-review",
+        "version": "0.1.0-mvp.4",
+        "commit": "a643bf00e79cba01933cbaa49a1616ecb675cf12",
+        "tree": "d9ab4d03512adf10a46b7bcb83dc4f8345a63e35",
+        "builtAt": "2026-11-28T12:58:52.498Z",
+        "dirty": false
+      }
+    },
+    "productionImagesPersonallyViewed": 16
+  },
+  "pmExecutedReadOnlyReviewed": {
+    "productionE2E": {
+      "checks": [
+        {
+          "id": "CF05",
+          "detail": "Empty personal scope name blocked locally with exact focus and zero write POSTs"
+        },
+        {
+          "id": "CF06",
+          "detail": "Creating 3rd Case and returning directly updates Case overview to all 3 Cases with 0 manual reloads"
+        },
+        {
+          "id": "CF02",
+          "detail": "Plan Task completes cleanly via real Pi 1.4.0; sustained heartbeat first-frame timeout exhausts to disconnected keeping send disabled & draft, and explicit reconnect restores send without auto open/messages/stop"
+        },
+        {
+          "id": "CF03",
+          "detail": "Empty choice modal guided to Plan Task & handoff, retained draft, saved choice, authorized board action, recorded feedback, and verified round history & original board entry"
+        },
+        {
+          "id": "CF01+CF04",
+          "detail": "Case Agent recovered automatically after clean SSE EOF and Pi 1.4.0 corrected invalid declaration request via field diagnostics"
+        },
+        {
+          "id": "FR01",
+          "detail": "Case Agent recovered full reply automatically (18 heartbeats on open stream without terminal event, zero replay/stop)"
+        },
+        {
+          "id": "CF07",
+          "detail": "Two same-named projects disambiguated via accessible label and only targeted project archived"
+        }
+      ],
+      "result": "PASS",
+      "providerRequests": 7,
+      "pageErrors": []
+    },
+    "affectedRoleTests": 40,
+    "coreTests": 54,
+    "realHostHeartbeatProbeSeconds": 50,
+    "cleanProductionBuild": "PASS"
+  },
+  "matrices": {
+    "followup": "CF01-CF07,FR01-FR02,T01-T10",
+    "frozen": "DW01-DW18",
+    "principles": "4 principles,IN01-IN07"
+  },
+  "notClaimed": [
+    "Full 524-file suite rerun",
+    "Mac original natural root cause or device acceptance",
+    "Paid/real model quality",
+    "Official registry archive redownload in this round"
+  ],
+  "remainingGate": {
+    "T10": "User confirmation of new actual product screenshots is pending; no PR permission",
+    "PRHeadCI": "not yet",
+    "authorizedMergeAndMainCI": "not yet"
+  },
+  "artifacts": [
+    "final-review.md",
+    "final-hash-matrix.json"
+  ]
+}

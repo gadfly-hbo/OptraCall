@@ -1,0 +1,112 @@
+{
+  "runningCandidate": "a643bf00e79cba01933cbaa49a1616ecb675cf12",
+  "productCodeCandidate": "b88af4aa6dfd7f998bfb3e5e119b87820b287d99",
+  "runtime": {
+    "instanceId": "61e609cf-6867-40a9-920e-dd14996176bc",
+    "pid": 364066,
+    "codeRoot": "/workspace/OptraCall-issue154-second-review",
+    "version": "0.1.0-mvp.4",
+    "commit": "a643bf00e79cba01933cbaa49a1616ecb675cf12",
+    "tree": "d9ab4d03512adf10a46b7bcb83dc4f8345a63e35",
+    "builtAt": "2026-11-28T12:58:52.498Z",
+    "dirty": false
+  },
+  "boundary": "actual production dist served by real Host on same loopback origin; isolated synthetic data/provider; no Mac or paid model validation",
+  "files": [
+    {
+      "path": "01-home-light-1440.png",
+      "bytes": 169155,
+      "sha256": "a5aea168e1764f03f349b3a678fa38e27fa1bd5cb6603f34f9ac98b1dcb5f460"
+    },
+    {
+      "path": "02-preparation-1440.png",
+      "bytes": 98838,
+      "sha256": "ba71ce9c38e55acff128813497350c7956108b73b5fc2b3db5cdf360b0322b10"
+    },
+    {
+      "path": "03-case-overview-map-1440.png",
+      "bytes": 98382,
+      "sha256": "e06f63c85d65d76b24a1d2d84737a7ebaa3afd1aa4c6a64126fb8ef7be258728"
+    },
+    {
+      "path": "04-case-overview-cards-1440.png",
+      "bytes": 185443,
+      "sha256": "2334344b15fe0edf20ad316026842f4bac1c2256823838655f6f4a325553bfc5"
+    },
+    {
+      "path": "05-case-detail-1440.png",
+      "bytes": 154584,
+      "sha256": "2b38f00ea1c316153cc6606be75d8a34d28443da4ae3a214651a1bf7087d837c"
+    },
+    {
+      "path": "05b-fr01-heartbeat-recovered-1440.png",
+      "bytes": 127223,
+      "sha256": "39c8f0ce7f59b59ae4846d181cf639941336bf6ce7b171cfc1ed34a5a10982f6"
+    },
+    {
+      "path": "06-choice-empty-unlinked-1440.png",
+      "bytes": 150540,
+      "sha256": "0ad9cc31e2a989cdee5cc262e17513486dd9872d256324ae3cedb25a7ff7f3e4"
+    },
+    {
+      "path": "07-choice-empty-linked-1440.png",
+      "bytes": 154856,
+      "sha256": "11f0a084b5037d5ac3cb66594a3eef0358bd155b77e75fa34869f43ed3098429"
+    },
+    {
+      "path": "08-case-detail-dark-1440.png",
+      "bytes": 129304,
+      "sha256": "4ab336e4931262113731793a36a0bd4e0b2c093302af54129cc065cfb6bd7427"
+    },
+    {
+      "path": "09-case-detail-1024.png",
+      "bytes": 109036,
+      "sha256": "0b78b4b5176991de3cbb8b5cf14477ef1c6dcfcd098bb125e79a3f017906e859"
+    },
+    {
+      "path": "10-case-detail-390.png",
+      "bytes": 63644,
+      "sha256": "51052526c0eb5d54dcd31b18467ff4adfcdd839260ade536fe412bc8217880c1"
+    },
+    {
+      "path": "11-all-projects-1440.png",
+      "bytes": 116215,
+      "sha256": "590711e0ce788cedb59252450dd69244b106d46e0063bc4e1a8431f266b34762"
+    },
+    {
+      "path": "12-preparation-field-validation.png",
+      "bytes": 93788,
+      "sha256": "6f6ef694e81a4d1e6ec3689ddf5bce28ed467b2a2c3ba6959e9e1f4024e8caa0"
+    },
+    {
+      "path": "13-task-disconnected.png",
+      "bytes": 221191,
+      "sha256": "89004f0a6d0515305e4a42edbf480fe17891e58050c1a40f4a123050dd8bb456"
+    },
+    {
+      "path": "14-task-reconnected-draft.png",
+      "bytes": 191949,
+      "sha256": "3ebab6fdabd890a2d7c2e190e2993dd6b2305ea78c0f33b68d149cf338cd3f12"
+    },
+    {
+      "path": "15-feedback-history.png",
+      "bytes": 180248,
+      "sha256": "b62e878da782eb06ba614a23b9153c1a66fa615fb1c25cc059b2864935056562"
+    },
+    {
+      "path": "build-stamp.json",
+      "bytes": 859,
+      "sha256": "4284151190df9ed92bd3de081899ccc5d544811b0bad41daaa036d5d5fc22513"
+    },
+    {
+      "path": "e2e-receipt.json",
+      "bytes": 2546,
+      "sha256": "b5439013ea5d2d14e9f3186b4e289925e02016680b2fc38c67521f079a24a9f5"
+    },
+    {
+      "path": "runtime-identity.json",
+      "bytes": 333,
+      "sha256": "0eec7d9b57b200c664061b0a24940f0c32e5095197f9ee891645935bb1677569"
+    }
+  ]
+}

@@ -63,6 +63,48 @@ export interface StrategyDiscussionSourcePort {
  verify(discussion:StrategyDiscussion,configuration:Readonly<RuntimeModelConfiguration>,context?:{signal?:AbortSignal;assertCurrent():void;metadataOnly?:boolean}):Promise<void>;
 }
 export type RoleContextReader = (owner: BusinessRoleOwner, configuration: Readonly<RuntimeModelConfiguration> | undefined, writing: boolean, localRead?: boolean) => Promise<unknown>;
+export function diagnoseCaseDecisionRequestError(error: unknown, input: Record<string, unknown>) {
+ if (!error || typeof error !== 'object' || !('code' in error) || typeof (error as { code?: unknown }).code !== 'string') return error;
+ const code = (error as { code: string }).code;
+ const isUuid = (v: unknown) => typeof v === 'string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(v);
+ const asRec = (v: unknown): Record<string, unknown> | undefined => !!v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : undefined;
+ const tgt = asRec(input.target);
+ const refObj = tgt ? asRec(tgt.strategyRef) : undefined;
+ let fieldPath = 'target';
+ if (code === 'case_decision_request_not_found' || code === 'case_decision_request_closed') fieldPath = 'requestId';
+ else if (code === 'case_decision_request_conflict' || code === 'invalid_revision') fieldPath = 'expectedRequestRevision';
+ else if (code === 'case_do_authorization_unavailable') fieldPath = 'target.authorizationId';
+ else if (code === 'project_not_linked') fieldPath = 'target.projectId';
+ else if (code === 'task_not_found') fieldPath = 'target.taskId';
+ else if (code === 'case_feedback_conflict') fieldPath = 'target.feedbackBaseRevisionId';
+ else if (code === 'case_choice_conflict') fieldPath = tgt?.kind === 'choose' ? 'target.expectedPreviousChoiceId' : 'target.authorizationId';
+ else if (code === 'case_decision_not_found' || code === 'case_decision_archived' || code === 'case_decision_plan_required' || code === 'invalid_case_decision_reference') fieldPath = 'target.strategyRef';
+ else if (code === 'case_decision_scope_mismatch') fieldPath = tgt?.kind === 'observe' ? 'target.itemId' : 'target.strategyRef.caseId';
+ else if (code === 'invalid_case_decision_id') {
+  if (input.requestId !== undefined && !isUuid(input.requestId)) fieldPath = 'requestId';
+  else if (tgt?.kind === 'choose') {
+   if (!isUuid(refObj?.caseStoreId)) fieldPath = 'target.strategyRef.caseStoreId';
+   else if (!isUuid(refObj?.caseId)) fieldPath = 'target.strategyRef.caseId';
+   else if (!isUuid(refObj?.recordId)) fieldPath = 'target.strategyRef.recordId';
+   else if (tgt.expectedPreviousChoiceId !== null && !isUuid(tgt.expectedPreviousChoiceId)) fieldPath = 'target.expectedPreviousChoiceId';
+  } else if (tgt?.kind === 'observe') {
+   if (!isUuid(tgt.projectId)) fieldPath = 'target.projectId';
+   else if (!isUuid(tgt.itemId)) fieldPath = 'target.itemId';
+   else if (!isUuid(tgt.taskId)) fieldPath = 'target.taskId';
+   else if (!isUuid(tgt.authorizationId)) fieldPath = 'target.authorizationId';
+   else if (tgt.feedbackBaseRevisionId !== null && !isUuid(tgt.feedbackBaseRevisionId)) fieldPath = 'target.feedbackBaseRevisionId';
+  }
+ } else if (code === 'invalid_case_decision_request') {
+  if (input.requestId === undefined && !input.kind) fieldPath = 'kind';
+  else if (input.requestId === undefined && (typeof input.text !== 'string' || !input.text.trim())) fieldPath = 'text';
+  else if (input.requestId === undefined && !tgt) fieldPath = 'target';
+ }
+ return Object.assign(new Error(`${code}: ${fieldPath}`), {
+  code,
+  exposure: 'safe-tool-error-v1' as const,
+  details: { issues: [{ path: fieldPath, reason: /^[a-z][a-z0-9_]{0,99}$/.test(code) ? code : 'invalid_case_decision_request' }] },
+ });
+}
 export function createStrategyDiscussionHost(options:{readDecompositionWorkspace?(goalId:string,version:number|undefined,configuration:Readonly<RuntimeModelConfiguration>):Promise<import('./strategy-goal-decomposition-types.ts').GoalWorkspaceView>;goalEnterprises?(projectId?:string):{id:string;name:string}[];verifyPriorRights?:(owner:BusinessRoleOwner,configuration:Readonly<RuntimeModelConfiguration>,rights:ReadonlySet<string>)=>Promise<void>;roleContext?:RoleContextReader;verifyGoalContext?(context:GoalContextSnapshot,configuration?:Readonly<RuntimeModelConfiguration>):Promise<void>;verifyArrangement?(ref:GoalActionArrangement,configuration?:Readonly<RuntimeModelConfiguration>):Promise<void>;mapImports?:()=>import('./strategy-map-import-routes.ts').StrategyMapImportService|undefined;dataRoot:string;codeRoot:string;goals:StrategyGoalsStore;readCaseDirectory?:(opts?:import('./case-directory.ts').CaseDirectoryOptions)=>import('./case-directory.ts').CaseDirectoryResult;caseDeclarations?:{readDeclarations(caseId:string,issueId:string,input:Record<string,unknown>):unknown;saveIssueEdge(caseId:string,input:Record<string,unknown>,options?:import('./case-decision-types.ts').CaseDecisionWriteOptions):Promise<unknown>;saveDecisionRequest(caseId:string,input:Record<string,unknown>,options?:import('./case-decision-types.ts').CaseDecisionWriteOptions):Promise<unknown>};configuration(id?:string,revision?:number):Readonly<RuntimeModelConfiguration>|null|undefined;defaultUsageContext():Promise<UsageContext|null>;mutate<T>(fn:()=>T|Promise<T>):Promise<T>;isClosing():boolean;sources?:StrategyDiscussionSourcePort;validateGoal(input:GoalDraftInput):void|Promise<void>}){
  const namespace = options.roleContext ? 'business-role-discussions' : 'strategy-discussions';
  const store=new StrategyDiscussionStore(options.dataRoot, namespace);
@@ -673,21 +715,25 @@ export function createStrategyDiscussionHost(options:{readDecompositionWorkspace
       assertWritable();
       return payload({ claim: 'case-issue-edge-saved', edge: saved });
     }
-    const saved = await options.caseDeclarations.saveDecisionRequest(owner.caseId, {
-      operationId,
-      issueId: owner.itemId,
-      ...(input.requestId !== undefined ? { requestId: input.requestId } : {}),
-      ...(input.requestAction !== undefined ? { action: input.requestAction } : {}),
-      ...(input.kind !== undefined ? { kind: input.kind } : {}),
-      ...(input.text !== undefined ? { text: input.text } : {}),
-      ...(input.assignee !== undefined ? { assignee: input.assignee } : {}),
-      ...(input.dueDate !== undefined ? { dueDate: input.dueDate } : {}),
-      ...(input.target !== undefined ? { target: input.target } : {}),
-      expectedRequestRevision: input.expectedRequestRevision ?? 0,
-      source: { kind: 'agent-tool', ref },
-    }, { assertWritable, currentCaseRevision: true });
-    assertWritable();
-    return payload({ claim: 'case-decision-request-saved', request: saved });
+    try {
+      const saved = await options.caseDeclarations.saveDecisionRequest(owner.caseId, {
+        operationId,
+        issueId: owner.itemId,
+        ...(input.requestId !== undefined ? { requestId: input.requestId } : {}),
+        ...(input.requestAction !== undefined ? { action: input.requestAction } : {}),
+        ...(input.kind !== undefined ? { kind: input.kind } : {}),
+        ...(input.text !== undefined ? { text: input.text } : {}),
+        ...(input.assignee !== undefined ? { assignee: input.assignee } : {}),
+        ...(input.dueDate !== undefined ? { dueDate: input.dueDate } : {}),
+        ...(input.target !== undefined ? { target: input.target } : {}),
+        expectedRequestRevision: input.expectedRequestRevision ?? 0,
+        source: { kind: 'agent-tool', ref },
+      }, { assertWritable, currentCaseRevision: true });
+      assertWritable();
+      return payload({ claim: 'case-decision-request-saved', request: saved });
+    } catch (error) {
+      throw diagnoseCaseDecisionRequestError(error, input);
+    }
    }
    if(owner.role==='goal'||owner.role==='goal-draft'){
     if (owner.analysisVariant === 'goal-plan') {

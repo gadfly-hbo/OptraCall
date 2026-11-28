@@ -1,0 +1,17 @@
+{
+  "repositoryMain": "74030911ade7a9e06ad1a0213d1fcb93ecbba6dd",
+  "reportedRuntime": "1fd351f74df6e1113e6bda3c136144975c35febd",
+  "files": [
+    {
+      "name": "试用反馈交接单.md",
+      "bytes": 25787,
+      "sha256": "a85d4066af3d9e3f1f4445c4d981c9602d2efdb9b989cec84e219ce2a2946053"
+    },
+    {
+      "name": "试用记录.md",
+      "bytes": 24181,
+      "sha256": "c67722a744d8765f0cfe32eb4f256fd7657f4c153d378e41551317e101e350a9"
+    }
+  ],
+  "boundary": "Two Markdown attachments only. Referenced Mac screenshots/native logs not attached or accessed; trial instructions and proposed causes are evidence claims, not implementation authorization."
+}

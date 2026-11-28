@@ -3,7 +3,7 @@ import { taskSourceDeliveryType, taskSourceDeliveryDetails, tracksTaskSource } f
 import { packageIdentity } from './skill-catalog.ts';
 import { taskPurpose, approvedTaskSkills } from '../host/task-assignment.ts';
 import {goalContextSourceTool} from './goal-context-source.ts';
-import { strategyDiscussionTool, projectDiscussionSourceTool, editableGoalTool, caseDeclarationsTool, goalEstimateTool, goalDecompositionTool, goalPlanTool, goalReviewTool, explainGoalProposalError, STRATEGY_DISCUSSION_ACTIONS } from './strategy-discussion.ts';
+import { strategyDiscussionTool, projectDiscussionSourceTool, editableGoalTool, caseDeclarationsTool, goalEstimateTool, goalDecompositionTool, goalPlanTool, goalReviewTool, explainGoalProposalError, explainCaseDeclarationError, STRATEGY_DISCUSSION_ACTIONS } from './strategy-discussion.ts';
 import { methodIssueTool } from './method-issue.ts';
 import { quotedDecisionTool } from './quoted-decisions.ts';
 import type { AnalysisDeliveryReceipt } from '../host/analysis-delivery.ts';
@@ -830,6 +830,7 @@ export async function runProjectSession(transport: { close: () => Promise<void>;
           } catch (error) {
             if (isRead && !originalRun!.strategyLoopStopped) noteStrategyRead(originalRun!, String(action), strategyReadFingerprint({ code: (error as {code?:unknown})?.code ?? (error as Error)?.message, details: (error as {details?:unknown})?.details }));
             if (action === 'propose-goal' && variant !== 'goal-draft' && variant !== 'goal-estimate' && variant !== 'goal-decomposition') throw explainGoalProposalError(error);
+            if (variant === 'case-declarations') throw explainCaseDeclarationError(error);
             throw error;
           }
         }

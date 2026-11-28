@@ -316,7 +316,7 @@ test('DW10/DW13: G/S can be written and reopened before scope is chosen; explici
     await ui.settle();
     assert.equal(api.goalRequests.length, 0, 'unselected scope cannot create a Goal candidate');
     assert.equal(api.createRequests.length, 0, 'unselected scope cannot create or continue a Case');
-    assert.ok(ui.nodes().some(n => n.props.role === 'alert' && label(n).includes('原输入和原请求保留')));
+    assert.ok(ui.nodes().some(n => n.props.role === 'alert' && label(n).includes('请选择目标归属') && !label(n).includes('核对原操作并继续')));
     inputFor('已有企业或个人', 'select').props.onChange({ target: { value: 'personal' } });
     await ui.settle();
     inputFor('个人归属名称', 'input').props.onChange({ target: { value: '明确选择的归属' } });
