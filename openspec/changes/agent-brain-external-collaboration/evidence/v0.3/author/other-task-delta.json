@@ -1,0 +1,10 @@
+{
+  "result": "PASS",
+  "hash": "9a5626d5efe69f2d5a4c22ee234919a4abd07e4c190a0fb996a9449cd062fcb4",
+  "checks": [
+    "other Task internal path selectable while analysis work waits",
+    "original external grant preserved",
+    "existing work/history/reads/API unmodified",
+    "other Task draft retained"
+  ]
+}

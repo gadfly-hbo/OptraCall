@@ -1,0 +1,1030 @@
+{
+  "started": "2026-11-28T11:18:59.963Z",
+  "checks": [
+    {
+      "name": "内部未配置零auth",
+      "actual": null,
+      "expected": null,
+      "pass": true
+    },
+    {
+      "name": "内部未配置零读取",
+      "actual": 0,
+      "expected": 0,
+      "pass": true
+    },
+    {
+      "name": "内部未配置零事件",
+      "actual": 0,
+      "expected": 0,
+      "pass": true
+    },
+    {
+      "name": "内部未配置零API",
+      "actual": 0,
+      "expected": 0,
+      "pass": true
+    },
+    {
+      "name": "内部选择保留草稿",
+      "actual": "独立复核草稿：保留UNKNOWN",
+      "expected": "独立复核草稿：保留UNKNOWN",
+      "pass": true
+    },
+    {
+      "name": "六类内部-requirement",
+      "actual": "internal",
+      "expected": "internal",
+      "pass": true
+    },
+    {
+      "name": "六类内部-analysis",
+      "actual": "internal",
+      "expected": "internal",
+      "pass": true
+    },
+    {
+      "name": "六类内部-plan",
+      "actual": "internal",
+      "expected": "internal",
+      "pass": true
+    },
+    {
+      "name": "六类内部-decision",
+      "actual": "internal",
+      "expected": "internal",
+      "pass": true
+    },
+    {
+      "name": "六类内部-do",
+      "actual": "internal",
+      "expected": "internal",
+      "pass": true
+    },
+    {
+      "name": "六类内部-teach",
+      "actual": "internal",
+      "expected": "internal",
+      "pass": true
+    },
+    {
+      "name": "默认通用选择",
+      "actual": "github",
+      "expected": "github",
+      "pass": true
+    },
+    {
+      "name": "WB默认禁用",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "Escape关闭授权",
+      "actual": false,
+      "expected": false,
+      "pass": true
+    },
+    {
+      "name": "Escape焦点恢复",
+      "actual": "authorize",
+      "expected": "authorize",
+      "pass": true
+    },
+    {
+      "name": "取消授权零auth",
+      "actual": null,
+      "expected": null,
+      "pass": true
+    },
+    {
+      "name": "GitHub接受且无WB配置",
+      "actual": [
+        "accepted",
+        false,
+        false,
+        false
+      ],
+      "expected": [
+        "accepted",
+        false,
+        false,
+        false
+      ],
+      "pass": true
+    },
+    {
+      "name": "纯GitHub额度0",
+      "actual": [
+        0,
+        0
+      ],
+      "expected": [
+        0,
+        0
+      ],
+      "pass": true
+    },
+    {
+      "name": "核心1work/24h",
+      "actual": [
+        1,
+        24
+      ],
+      "expected": [
+        1,
+        24
+      ],
+      "pass": true
+    },
+    {
+      "name": "纯GitHub准确读取",
+      "actual": 4,
+      "expected": 4,
+      "pass": true
+    },
+    {
+      "name": "单项不能启WB",
+      "actual": false,
+      "expected": false,
+      "pass": true
+    },
+    {
+      "name": "单项后WB仍禁用",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "模拟联合通过",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "WB可选闭环",
+      "actual": [
+        "accepted",
+        1,
+        3
+      ],
+      "expected": [
+        "accepted",
+        1,
+        3
+      ],
+      "pass": true
+    },
+    {
+      "name": "未领取读取拒绝",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "未领取无WB触发",
+      "actual": 0,
+      "expected": 0,
+      "pass": true
+    },
+    {
+      "name": "UNKNOWN不重发",
+      "actual": [
+        "unknown",
+        0,
+        true
+      ],
+      "expected": [
+        "unknown",
+        0,
+        true
+      ],
+      "pass": true
+    },
+    {
+      "name": "UNKNOWN重开保留",
+      "actual": "unknown",
+      "expected": "unknown",
+      "pass": true
+    },
+    {
+      "name": "空闲但暂停仍待处理",
+      "actual": "pending",
+      "expected": "pending",
+      "pass": true
+    },
+    {
+      "name": "恢复后接受",
+      "actual": "accepted",
+      "expected": "accepted",
+      "pass": true
+    },
+    {
+      "name": "缺件不接受",
+      "actual": "failed",
+      "expected": "failed",
+      "pass": true
+    },
+    {
+      "name": "原范围补充保留首次失败",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "纯GH补充零WB额度",
+      "actual": 0,
+      "expected": 0,
+      "pass": true
+    },
+    {
+      "name": "取消迟到不复活",
+      "actual": [
+        true,
+        true,
+        "stopped"
+      ],
+      "expected": [
+        true,
+        true,
+        "stopped"
+      ],
+      "pass": true
+    },
+    {
+      "name": "identity阻断",
+      "actual": 0,
+      "expected": 0,
+      "pass": true
+    },
+    {
+      "name": "offline阻断",
+      "actual": 0,
+      "expected": 0,
+      "pass": true
+    },
+    {
+      "name": "expired阻断",
+      "actual": 0,
+      "expected": 0,
+      "pass": true
+    },
+    {
+      "name": "跨页Task草稿",
+      "actual": "Task独立草稿",
+      "expected": "Task独立草稿",
+      "pass": true
+    },
+    {
+      "name": "准确来源返回",
+      "actual": [
+        "choice",
+        "projects",
+        "quality"
+      ],
+      "expected": [
+        "choice",
+        "projects",
+        "quality"
+      ],
+      "pass": true
+    },
+    {
+      "name": "准确来源焦点",
+      "actual": "return-source-case",
+      "expected": "task-analysis",
+      "pass": false
+    },
+    {
+      "name": "原事项草稿",
+      "actual": "choice独立草稿",
+      "expected": "choice独立草稿",
+      "pass": true
+    },
+    {
+      "name": "另一事项草稿",
+      "actual": "quality草稿",
+      "expected": "quality草稿",
+      "pass": true
+    },
+    {
+      "name": "独立项目不猜来源",
+      "actual": null,
+      "expected": null,
+      "pass": true
+    },
+    {
+      "name": "接受不改原待回应",
+      "actual": "2",
+      "expected": "2",
+      "pass": true
+    },
+    {
+      "name": "接受保留项目等待",
+      "actual": 1,
+      "expected": 1,
+      "pass": true
+    },
+    {
+      "name": "不将外部交付写Case正式依据",
+      "actual": 1,
+      "expected": 1,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-light-home",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-light-cases",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-light-projects",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-light-project",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-light-case/current",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-light-case/projects",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-light-case/artifacts",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-light-case/history",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-light-task/analysis",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-light-report",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-light-draft",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-light-work",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-light-assets",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-light-delivery",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-light-setup",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "授权抽屉无横溢-1440-light",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "授权键盘焦点-1440-light",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-dark-home",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-dark-cases",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-dark-projects",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-dark-project",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-dark-case/current",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-dark-case/projects",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-dark-case/artifacts",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-dark-case/history",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-dark-task/analysis",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-dark-report",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-dark-draft",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-dark-work",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-dark-assets",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-dark-delivery",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1440-dark-setup",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "授权抽屉无横溢-1440-dark",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "授权键盘焦点-1440-dark",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-light-home",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-light-cases",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-light-projects",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-light-project",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-light-case/current",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-light-case/projects",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-light-case/artifacts",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-light-case/history",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-light-task/analysis",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-light-report",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-light-draft",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-light-work",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-light-assets",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-light-delivery",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-light-setup",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "授权抽屉无横溢-1024-light",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "授权键盘焦点-1024-light",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-dark-home",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-dark-cases",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-dark-projects",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-dark-project",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-dark-case/current",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-dark-case/projects",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-dark-case/artifacts",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-dark-case/history",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-dark-task/analysis",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-dark-report",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-dark-draft",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-dark-work",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-dark-assets",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-dark-delivery",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-1024-dark-setup",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "授权抽屉无横溢-1024-dark",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "授权键盘焦点-1024-dark",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-light-home",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-light-cases",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-light-projects",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-light-project",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-light-case/current",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-light-case/projects",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-light-case/artifacts",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-light-case/history",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-light-task/analysis",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-light-report",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-light-draft",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-light-work",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-light-assets",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-light-delivery",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-light-setup",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "授权抽屉无横溢-390-light",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "授权键盘焦点-390-light",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-dark-home",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-dark-cases",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-dark-projects",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-dark-project",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-dark-case/current",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-dark-case/projects",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-dark-case/artifacts",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-dark-case/history",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-dark-task/analysis",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-dark-report",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-dark-draft",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-dark-work",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-dark-assets",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-dark-delivery",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "无页面横溢-390-dark-setup",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "授权抽屉无横溢-390-dark",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "授权键盘焦点-390-dark",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "页面脚本无错误",
+      "actual": 0,
+      "expected": 0,
+      "pass": true
+    },
+    {
+      "name": "无外站网络请求",
+      "actual": 0,
+      "expected": 0,
+      "pass": true
+    }
+  ],
+  "errors": [],
+  "screenshots": [
+    "internal-unconfigured.png",
+    "github-accepted.png",
+    "github-delivery.png",
+    "wb-simulated-verified.png",
+    "wb-authorization.png",
+    "unclaimed-read-denied.png",
+    "unknown-preserved.png",
+    "busy-pending.png",
+    "failed-manifest.png",
+    "supplement-v1-failed.png",
+    "supplement-v11.png",
+    "late-quarantine.png",
+    "identity-blocked.png",
+    "offline-blocked.png",
+    "expired-blocked.png",
+    "case-original-authority.png",
+    "visual-1440-light-home.png",
+    "visual-1440-light-case-current.png",
+    "visual-1440-light-task-analysis.png",
+    "visual-1440-light-work.png",
+    "visual-1440-light-delivery.png",
+    "visual-1440-light-setup.png",
+    "visual-1440-light-authorization.png",
+    "visual-1440-dark-home.png",
+    "visual-1440-dark-case-current.png",
+    "visual-1440-dark-task-analysis.png",
+    "visual-1440-dark-work.png",
+    "visual-1440-dark-delivery.png",
+    "visual-1440-dark-setup.png",
+    "visual-1440-dark-authorization.png",
+    "visual-1024-light-home.png",
+    "visual-1024-light-case-current.png",
+    "visual-1024-light-task-analysis.png",
+    "visual-1024-light-work.png",
+    "visual-1024-light-delivery.png",
+    "visual-1024-light-setup.png",
+    "visual-1024-light-authorization.png",
+    "visual-1024-dark-home.png",
+    "visual-1024-dark-case-current.png",
+    "visual-1024-dark-task-analysis.png",
+    "visual-1024-dark-work.png",
+    "visual-1024-dark-delivery.png",
+    "visual-1024-dark-setup.png",
+    "visual-1024-dark-authorization.png",
+    "visual-390-light-home.png",
+    "visual-390-light-case-current.png",
+    "visual-390-light-task-analysis.png",
+    "visual-390-light-work.png",
+    "visual-390-light-delivery.png",
+    "visual-390-light-setup.png",
+    "visual-390-light-authorization.png",
+    "visual-390-dark-home.png",
+    "visual-390-dark-case-current.png",
+    "visual-390-dark-task-analysis.png",
+    "visual-390-dark-work.png",
+    "visual-390-dark-delivery.png",
+    "visual-390-dark-setup.png",
+    "visual-390-dark-authorization.png"
+  ],
+  "requests": [
+    "http://127.0.0.1:4317/ui-demo.html",
+    "http://127.0.0.1:4317/ui-demo.html"
+  ],
+  "finished": "2026-11-28T11:20:25.813Z",
+  "summary": {
+    "total": 150,
+    "pass": 149,
+    "fail": 1
+  }
+}

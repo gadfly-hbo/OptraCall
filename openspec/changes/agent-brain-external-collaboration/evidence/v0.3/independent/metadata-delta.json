@@ -1,0 +1,691 @@
+{
+  "at": "2026-11-28T11:27:09.341542+00:00",
+  "scope": "read-only metadata delta; no browser rerun",
+  "checks": [
+    {
+      "name": "spec.md final identity",
+      "actual": "56522ef4db656ed047864cd9cc897fec0544bb627dd5fcf8bf26af82a27d9375",
+      "expected": "56522ef4db656ed047864cd9cc897fec0544bb627dd5fcf8bf26af82a27d9375",
+      "pass": true
+    },
+    {
+      "name": "tasks.md final identity",
+      "actual": "fe12198ab553abc388b74dc3dc94818d09b358b2e27bde527b0b9fed45fbd9bd",
+      "expected": "fe12198ab553abc388b74dc3dc94818d09b358b2e27bde527b0b9fed45fbd9bd",
+      "pass": true
+    },
+    {
+      "name": "ui-demo.html final identity",
+      "actual": "9a5626d5efe69f2d5a4c22ee234919a4abd07e4c190a0fb996a9449cd062fcb4",
+      "expected": "9a5626d5efe69f2d5a4c22ee234919a4abd07e4c190a0fb996a9449cd062fcb4",
+      "pass": true
+    },
+    {
+      "name": "tasks only P04 change",
+      "actual": "081590164b9d4f7e3a8abac465e85eb5f4d1cb1f5e5b6c4a2ced93ce6beda8a1",
+      "expected": "081590164b9d4f7e3a8abac465e85eb5f4d1cb1f5e5b6c4a2ced93ce6beda8a1",
+      "pass": true
+    },
+    {
+      "name": "P04 completed",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "P05 pending",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "all 8 E pending",
+      "actual": 8,
+      "expected": 8,
+      "pass": true
+    },
+    {
+      "name": "public identity manifest accurate",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "metadata links resolve",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "all independent artifacts copied without modification",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    }
+  ],
+  "changedSinceReviewFinalManifest": [
+    "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/input-manifest.json",
+    "openspec/changes/agent-brain-external-collaboration/preparation-review.md",
+    "openspec/changes/agent-brain-external-collaboration/result.md",
+    "openspec/changes/agent-brain-external-collaboration/tasks.md"
+  ],
+  "links": [
+    {
+      "source": "result.md",
+      "target": "spec.md",
+      "exists": true
+    },
+    {
+      "source": "result.md",
+      "target": "tasks.md",
+      "exists": true
+    },
+    {
+      "source": "result.md",
+      "target": "ui-demo.html",
+      "exists": true
+    },
+    {
+      "source": "result.md",
+      "target": "issue-draft.md",
+      "exists": true
+    },
+    {
+      "source": "result.md",
+      "target": "changes-v0.3.md",
+      "exists": true
+    },
+    {
+      "source": "result.md",
+      "target": "evidence/v0.3/README.md",
+      "exists": true
+    },
+    {
+      "source": "result.md",
+      "target": "preparation-review.md",
+      "exists": true
+    },
+    {
+      "source": "result.md",
+      "target": "evidence/v0.3/independent/matrix.md",
+      "exists": true
+    },
+    {
+      "source": "result.md",
+      "target": "result-v0.2.md",
+      "exists": true
+    },
+    {
+      "source": "result.md",
+      "target": "preparation-review-v0.2.md",
+      "exists": true
+    },
+    {
+      "source": "preparation-review.md",
+      "target": "evidence/v0.3/independent/report.md",
+      "exists": true
+    },
+    {
+      "source": "preparation-review.md",
+      "target": "evidence/v0.3/independent/matrix.md",
+      "exists": true
+    },
+    {
+      "source": "preparation-review.md",
+      "target": "evidence/v0.3/independent/input-manifest.json",
+      "exists": true
+    },
+    {
+      "source": "preparation-review.md",
+      "target": "evidence/v0.3/independent/review-final-manifest.json",
+      "exists": true
+    },
+    {
+      "source": "preparation-review.md",
+      "target": "evidence/v0.3/independent/delta.json",
+      "exists": true
+    },
+    {
+      "source": "preparation-review.md",
+      "target": "evidence/v0.3/input-manifest.json",
+      "exists": true
+    },
+    {
+      "source": "preparation-review.md",
+      "target": "preparation-review-v0.2.md",
+      "exists": true
+    },
+    {
+      "source": "evidence/v0.3/README.md",
+      "target": "input-manifest.json",
+      "exists": true
+    },
+    {
+      "source": "evidence/v0.3/README.md",
+      "target": "author/results.json",
+      "exists": true
+    },
+    {
+      "source": "evidence/v0.3/README.md",
+      "target": "author/check.mjs",
+      "exists": true
+    },
+    {
+      "source": "evidence/v0.3/README.md",
+      "target": "author/other-task-delta.json",
+      "exists": true
+    }
+  ],
+  "copyComparison": [
+    {
+      "file": "busy-pending.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "case-original-authority.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "check.cjs",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "checks.json",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "corrected-1024-dark-authorization-bottom.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "corrected-1024-dark-authorization.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "corrected-1024-light-authorization-bottom.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "corrected-1024-light-authorization.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "corrected-1440-dark-authorization-bottom.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "corrected-1440-dark-authorization.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "corrected-1440-light-authorization-bottom.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "corrected-1440-light-authorization.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "corrected-390-dark-authorization-bottom.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "corrected-390-dark-authorization.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "corrected-390-light-authorization-bottom.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "corrected-390-light-authorization.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "delta-csp-failed.cjs",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "delta-csp-failed.json",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "delta-csp-failed.log",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "delta-locator-failed.cjs",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "delta-locator-failed.json",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "delta-locator-failed.log",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "delta-other-task-internal.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "delta.cjs",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "delta.json",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "delta.log",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "demo-readable.txt",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "expectations.md",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "expired-blocked.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "failed-manifest.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "github-accepted.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "github-delivery.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "identity-blocked.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "input-manifest.json",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "internal-unconfigured.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "issue155-readback.json",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "late-quarantine.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "links.json",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "matrix.md",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "offline-blocked.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "report.md",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "return-origin-focused.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "review-final-manifest.json",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "run.log",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "static-check.py",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "static-checks-html-delta-detected.json",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "static-checks-initial.json",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "static-checks-initial.log",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "static-checks.json",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "static-checks.log",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "supplement-v1-failed.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "supplement-v11.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "supplement.cjs",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "supplement.json",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "supplement.log",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "unclaimed-read-denied.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "unknown-preserved.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1024-dark-authorization.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1024-dark-case-current.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1024-dark-delivery.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1024-dark-home.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1024-dark-setup.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1024-dark-task-analysis.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1024-dark-work.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1024-light-authorization.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1024-light-case-current.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1024-light-delivery.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1024-light-home.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1024-light-setup.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1024-light-task-analysis.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1024-light-work.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1440-dark-authorization.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1440-dark-case-current.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1440-dark-delivery.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1440-dark-home.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1440-dark-setup.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1440-dark-task-analysis.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1440-dark-work.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1440-light-authorization.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1440-light-case-current.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1440-light-delivery.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1440-light-home.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1440-light-setup.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1440-light-task-analysis.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-1440-light-work.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-390-dark-authorization.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-390-dark-case-current.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-390-dark-delivery.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-390-dark-home.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-390-dark-setup.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-390-dark-task-analysis.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-390-dark-work.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-390-light-authorization.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-390-light-case-current.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-390-light-delivery.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-390-light-home.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-390-light-setup.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-390-light-task-analysis.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "visual-390-light-work.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "wb-authorization.png",
+      "copied": true,
+      "same": true
+    },
+    {
+      "file": "wb-simulated-verified.png",
+      "copied": true,
+      "same": true
+    }
+  ],
+  "summary": {
+    "total": 10,
+    "pass": 10,
+    "fail": 0
+  }
+}

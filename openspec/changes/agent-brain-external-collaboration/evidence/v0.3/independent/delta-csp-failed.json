@@ -1,0 +1,10 @@
+{
+  "checks": [],
+  "htmlSha256": "9a5626d5efe69f2d5a4c22ee234919a4abd07e4c190a0fb996a9449cd062fcb4",
+  "fatal": "page.waitForFunction: EvalError: Evaluating a string as JavaScript violates the following Content Security Policy directive because 'unsafe-eval' is not an allowed source of script: script-src 'unsafe-inline'\".\n\n    at eval (<anonymous>)\n    at eval (eval at predicate (eval at evaluate (:290:30)), <anonymous>:1:12)\n    at predicate (eval at evaluate (:290:30), <anonymous>:7:23)\n    at next (eval at evaluate (:290:30), <anonymous>:29:29)\n    at /workspace/OptraCall/.local/brain-v03-independent/delta.cjs:2:460",
+  "summary": {
+    "total": 0,
+    "pass": 0,
+    "fail": 0
+  }
+}

@@ -1,5 +1,7 @@
 # Agent 大脑外部协作：复用与责任边界核对
 
+**当前v0.3准入以文末模式分离补充及spec为准：内部可选、GitHub/MCP独立，WorkBuddy仅可选且真实联调后启用。**
+
 **版本关系：第1–8节保留为 v0.1 历史核对（2026-11-27，基线4132a39），其中新增外派合同是设计约束，不代表当前已实现。最新 main 对齐见第9节及 [main-alignment.md](main-alignment.md)，旧行号不作为新版源码定位。**
 
 2026-11-27；设计依据为产品源码 `main@4132a39d336c22d46c5bc57ae9d9b544a7ebac5f`、讨论稿 `41264eb5c584c1cf4e09c532e8842823a870c469`。
@@ -117,3 +119,7 @@ Host 从原 Task 构造真实 owner，静态注入狭窄业务 port；Extension 
 - `CaseBoard.tsx:197`、`TaskReportEvidence.tsx:69` 的准确成果/范围读取继续保留；接受外派不自动成为 Case 产物。项目返回原事项已有路径，但报告 sourceCase 目前仅携 Case ID，准确事项/页签/焦点返回是本期需补的最小导航信息，不能当成读取权限。
 - Interface v3、官方 Pi1.4.0/MCP1.32.2、受管 profile 拒绝、Host-only 后台读、legacy 不外露、ExternalDeliveryRef 及 UNKNOWN 跨 turn/迟到边界仍适用；当前行号及新增检查建议详见 main-alignment。
 - 最新工程规范 `:211`、`:284` 要求真正渲染/阅读冻结 Demo、DOM/CSS 到生产视图映射、逐项独立矩阵、开 PR 前真实产品截图展示及用户确认；这是工程交付门禁，不增加产品日常外派审批。
+
+## v0.3模式分离补充（2026-11-28）
+
+不改变主线/source接缝结论，只修正设计准入：原Task内部路径不依赖外部连接；核心外派门槛为GitHub/受保护MCP/认证通用执行者/适用资源，不依赖WorkBuddy。原Task/Case来源、原owner、原子性及保全约束保留。WorkBuddy API/Connector/真实联合测试/3次触发与费用仅可选适配适用，默认禁用，实际联调未做不阻塞核心工程完成。不承诺本机开机/退出应用启动/多设备路由。当前v0.3准备尚无产品代码或实号证明；原§1–9与v0.2记录均为各自历史范围。

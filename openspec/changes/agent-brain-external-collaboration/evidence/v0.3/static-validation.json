@@ -1,0 +1,14 @@
+{
+  "result": "PASS",
+  "files": 437,
+  "relative_references": 83,
+  "v03_scope_only_preparation": true,
+  "v03_base": "452e9c5a2fd91f427df3cddec68124c9f0c492e6",
+  "checks": [
+    "strict UTF-8/JSON and local Markdown links",
+    "v0.3 changes confined to preparation folder since 452e9c5a",
+    "product/extensions/dependencies/lockfiles/CI unchanged from origin/main",
+    "git diff --check"
+  ],
+  "main": "74030911ade7a9e06ad1a0213d1fcb93ecbba6dd"
+}
