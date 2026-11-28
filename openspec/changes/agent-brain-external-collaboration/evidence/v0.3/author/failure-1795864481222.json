@@ -1,0 +1,21 @@
+{
+  "hash": "e15a69b60b70f0442d4145d9a0f00f61f915f2c94ffef27f86b5827a66ba4f85",
+  "checks": [
+    "internal choice retains draft and original Task",
+    "internal zero authorization/reads/API/external work",
+    "internal choice explicit",
+    "internal works with all external configs absent",
+    "missing core does not create authorization",
+    "default GitHub selected",
+    "unverified WB disabled",
+    "GH resource explicitly excludes WB quota",
+    "cancel no grant",
+    "pure GH completes without WB config",
+    "pure GH no WB calls",
+    "generic claimant actually shown",
+    "unclaimed stays waiting and no asset reads"
+  ],
+  "errors": [],
+  "external": [],
+  "error": "TimeoutError: locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('run-read-case')\u001b[22m\n\u001b[2m    - locator resolved to <button class=\"btn \" data-action=\"read-case\" data-testid=\"run-read-case\">演示本次读取</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not visible\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not visible\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    58 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is not visible\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n"
+}

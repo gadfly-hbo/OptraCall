@@ -1,0 +1,157 @@
+{
+  "checks": [
+    {
+      "name": "准确来源焦点异步settled",
+      "actual": "task-analysis",
+      "expected": "task-analysis",
+      "pass": true
+    },
+    {
+      "name": "来源精确四元组",
+      "actual": [
+        "choice",
+        "projects",
+        "quality",
+        "复核焦点草稿"
+      ],
+      "expected": [
+        "choice",
+        "projects",
+        "quality",
+        "复核焦点草稿"
+      ],
+      "pass": true
+    },
+    {
+      "name": "实际主题-1440-light",
+      "actual": "light",
+      "expected": "light",
+      "pass": true
+    },
+    {
+      "name": "资源快照可达-1440-light",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "实际主题-1440-dark",
+      "actual": "dark",
+      "expected": "dark",
+      "pass": true
+    },
+    {
+      "name": "资源快照可达-1440-dark",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "实际主题-1024-light",
+      "actual": "light",
+      "expected": "light",
+      "pass": true
+    },
+    {
+      "name": "资源快照可达-1024-light",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "实际主题-1024-dark",
+      "actual": "dark",
+      "expected": "dark",
+      "pass": true
+    },
+    {
+      "name": "资源快照可达-1024-dark",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "实际主题-390-light",
+      "actual": "light",
+      "expected": "light",
+      "pass": true
+    },
+    {
+      "name": "资源快照可达-390-light",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "实际主题-390-dark",
+      "actual": "dark",
+      "expected": "dark",
+      "pass": true
+    },
+    {
+      "name": "资源快照可达-390-dark",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "WB补充共占2次非重置",
+      "actual": [
+        2,
+        3,
+        true
+      ],
+      "expected": [
+        2,
+        3,
+        true
+      ],
+      "pass": true
+    },
+    {
+      "name": "缩小资产不补造映射使用",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "缩小映射限制显式展示",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "超范围未接受",
+      "actual": "intervention",
+      "expected": "intervention",
+      "pass": true
+    },
+    {
+      "name": "保持原范围恢复",
+      "actual": 4,
+      "expected": 4,
+      "pass": true
+    }
+  ],
+  "screenshots": [
+    "return-origin-focused.png",
+    "corrected-1440-light-authorization.png",
+    "corrected-1440-light-authorization-bottom.png",
+    "corrected-1440-dark-authorization.png",
+    "corrected-1440-dark-authorization-bottom.png",
+    "corrected-1024-light-authorization.png",
+    "corrected-1024-light-authorization-bottom.png",
+    "corrected-1024-dark-authorization.png",
+    "corrected-1024-dark-authorization-bottom.png",
+    "corrected-390-light-authorization.png",
+    "corrected-390-light-authorization-bottom.png",
+    "corrected-390-dark-authorization.png",
+    "corrected-390-dark-authorization-bottom.png"
+  ],
+  "note": "原run一次焦点观测未等待hashchange；本补充等待真实页面和焦点。原暗色授权截图在scenarioChanged重置theme后实际是light，原图保留，本补充纠正截图标签。",
+  "summary": {
+    "total": 19,
+    "pass": 19,
+    "fail": 0
+  }
+}

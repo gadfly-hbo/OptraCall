@@ -1,0 +1,1698 @@
+{
+  "at": "2026-11-28T11:25:47.259779+00:00",
+  "head": "452e9c5a2fd91f427df3cddec68124c9f0c492e6",
+  "originMain": "74030911ade7a9e06ad1a0213d1fcb93ecbba6dd",
+  "status": " M openspec/changes/agent-brain-external-collaboration/decisions.md\n M openspec/changes/agent-brain-external-collaboration/demo-guide.md\n M openspec/changes/agent-brain-external-collaboration/demo-notes.md\n M openspec/changes/agent-brain-external-collaboration/integration-research.md\n M openspec/changes/agent-brain-external-collaboration/issue-draft.md\n M openspec/changes/agent-brain-external-collaboration/main-alignment.md\n M openspec/changes/agent-brain-external-collaboration/preparation-matrix.md\n M openspec/changes/agent-brain-external-collaboration/preparation-review.md\n M openspec/changes/agent-brain-external-collaboration/result.md\n M openspec/changes/agent-brain-external-collaboration/reuse-audit.md\n M openspec/changes/agent-brain-external-collaboration/spec.md\n M openspec/changes/agent-brain-external-collaboration/tasks.md\n M openspec/changes/agent-brain-external-collaboration/ui-demo.html\n M openspec/changes/agent-brain-external-collaboration/ui-mapping.md\n?? openspec/changes/agent-brain-external-collaboration/changes-v0.3.md\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/README.md\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1024-dark-case-projects.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1024-dark-setup.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1024-dark-task-analysis.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1024-dark-work.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1024-light-case-projects.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1024-light-setup.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1024-light-task-analysis.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1024-light-work.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1440-dark-case-projects.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1440-dark-setup.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1440-dark-task-analysis.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1440-dark-work.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1440-light-case-projects.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1440-light-setup.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1440-light-task-analysis.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1440-light-work.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/390-dark-case-projects.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/390-dark-setup.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/390-dark-task-analysis.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/390-dark-work.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/390-light-case-projects.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/390-light-setup.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/390-light-task-analysis.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/390-light-work.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/check.mjs\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/failure-1795864236269.json\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/failure-1795864236269.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/failure-1795864481222.json\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/failure-1795864481222.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/failure-script-1795864236269.mjs\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/failure-script-1795864481222.mjs\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/github-accepted.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/initial-static-scope-failure.json\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/other-task-delta.json\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/other-task-delta.mjs\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/other-task-internal.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/regression/cases-1024-dark.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/regression/check.mjs\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/regression/failure-1795864670099.json\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/regression/failure-1795864670099.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/regression/failure-script-1795864670099.mjs\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/regression/grant-390.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/regression/results-06804f28-superseded.json\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/regression/results.json\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/results-06804f28-superseded.json\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/results.json\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/validate-packet.py\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/workbuddy-accepted.png\n?? openspec/changes/agent-brain-external-collaboration/evidence/v0.3/input-manifest.json\n?? openspec/changes/agent-brain-external-collaboration/integration-research-v0.2.md\n?? openspec/changes/agent-brain-external-collaboration/preparation-review-v0.2.md\n?? openspec/changes/agent-brain-external-collaboration/result-v0.2.md\n",
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "bytes": 14777,
+      "sha256": "fd40b994125c3d57fe19b89e25d4a6a8aa0d4b0fdddd2da8ba959268c5c4674f"
+    },
+    {
+      "path": "docs/engineering-workflow.md",
+      "bytes": 100725,
+      "sha256": "3630a2435e5f956a740265a778c2e7d9b7f3349ea771abec63306566182738dd"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/.gitattributes",
+      "bytes": 137,
+      "sha256": "6cfa0db5d93755fec5214f023c2f7f563796eae12004222a68e38acfd5d1b4ea"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/changes-v0.3.md",
+      "bytes": 3030,
+      "sha256": "e7df16153da2749b3944a3ffa4dca5ded45942aa12ab080e62ed2126c303484b"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/decisions.md",
+      "bytes": 1491,
+      "sha256": "e31dc9a3fe09b569c12c4492d5172ddea9e4c42c7dd202281b4af7d79e2821fc"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/demo-guide.md",
+      "bytes": 2297,
+      "sha256": "be419719f80c0e62d122cca7cb13daf957c252da41cb6622cd3528c5bf4daedd"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/demo-notes.md",
+      "bytes": 1287,
+      "sha256": "8a4729955cce9468a0b867e84583b95ae87ebf0f82a5063b72a549d43c04a2e5"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/publication/format-check-initial.txt",
+      "bytes": 98,
+      "sha256": "541a594027af550d0806664d17bdfb665af535d48c26b0a563ffb01d173e16a0"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/publication/independent-readback.json",
+      "bytes": 619,
+      "sha256": "c9af1564ad96c21525e638aa3ab00cd51ef6e34d07328ad606b6ed94007cd200"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/publication/independent-review.md",
+      "bytes": 1635,
+      "sha256": "084ef269bf00850d98446c28ac389a3364811fe0eb525351ce8985a5e2080260"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/.gitattributes",
+      "bytes": 196,
+      "sha256": "8a2fe9a4f34d38e67e46249bf0cc6443ec553f565300df6aaa88b15a82d9e2b9"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/README.md",
+      "bytes": 4169,
+      "sha256": "856094b041dc207d5cc221dfd72b8f59455026e86118ded8428faa89315f1485"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/attempt1-render-race.json",
+      "bytes": 1833,
+      "sha256": "93522703ebd0a381586734201ac4f5bd9f7b12d2eafca4ecc62ea0395b64c26f"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/attempt1-render-race.png",
+      "bytes": 118934,
+      "sha256": "e18cc8b901477a6039a3ae8643c7d039a116776695154fd863df3e9956d61917"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/attempt2-focus-failure.json",
+      "bytes": 2244,
+      "sha256": "90aee55e30b3aaec78a5a62a5a1bbfc1483045d6375b52688a43284bcbc3aa7d"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/attempt2-focus-failure.png",
+      "bytes": 134322,
+      "sha256": "53e877b8e87b354ac8a9fe02056bc4e5baa45ba05ae2ebdbde6bd0b79115061b"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/attempt3-label-assertion.json",
+      "bytes": 4020,
+      "sha256": "8a033a3daba05b1abbf9fab7a5356ccccbbd90c6c7cd7e75edbf5d8352ede5bf"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/attempt3-label-assertion.png",
+      "bytes": 278047,
+      "sha256": "578affe64c26fd01b8235875ebe0ad6f3e7703eb691f1ae5c5917cb4cf4e1f6c"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/attempt4-check-v02-final.mjs",
+      "bytes": 16776,
+      "sha256": "97ec342c92854c83a4b336aa567584e4366df2ab6a53c4fcd60838fede216d41"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/attempt4-resource-dialog-assumption.json",
+      "bytes": 6984,
+      "sha256": "a5211cd7ab89bf631ab885404f657e5ca7b2802263c1c4b787e721b5c969e7fb"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/attempt4-resource-dialog-assumption.png",
+      "bytes": 303491,
+      "sha256": "472f124580de3f9433266f5e1494b239784ab57a004a07e8ce0c3a80dc662b14"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/attempt5-check-v02-final.mjs",
+      "bytes": 16776,
+      "sha256": "97ec342c92854c83a4b336aa567584e4366df2ab6a53c4fcd60838fede216d41"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/attempt5-unmatched-script-fix.json",
+      "bytes": 6984,
+      "sha256": "a5211cd7ab89bf631ab885404f657e5ca7b2802263c1c4b787e721b5c969e7fb"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/attempt5-unmatched-script-fix.png",
+      "bytes": 303491,
+      "sha256": "472f124580de3f9433266f5e1494b239784ab57a004a07e8ce0c3a80dc662b14"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/author-final-summary.json",
+      "bytes": 1817,
+      "sha256": "035b61b35994238ac4f879cecf714f0090367a1ed791b601cd57bc1b281d106b"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/background-fix-identity.json",
+      "bytes": 441,
+      "sha256": "d17c52ac9bc3978813bfad9d017098abaad3e50f255ecfcbca83d142720b1626"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/before-background-fix-6946bc.html",
+      "bytes": 156954,
+      "sha256": "6946bc7744365bdf19f41bb135248693372a4e1be5152bd9a7c0065984cfe060"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/before-dom-css.json",
+      "bytes": 18804,
+      "sha256": "ef04248252053d38245f5a6c9538f37d2c0ccf5d9a1f94a62c2c682e47ba77e2"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/before-v0.1-ui-demo.html",
+      "bytes": 107113,
+      "sha256": "770fcd371694554df18a2a482f2c5170c8210dead488539d2d2561d640d54933"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/check-permissions-final.mjs",
+      "bytes": 4247,
+      "sha256": "877b504432f5b6fcc230a19eefba14d8e3333b1641955db8245e4d88bfaf0bc9"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/check-shortpage-final.mjs",
+      "bytes": 2182,
+      "sha256": "7f03a5b772ac0fbb60086721c668a2f648d21a7eb441897e226d95d0025aa52e"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/check-v02-f2c.mjs",
+      "bytes": 15201,
+      "sha256": "6874af78d6423e68043e55a8014789406862d4d5bc195490c8974351630a1beb"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/check-v02-final-continuation.mjs",
+      "bytes": 5821,
+      "sha256": "a349c94d55e630cef0335cb7e3fc074ebb7cf707c062a250d3807deef5a071e3"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/check-v02-final.mjs",
+      "bytes": 17007,
+      "sha256": "9366442dd2b5b48faf1420e75180c369e23baaee8fec81075cfa8b4a27e65782"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/check-v02.mjs",
+      "bytes": 15201,
+      "sha256": "6874af78d6423e68043e55a8014789406862d4d5bc195490c8974351630a1beb"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/dom-css-v02-final.json",
+      "bytes": 30399,
+      "sha256": "bca2ea8313b64e620073b17338642ce7827e8fcf21ed5287babbea291a3d382d"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/dom-css-v02.json",
+      "bytes": 30399,
+      "sha256": "f821869dd970af4c5711642e2616239c497246f60e8c9186d13ce376f693a3af"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/evidence-manifest-final.json",
+      "bytes": 33321,
+      "sha256": "2f150eed37704346304c48f42e7290289865c104307e89eb09cbee9a94c0086d"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/failure-v02-final.json",
+      "bytes": 6984,
+      "sha256": "a5211cd7ab89bf631ab885404f657e5ca7b2802263c1c4b787e721b5c969e7fb"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/failure-v02-final.png",
+      "bytes": 303491,
+      "sha256": "472f124580de3f9433266f5e1494b239784ab57a004a07e8ce0c3a80dc662b14"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/failure-v02.json",
+      "bytes": 4020,
+      "sha256": "8a033a3daba05b1abbf9fab7a5356ccccbbd90c6c7cd7e75edbf5d8352ede5bf"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/failure-v02.png",
+      "bytes": 278047,
+      "sha256": "578affe64c26fd01b8235875ebe0ad6f3e7703eb691f1ae5c5917cb4cf4e1f6c"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/final-resource-authorization-preview.png",
+      "bytes": 335895,
+      "sha256": "b0f3d4e6c227dd3212606fab22cc36718342395b0449ecd17000a7822b66d171"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/final-resource-authorized-snapshot.png",
+      "bytes": 292348,
+      "sha256": "dccf7b524e96102b1b67f9c7eb276247ffe1989047c2b9a639e13ab2359515cb"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/final-resource-setup.png",
+      "bytes": 309280,
+      "sha256": "d821ece0899f8ba0d9bcedd77c8baaad6eba12d68f64c45b4649e0d7670b3c55"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/manifest.mjs",
+      "bytes": 2160,
+      "sha256": "23c7bfcc7ec6bb1112e6f6f528705c6a972a576f98fa3fa662e0fd6874c19f31"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/permissions-final-results.json",
+      "bytes": 838,
+      "sha256": "3ad7e61fd48ca20085074ee5c47d747c4a117ea82704d223d80581bb7e2e2a11"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/pilot-errors.json",
+      "bytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/pilot.mjs",
+      "bytes": 1125,
+      "sha256": "e8c4147af180040bf38e042b5b635d6d0f7cf7a61f3f83e198abada727c4648c"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/read-after-final.mjs",
+      "bytes": 1608,
+      "sha256": "8b52322edad3899e7f856d8437c37f65d8faee4d075128794aa6612b2d690a13"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/read-after.mjs",
+      "bytes": 1602,
+      "sha256": "86a563c6f5dd8af8ffbd5570719100077e3d7d3ef44e53f51dfad75b0e4ff5f6"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/read-before.mjs",
+      "bytes": 1270,
+      "sha256": "bae47dc13c8a0c584c2996735fc6b58dd8aed378813c7bd6bf9efce456336b02"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/results-v02-final-continuation.json",
+      "bytes": 19812,
+      "sha256": "e663ff4c68f430c9be5876b1046a833cffcc82f3c2548c34131e6c278cb436aa"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/results-v02.json",
+      "bytes": 24383,
+      "sha256": "d75a4ea5d7bc941593bd84c149757ee815bfc1bd3b31d1ea054fb3a84a7a6b5f"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/shortpage-final-cases-1024-dark.png",
+      "bytes": 102004,
+      "sha256": "0468a10b50b74b7f00beddec041dbe08c0690147331b45b0b7a49d07722a2c7a"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/shortpage-final-cases-1024-light.png",
+      "bytes": 125967,
+      "sha256": "27cfff86345a6f2c7caa25fbaef60567d808553a4c2b4d5ab57712eee714db13"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/shortpage-final-cases-1440-dark.png",
+      "bytes": 106852,
+      "sha256": "98c97c57ef962c265b147376719a439f1b6a03d2b0db3e62bed2a51b3a1d15b5"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/shortpage-final-cases-1440-light.png",
+      "bytes": 129873,
+      "sha256": "bb424fe87cffcf9789ad66268f1d2982be848d3f3b0aa56d16004acb19b6d947"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/shortpage-final-cases-390-dark.png",
+      "bytes": 66863,
+      "sha256": "3bc0ae3c17124d8d75d9f27e2ae7127c51d130dc441cdbb04cbf86f3023c30f7"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/shortpage-final-cases-390-light.png",
+      "bytes": 86908,
+      "sha256": "b478910daa4ee762008eda30dc7c9196626d81643492618f342d53a3ffc96049"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/shortpage-final-delivery-1024-dark.png",
+      "bytes": 136313,
+      "sha256": "80e8cdde284e94f93748e5a1cf20337354a97bd4ab2e2051f78ceaf1103bfe27"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/shortpage-final-delivery-1024-light.png",
+      "bytes": 133389,
+      "sha256": "9f86707bc79b28aead515a80a80e8cb69226385edad4efbe5ccd150fe6b6caa4"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/shortpage-final-delivery-1440-dark.png",
+      "bytes": 141174,
+      "sha256": "c771ed4e6f1192ded245770319c4c8623a172aeba2bfe5a9810389c48f28bc41"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/shortpage-final-delivery-1440-light.png",
+      "bytes": 138419,
+      "sha256": "4d2bddb568a9793ae15c59d1dac2dc932d37a0843f110786f3ab38369793e196"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/shortpage-final-delivery-390-dark.png",
+      "bytes": 81127,
+      "sha256": "cce63d2d503de10cc56f9eda7362241a0fc77bf425cbf9f70ff51be879e5d172"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/shortpage-final-delivery-390-light.png",
+      "bytes": 78416,
+      "sha256": "907b79f8914dda8f05bfd1523a7bc99920af1062f253093a1606b018172993d4"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/shortpage-final-draft-1024-dark.png",
+      "bytes": 99581,
+      "sha256": "cb98c0315b307981205b43ff6845f0ad9855beb816388c07f1911332179eda52"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/shortpage-final-draft-1024-light.png",
+      "bytes": 98682,
+      "sha256": "9c2122e6226de78dcc8a7eebf75e90fcc7e24375e85508270d3da89b7d07b889"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/shortpage-final-draft-1440-dark.png",
+      "bytes": 104272,
+      "sha256": "83ba94431d7d889bf1164e591e6a9732250a7a680142df55e84138d569eed5e8"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/shortpage-final-draft-1440-light.png",
+      "bytes": 103359,
+      "sha256": "653b79f1d03837207959d3cf7840d22eccd0ce9814d7b30ed972fcc078d8eca4"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/shortpage-final-draft-390-dark.png",
+      "bytes": 63889,
+      "sha256": "987263fda529bbcbf1b5ece33a937925b867512e28ae0048afc472b202ad1273"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/shortpage-final-draft-390-light.png",
+      "bytes": 62303,
+      "sha256": "e29f53c8eb562280f703da06dc6723a117411e376b93df66aaba1c7120c1ea9c"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/shortpage-final-projects-1024-dark.png",
+      "bytes": 92782,
+      "sha256": "4f5920f88c8d06e204f5e72c0ec1f885851b8695b0f46f87d79a673584c19cde"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/shortpage-final-projects-1024-light.png",
+      "bytes": 91050,
+      "sha256": "a38a8d6adb50e48265b1a14cce8561f91e145a30a8fcfed482db8318f6b3b8e5"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/shortpage-final-projects-1440-dark.png",
+      "bytes": 97213,
+      "sha256": "6cd12c83b6b0860541a5305351fd04d0bc113d70fb0784a4569baaf3c45c9336"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/shortpage-final-projects-1440-light.png",
+      "bytes": 95542,
+      "sha256": "feb286e63922f1496af2c3852851d5eb46d26706cd614f1a94e095b24273ab25"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/shortpage-final-projects-390-dark.png",
+      "bytes": 55159,
+      "sha256": "9b83dc589899b3e6e3c5a482fc613be9557b4cacddfd040f945ab4bbed224a3d"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/shortpage-final-projects-390-light.png",
+      "bytes": 52488,
+      "sha256": "2cf381095482bdcb302dcd20eb2532d13789ed1939e744f030cb0d4024b45495"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/author/shortpage-final-results.json",
+      "bytes": 8498,
+      "sha256": "04033ead40c929b651eaaac0d9b9ce801a22048e4130a6df24beab5fe7382807"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/history/ui-demo-6946bc.html",
+      "bytes": 156954,
+      "sha256": "6946bc7744365bdf19f41bb135248693372a4e1be5152bd9a7c0065984cfe060"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/check-background-delta.mjs",
+      "bytes": 3170,
+      "sha256": "9d748ac1242226fd2d79134a7c6bf3a564894c38f6cc1d8adf0d6d060d7e3971"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/check-focus-delta.mjs",
+      "bytes": 1596,
+      "sha256": "ca1ca903f934a5af25f2b3fc10c09f33edac18a259f7bff95c272c852422812d"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/check-resource.mjs",
+      "bytes": 4569,
+      "sha256": "6e9111fc39b90bc64eec0ea8084502c2d82316a0f451b0bb5d7c63c29b92d301"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/check-scenarios-final.mjs",
+      "bytes": 9860,
+      "sha256": "d8cecd48233f20281fa67cb8c440ec6d6ad5072928ff31b1c013a338fb601012"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/check-scenarios.mjs",
+      "bytes": 9504,
+      "sha256": "de7adecd7eb303ff4233b244b607e231c9c8bb65894ca9670f16c2c3f5332365"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/check-ui-final.mjs",
+      "bytes": 6766,
+      "sha256": "1268eceae4413de326ff3af15b05d96706eb6bb4bd5254072dc5bacde70ee81b"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/check-ui.mjs",
+      "bytes": 6655,
+      "sha256": "bd6fd7b273eb0250e2fd600bc059e5f785a5734da6e99fbf8a93ba7b4ebf157a"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-background/1024-dark-cases.png",
+      "bytes": 101765,
+      "sha256": "8f58d3d4e0ca886ed22e3f0153d2f267435b3197aa96f7e537482218099133b0"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-background/1024-dark-delivery.png",
+      "bytes": 135955,
+      "sha256": "fc279d95e0a344d8e9ff1f7715ff6f66ff3f93111977a1f7563f094e567b4c83"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-background/1024-dark-draft.png",
+      "bytes": 99277,
+      "sha256": "dd5c234ea487926fec590ef6ce013516181a6afc22f998ba9bfc14433e92281d"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-background/1024-dark-projects.png",
+      "bytes": 92414,
+      "sha256": "2b4210532f71951ece253e7e8990143df8c236fa1d1f066eb61fff97dd15a4cb"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-background/1024-light-cases.png",
+      "bytes": 125690,
+      "sha256": "b1f5ddaff6e3f0f97b1e7f0e797761ba959608a305fce3efa04b73f1ee6126f6"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-background/1024-light-delivery.png",
+      "bytes": 133095,
+      "sha256": "f8bc119719daa0e4f76405131a372730e337718d4124414b85f911d0b3920f49"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-background/1024-light-draft.png",
+      "bytes": 98376,
+      "sha256": "38d5c2cce13339e7dbcb88be2ada4f96ac9d65e5a24483d202dc442384b6c747"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-background/1024-light-projects.png",
+      "bytes": 90695,
+      "sha256": "daeac1d5023d479cb22b1ef407e800012dc1da13cbed5d945995ad8bafb528e1"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-background/1440-dark-cases.png",
+      "bytes": 106456,
+      "sha256": "85509114e05d8eb526f74ceb470152983e14abef030d257d9e3ffc14ed378e78"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-background/1440-dark-delivery.png",
+      "bytes": 140663,
+      "sha256": "e6087adf23ee7f903cd63f47e223b1fc478b6593fd19e7fb7a77314a515c1403"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-background/1440-dark-draft.png",
+      "bytes": 103965,
+      "sha256": "59d9168619fe568c95242e32db3fd27b8eab79614599f4e91c95a3ad5efb55f9"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-background/1440-dark-projects.png",
+      "bytes": 96916,
+      "sha256": "56ebc97cdc7d14d82bb64f990be41ead49f917179731e7107dac55b02a246f19"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-background/1440-light-cases.png",
+      "bytes": 129418,
+      "sha256": "c4043e3e85999263cbc8caa4b57ec73abac4b41d210c211b9b3d53e53d7e5115"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-background/1440-light-delivery.png",
+      "bytes": 137897,
+      "sha256": "375bfecd44aa0d19720e58a187e15ce4c32161bc090a2a35d98573a3cdea215b"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-background/1440-light-draft.png",
+      "bytes": 103016,
+      "sha256": "8178759d61179f0e58b2bb3deec06c36c81c7bb220ac5971d75788c7670ed1a7"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-background/1440-light-projects.png",
+      "bytes": 95199,
+      "sha256": "f0ba4d7e6dea6050f78ac2e6a63e3d9c72e53b6b1770167aace1e285e315afa0"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-background/390-dark-cases.png",
+      "bytes": 67779,
+      "sha256": "e7d27bdbec1595626cd2435a05c1bd89cdcfe1d9ecda82b0760c7a1ae6608862"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-background/390-dark-delivery.png",
+      "bytes": 90062,
+      "sha256": "1907792e4c548e6699f14d4a41c78f09e8fbecf84a6f71d4e57785a4635ac1ff"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-background/390-dark-draft.png",
+      "bytes": 64697,
+      "sha256": "84c2435b20312a2bbb6a186dba0e950fb86b50b7a2bd5d114477bd6e500cd33a"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-background/390-dark-projects.png",
+      "bytes": 55894,
+      "sha256": "993d8d5214f07d03ecca4aef1373986bca5e34412f977002acc298bba22021cc"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-background/390-light-cases.png",
+      "bytes": 88233,
+      "sha256": "871dd63426f237e1b3728480a12df4ffe88ce13da2924f08e1c23dd6bf48c1ea"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-background/390-light-delivery.png",
+      "bytes": 86714,
+      "sha256": "860bc5adfb27bb598db89d2e10b0d2ba4378df6aa1390e3f5515d243fb6c805d"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-background/390-light-draft.png",
+      "bytes": 63317,
+      "sha256": "f3b1f150ce66b25db8c43a1e20c9ab98d91249a6d68ebc89d18e3347e0205758"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-background/390-light-projects.png",
+      "bytes": 53423,
+      "sha256": "ff9c1788e2076305e4e8d66235b3ce6a866bea991ca92dc988cca5c1085033dc"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-background/receipt.json",
+      "bytes": 5497,
+      "sha256": "4271fc65522c94cfbb27c78f8d184048f4f588363a6d561e1ebcc3b856879b9d"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-overview/1024-dark.jpg",
+      "bytes": 281374,
+      "sha256": "d4deee9544e16a838dd45356215044d52c452fc4626c18f8c5652d53736e86af"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-overview/1024-light.jpg",
+      "bytes": 275947,
+      "sha256": "ae45203670b3f1b92b49fed69aa131c7df3f26653e10b072d12cb1e7b38a1895"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-overview/1440-dark.jpg",
+      "bytes": 192373,
+      "sha256": "e5a44fd0a8e6a2a040c81c50185b090053bbff64adcf86e8f6d17938361c54ee"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-overview/1440-light.jpg",
+      "bytes": 186533,
+      "sha256": "3d2a4d22e94da8b4b4622b4a4c4a6910d96e913bd1bc680993cff138f0f17982"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-overview/390-dark.jpg",
+      "bytes": 466264,
+      "sha256": "92364ae0bd2effe7221d91df9350f0741678f8c5f9d7cb5d50521b5f1f95d618"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-overview/390-light.jpg",
+      "bytes": 439836,
+      "sha256": "f2c532755be4629f5a54fe7d972168f0c7c9f4f964e9cf90d24b6c55d18be851"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-resource/authorize-resource-390.png",
+      "bytes": 242315,
+      "sha256": "5c2ae62dd399b7eb97acc9732f9b2091aecc237a2c04c6f074f05174b65080a8"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-resource/authorized-resource-390.png",
+      "bytes": 387911,
+      "sha256": "381ed68087b35aed6860947b0dd9b344595df44d7766e40e8fe5271930ee30c5"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-resource/dark-canvas-1440.png",
+      "bytes": 193564,
+      "sha256": "ac960d3c6e489fb73f253800072c8a011f11cac84f995eb916e074f288fda01f"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-resource/missing-policy-390.png",
+      "bytes": 264562,
+      "sha256": "6d3600f8b62bc209f5c6bffd50f2273dd0e96500365dbc0e7f2f80feeff4a39d"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-resource/receipt.json",
+      "bytes": 11128,
+      "sha256": "d19bafa94110028bd3579df7346aea3007bd443748d1d253fe77b7de012a58db"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-resource/resource-dark-1440.png",
+      "bytes": 675377,
+      "sha256": "817fa8d4445f422c0203ff9e1be97bbd40186d9079a7786eea9f726e2f1ee393"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-resource/supplement-resource-390.png",
+      "bytes": 496497,
+      "sha256": "cf81b95aae690b3942fdf777a2f7605aa99d964990f556fcda51319725e8631f"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-scenarios/scenario-checkpoint.json",
+      "bytes": 8514,
+      "sha256": "edadc8d788fe7f1114e2f1f892365522feec8a937f904755e4baced80ee3b541"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-scenarios/scenario-receipt.json",
+      "bytes": 12963,
+      "sha256": "37b996ea151732cf91fd8afa9c397139adb3cb250a2be4a39bfe18c5006546cd"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-scenarios/screens/asset-denied-expired.png",
+      "bytes": 255729,
+      "sha256": "b2bc57f135801df1f8d4567e158396c9994ab3b62d0252902b31e2887fc785b9"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-scenarios/screens/asset-denied-identity.png",
+      "bytes": 258295,
+      "sha256": "f9dfe786e0e56f1a7735e2890e634011aecd1545c4c12b1622e8cfeea62b4072"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-scenarios/screens/asset-denied-offline.png",
+      "bytes": 256775,
+      "sha256": "86c0d3088f7ca2e6fa6791bd3ffc0348a4c2b536ce80a863d118405b90145aa0"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-scenarios/screens/cancel-stopped-unknown.png",
+      "bytes": 415276,
+      "sha256": "9b5519baea0e964f8d73d0cabd75cf04afab6bf151022edb6e15f6089690cc93"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-scenarios/screens/case-tree.png",
+      "bytes": 186288,
+      "sha256": "463c05828e063dc47fe537266cbadb82d547dfdeea0db9ab97293d70e179ec9c"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-scenarios/screens/failed-delivery-390.png",
+      "bytes": 206610,
+      "sha256": "c14def80147c7e39c206ab23d7c5e6d8361afc2a07da7c920ab42345a750fc99"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-scenarios/screens/project-case-return-focused.png",
+      "bytes": 179957,
+      "sha256": "35a5b4174dc34ada685f2f029fda0bbeeae41b674c4ee9c04398d172b8fed3cc"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-scenarios/screens/scenario-busy.png",
+      "bytes": 379749,
+      "sha256": "ac6f9b04c98db704131ca3f92316f0873d0f1778b95e0450d0f9619b108c9500"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-scenarios/screens/scenario-duplicate.png",
+      "bytes": 455587,
+      "sha256": "a9849dceb6c7c6d7a014d3731511b718108b760a5d7462132a539a6592c141e3"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-scenarios/screens/scenario-executorbusy.png",
+      "bytes": 301793,
+      "sha256": "e6959717f227f2d8377e326a68ade16b6a878591c8efe3ce2751ffcc466b12c2"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-scenarios/screens/scenario-expired.png",
+      "bytes": 332524,
+      "sha256": "ed1a63cc38ed0a569e4052fabec782c5279cbee097448e68a67d6c2a5c2b186e"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-scenarios/screens/scenario-failed.png",
+      "bytes": 304408,
+      "sha256": "bacb9e376bb08ecf85f623f13c333a24b43db55c301cc7100fd1dee6c825c8da"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-scenarios/screens/scenario-human.png",
+      "bytes": 364483,
+      "sha256": "739e898411ca3dc703c1479579f3fdea4a6023792535bc6dcfec19b3e9db6e02"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-scenarios/screens/scenario-identity.png",
+      "bytes": 337552,
+      "sha256": "45b55fcab377dc55806054b5e6fa4f17001a27b0afa4ff3a90d4b2317941a4f3"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-scenarios/screens/scenario-late.png",
+      "bytes": 377747,
+      "sha256": "1ffaafd5613452a9b636ff628ebf0a689039ea64325a48e13f5681359ab1a04d"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-scenarios/screens/scenario-offline.png",
+      "bytes": 337783,
+      "sha256": "e25d62d9dabccad07af74d36a6bcb1ca3f0940402367b3b652f6e4224f2b5be0"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-scenarios/screens/scenario-supplement.png",
+      "bytes": 467236,
+      "sha256": "f6477c6156d54542a95ba7027f7bfc90f717919d3e7376d54f54b6c46af53433"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-scenarios/screens/scenario-unknown.png",
+      "bytes": 288273,
+      "sha256": "c85473e1e62be4f46c97f375cf5f2202d3b68c494777ae8eb752db9a43169e2b"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-scenarios/screens/setup-complete-synthetic.png",
+      "bytes": 311866,
+      "sha256": "d35f4345ff3ce8038459eec423112e8b8d998a6261f5f144abb053a1072f56db"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-scenarios/screens/supplement-old-delivery.png",
+      "bytes": 375510,
+      "sha256": "1841d80814920250ea108d7c78f798ed8f04cb836c4a4f692c5a8202b0544504"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/html-after.sha256",
+      "bytes": 65,
+      "sha256": "e38587787bdebf2fea982b5ccc2a4f951a4e4ae261eda3937b1c9c6a6c577995"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/receipt.json",
+      "bytes": 27755,
+      "sha256": "48073ca32986a0f64a68e7ad717c20751542f2cd9eb885cd149e557334341c66"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-dark-assets.png",
+      "bytes": 242328,
+      "sha256": "0735b765159b0a6036968f2a664ca0897952d44a83aa454916f5420cc7f752fa"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-dark-case-artifacts.png",
+      "bytes": 139550,
+      "sha256": "5b8967f580a616aed458be868b00ac8836711ed8d2cf153785b292912bd5c094"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-dark-case-current.png",
+      "bytes": 177697,
+      "sha256": "51a913787d50b447821101ebe6119353ddf574fead42a372707857720a75e153"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-dark-case-history.png",
+      "bytes": 129529,
+      "sha256": "6fabaac99939ec66938625de637d7ab89f260159defca2ef53b01b78ad1f6734"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-dark-case-projects.png",
+      "bytes": 131713,
+      "sha256": "4d2de3a0257503530d79e3a3db95ba473f4ce6048c6c37338d84c2a724589994"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-dark-cases.png",
+      "bytes": 101770,
+      "sha256": "12148730c9e4447def20f10dbd0f634f2f7602977d8a56d87c99cce65072a729"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-dark-delivery.png",
+      "bytes": 135962,
+      "sha256": "d872a2d3dde85c65fc069d7a8c64bdb216ef3fe4e71393a830236aa426ac14ae"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-dark-draft.png",
+      "bytes": 99282,
+      "sha256": "e03f6ddb23760fb15da4a60e32a3042348bc21b8b8579ea31b57da09845281ba"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-dark-home.png",
+      "bytes": 204495,
+      "sha256": "d1a4c55c1eaaa2145fc86049453dae8d22c75908fd30f919700b9575a0f38f94"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-dark-project.png",
+      "bytes": 204700,
+      "sha256": "a9f9eaf78e5831719d8a8b0c47e02f28cf0945b29b580f0896f7c97306465448"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-dark-projects.png",
+      "bytes": 92421,
+      "sha256": "08f8b4d3f9bee8aee092c835e0e9ec4d254a43a5ce22c8e7cd581289081d1614"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-dark-report.png",
+      "bytes": 183765,
+      "sha256": "afc791c47eff9a10c18a689f7681c9c1234266e30127fa8b337e2de703b8c400"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-dark-setup.png",
+      "bytes": 301592,
+      "sha256": "40efb0670dacc03ac0fa8fb482e7a6fe842c70c5cf308105b50445d1042502ab"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-dark-task-analysis.png",
+      "bytes": 238631,
+      "sha256": "e0e261e22571606e556f9056c190c8dd6176b3824725732544468617bcfa669a"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-dark-work.png",
+      "bytes": 139515,
+      "sha256": "6af7627f8192f55b0793c4e4c7fb915de9999cbb0868a59ad31ad1e1fd8c176f"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-light-assets.png",
+      "bytes": 236481,
+      "sha256": "1ed9e5cbe5fff28db2384399d4dc5e001e21296b5ef136d073f3a8a53a5044fd"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-light-case-artifacts.png",
+      "bytes": 137308,
+      "sha256": "0f78e3701aff2d0a5ca3f263ed7e1269c510da1abffed0271f53418b2526974d"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-light-case-current.png",
+      "bytes": 174845,
+      "sha256": "e2a79ef976866782583739057f51e90bb0e0a314db7162a08eed99fc53f76d50"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-light-case-history.png",
+      "bytes": 126767,
+      "sha256": "514c4cafb793dd4181f8b164149116e5f12367664568853dbaf834178f8a45f9"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-light-case-projects.png",
+      "bytes": 128350,
+      "sha256": "58798447efc70445326ab732ca3e7d721a6d0c252a6d5bf3c4df95b9b5d1b89a"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-light-cases.png",
+      "bytes": 125696,
+      "sha256": "92460c552a69e4f2496257ae17ee77e372f3bf6fdccc95dfd54b4f2686024bef"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-light-delivery.png",
+      "bytes": 133102,
+      "sha256": "e60ec849b178ac4934224220c22695bad84640787a85d9d25e626cda78f71aa3"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-light-draft.png",
+      "bytes": 98383,
+      "sha256": "f589fce5b8a6fcc69236ad314d8d9336a9ce92fa057222efa6cd52ecc2008019"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-light-home.png",
+      "bytes": 227491,
+      "sha256": "3a3011d607b3b5fc65c6249ddcf74ecd6fd8c11a39766aeb4cb9c9258c073e44"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-light-project.png",
+      "bytes": 194679,
+      "sha256": "0ab18128b1d1775718fd9ac918a893a4ceadb65f444572501242f516af4b4534"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-light-projects.png",
+      "bytes": 90702,
+      "sha256": "93998fe1f97cccf54a028b1c63dc4d5371c64214b9e51804deade5d84fe75cd1"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-light-report.png",
+      "bytes": 180990,
+      "sha256": "4100ec122592f07fef748656b2a4b261d94d2c48955c6534f476bdc79c30467a"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-light-setup.png",
+      "bytes": 297107,
+      "sha256": "0500ab57a737defb17b115d31f3bc5115a6a41453a14b1f0885f93255ec02c08"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-light-task-analysis.png",
+      "bytes": 257200,
+      "sha256": "353f91d8f1a0dae407725b55bc0d6db6cde5077b32b757158ab612a9a39313c1"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1024-light-work.png",
+      "bytes": 160650,
+      "sha256": "8398a82b8e23f76fd278cfc472f8488635fedf4e99b29ceb5b48e705a02f0948"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-dark-assets.png",
+      "bytes": 249764,
+      "sha256": "77f5dada4a5dd39ee9a467804504c0ff92ccc4119d70f9caf1bb1afe9b66e8e9"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-dark-case-artifacts.png",
+      "bytes": 145466,
+      "sha256": "29ae76531e5aeff0ef52cd8162555a21e858e994bbea91188d442a0876aaed97"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-dark-case-current.png",
+      "bytes": 184882,
+      "sha256": "0d6f85e26d7412ca9559906c94a96989d8fe3c07de25df6174a684389658286b"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-dark-case-history.png",
+      "bytes": 135245,
+      "sha256": "b45950ca66daea995ae4bfe0b1cc38b0283bed18e07145b369ea935564ea715b"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-dark-case-projects.png",
+      "bytes": 137479,
+      "sha256": "c114289224aa1be7ab968954ca8facb7744b7b66e3cf809e38795dae3741e33b"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-dark-cases.png",
+      "bytes": 106467,
+      "sha256": "0bce8611f729ba632e7b1a8e5a090681fd2b5527c5967318d9f6e93b15fe2342"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-dark-delivery.png",
+      "bytes": 140668,
+      "sha256": "4e5de99edad2f92e1bc04a8e07d3e20b2b1441a6f611c240998b60c1926f5caf"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-dark-draft.png",
+      "bytes": 103969,
+      "sha256": "f3a0a9b336c19a1e64ee5fdfb71003f93dcefed7a6b7c513e1b86a09324e5c7e"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-dark-home.png",
+      "bytes": 208564,
+      "sha256": "7f04fec0661fe4bc0182df05ae40ecd3b938dec1baf1f5d769fa1f611ae5fb3b"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-dark-project.png",
+      "bytes": 212890,
+      "sha256": "3ba2931ffb2422c2c33e414af58fb3b912a30d02744a742b7a87b6c447405be0"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-dark-projects.png",
+      "bytes": 96923,
+      "sha256": "aec75a1af77224676a2dd440dcfc33114a01121eebf0b457ed6e7dcdf353da9a"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-dark-report.png",
+      "bytes": 186932,
+      "sha256": "12e484621bbeb3e3ae6468877c4d007f30c417886170656cfe2368ee17247bfd"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-dark-setup.png",
+      "bytes": 305105,
+      "sha256": "bf3877f8b983d678914f6acb1e589bf128f0dba9f3c3f0bb6c44f0e69c0fa515"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-dark-task-analysis.png",
+      "bytes": 254670,
+      "sha256": "3f2d006f16a108e1622502cb1a05b4c2137340b5c49ee22d0ba2fc413d9c2f57"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-dark-work.png",
+      "bytes": 144198,
+      "sha256": "aa248eb24ee7942e4edc1530da84598d79f50895aa947ba2c2ebfaf3cc7bef3f"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-light-assets.png",
+      "bytes": 244086,
+      "sha256": "25a8accc7faad5388f84f40d8749072dd4dc3dad311ab2ef43ae2c413197d20f"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-light-case-artifacts.png",
+      "bytes": 142969,
+      "sha256": "6e9763b4dddccda6ae4e387eeefd8a6e08f81708a075f3db64e909146fea87d5"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-light-case-current.png",
+      "bytes": 182025,
+      "sha256": "6f1de79998ddcf8761c2f063554410bb3c43773e8f967b7934547abb4bdced98"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-light-case-history.png",
+      "bytes": 132339,
+      "sha256": "00e6594217d6456d91d58a3eff91ca28165d100f849dacf78704e9bd606cbe20"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-light-case-projects.png",
+      "bytes": 133842,
+      "sha256": "4c8ee6140acadecb9016217889bb55bdde708e5bd23883e9663fc07b14776b76"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-light-cases.png",
+      "bytes": 129422,
+      "sha256": "052adf923fa3d99fc4605ae9e1cda6f6039001fdf7ac0ad8e7dd736faea6a3ca"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-light-delivery.png",
+      "bytes": 137903,
+      "sha256": "3af1cdfb5e25fe470fc7bdcf6a837645349e226cc502a9ccc89e65afd59dbeac"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-light-draft.png",
+      "bytes": 103022,
+      "sha256": "057fd9b34ea39f6ac4295e25bded17c57cf0538c51c7afb3eaa96897f36581d1"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-light-home.png",
+      "bytes": 237461,
+      "sha256": "5b7f24298e439703823791d88a3b130ea9a2ad0afbd5807cc98adcfeb7fb5fb2"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-light-project.png",
+      "bytes": 202921,
+      "sha256": "eb993e9d3fa8fea2de6fdef0b539be6e9a5d9e742d5d4b083a1584c4cefab11d"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-light-projects.png",
+      "bytes": 95207,
+      "sha256": "f35eadd512cb87df5d2aa9694cf5f2f5a48c0c92a085ce342ed21b162c88ffa3"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-light-report.png",
+      "bytes": 184374,
+      "sha256": "fdd88abe9f017653144c2af9fcbea02c1e65f6df176440e1581f2435f8e8f8f1"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-light-setup.png",
+      "bytes": 300819,
+      "sha256": "9f82de13f255b34ec69ea43a39cbac0cb6a7426d95bff788ed6377031a30896b"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-light-task-analysis.png",
+      "bytes": 272141,
+      "sha256": "23eed37c607e3f68e278214ba709a2e0f35b35ae43f1df784e14c290ea15458b"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/1440-light-work.png",
+      "bytes": 167489,
+      "sha256": "98b35d550514632359cf2e293c70392214829a654c4876e1a94b3b150065188f"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-dark-assets.png",
+      "bytes": 191128,
+      "sha256": "18869f54dcc8cfd561a9357abfe49f0df3af40c15e734439f83e44fb63b692c7"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-dark-case-artifacts.png",
+      "bytes": 103058,
+      "sha256": "211403c581cb88dd07c8c867f0f7c9a4b6ca26040e23f5c6abf9c8eeaba34fd4"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-dark-case-current.png",
+      "bytes": 138248,
+      "sha256": "9cc19cb7b465472d2592801eb06570e9999370f14025c1d011ac2c4902657ce6"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-dark-case-history.png",
+      "bytes": 93537,
+      "sha256": "4faa6054866fe81dadbf58f8aa1b5690a30eecf4246ec6c272f9cfb3b632c1bb"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-dark-case-projects.png",
+      "bytes": 84396,
+      "sha256": "c9f8af185d53c24aa977c7a05854c2a1d19bf7321618723630b555df5b2a0494"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-dark-cases.png",
+      "bytes": 67783,
+      "sha256": "190ac5c929dc7351737c29990f456bbb39a848cb37c4ddf205404c9230b7cc86"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-dark-delivery.png",
+      "bytes": 102065,
+      "sha256": "5b5da635947a1d0b4dec3fe75d58d7859ba08739f4d112668b3f857e21837da7"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-dark-draft.png",
+      "bytes": 64700,
+      "sha256": "455575b0fae5de18341c4ad50c80076a9bf284849a5ca5e6009039b7cc3f82e2"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-dark-home.png",
+      "bytes": 159682,
+      "sha256": "f6f4cc5c11ce26dc15115b4b8c647a285ea3cc9b7d01a511a4ea2070c91a057e"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-dark-project.png",
+      "bytes": 139052,
+      "sha256": "1b3e9b74cfe7dd94519509e768a64a43f028ea90be98aae702a784cb38ea894c"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-dark-projects.png",
+      "bytes": 55897,
+      "sha256": "8227d42f22d182d576a17d7c094497103779ad134eb0555927a75bc2ec7d9245"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-dark-report.png",
+      "bytes": 147163,
+      "sha256": "ee69f35b14dd2a441ace8ed64b831ee698f9d8764b627a8f66fb9505ad0274ce"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-dark-setup.png",
+      "bytes": 259137,
+      "sha256": "9234e8b91d370817e6bc998bf4641a1dc455716434016d833fa97a2ad3f52d68"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-dark-task-analysis.png",
+      "bytes": 193973,
+      "sha256": "1bdcdac1aa3611ee403c02b242a66194351d0e466f76b160164817764d7a75e8"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-dark-work.png",
+      "bytes": 102886,
+      "sha256": "67a176f49ae3aeabb543d75aeb32d2c00c14b7e313c4a10db2524cfef4b59b1f"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-light-assets.png",
+      "bytes": 183239,
+      "sha256": "ca0bd42666e208d780cb56bb39584eb602fd44a957657ac690c4a4da64eea87d"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-light-case-artifacts.png",
+      "bytes": 99764,
+      "sha256": "770112bbc333d07d96681eec95dd18fc7736e9dad28579eaaae5bb78228b6620"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-light-case-current.png",
+      "bytes": 133657,
+      "sha256": "f75b69d4c77718d0e69abd9ca217755f7b245036b6db7890561cb1a146c5bd7e"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-light-case-history.png",
+      "bytes": 90180,
+      "sha256": "533d65705be0d4ead4b606679b8ed146b5cca294aa3cf4b596f426bf1234ce78"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-light-case-projects.png",
+      "bytes": 81150,
+      "sha256": "d5d457363237add3d5f9ff07d5caccde16b309ea3f2fabb2fc460e2ebf682490"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-light-cases.png",
+      "bytes": 88236,
+      "sha256": "62898e6ccf0f4e4426f6bb6f9c69557ad15f46f8f5cf39243709d871a6b0bc67"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-light-delivery.png",
+      "bytes": 97929,
+      "sha256": "51897297fefb45b5d2b2d5b465a03203fa1dd590fed77231a7e6562ec7ae0fc9"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-light-draft.png",
+      "bytes": 63320,
+      "sha256": "441200438ffa0617a403d2d70f72e46caa865a259234c6b9efb6b90f71497072"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-light-home.png",
+      "bytes": 165871,
+      "sha256": "97d413cbf8c3fb3f8eb4f62ed619ceaeeb4b86a6a3c38726f69cd12f82117767"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-light-project.png",
+      "bytes": 131350,
+      "sha256": "36c1eade5bb4962ab6211c783758676c2fec20b72736175c5de2e872f994127e"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-light-projects.png",
+      "bytes": 53428,
+      "sha256": "4e8ada600bf4877780995c51b70bb714038c1a9b515357cb1b1dceeab87f94da"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-light-report.png",
+      "bytes": 142248,
+      "sha256": "6479f2470b12f9c4de5209ae3ae795a4840d16f54648cfbe88fadb66a974b8a2"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-light-setup.png",
+      "bytes": 252183,
+      "sha256": "50f5b6b774f60d15971cd504f6a1c9af6557cec8d6b5caa15ffa43f573747490"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-light-task-analysis.png",
+      "bytes": 213125,
+      "sha256": "7498df4fa3850a987047f38e0f751d3b4f762a84c86b1f2baf2ce2d5dc859264"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/390-light-work.png",
+      "bytes": 126174,
+      "sha256": "5f057f2e928632385b85ee1c7f49b50ccf7a3319ce991815515087f8cd153c39"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/authorize-1440.png",
+      "bytes": 297922,
+      "sha256": "1745878780fa052167038b147bdefd1b2610684dff5c4857e93451ddae19c577"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/normal-delivery-accepted.png",
+      "bytes": 296274,
+      "sha256": "f47e1eb7f37da15be55b20e9589a82363d788de037f3ffffec0083a49dcde6c2"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/normal-mapping-excluded-accepted.png",
+      "bytes": 461372,
+      "sha256": "3d74e798e0f2f29becf5fd0516caca75b94d82c89640dacc7f55c30e29559acd"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/final-ui/screens/project-after-external-accepted.png",
+      "bytes": 223793,
+      "sha256": "a11617a4326747a81b079108364fae838fc0c5208679018ab38a575a9328eadd"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/focus-delta.json",
+      "bytes": 445,
+      "sha256": "2872325dfd756ff8bdc65d33e5b56a08215fce33f96ef2ac1e6c72eb74caeeb1"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/html-after.sha256",
+      "bytes": 65,
+      "sha256": "18cbaf4cd54d92c15890c09e2fd0647a8bbc61216847b1eb0e5dff196e87507e"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/input-manifest.json",
+      "bytes": 66663,
+      "sha256": "3ec6251766d660b3c0fd316eb3cca2996989291fedc7ad30a1e74d44d8b24b3c"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/matrix.md",
+      "bytes": 14255,
+      "sha256": "ace40c8774d34da08aae6f235853547518a6772b8e9331460e3f28605144c8aa"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/receipt.json",
+      "bytes": 27744,
+      "sha256": "cbcb82baba6322fbbf9998302994f8a30a455b2d6451e17b44c1a551910a64fd"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/report.md",
+      "bytes": 4248,
+      "sha256": "0f68929816711aef29143750604fb1b8016fbb88eedee8c1f62707ae9c02e2f1"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/scenario-initial-failure.txt",
+      "bytes": 705,
+      "sha256": "44a844752f5c4c08d51be9c3484cdb681ea337bed64cd0a530ef70345b40c13c"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/screens/authorize-1440.png",
+      "bytes": 297922,
+      "sha256": "1745878780fa052167038b147bdefd1b2610684dff5c4857e93451ddae19c577"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/screens/project-after-external-accepted.png",
+      "bytes": 224160,
+      "sha256": "12d7b3b4508c68ee6e27381852f1e71cef290858b2eb039b02bd3adb45b3ae2b"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/independent/screens/scenario-busy.png",
+      "bytes": 379749,
+      "sha256": "ac6f9b04c98db704131ca3f92316f0873d0f1778b95e0450d0f9619b108c9500"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/root/cases-1024-dark.png",
+      "bytes": 106405,
+      "sha256": "9ad0c5caba1f98bdb1e9ae458fb1de89d15f5261fd246e2de5d7621c97e060cc"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/root/check-v02-6946bc.mjs",
+      "bytes": 7509,
+      "sha256": "9523627e5a8d7dd9f35bea9b5ce074ddbb4b2a32a0778533eb0f795527311504"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/root/check-v02.mjs",
+      "bytes": 7873,
+      "sha256": "b94c809a2685654aa5f94895980e123ba83617f3979730f1e888dfe1ad2fda37"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/root/failure-1795857295616.json",
+      "bytes": 2035,
+      "sha256": "fe34763b02a7da3b7624a22cd6409247be6977080e90add06f9590ef2bfe8445"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/root/failure-1795857295616.png",
+      "bytes": 98410,
+      "sha256": "1a230c06fd55669bc12417fbf6d7fcd868c8c170de2143a2f85d29e921073f8b"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/root/failure-1795857330444.json",
+      "bytes": 1025,
+      "sha256": "9260de1f53443078fae978ce07d2f29dfd9cfa80568f397b71cf254cdcf38635"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/root/failure-1795857330444.png",
+      "bytes": 106590,
+      "sha256": "5e4a09d37117ad58d307db92a1e186e9318f3990b489393faf55fd3d166a826c"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/root/failure-1795858053466.json",
+      "bytes": 1134,
+      "sha256": "e75a04f8250ca42df7cdf553a049cbc14da48e11d1cea61d7dca3c4c213c590f"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/root/failure-1795858053466.png",
+      "bytes": 119023,
+      "sha256": "a16834c93cf1e9695560176e8a913cf6502807ed3dfda6852427cdf444fe1fc4"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/root/failure-script-1795857295616.mjs",
+      "bytes": 7194,
+      "sha256": "e9fe1964572891bc4eebb97b09831dd0aaee8804103d720f27b1229220bafa30"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/root/failure-script-1795857330444.mjs",
+      "bytes": 7433,
+      "sha256": "ff5c72de30b26f79abde8ed0e8ed1b064e2b0ea4357525cbc7124bba4d33d28d"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/root/failure-script-1795858053466.mjs",
+      "bytes": 7706,
+      "sha256": "a2239d733dd6156aac16249fe1c25945423c8dfa50916f6d38c247b09c1b589a"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/root/final-validation.json",
+      "bytes": 1233,
+      "sha256": "f6d6e9a0d1a31d4c00e037f5cb3696c99e30a2e68b7b1a8a3217870e161e9384"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/root/grant-390.png",
+      "bytes": 91500,
+      "sha256": "e13689fbb4b39d4168350e21fd67b6deb34cda999e9df8bfaba743d1629189cb"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/root/results-6946bc.json",
+      "bytes": 1465,
+      "sha256": "5c1770c80300aba9c9936b5521cde89ed81d5173aaf983e8ee9391085b1aed55"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/root/results.json",
+      "bytes": 1524,
+      "sha256": "07d5a07ecc150d24a487582f3c80f7910ee605d67ca409826bd8327134dbc3a7"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.2/root/validate-packet.py",
+      "bytes": 1471,
+      "sha256": "c31d44ec0b2f6afc49d064f7a544cef37ddb7467430c7ba42205c42fadd6330b"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/README.md",
+      "bytes": 2118,
+      "sha256": "8608a045bba9dddc1004d53e39eb20554b2e91e37746339789662d4280c31915"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1024-dark-case-projects.png",
+      "bytes": 141148,
+      "sha256": "d6b486da636898718eea7b3ef6bf78a2ae11d11bc5b93a9ad8839a93ab1cea36"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1024-dark-setup.png",
+      "bytes": 196703,
+      "sha256": "533a749d8347c89eac1bd6db18d4bed211f7fd1dad4854fa088d055a57ca01aa"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1024-dark-task-analysis.png",
+      "bytes": 247326,
+      "sha256": "5854bdd5a5cf011fe62a9c9778c36d9bac5a6f721db8174762831a4eacfe057c"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1024-dark-work.png",
+      "bytes": 147605,
+      "sha256": "655aa4c23e50d38398594f73ae835c0b1fe41b54ec7dba4934f66949c653ec35"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1024-light-case-projects.png",
+      "bytes": 139095,
+      "sha256": "a3c0abd02358868cadae10356e27eda9c808723ec5046187bef3bf063f37b6cf"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1024-light-setup.png",
+      "bytes": 193130,
+      "sha256": "c323c0d914d67d0a72808f8ed14aec931c41e4e7cdb7ed2119990453395b288c"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1024-light-task-analysis.png",
+      "bytes": 269440,
+      "sha256": "4165f192798a6411a4f2fbbb55777c2664c047fb8357d6972b93e09bb6a79dbe"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1024-light-work.png",
+      "bytes": 173091,
+      "sha256": "84b21e4ecc218c46d2f75bf00b889fac48b46cb37220bd56285e685220ceea79"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1440-dark-case-projects.png",
+      "bytes": 147013,
+      "sha256": "010cd3474103698c796d479ae5771cee81a1bb34261a5164abf031a82789d94e"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1440-dark-setup.png",
+      "bytes": 207232,
+      "sha256": "595a5f9fea7a2887175289e5920989e5b1f65ca152cf750c487fa6f113f37b9c"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1440-dark-task-analysis.png",
+      "bytes": 261473,
+      "sha256": "8ac0d7bd2a02ea122476f2dc35816184b0834feb5bcd9f30cc92de33791cbb4d"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1440-dark-work.png",
+      "bytes": 152563,
+      "sha256": "f131a7d13b0ddba83590c6e36fc985b4615e03dd5e1662940b0a76159271b6f1"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1440-light-case-projects.png",
+      "bytes": 144744,
+      "sha256": "f56f55cb6c6a452fcefbe37526c60972862e40becb257ef364cbab225cf0f829"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1440-light-setup.png",
+      "bytes": 204520,
+      "sha256": "6fa21be4ee01914b0a0fdb2eead52454959f63d2a9ef8615cb58dac7e4693e4c"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1440-light-task-analysis.png",
+      "bytes": 282572,
+      "sha256": "1918b4e7c6ed41287a683acce90690553b5aca6f2da33b90125ce080f98f50e5"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/1440-light-work.png",
+      "bytes": 180582,
+      "sha256": "5b10c94832ddc91bb979f55be805ad97114eb02fa6c8dc73947e7906fbe037a0"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/390-dark-case-projects.png",
+      "bytes": 89385,
+      "sha256": "ac5db64340a5b234e2dd0a0f1961d00d49bfd978b454abfdd11a76ecfe4a24f0"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/390-dark-setup.png",
+      "bytes": 160504,
+      "sha256": "da954b39b518c26cd471df6d68a4606afcc9db5e51ca83c88c4fd0b5095ee966"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/390-dark-task-analysis.png",
+      "bytes": 196570,
+      "sha256": "81b35184d558be30a09800feccb4c8ba315fa7e0ee0aef2c662dd3bd20c04667"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/390-dark-work.png",
+      "bytes": 108919,
+      "sha256": "fbcf18fb595d5da784b326bea8f1a1bb32dfdd2f567746bf58c85885203182ca"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/390-light-case-projects.png",
+      "bytes": 87190,
+      "sha256": "32764e0daa2a2f763c62dc53a72ef10c809b04625fb7e86aaa3fea9bc9bf9ddc"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/390-light-setup.png",
+      "bytes": 155702,
+      "sha256": "6a9a79d6f1bfbeb770a9a12b424a61df0af21b50469226788fa01d01617f584e"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/390-light-task-analysis.png",
+      "bytes": 217802,
+      "sha256": "e2daf5b5e25528521aa463f95c0c7ffe7c7eee69c91197c52e9e6e2a286c37cf"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/390-light-work.png",
+      "bytes": 130889,
+      "sha256": "56449306f1b2709f360a54a707f1957c330718ab2692adb3d1509d9575932ad2"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/check.mjs",
+      "bytes": 8068,
+      "sha256": "22c84cd64b031d2ec09ad80ae7b4c6fcb114ac183fcc6f60fbb7df17dba0a83a"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/failure-1795864236269.json",
+      "bytes": 587,
+      "sha256": "a4a9fd85f231011c08dd277d62169a9dc8868e67043d4031c97d4726cb92b509"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/failure-1795864236269.png",
+      "bytes": 308205,
+      "sha256": "da0b57a1770f69dc87d219eb2dc9e913d243e37236e67fc8f2753f60824d7e79"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/failure-1795864481222.json",
+      "bytes": 1695,
+      "sha256": "1e3cccf7ae7139573250bd12cf9917978a967ef90d08e21dc3d65f78570ad060"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/failure-1795864481222.png",
+      "bytes": 242503,
+      "sha256": "c0da828601761d9981f7dd3403165f648a13c2218ffd2c0d9a65de3350985f25"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/failure-script-1795864236269.mjs",
+      "bytes": 7963,
+      "sha256": "cc91d8328f4fa17221635626b7c40613853c314e19f5fe02646572f1f00d73f8"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/failure-script-1795864481222.mjs",
+      "bytes": 7963,
+      "sha256": "cc91d8328f4fa17221635626b7c40613853c314e19f5fe02646572f1f00d73f8"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/github-accepted.png",
+      "bytes": 426487,
+      "sha256": "cbb03bd4b5a26381b23284cc1117898019cbb263f581c3a6db4350859baa9752"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/initial-static-scope-failure.json",
+      "bytes": 255,
+      "sha256": "25b2c8fba40277d485bec84146b368479a5f6d4a26b981e1b46ba489476111d3"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/other-task-delta.json",
+      "bytes": 311,
+      "sha256": "6ef22341d062a1f1188e7eb40ea15b6c662fad752033d9ad995d5b49af5ad36e"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/other-task-delta.mjs",
+      "bytes": 2007,
+      "sha256": "896eb724c09ff41dc2c9115fa5fd94a6919c826cd05f648c575ff30086df2704"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/other-task-internal.png",
+      "bytes": 281909,
+      "sha256": "a68a3766784206eb6c59b30acb2544bd6ec83c59d9baa21edc88fbe7e3aaf388"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/regression/cases-1024-dark.png",
+      "bytes": 107463,
+      "sha256": "9eb4a96bdb665990659cccc77ddcac94b405c3e34453ad739e97f37ba38473f4"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/regression/check.mjs",
+      "bytes": 7864,
+      "sha256": "decef5eb3fc6aafc22a98d07d6e1c0e3f2be0bd18e8f7c70914e991e90621683"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/regression/failure-1795864670099.json",
+      "bytes": 1847,
+      "sha256": "39a48741724512b4e8d2a1921965a65ef58e5c5ff1aa84661841e18b405b8552"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/regression/failure-1795864670099.png",
+      "bytes": 107463,
+      "sha256": "9eb4a96bdb665990659cccc77ddcac94b405c3e34453ad739e97f37ba38473f4"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/regression/failure-script-1795864670099.mjs",
+      "bytes": 8357,
+      "sha256": "574dc3fca8d7910da69c64007fdd7eebbf1c72f8473d45a8098e2219dc396b01"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/regression/grant-390.png",
+      "bytes": 88201,
+      "sha256": "699f638fd9b1fea14a5fa9e61340a0c3b15561991d3bdbfb2c79acca7f47de73"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/regression/results-06804f28-superseded.json",
+      "bytes": 1524,
+      "sha256": "25872ead651fe25f883a00a6e0e992ef2d0df130326da1d70b3c189fb0cef20c"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/regression/results.json",
+      "bytes": 1524,
+      "sha256": "d90f824e77586530a4dacf0a9dfdcf20887a60069d05500d5b4af37a1c3f10b0"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/results-06804f28-superseded.json",
+      "bytes": 2885,
+      "sha256": "68f7d5dc01c425e16ed3a74f0678992154ecc37a9ee0850ac273607cf17a9f59"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/results.json",
+      "bytes": 2885,
+      "sha256": "9a8be2e1eecb59dc151aa518f978634e0a9196ac1a5dfbaf337595b26ace5f32"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/validate-packet.py",
+      "bytes": 1652,
+      "sha256": "0e2f0546ecc3b6fdf06b57c3b96074ce7c2adb83e49ada52920369238c480452"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/author/workbuddy-accepted.png",
+      "bytes": 443606,
+      "sha256": "47921c840830a63f3cb0cfda81213086a06fe48270ace287b15430853ad4ff0d"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/evidence/v0.3/input-manifest.json",
+      "bytes": 576,
+      "sha256": "48e863605c1b148d75b4e536111ee5730506bb37e7a471e455cee861b7ace3b1"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/integration-research-v0.2.md",
+      "bytes": 9583,
+      "sha256": "2cd2d38011baa6aa3c6ab35dfb69a7a1482675cba3924d91a20c3d9326e4430e"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/integration-research.md",
+      "bytes": 12248,
+      "sha256": "9e3e382220b700ed8d5a2e8dd0dab036dc39b0c7a8117449500df2c345e54b7b"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/issue-draft.md",
+      "bytes": 7077,
+      "sha256": "599eae47f40b8d3444ebc018f453d994cb2d99ca9a3db5a7c94246359bc68dae"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/main-alignment.md",
+      "bytes": 14004,
+      "sha256": "9c278dc7dac0d963e4344c492e2c1d0a2fbcb40a1545199b95fd244e91fab3e6"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/preparation-matrix.md",
+      "bytes": 1069,
+      "sha256": "3de45192891b3c221b01e00b06d33f6c08fc8a80b3c59ac4dd7427d30c5df621"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/preparation-review-v0.1.md",
+      "bytes": 8488,
+      "sha256": "82986bc97bd15037793f7819d4634c66713a96973e2356de4c6979fee0a15130"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/preparation-review-v0.2.md",
+      "bytes": 606,
+      "sha256": "e3752f6d3be29e96767c29c973b3f9d53add1bf3f7447a33525bf42aca67f599"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/preparation-review.md",
+      "bytes": 436,
+      "sha256": "b235f97a4f0df263d7775255a95a39ae6b525e899aae5ee62042fae6fc007d88"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/publication-receipt.json",
+      "bytes": 1347,
+      "sha256": "8cd67a5954f00eaa487ef79b8cc6b2291710a1a1f42ece696533b59fc834d3af"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/publication.md",
+      "bytes": 3492,
+      "sha256": "ad509925fc3704f17f5ddac255358ef09f328f75f06f51b5df7bd96f74a8e3a5"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/published-issue.md",
+      "bytes": 10737,
+      "sha256": "9b39632fa2fc2d83990b72a5a3165d679b5e3467a52e37f188311fc3066bece7"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/result-v0.2.md",
+      "bytes": 6813,
+      "sha256": "6c1c8c8833c374d04a81d14fcc4498e04ed8f5a9215dd07bd7d9aabcbfaea344"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/result.md",
+      "bytes": 3273,
+      "sha256": "3b6f4d9195426f8e66535576cd98c7a2b1b1673b308baec03696d1398c081d39"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/reuse-audit.md",
+      "bytes": 15827,
+      "sha256": "e9923bcad47e60c94b45aa3d99677e3a2935ad93802f12790774736f6a3b712e"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/spec.md",
+      "bytes": 37308,
+      "sha256": "56522ef4db656ed047864cd9cc897fec0544bb627dd5fcf8bf26af82a27d9375"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/tasks.md",
+      "bytes": 3221,
+      "sha256": "081590164b9d4f7e3a8abac465e85eb5f4d1cb1f5e5b6c4a2ced93ce6beda8a1"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/ui-demo.html",
+      "bytes": 157525,
+      "sha256": "9a5626d5efe69f2d5a4c22ee234919a4abd07e4c190a0fb996a9449cd062fcb4"
+    },
+    {
+      "path": "openspec/changes/agent-brain-external-collaboration/ui-mapping.md",
+      "bytes": 2246,
+      "sha256": "e81ca5e6874bd7dbfc791cfb2c582652c43672d5ea5ec61a4c13256e5e665e2e"
+    }
+  ]
+}

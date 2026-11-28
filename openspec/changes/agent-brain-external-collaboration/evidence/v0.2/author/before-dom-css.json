@@ -1,0 +1,87 @@
+{
+  "source": "rendered standalone v0.1 via actual localhost HTTP",
+  "observations": [
+    {
+      "route": "#project",
+      "headings": [
+        "从原项目继续工作",
+        "四店会员资料核查",
+        "项目任务 6"
+      ],
+      "rail": "<aside class=\"rail\" aria-label=\"工作台导航\">\n<a class=\"brand\" href=\"#project\"><span class=\"mark\" aria-hidden=\"true\"></span>OptraCall</a>\n<div class=\"rail-context\"><span class=\"avatar\">杉</span><div><strong>云杉零售 · 示例</strong><small>个人工作空间</small></div></div>\n<div class=\"nav-label\">WORKSPACE</div>\n<nav class=\"nav\"><a href=\"#case\" data-nav=\"case\"><i>◈</i>工作台首页</a><a href=\"#case\" data-nav=\"case\"><i>✧</i>决策星图</a><a href=\"#project\" data-nav=\"project\" class=\"active\"><i>▦</i>项目地图</a><a href=\"#task/analysis\" data-nav=\"task\"><i>◉</i>当前任务</a><a href=\"#report\" data-nav=\"report\"><i>▤</i>报告与成果</a></nav>\n<div class=\"nav-label\" style=\"margin-top:30px\">CONTEXT</div>\n<nav class=\"nav\"><a href=\"#assets\" data-nav=\"assets\"><i>⌘</i>协作资产依据</a><a href=\"#setup\" data-nav=\"setup\"><i>⇄</i>连接与接入</a></nav>\n<div class=\"rail-footer\"><p>持续做出更好的决策</p><p style=\"margin-top:8px\">界面提案 · 待用户审核</p><button data-action=\"about\" style=\"margin-top:14px\">关于本演示 ↗</button></div>\n</aside>",
+      "main": "<div class=\"page-head\"><div><div class=\"eyebrow\">PROJECT MAP</div><h1>从原项目继续工作</h1><p>六类任务承载不同用途；外部协作可承接其中的一段工作。</p></div><div class=\"head-actions\"><a class=\"btn\" href=\"#case\" data-testid=\"open-case\">查看关联 Case ↗</a></div></div><section class=\"project-banner\"><span class=\"pill\">云杉零售 · 全部为合成资料</span><h2>四店会员资料核查</h2><p>先厘清口径与差异，再决定修订。原任务、报告、验收和后续反馈留在 OptraCall。</p><div class=\"head-actions\"><a class=\"btn primary\" href=\"#task/analysis\" data-testid=\"open-analysis\">继续分析任务 →</a><a class=\"btn\" href=\"#report\">查看当前报告</a></div></section><div class=\"row between\" style=\"margin-bottom:13px\"><h2 style=\"font-size:16px\">项目任务 <span class=\"muted small\">6</span></h2><span class=\"small muted\">需求 → 分析 → 计划 → 决策 → 执行 → 反馈</span></div><section class=\"six-grid\" aria-label=\"六类任务\"><a class=\"task-tile \" href=\"#task/requirement\" data-testid=\"task-requirement\"><div class=\"row between\"><span class=\"eyebrow\">R / 需求</span><span class=\"pill gray\">已完成</span></div><strong>明确会员资料核查范围</strong><p>可按目标外派片段：整理四店资料字段与缺失项</p><div class=\"foot\"><span>保留在原需求任务</span><span>打开 →</span></div></a><a class=\"task-tile feature\" href=\"#task/analysis\" data-testid=\"task-analysis\"><div class=\"row between\"><span class=\"eyebrow\">A / 分析</span><span class=\"pill green\">进行中</span></div><strong>四店会员资料一致性核查</strong><p>可按目标外派片段：核查四店会员字段映射与重复记录</p><div class=\"foot\"><span>保留在原分析任务</span><span>打开 →</span></div></a><a class=\"task-tile \" href=\"#task/plan\" data-testid=\"task-plan\"><div class=\"row between\"><span class=\"eyebrow\">P / 计划</span><span class=\"pill gray\">草稿</span></div><strong>安排资料修订与复查计划</strong><p>可按目标外派片段：编写资料修订排期与复查清单</p><div class=\"foot\"><span>保留在原计划任务</span><span>打开 →</span></div></a><a class=\"task-tile \" href=\"#task/decision\" data-testid=\"task-decision\"><div class=\"row between\"><span class=\"eyebrow\">D / 决策</span><span class=\"pill gray\">待资料</span></div><strong>核定四店会员口径处理方案</strong><p>可按目标外派片段：整理可选方案、证据与影响对照</p><div class=\"foot\"><span>保留在原决策任务</span><span>打开 →</span></div></a><a class=\"task-tile \" href=\"#task/do\" data-testid=\"task-do\"><div class=\"row between\"><span class=\"eyebrow\">Do / 执行</span><span class=\"pill gray\">未开始</span></div><strong>落实获准的资料修订</strong><p>可按目标外派片段：在隔离副本准备修订脚本与差异</p><div class=\"foot\"><span>保留在原执行任务</span><span>打开 →</span></div></a><a class=\"task-tile \" href=\"#task/teach\" data-testid=\"task-teach\"><div class=\"row between\"><span class=\"eyebrow\">T / 反馈</span><span class=\"pill gray\">未开始</span></div><strong>复盘核查结果与业务反馈</strong><p>可按目标外派片段：汇总四店反馈与未解决问题</p><div class=\"foot\"><span>保留在原反馈任务</span><span>打开 →</span></div></a></section><div class=\"callout section-space\">这是已有项目的六个示例任务。打开任务、Case、报告或资产依据，只切换阅读位置；不会派单或创建新任务。</div>",
+      "css": {
+        "rail": "218px",
+        "mainPadding": "27px 30px 38px",
+        "canvas": "rgba(0, 0, 0, 0)",
+        "font": "system-ui, -apple-system, \"PingFang SC\", \"Microsoft YaHei\", sans-serif"
+      },
+      "viewport": {
+        "width": 1440,
+        "height": 1050
+      }
+    },
+    {
+      "route": "#task/analysis",
+      "headings": [
+        "四店会员资料一致性核查",
+        "四店会员资料一致性核查",
+        "⇄ 外部协作",
+        "本任务保留"
+      ],
+      "rail": "<aside class=\"rail\" aria-label=\"工作台导航\">\n<a class=\"brand\" href=\"#project\"><span class=\"mark\" aria-hidden=\"true\"></span>OptraCall</a>\n<div class=\"rail-context\"><span class=\"avatar\">杉</span><div><strong>云杉零售 · 示例</strong><small>个人工作空间</small></div></div>\n<div class=\"nav-label\">WORKSPACE</div>\n<nav class=\"nav\"><a href=\"#case\" data-nav=\"case\"><i>◈</i>工作台首页</a><a href=\"#case\" data-nav=\"case\"><i>✧</i>决策星图</a><a href=\"#project\" data-nav=\"project\" class=\"\"><i>▦</i>项目地图</a><a href=\"#task/analysis\" data-nav=\"task\" class=\"active\"><i>◉</i>当前任务</a><a href=\"#report\" data-nav=\"report\"><i>▤</i>报告与成果</a></nav>\n<div class=\"nav-label\" style=\"margin-top:30px\">CONTEXT</div>\n<nav class=\"nav\"><a href=\"#assets\" data-nav=\"assets\"><i>⌘</i>协作资产依据</a><a href=\"#setup\" data-nav=\"setup\"><i>⇄</i>连接与接入</a></nav>\n<div class=\"rail-footer\"><p>持续做出更好的决策</p><p style=\"margin-top:8px\">界面提案 · 待用户审核</p><button data-action=\"about\" style=\"margin-top:14px\">关于本演示 ↗</button></div>\n</aside>",
+      "main": "<div class=\"page-head\"><div><div class=\"eyebrow\">TASK / 分析</div><h1>四店会员资料一致性核查</h1><p>项目和任务关系保持；按需委派工作片段，由原任务 Agent 收回结果。</p></div><div class=\"head-actions\"><a class=\"btn\" href=\"#project\" data-testid=\"back-project\">← 项目地图</a><a class=\"btn\" href=\"#case\">关联 Case</a></div></div><nav class=\"tabs\" aria-label=\"任务内容\"><a href=\"#task/analysis\" class=\"active\">任务对话</a><a href=\"#report\" class=\"\" data-testid=\"report-tab\">报告与成果</a><a href=\"#draft\" class=\"\" data-testid=\"draft-tab\">保留的草稿</a><a href=\"#work\" class=\"\" data-testid=\"work-tab\">外部协作</a></nav><div class=\"grid\"><section class=\"card\"><div class=\"task-overview\"><span class=\"task-glyph\">A</span><div><h2 class=\"task-title\">四店会员资料一致性核查</h2><small>合成快照 2026-11-01 · 原任务记录持续保留</small></div></div><div class=\"chat\"><div class=\"speaker\"><span class=\"mini-avatar\">你</span>业务目标 · 已有上下文</div><p>帮我核对云杉零售四家店的会员资料：字段、状态与跨店重复是否一致。先查清差异，不要修改业务系统，也不要把不确定身份自动合并。</p></div><div class=\"chat\"><div class=\"speaker\"><span class=\"mini-avatar\">O</span>OptraCall Agent <span class=\"pill gray\">合成交互</span></div><p>我保留了原报告与数据说明。四店字段名称存在差异，需按已发布口径逐项核对；其中一组跨店身份对应关系仍为 UNKNOWN。</p><div class=\"quote\">当前边界：只核查合成快照及获准依据；不改生产数据，不联系会员，不发布正式口径。</div><p>我建议将「核查四店会员字段映射与重复记录」交给外部执行者。你确认必要范围后，我会自主派单、跟进并验收。</p><div class=\"head-actions\" style=\"margin-top:15px\"><a class=\"btn\" href=\"#report\">查看原报告 ↗</a><a class=\"btn text\" href=\"#assets\">查看依据</a></div></div><div class=\"compose\"><label class=\"sr-only\" for=\"task-draft\">原任务草稿</label><textarea id=\"task-draft\" data-testid=\"task-draft\" placeholder=\"继续和原任务 Agent 沟通…\" style=\"\">请保留未确认的身份映射，不要自动合并会员。</textarea><div class=\"compose-foot\"><small>草稿随页面往返保留。演示发送只保存本地状态。</small><button class=\"btn primary\" data-action=\"send-draft\" data-testid=\"send-draft\">发送</button></div></div></section><aside class=\"stack\"><section class=\"card collab\"><div class=\"card-head\"><h2>⇄ 外部协作</h2><span class=\"pill gray\">待授权</span></div><div class=\"pad\"><div class=\"eyebrow\" style=\"margin-bottom:8px\">Agent 的建议</div><h3>核查四店会员字段映射与重复记录</h3><p>这段核查可交给外部执行者完成；我会准备工单、跟进进度，并核验回传。业务判断仍回到本任务。</p><div class=\"tiny-line\"></div><p><strong style=\"color:#59416f\">只需确认一次必要授权</strong><br>目标、外派范围、执行者与资产权限一起确认，范围内无需逐条审批读取。</p><button class=\"btn primary\" data-action=\"authorize\" data-testid=\"authorize-open\">查看建议并授权 →</button></div></section><section class=\"card\"><div class=\"card-head\"><h2>本任务保留</h2></div><div class=\"pad\"><div class=\"list-row\"><div><strong>原报告 · 核查初稿</strong><small>v0.3 · 包含未确认映射</small></div><a href=\"#report\" class=\"btn text\">打开 ↗</a></div><div class=\"list-row\"><div><strong>业务草稿</strong><small>跨页保留，不自动发布</small></div><a href=\"#draft\" class=\"btn text\">查看</a></div><div class=\"list-row\"><div><strong>会员资料治理 Case</strong><small>分析中 · 业务决定待后续</small></div><a href=\"#case\" class=\"btn text\">打开</a></div></div></section></aside></div>",
+      "css": {
+        "rail": "218px",
+        "mainPadding": "27px 30px 38px",
+        "canvas": "rgba(0, 0, 0, 0)",
+        "font": "system-ui, -apple-system, \"PingFang SC\", \"Microsoft YaHei\", sans-serif"
+      },
+      "viewport": {
+        "width": 1440,
+        "height": 1050
+      }
+    },
+    {
+      "route": "#case",
+      "headings": [
+        "先查清资料，再决定怎样修订",
+        "是否统一四店会员资料口径？",
+        "目标与当前判断",
+        "关联工作"
+      ],
+      "rail": "<aside class=\"rail\" aria-label=\"工作台导航\">\n<a class=\"brand\" href=\"#project\"><span class=\"mark\" aria-hidden=\"true\"></span>OptraCall</a>\n<div class=\"rail-context\"><span class=\"avatar\">杉</span><div><strong>云杉零售 · 示例</strong><small>个人工作空间</small></div></div>\n<div class=\"nav-label\">WORKSPACE</div>\n<nav class=\"nav\"><a href=\"#case\" data-nav=\"case\" class=\"active\"><i>◈</i>工作台首页</a><a href=\"#case\" data-nav=\"case\" class=\"active\"><i>✧</i>决策星图</a><a href=\"#project\" data-nav=\"project\" class=\"\"><i>▦</i>项目地图</a><a href=\"#task/analysis\" data-nav=\"task\" class=\"\"><i>◉</i>当前任务</a><a href=\"#report\" data-nav=\"report\"><i>▤</i>报告与成果</a></nav>\n<div class=\"nav-label\" style=\"margin-top:30px\">CONTEXT</div>\n<nav class=\"nav\"><a href=\"#assets\" data-nav=\"assets\"><i>⌘</i>协作资产依据</a><a href=\"#setup\" data-nav=\"setup\"><i>⇄</i>连接与接入</a></nav>\n<div class=\"rail-footer\"><p>持续做出更好的决策</p><p style=\"margin-top:8px\">界面提案 · 待用户审核</p><button data-action=\"about\" style=\"margin-top:14px\">关于本演示 ↗</button></div>\n</aside>",
+      "main": "<div class=\"page-head\"><div><div class=\"eyebrow\">DECISION CASE</div><h1>先查清资料，再决定怎样修订</h1><p>会员资料治理 · Case 处于分析中；外部工作完成不会代替业务决定。</p></div><div class=\"head-actions\"><a class=\"btn\" href=\"#project\" data-testid=\"case-project\">查看关联项目</a><a class=\"btn primary\" href=\"#task/analysis\" data-testid=\"case-task\">继续原分析任务 →</a></div></div><section class=\"project-banner\"><span class=\"pill\">CASE · 分析中</span><h2>是否统一四店会员资料口径？</h2><p>先明确字段与身份映射的差异、影响及未知，再确定修订方案和后续观察方式。</p></section><div class=\"grid equal\"><section class=\"card\"><div class=\"card-head\"><h2>目标与当前判断</h2></div><div class=\"pad\"><dl class=\"meta\"><dt>业务目标</dt><dd>形成可解释、可追溯的四店会员资料核查结果。</dd><dt>当前判断</dt><dd>存在资料质量问题；经营影响尚未验证。</dd><dt>待决定</dt><dd>怎样处理无法确认的身份映射；是否启动后续修订。</dd><dt>当前反馈</dt><dd>尚无真实经营反馈，不能声明治理效果。</dd></dl></div></section><section class=\"card\"><div class=\"card-head\"><h2>关联工作</h2><span class=\"pill gray\">原记录保持</span></div><div class=\"pad\"><div class=\"list-row\"><div><strong>四店会员资料核查</strong><small>项目 · 6 类任务</small></div><a class=\"btn text\" href=\"#project\">项目地图 →</a></div><div class=\"list-row\"><div><strong>四店会员资料一致性核查</strong><small>原分析任务</small></div><a class=\"btn text\" href=\"#task/analysis\">继续 →</a></div><div class=\"list-row\"><div><strong>核查初稿 v0.3</strong><small>原报告 · 未自动改写</small></div><a class=\"btn text\" href=\"#report\" data-testid=\"case-report\">阅读 →</a></div></div></section></div><div class=\"callout section-space\">任务推进、成果接受、业务决定与实际经营反馈各有记录。这里没有把 GitHub 工单状态用作 Case 完成依据。</div>",
+      "css": {
+        "rail": "218px",
+        "mainPadding": "27px 30px 38px",
+        "canvas": "rgba(0, 0, 0, 0)",
+        "font": "system-ui, -apple-system, \"PingFang SC\", \"Microsoft YaHei\", sans-serif"
+      },
+      "viewport": {
+        "width": 1440,
+        "height": 1050
+      }
+    },
+    {
+      "route": "#work",
+      "headings": [
+        "在原任务中按需外派",
+        "把适合外部能力的片段交出去",
+        "⇄ 外部协作"
+      ],
+      "rail": "<aside class=\"rail\" aria-label=\"工作台导航\">\n<a class=\"brand\" href=\"#project\"><span class=\"mark\" aria-hidden=\"true\"></span>OptraCall</a>\n<div class=\"rail-context\"><span class=\"avatar\">杉</span><div><strong>云杉零售 · 示例</strong><small>个人工作空间</small></div></div>\n<div class=\"nav-label\">WORKSPACE</div>\n<nav class=\"nav\"><a href=\"#case\" data-nav=\"case\" class=\"\"><i>◈</i>工作台首页</a><a href=\"#case\" data-nav=\"case\" class=\"\"><i>✧</i>决策星图</a><a href=\"#project\" data-nav=\"project\" class=\"\"><i>▦</i>项目地图</a><a href=\"#task/analysis\" data-nav=\"task\" class=\"active\"><i>◉</i>当前任务</a><a href=\"#report\" data-nav=\"report\"><i>▤</i>报告与成果</a></nav>\n<div class=\"nav-label\" style=\"margin-top:30px\">CONTEXT</div>\n<nav class=\"nav\"><a href=\"#assets\" data-nav=\"assets\"><i>⌘</i>协作资产依据</a><a href=\"#setup\" data-nav=\"setup\"><i>⇄</i>连接与接入</a></nav>\n<div class=\"rail-footer\"><p>持续做出更好的决策</p><p style=\"margin-top:8px\">界面提案 · 待用户审核</p><button data-action=\"about\" style=\"margin-top:14px\">关于本演示 ↗</button></div>\n</aside>",
+      "main": "<div class=\"page-head\"><div><div class=\"eyebrow\">EXTERNAL COLLABORATION</div><h1>在原任务中按需外派</h1><p>外派是执行方式；任务用途和闭环仍由原 Task 承载。</p></div><div class=\"head-actions\"><a class=\"btn\" href=\"#task/analysis\">← 原任务</a></div></div><div class=\"context-strip\"><span>项目：云杉零售四店会员资料核查</span><span>任务：分析 · 四店会员资料一致性核查</span><span>Case：会员资料治理</span><span>任务数：6（浏览不会新建）</span></div><div class=\"grid\"><section class=\"card\"><div class=\"pad\"><h2>把适合外部能力的片段交出去</h2><p class=\"lead muted\" style=\"margin-top:12px\">核查四店会员字段映射与重复记录</p><div class=\"callout section-space\">Agent 会准备、发布、跟进并验收。你只需一次确认业务目标与必要权限；逐条读取、评论和回执由 Agent 在范围内处理。</div><div style=\"margin-top:20px\"><button class=\"btn primary\" data-action=\"authorize\" data-testid=\"authorize-open\">查看外派建议与授权</button></div></div></section><aside><section class=\"card collab\"><div class=\"card-head\"><h2>⇄ 外部协作</h2><span class=\"pill gray\">待授权</span></div><div class=\"pad\"><div class=\"eyebrow\" style=\"margin-bottom:8px\">Agent 的建议</div><h3>核查四店会员字段映射与重复记录</h3><p>这段核查可交给外部执行者完成；我会准备工单、跟进进度，并核验回传。业务判断仍回到本任务。</p><div class=\"tiny-line\"></div><p><strong style=\"color:#59416f\">只需确认一次必要授权</strong><br>目标、外派范围、执行者与资产权限一起确认，范围内无需逐条审批读取。</p><button class=\"btn primary\" data-action=\"authorize\" data-testid=\"authorize-open\">查看建议并授权 →</button></div></section></aside></div>",
+      "css": {
+        "rail": "218px",
+        "mainPadding": "27px 30px 38px",
+        "canvas": "rgba(0, 0, 0, 0)",
+        "font": "system-ui, -apple-system, \"PingFang SC\", \"Microsoft YaHei\", sans-serif"
+      },
+      "viewport": {
+        "width": 1440,
+        "height": 1050
+      }
+    }
+  ]
+}

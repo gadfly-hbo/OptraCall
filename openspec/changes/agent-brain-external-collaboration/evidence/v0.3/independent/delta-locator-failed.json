@@ -1,0 +1,177 @@
+{
+  "checks": [
+    {
+      "name": "另一Task可内部继续",
+      "actual": "internal",
+      "expected": "internal",
+      "pass": true
+    },
+    {
+      "name": "原外派授权保留",
+      "actual": {
+        "mode": "github",
+        "task": "analysis",
+        "taskType": "分析",
+        "piece": "核查四店会员字段映射与重复记录",
+        "goal": "核对四店会员资料的一致性，交回可追溯的差异表和检查说明。",
+        "executor": "已批准通用Agent集合（首个认证有效领取）",
+        "repo": "yunshan-demo/private-member-audit · Private",
+        "assets": [
+          "semantic",
+          "metric",
+          "method",
+          "mapping"
+        ],
+        "hours": 24,
+        "resourcePolicy": {
+          "approved": true,
+          "simulation": true,
+          "maxFragments": 1,
+          "maxApiTriggers": 0,
+          "maxHours": 24,
+          "cost": "GitHub/MCP沿已批准策略；不申请或消耗WorkBuddy额度"
+        },
+        "revoked": false,
+        "expired": false
+      },
+      "expected": {
+        "mode": "github",
+        "task": "analysis",
+        "taskType": "分析",
+        "piece": "核查四店会员字段映射与重复记录",
+        "goal": "核对四店会员资料的一致性，交回可追溯的差异表和检查说明。",
+        "executor": "已批准通用Agent集合（首个认证有效领取）",
+        "repo": "yunshan-demo/private-member-audit · Private",
+        "assets": [
+          "semantic",
+          "metric",
+          "method",
+          "mapping"
+        ],
+        "hours": 24,
+        "resourcePolicy": {
+          "approved": true,
+          "simulation": true,
+          "maxFragments": 1,
+          "maxApiTriggers": 0,
+          "maxHours": 24,
+          "cost": "GitHub/MCP沿已批准策略；不申请或消耗WorkBuddy额度"
+        },
+        "revoked": false,
+        "expired": false
+      },
+      "pass": true
+    },
+    {
+      "name": "原外派状态保留",
+      "actual": "waiting",
+      "expected": "waiting",
+      "pass": true
+    },
+    {
+      "name": "原事件读取API不变",
+      "actual": [
+        [
+          {
+            "label": "已确认本次授权",
+            "body": "分析任务外派一个工作片段；只读 4 项准确资产版本，24 小时内有效。",
+            "source": "用户 / 授权快照",
+            "kind": "normal",
+            "time": "演示 01"
+          },
+          {
+            "label": "Host 已建立外派工作台账",
+            "body": "领取、交付与验收按此工作原子更新；GitHub Issue 与评论仅作通信和证据。",
+            "source": "Host / 模拟工作台账",
+            "kind": "normal",
+            "time": "演示 02"
+          },
+          {
+            "label": "Agent 已准备工单",
+            "body": "目标、禁做项、准确资产引用和验收要求已按授权整理；没有搬运原始资产到 GitHub。",
+            "source": "OptraCall Agent",
+            "kind": "normal",
+            "time": "演示 03"
+          },
+          {
+            "label": "发布回执已核对",
+            "body": "Issue #DEMO-42 已关联原 Task；工单发布不等于执行完成。",
+            "source": "GitHub / 模拟发布回执",
+            "kind": "normal",
+            "time": "演示 04"
+          },
+          {
+            "label": "等待通用Agent领取",
+            "body": "工单已发布；尚无有效领取，不能读取资产；未触发WorkBuddy。",
+            "source": "Host / 模拟待领取",
+            "kind": "normal",
+            "time": "演示 05"
+          }
+        ],
+        [],
+        0
+      ],
+      "expected": [
+        [
+          {
+            "label": "已确认本次授权",
+            "body": "分析任务外派一个工作片段；只读 4 项准确资产版本，24 小时内有效。",
+            "source": "用户 / 授权快照",
+            "kind": "normal",
+            "time": "演示 01"
+          },
+          {
+            "label": "Host 已建立外派工作台账",
+            "body": "领取、交付与验收按此工作原子更新；GitHub Issue 与评论仅作通信和证据。",
+            "source": "Host / 模拟工作台账",
+            "kind": "normal",
+            "time": "演示 02"
+          },
+          {
+            "label": "Agent 已准备工单",
+            "body": "目标、禁做项、准确资产引用和验收要求已按授权整理；没有搬运原始资产到 GitHub。",
+            "source": "OptraCall Agent",
+            "kind": "normal",
+            "time": "演示 03"
+          },
+          {
+            "label": "发布回执已核对",
+            "body": "Issue #DEMO-42 已关联原 Task；工单发布不等于执行完成。",
+            "source": "GitHub / 模拟发布回执",
+            "kind": "normal",
+            "time": "演示 04"
+          },
+          {
+            "label": "等待通用Agent领取",
+            "body": "工单已发布；尚无有效领取，不能读取资产；未触发WorkBuddy。",
+            "source": "Host / 模拟待领取",
+            "kind": "normal",
+            "time": "演示 05"
+          }
+        ],
+        [],
+        0
+      ],
+      "pass": true
+    },
+    {
+      "name": "另一Task草稿保留",
+      "actual": "另一Task内部草稿",
+      "expected": "另一Task内部草稿",
+      "pass": true
+    },
+    {
+      "name": "原Task仍外派",
+      "actual": "external",
+      "expected": "external",
+      "pass": true
+    }
+  ],
+  "htmlSha256": "9a5626d5efe69f2d5a4c22ee234919a4abd07e4c190a0fb996a9449cd062fcb4",
+  "fatal": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-action=\"choose-internal\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <button class=\"btn \" data-action=\"choose-internal\" data-testid=\"decline-to-internal\">在 OptraCall 内完成</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not visible\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not visible\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    58 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is not visible\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n\n    at a (/workspace/OptraCall/.local/brain-v03-independent/delta.cjs:2:208)\n    at /workspace/OptraCall/.local/brain-v03-independent/delta.cjs:2:1171",
+  "summary": {
+    "total": 6,
+    "pass": 6,
+    "fail": 0
+  }
+}

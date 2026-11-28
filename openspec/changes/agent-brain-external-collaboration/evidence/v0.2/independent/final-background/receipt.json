@@ -1,0 +1,210 @@
+{
+  "htmlSha256": "59b9bbdb70414a8909e0c4b9ea2386b68f56d8638d5c1c39ebff5c4922b6bb17",
+  "priorHtmlSha256": "6946bc7744365bdf19f41bb135248693372a4e1be5152bd9a7c0065984cfe060",
+  "startedAt": "2026-11-28T09:27:42.498Z",
+  "sameJs": true,
+  "sameDomOutsideStyle": true,
+  "oldJsHash": "30cd0c08d1199dbc999b2f4cf244baea090a7f74d77f87d258fdd455d239b473",
+  "newJsHash": "30cd0c08d1199dbc999b2f4cf244baea090a7f74d77f87d258fdd455d239b473",
+  "oldDomHash": "5957964f092e09013178e56940da199dfe0c00a1b2767f383334ed19cf353826",
+  "newDomHash": "5957964f092e09013178e56940da199dfe0c00a1b2767f383334ed19cf353826",
+  "cssAdded": "\n:root,:root[data-theme=\"dark\"]{background:var(--canvas)}\n",
+  "checks": [
+    {
+      "filename": "1440-light-cases.png",
+      "passed": true,
+      "root": "rgb(247, 245, 250)",
+      "body": "rgb(247, 245, 250)",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "filename": "1440-light-draft.png",
+      "passed": true,
+      "root": "rgb(247, 245, 250)",
+      "body": "rgb(247, 245, 250)",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "filename": "1440-light-delivery.png",
+      "passed": true,
+      "root": "rgb(247, 245, 250)",
+      "body": "rgb(247, 245, 250)",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "filename": "1440-light-projects.png",
+      "passed": true,
+      "root": "rgb(247, 245, 250)",
+      "body": "rgb(247, 245, 250)",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "filename": "1440-dark-cases.png",
+      "passed": true,
+      "root": "rgb(32, 27, 42)",
+      "body": "rgb(32, 27, 42)",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "filename": "1440-dark-draft.png",
+      "passed": true,
+      "root": "rgb(32, 27, 42)",
+      "body": "rgb(32, 27, 42)",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "filename": "1440-dark-delivery.png",
+      "passed": true,
+      "root": "rgb(32, 27, 42)",
+      "body": "rgb(32, 27, 42)",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "filename": "1440-dark-projects.png",
+      "passed": true,
+      "root": "rgb(32, 27, 42)",
+      "body": "rgb(32, 27, 42)",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "filename": "1024-light-cases.png",
+      "passed": true,
+      "root": "rgb(247, 245, 250)",
+      "body": "rgb(247, 245, 250)",
+      "width": 1024,
+      "scrollWidth": 1024
+    },
+    {
+      "filename": "1024-light-draft.png",
+      "passed": true,
+      "root": "rgb(247, 245, 250)",
+      "body": "rgb(247, 245, 250)",
+      "width": 1024,
+      "scrollWidth": 1024
+    },
+    {
+      "filename": "1024-light-delivery.png",
+      "passed": true,
+      "root": "rgb(247, 245, 250)",
+      "body": "rgb(247, 245, 250)",
+      "width": 1024,
+      "scrollWidth": 1024
+    },
+    {
+      "filename": "1024-light-projects.png",
+      "passed": true,
+      "root": "rgb(247, 245, 250)",
+      "body": "rgb(247, 245, 250)",
+      "width": 1024,
+      "scrollWidth": 1024
+    },
+    {
+      "filename": "1024-dark-cases.png",
+      "passed": true,
+      "root": "rgb(32, 27, 42)",
+      "body": "rgb(32, 27, 42)",
+      "width": 1024,
+      "scrollWidth": 1024
+    },
+    {
+      "filename": "1024-dark-draft.png",
+      "passed": true,
+      "root": "rgb(32, 27, 42)",
+      "body": "rgb(32, 27, 42)",
+      "width": 1024,
+      "scrollWidth": 1024
+    },
+    {
+      "filename": "1024-dark-delivery.png",
+      "passed": true,
+      "root": "rgb(32, 27, 42)",
+      "body": "rgb(32, 27, 42)",
+      "width": 1024,
+      "scrollWidth": 1024
+    },
+    {
+      "filename": "1024-dark-projects.png",
+      "passed": true,
+      "root": "rgb(32, 27, 42)",
+      "body": "rgb(32, 27, 42)",
+      "width": 1024,
+      "scrollWidth": 1024
+    },
+    {
+      "filename": "390-light-cases.png",
+      "passed": true,
+      "root": "rgb(247, 245, 250)",
+      "body": "rgb(247, 245, 250)",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "filename": "390-light-draft.png",
+      "passed": true,
+      "root": "rgb(247, 245, 250)",
+      "body": "rgb(247, 245, 250)",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "filename": "390-light-delivery.png",
+      "passed": true,
+      "root": "rgb(247, 245, 250)",
+      "body": "rgb(247, 245, 250)",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "filename": "390-light-projects.png",
+      "passed": true,
+      "root": "rgb(247, 245, 250)",
+      "body": "rgb(247, 245, 250)",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "filename": "390-dark-cases.png",
+      "passed": true,
+      "root": "rgb(32, 27, 42)",
+      "body": "rgb(32, 27, 42)",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "filename": "390-dark-draft.png",
+      "passed": true,
+      "root": "rgb(32, 27, 42)",
+      "body": "rgb(32, 27, 42)",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "filename": "390-dark-delivery.png",
+      "passed": true,
+      "root": "rgb(32, 27, 42)",
+      "body": "rgb(32, 27, 42)",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "filename": "390-dark-projects.png",
+      "passed": true,
+      "root": "rgb(32, 27, 42)",
+      "body": "rgb(32, 27, 42)",
+      "width": 390,
+      "scrollWidth": 390
+    }
+  ],
+  "errors": [],
+  "network": [],
+  "afterHtmlSha256": "59b9bbdb70414a8909e0c4b9ea2386b68f56d8638d5c1c39ebff5c4922b6bb17",
+  "finishedAt": "2026-11-28T09:27:46.859Z"
+}

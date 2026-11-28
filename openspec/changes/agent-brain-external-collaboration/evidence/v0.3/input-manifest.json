@@ -1,0 +1,21 @@
+{
+  "scope": "v0.3设计三个确认件；本轮尚待用户确认",
+  "main": "74030911ade7a9e06ad1a0213d1fcb93ecbba6dd",
+  "files": [
+    {
+      "path": "spec.md",
+      "bytes": 37308,
+      "sha256": "56522ef4db656ed047864cd9cc897fec0544bb627dd5fcf8bf26af82a27d9375"
+    },
+    {
+      "path": "tasks.md",
+      "bytes": 3221,
+      "sha256": "fe12198ab553abc388b74dc3dc94818d09b358b2e27bde527b0b9fed45fbd9bd"
+    },
+    {
+      "path": "ui-demo.html",
+      "bytes": 157525,
+      "sha256": "9a5626d5efe69f2d5a4c22ee234919a4abd07e4c190a0fb996a9449cd062fcb4"
+    }
+  ]
+}

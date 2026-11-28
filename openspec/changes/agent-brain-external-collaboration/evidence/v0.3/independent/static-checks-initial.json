@@ -1,0 +1,481 @@
+{
+  "at": "2026-11-28T11:21:35.240541+00:00",
+  "checks": [
+    {
+      "name": "local links missing",
+      "actual": [],
+      "expected": [],
+      "pass_": true
+    },
+    {
+      "name": "full branch product differences",
+      "actual": [],
+      "expected": [],
+      "pass_": true
+    },
+    {
+      "name": "result-v0.2.md exact original preservation",
+      "actual": true,
+      "expected": true,
+      "pass_": true
+    },
+    {
+      "name": "preparation-review-v0.2.md exact original preservation",
+      "actual": true,
+      "expected": true,
+      "pass_": true
+    },
+    {
+      "name": "integration-research-v0.2.md exact original preservation",
+      "actual": true,
+      "expected": true,
+      "pass_": true
+    },
+    {
+      "name": "spec.md design unchanged since independent read",
+      "actual": "56522ef4db656ed047864cd9cc897fec0544bb627dd5fcf8bf26af82a27d9375",
+      "expected": "56522ef4db656ed047864cd9cc897fec0544bb627dd5fcf8bf26af82a27d9375",
+      "pass_": true
+    },
+    {
+      "name": "tasks.md design unchanged since independent read",
+      "actual": "081590164b9d4f7e3a8abac465e85eb5f4d1cb1f5e5b6c4a2ced93ce6beda8a1",
+      "expected": "081590164b9d4f7e3a8abac465e85eb5f4d1cb1f5e5b6c4a2ced93ce6beda8a1",
+      "pass_": true
+    },
+    {
+      "name": "ui-demo.html design unchanged since independent read",
+      "actual": "06804f28f668b2acceb9a22e65647ed2ea9b48dc708610a366f5bd9505630efe",
+      "expected": "06804f28f668b2acceb9a22e65647ed2ea9b48dc708610a366f5bd9505630efe",
+      "pass_": true
+    },
+    {
+      "name": "F01 explicitly WB-only gate",
+      "actual": false,
+      "expected": true,
+      "pass_": false
+    },
+    {
+      "name": "F01 generic core path documented",
+      "actual": true,
+      "expected": true,
+      "pass_": true
+    }
+  ],
+  "links": [
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/demo-guide.md",
+      "label": "ui-demo.html",
+      "target": "ui-demo.html",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/integration-research.md",
+      "label": "原v0.2研究",
+      "target": "integration-research-v0.2.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/issue-draft.md",
+      "label": "spec v0.3",
+      "target": "spec.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/issue-draft.md",
+      "label": "任务清单v0.3",
+      "target": "tasks.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/issue-draft.md",
+      "label": "可点击UI Demo",
+      "target": "ui-demo.html",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/issue-draft.md",
+      "label": "Demo指南",
+      "target": "demo-guide.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/issue-draft.md",
+      "label": "本版取舍与覆盖",
+      "target": "changes-v0.3.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/issue-draft.md",
+      "label": "用户决定",
+      "target": "decisions.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/issue-draft.md",
+      "label": "UI骨架/生产映射",
+      "target": "ui-mapping.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/issue-draft.md",
+      "label": "main接缝",
+      "target": "main-alignment.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/issue-draft.md",
+      "label": "复用核对",
+      "target": "reuse-audit.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/issue-draft.md",
+      "label": "官方接入研究及未证明项",
+      "target": "integration-research.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/issue-draft.md",
+      "label": "准备结果",
+      "target": "result.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/issue-draft.md",
+      "label": "独立准备复核",
+      "target": "preparation-review.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/issue-draft.md",
+      "label": "原结果",
+      "target": "result-v0.2.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/issue-draft.md",
+      "label": "复核",
+      "target": "preparation-review-v0.2.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/main-alignment.md",
+      "label": "reuse-audit v0.1历史及v0.2补充",
+      "target": "reuse-audit.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/main-alignment.md",
+      "label": "工程规范",
+      "target": "../../../docs/engineering-workflow.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/main-alignment.md",
+      "label": "统一会话接入",
+      "target": "../../../docs/agent-session-integration.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/main-alignment.md",
+      "label": "变更表",
+      "target": "changes-v0.3.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/preparation-matrix.md",
+      "label": "changes-v0.3.md",
+      "target": "changes-v0.3.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/preparation-review-v0.2.md",
+      "label": "report.md",
+      "target": "evidence/v0.2/independent/report.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/preparation-review-v0.2.md",
+      "label": "matrix.md",
+      "target": "evidence/v0.2/independent/matrix.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/preparation-review-v0.2.md",
+      "label": "input-manifest.json",
+      "target": "evidence/v0.2/independent/input-manifest.json",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/preparation-review-v0.2.md",
+      "label": "preparation-review-v0.1.md",
+      "target": "preparation-review-v0.1.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/preparation-review.md",
+      "label": "preparation-review-v0.2.md",
+      "target": "preparation-review-v0.2.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/publication.md",
+      "label": "已发布正文原样快照",
+      "target": "published-issue.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/publication.md",
+      "label": "机器回执",
+      "target": "publication-receipt.json",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/publication.md",
+      "label": "发单前非作者只读复核",
+      "target": "evidence/publication/independent-review.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/result-v0.2.md",
+      "label": "spec",
+      "target": "spec.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/result-v0.2.md",
+      "label": "UI Demo",
+      "target": "ui-demo.html",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/result-v0.2.md",
+      "label": "演示说明",
+      "target": "demo-guide.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/result-v0.2.md",
+      "label": "实际视觉/DOM-CSS阅读与生产映射",
+      "target": "ui-mapping.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/result-v0.2.md",
+      "label": "任务清单",
+      "target": "tasks.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/result-v0.2.md",
+      "label": "Issue草稿",
+      "target": "issue-draft.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/result-v0.2.md",
+      "label": "main-alignment",
+      "target": "main-alignment.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/result-v0.2.md",
+      "label": "reuse-audit",
+      "target": "reuse-audit.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/result-v0.2.md",
+      "label": "decisions",
+      "target": "decisions.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/result-v0.2.md",
+      "label": "准备覆盖表",
+      "target": "preparation-matrix.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/result-v0.2.md",
+      "label": "非作者实际逐项矩阵",
+      "target": "evidence/v0.2/independent/matrix.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/result-v0.2.md",
+      "label": "独立报告入口",
+      "target": "preparation-review.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/result-v0.2.md",
+      "label": "证据索引",
+      "target": "evidence/v0.2/README.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/result-v0.2.md",
+      "label": "final-validation.json",
+      "target": "evidence/v0.2/root/final-validation.json",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/result-v0.2.md",
+      "label": "独立复核",
+      "target": "preparation-review-v0.1.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/result-v0.2.md",
+      "label": "研究记录",
+      "target": "integration-research.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/result.md",
+      "label": "spec",
+      "target": "spec.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/result.md",
+      "label": "任务清单",
+      "target": "tasks.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/result.md",
+      "label": "可点击Demo",
+      "target": "ui-demo.html",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/result.md",
+      "label": "同Issue同步正文",
+      "target": "issue-draft.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/result.md",
+      "label": "本版变更表",
+      "target": "changes-v0.3.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/result.md",
+      "label": "evidence/v0.3",
+      "target": "evidence/v0.3/README.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/result.md",
+      "label": "独立准备复核",
+      "target": "preparation-review.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/result.md",
+      "label": "原结果",
+      "target": "result-v0.2.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/result.md",
+      "label": "原复核",
+      "target": "preparation-review-v0.2.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/reuse-audit.md",
+      "label": "main-alignment.md",
+      "target": "main-alignment.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/reuse-audit.md",
+      "label": "工程规范四原则及 IN01–IN07",
+      "target": "../../../docs/engineering-workflow.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/reuse-audit.md",
+      "label": "统一会话接入",
+      "target": "../../../docs/agent-session-integration.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/spec.md",
+      "label": "Agent 大脑讨论稿",
+      "target": "../../../docs/optracall-agent-brain-discussion-v0.1.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/spec.md",
+      "label": "最新决定",
+      "target": "decisions.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/spec.md",
+      "label": "ui-demo.html",
+      "target": "ui-demo.html",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/spec.md",
+      "label": "demo-guide.md",
+      "target": "demo-guide.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/spec.md",
+      "label": "工程规范",
+      "target": "../../../docs/engineering-workflow.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/spec.md",
+      "label": "会话说明",
+      "target": "../../../docs/agent-session-integration.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/spec.md",
+      "label": "最新 main 对齐",
+      "target": "main-alignment.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/spec.md",
+      "label": "复用核对",
+      "target": "reuse-audit.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/spec.md",
+      "label": "官方接入研究",
+      "target": "integration-research.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/spec.md",
+      "label": "接入研究",
+      "target": "integration-research.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/spec.md",
+      "label": "UI 骨架与实现映射",
+      "target": "ui-mapping.md",
+      "exists": true
+    },
+    {
+      "source": "openspec/changes/agent-brain-external-collaboration/spec.md",
+      "label": "tasks.md",
+      "target": "tasks.md",
+      "exists": true
+    }
+  ]
+}

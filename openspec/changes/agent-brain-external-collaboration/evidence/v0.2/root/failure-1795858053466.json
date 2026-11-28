@@ -1,0 +1,29 @@
+{
+  "result": "FAIL",
+  "expected": "59b9bbdb70414a8909e0c4b9ea2386b68f56d8638d5c1c39ebff5c4922b6bb17",
+  "checks": [
+    "fixed HTML before navigation",
+    "one Decision Case primary navigation",
+    "Task carries exact source Case navigation",
+    "390 grant fits viewport",
+    "grant keeps keyboard focus inside",
+    "Escape restores grant trigger focus",
+    "dismissed dialog leaves authorization empty",
+    "one grant autonomously accepts original analysis work",
+    "mapping remains outside actual reads",
+    "both artifacts show actual simulated bytes",
+    "version and mapping restriction stay accurate",
+    "original Task draft remains exact",
+    "source Case tab preserved",
+    "source Case selected issue preserved",
+    "manual all-Case scope preserved",
+    "focus restored to originating Task link",
+    "Case only summarizes original work",
+    "original Case draft remains exact",
+    "Case original artifact retained",
+    "Case does not automatically list external attachment"
+  ],
+  "errors": [],
+  "external": [],
+  "error": "AssertionError [ERR_ASSERTION]: 390 workspace menu returns to actual home"
+}

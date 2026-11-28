@@ -1,0 +1,6 @@
+# Preserve original synthetic browser evidence bytes on every platform.
+* -text
+# Raw failure diagnostics keep original terminal whitespace.
+*.txt -whitespace
+*.log -whitespace
+*.diff -whitespace

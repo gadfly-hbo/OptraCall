@@ -1,0 +1,1047 @@
+{
+  "htmlSha256": "f2c10eb3c3b8f13a991b0d3c1de244c041916c8b81d645db946738d40a9b8f52",
+  "startedAt": "2026-11-28T09:15:39.922Z",
+  "browser": "156.0.8078.79",
+  "pages": [
+    {
+      "name": "1440-light-home",
+      "filename": "screens/1440-light-home.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "home",
+      "heading": "今天，先推进一件重要的事",
+      "theme": "light",
+      "active": null
+    },
+    {
+      "name": "1440-light-cases",
+      "filename": "screens/1440-light-cases.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "cases",
+      "heading": "Case 总览",
+      "theme": "light",
+      "active": null
+    },
+    {
+      "name": "1440-light-case-current",
+      "filename": "screens/1440-light-case-current.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "case",
+      "heading": "会员资料治理",
+      "theme": "light",
+      "active": null
+    },
+    {
+      "name": "1440-light-case-projects",
+      "filename": "screens/1440-light-case-projects.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "case",
+      "heading": "会员资料治理",
+      "theme": "light",
+      "active": null
+    },
+    {
+      "name": "1440-light-case-artifacts",
+      "filename": "screens/1440-light-case-artifacts.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "case",
+      "heading": "会员资料治理",
+      "theme": "light",
+      "active": null
+    },
+    {
+      "name": "1440-light-case-history",
+      "filename": "screens/1440-light-case-history.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "case",
+      "heading": "会员资料治理",
+      "theme": "light",
+      "active": null
+    },
+    {
+      "name": "1440-light-projects",
+      "filename": "screens/1440-light-projects.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "projects",
+      "heading": "全部项目",
+      "theme": "light",
+      "active": null
+    },
+    {
+      "name": "1440-light-project",
+      "filename": "screens/1440-light-project.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "project",
+      "heading": "四店会员资料核查",
+      "theme": "light",
+      "active": null
+    },
+    {
+      "name": "1440-light-task-analysis",
+      "filename": "screens/1440-light-task-analysis.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "task",
+      "heading": "四店会员资料一致性核查",
+      "theme": "light",
+      "active": null
+    },
+    {
+      "name": "1440-light-report",
+      "filename": "screens/1440-light-report.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "report",
+      "heading": "四店会员资料核查初稿",
+      "theme": "light",
+      "active": null
+    },
+    {
+      "name": "1440-light-draft",
+      "filename": "screens/1440-light-draft.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "draft",
+      "heading": "保留的任务草稿",
+      "theme": "light",
+      "active": null
+    },
+    {
+      "name": "1440-light-work",
+      "filename": "screens/1440-light-work.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "work",
+      "heading": "在原任务中按需外派",
+      "theme": "light",
+      "active": null
+    },
+    {
+      "name": "1440-light-assets",
+      "filename": "screens/1440-light-assets.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "assets",
+      "heading": "外部读取的是获准依据",
+      "theme": "light",
+      "active": null
+    },
+    {
+      "name": "1440-light-delivery",
+      "filename": "screens/1440-light-delivery.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "delivery",
+      "heading": "外部交付，核验后接回原任务",
+      "theme": "light",
+      "active": null
+    },
+    {
+      "name": "1440-light-setup",
+      "filename": "screens/1440-light-setup.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "setup",
+      "heading": "连接一次，日常沿已授权范围工作",
+      "theme": "light",
+      "active": null
+    },
+    {
+      "name": "1440-dark-home",
+      "filename": "screens/1440-dark-home.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "home",
+      "heading": "今天，先推进一件重要的事",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1440-dark-cases",
+      "filename": "screens/1440-dark-cases.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "cases",
+      "heading": "Case 总览",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1440-dark-case-current",
+      "filename": "screens/1440-dark-case-current.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "case",
+      "heading": "会员资料治理",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1440-dark-case-projects",
+      "filename": "screens/1440-dark-case-projects.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "case",
+      "heading": "会员资料治理",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1440-dark-case-artifacts",
+      "filename": "screens/1440-dark-case-artifacts.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "case",
+      "heading": "会员资料治理",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1440-dark-case-history",
+      "filename": "screens/1440-dark-case-history.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "case",
+      "heading": "会员资料治理",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1440-dark-projects",
+      "filename": "screens/1440-dark-projects.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "projects",
+      "heading": "全部项目",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1440-dark-project",
+      "filename": "screens/1440-dark-project.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "project",
+      "heading": "四店会员资料核查",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1440-dark-task-analysis",
+      "filename": "screens/1440-dark-task-analysis.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "task",
+      "heading": "四店会员资料一致性核查",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1440-dark-report",
+      "filename": "screens/1440-dark-report.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "report",
+      "heading": "四店会员资料核查初稿",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1440-dark-draft",
+      "filename": "screens/1440-dark-draft.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "draft",
+      "heading": "保留的任务草稿",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1440-dark-work",
+      "filename": "screens/1440-dark-work.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "work",
+      "heading": "在原任务中按需外派",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1440-dark-assets",
+      "filename": "screens/1440-dark-assets.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "assets",
+      "heading": "外部读取的是获准依据",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1440-dark-delivery",
+      "filename": "screens/1440-dark-delivery.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "delivery",
+      "heading": "外部交付，核验后接回原任务",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1440-dark-setup",
+      "filename": "screens/1440-dark-setup.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "setup",
+      "heading": "连接一次，日常沿已授权范围工作",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-light-home",
+      "filename": "screens/1024-light-home.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "home",
+      "heading": "今天，先推进一件重要的事",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-light-cases",
+      "filename": "screens/1024-light-cases.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "cases",
+      "heading": "Case 总览",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-light-case-current",
+      "filename": "screens/1024-light-case-current.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "case",
+      "heading": "会员资料治理",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-light-case-projects",
+      "filename": "screens/1024-light-case-projects.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "case",
+      "heading": "会员资料治理",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-light-case-artifacts",
+      "filename": "screens/1024-light-case-artifacts.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "case",
+      "heading": "会员资料治理",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-light-case-history",
+      "filename": "screens/1024-light-case-history.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "case",
+      "heading": "会员资料治理",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-light-projects",
+      "filename": "screens/1024-light-projects.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "projects",
+      "heading": "全部项目",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-light-project",
+      "filename": "screens/1024-light-project.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "project",
+      "heading": "四店会员资料核查",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-light-task-analysis",
+      "filename": "screens/1024-light-task-analysis.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "task",
+      "heading": "四店会员资料一致性核查",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-light-report",
+      "filename": "screens/1024-light-report.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "report",
+      "heading": "四店会员资料核查初稿",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-light-draft",
+      "filename": "screens/1024-light-draft.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "draft",
+      "heading": "保留的任务草稿",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-light-work",
+      "filename": "screens/1024-light-work.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "work",
+      "heading": "在原任务中按需外派",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-light-assets",
+      "filename": "screens/1024-light-assets.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "assets",
+      "heading": "外部读取的是获准依据",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-light-delivery",
+      "filename": "screens/1024-light-delivery.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "delivery",
+      "heading": "外部交付，核验后接回原任务",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-light-setup",
+      "filename": "screens/1024-light-setup.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "setup",
+      "heading": "连接一次，日常沿已授权范围工作",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-dark-home",
+      "filename": "screens/1024-dark-home.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "home",
+      "heading": "今天，先推进一件重要的事",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-dark-cases",
+      "filename": "screens/1024-dark-cases.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "cases",
+      "heading": "Case 总览",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-dark-case-current",
+      "filename": "screens/1024-dark-case-current.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "case",
+      "heading": "会员资料治理",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-dark-case-projects",
+      "filename": "screens/1024-dark-case-projects.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "case",
+      "heading": "会员资料治理",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-dark-case-artifacts",
+      "filename": "screens/1024-dark-case-artifacts.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "case",
+      "heading": "会员资料治理",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-dark-case-history",
+      "filename": "screens/1024-dark-case-history.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "case",
+      "heading": "会员资料治理",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-dark-projects",
+      "filename": "screens/1024-dark-projects.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "projects",
+      "heading": "全部项目",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-dark-project",
+      "filename": "screens/1024-dark-project.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "project",
+      "heading": "四店会员资料核查",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-dark-task-analysis",
+      "filename": "screens/1024-dark-task-analysis.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "task",
+      "heading": "四店会员资料一致性核查",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-dark-report",
+      "filename": "screens/1024-dark-report.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "report",
+      "heading": "四店会员资料核查初稿",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-dark-draft",
+      "filename": "screens/1024-dark-draft.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "draft",
+      "heading": "保留的任务草稿",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-dark-work",
+      "filename": "screens/1024-dark-work.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "work",
+      "heading": "在原任务中按需外派",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-dark-assets",
+      "filename": "screens/1024-dark-assets.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "assets",
+      "heading": "外部读取的是获准依据",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-dark-delivery",
+      "filename": "screens/1024-dark-delivery.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "delivery",
+      "heading": "外部交付，核验后接回原任务",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "1024-dark-setup",
+      "filename": "screens/1024-dark-setup.png",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "page": "setup",
+      "heading": "连接一次，日常沿已授权范围工作",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-light-home",
+      "filename": "screens/390-light-home.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "home",
+      "heading": "今天，先推进一件重要的事",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-light-cases",
+      "filename": "screens/390-light-cases.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "cases",
+      "heading": "Case 总览",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-light-case-current",
+      "filename": "screens/390-light-case-current.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "case",
+      "heading": "会员资料治理",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-light-case-projects",
+      "filename": "screens/390-light-case-projects.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "case",
+      "heading": "会员资料治理",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-light-case-artifacts",
+      "filename": "screens/390-light-case-artifacts.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "case",
+      "heading": "会员资料治理",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-light-case-history",
+      "filename": "screens/390-light-case-history.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "case",
+      "heading": "会员资料治理",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-light-projects",
+      "filename": "screens/390-light-projects.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "projects",
+      "heading": "全部项目",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-light-project",
+      "filename": "screens/390-light-project.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "project",
+      "heading": "四店会员资料核查",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-light-task-analysis",
+      "filename": "screens/390-light-task-analysis.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "task",
+      "heading": "四店会员资料一致性核查",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-light-report",
+      "filename": "screens/390-light-report.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "report",
+      "heading": "四店会员资料核查初稿",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-light-draft",
+      "filename": "screens/390-light-draft.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "draft",
+      "heading": "保留的任务草稿",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-light-work",
+      "filename": "screens/390-light-work.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "work",
+      "heading": "在原任务中按需外派",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-light-assets",
+      "filename": "screens/390-light-assets.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "assets",
+      "heading": "外部读取的是获准依据",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-light-delivery",
+      "filename": "screens/390-light-delivery.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "delivery",
+      "heading": "外部交付，核验后接回原任务",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-light-setup",
+      "filename": "screens/390-light-setup.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "setup",
+      "heading": "连接一次，日常沿已授权范围工作",
+      "theme": "light",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-dark-home",
+      "filename": "screens/390-dark-home.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "home",
+      "heading": "今天，先推进一件重要的事",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-dark-cases",
+      "filename": "screens/390-dark-cases.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "cases",
+      "heading": "Case 总览",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-dark-case-current",
+      "filename": "screens/390-dark-case-current.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "case",
+      "heading": "会员资料治理",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-dark-case-projects",
+      "filename": "screens/390-dark-case-projects.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "case",
+      "heading": "会员资料治理",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-dark-case-artifacts",
+      "filename": "screens/390-dark-case-artifacts.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "case",
+      "heading": "会员资料治理",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-dark-case-history",
+      "filename": "screens/390-dark-case-history.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "case",
+      "heading": "会员资料治理",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-dark-projects",
+      "filename": "screens/390-dark-projects.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "projects",
+      "heading": "全部项目",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-dark-project",
+      "filename": "screens/390-dark-project.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "project",
+      "heading": "四店会员资料核查",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-dark-task-analysis",
+      "filename": "screens/390-dark-task-analysis.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "task",
+      "heading": "四店会员资料一致性核查",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-dark-report",
+      "filename": "screens/390-dark-report.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "report",
+      "heading": "四店会员资料核查初稿",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-dark-draft",
+      "filename": "screens/390-dark-draft.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "draft",
+      "heading": "保留的任务草稿",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-dark-work",
+      "filename": "screens/390-dark-work.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "work",
+      "heading": "在原任务中按需外派",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-dark-assets",
+      "filename": "screens/390-dark-assets.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "assets",
+      "heading": "外部读取的是获准依据",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-dark-delivery",
+      "filename": "screens/390-dark-delivery.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "delivery",
+      "heading": "外部交付，核验后接回原任务",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "390-dark-setup",
+      "filename": "screens/390-dark-setup.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "page": "setup",
+      "heading": "连接一次，日常沿已授权范围工作",
+      "theme": "dark",
+      "active": "theme-toggle"
+    },
+    {
+      "name": "authorize-1440",
+      "filename": "screens/authorize-1440.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "task",
+      "heading": "四店会员资料一致性核查",
+      "theme": "light",
+      "active": "close-dialog"
+    },
+    {
+      "name": "normal-mapping-excluded-accepted",
+      "filename": "screens/normal-mapping-excluded-accepted.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "work",
+      "heading": "一段工作，始终回到原任务",
+      "theme": "light",
+      "active": null
+    },
+    {
+      "name": "normal-delivery-accepted",
+      "filename": "screens/normal-delivery-accepted.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "delivery",
+      "heading": "外部交付，核验后接回原任务",
+      "theme": "light",
+      "active": null
+    },
+    {
+      "name": "project-after-external-accepted",
+      "filename": "screens/project-after-external-accepted.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "page": "project",
+      "heading": "四店会员资料核查",
+      "theme": "light",
+      "active": null
+    }
+  ],
+  "checks": [
+    {
+      "id": "initial-no-page-overflow",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "id": "source-case-return",
+      "passed": true,
+      "detail": "all scope and Task link focus"
+    },
+    {
+      "id": "case-draft",
+      "passed": true,
+      "detail": "Case discussion preserved"
+    },
+    {
+      "id": "home-draft",
+      "passed": true,
+      "detail": "Home draft preserved"
+    },
+    {
+      "id": "task-draft",
+      "passed": true,
+      "detail": "Task draft preserved"
+    },
+    {
+      "id": "authorization-focus-trap",
+      "passed": true,
+      "detail": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "id": "authorization-escape-focus",
+      "passed": true,
+      "detail": "Escape returns opener"
+    },
+    {
+      "id": "authorization-cancel-no-work",
+      "passed": true,
+      "detail": "no auth created"
+    },
+    {
+      "id": "authorization-scope-preview",
+      "passed": false,
+      "detail": "mapping removed"
+    },
+    {
+      "id": "mapping-exclusion-respected",
+      "passed": true,
+      "detail": "excluded mapping not verified"
+    },
+    {
+      "id": "candidate-not-published",
+      "passed": true,
+      "detail": "candidate pending"
+    },
+    {
+      "id": "original-home-unchanged",
+      "passed": true,
+      "detail": "two requests/project wait retained"
+    },
+    {
+      "id": "external-not-case-artifact",
+      "passed": true,
+      "detail": "Case only original linked report"
+    },
+    {
+      "id": "external-summary-scope",
+      "passed": false,
+      "detail": "spec2.1 only original Task and Case project/task row"
+    }
+  ],
+  "errors": [],
+  "network": []
+}

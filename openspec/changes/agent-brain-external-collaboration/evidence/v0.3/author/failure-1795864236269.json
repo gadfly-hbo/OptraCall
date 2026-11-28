@@ -1,0 +1,14 @@
+{
+  "hash": "84df101bc95661740583bf603342de39fb6fd2788d1f8b85bf8c1b8e7efb6f6c",
+  "checks": [
+    "internal choice retains draft and original Task",
+    "internal zero authorization/reads/API/external work",
+    "internal choice explicit",
+    "internal works with all external configs absent",
+    "missing core does not create authorization",
+    "default GitHub selected"
+  ],
+  "errors": [],
+  "external": [],
+  "error": "TimeoutError: locator.isDisabled: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('#auth-mode option[value=\"workbuddy\"]')\u001b[22m\n"
+}

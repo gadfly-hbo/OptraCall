@@ -1,0 +1,795 @@
+{
+  "hash": "6946bc7744365bdf19f41bb135248693372a4e1be5152bd9a7c0065984cfe060",
+  "store": "optracall.external-collaboration.demo.v2",
+  "baseMain": "74030911ade7a9e06ad1a0213d1fcb93ecbba6dd",
+  "role": "synthetic UI Demo, not running product",
+  "result": "PASS",
+  "checks": [
+    {
+      "label": "unfinished onboarding cannot claim autonomous readiness",
+      "result": "PASS"
+    },
+    {
+      "label": "unconfigured resource policy blocks autonomous setup",
+      "result": "PASS"
+    },
+    {
+      "label": "resource setup approval is a state update without extra modal",
+      "result": "PASS"
+    },
+    {
+      "label": "first-time three-part simulated connection gate retained",
+      "result": "PASS"
+    },
+    {
+      "label": "new namespace never overwrites old v1",
+      "result": "PASS"
+    },
+    {
+      "label": "exhausted approved resource allocation blocks fourth trigger",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light home no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light cases no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light projects no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light project no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light case/current no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light case/projects no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light case/artifacts no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light case/history no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light task/analysis no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light report no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light draft no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light work no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light assets no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light delivery no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light setup no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light dialog keyboard focus remains inside 0",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light dialog keyboard focus remains inside 1",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light dialog keyboard focus remains inside 2",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light dialog keyboard focus remains inside 3",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light dialog keyboard focus remains inside 4",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light dialog keyboard focus remains inside 5",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light dialog keyboard focus remains inside 6",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light dialog keyboard focus remains inside 7",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light dialog keyboard focus remains inside 8",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light dialog keyboard focus remains inside 9",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light dialog keyboard focus remains inside 10",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light dialog keyboard focus remains inside 11",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light dialog keyboard focus remains inside 12",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light dialog keyboard focus remains inside 13",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light dialog keyboard focus remains inside 14",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 light Escape returns to invoking authorization button",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark home no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark cases no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark projects no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark project no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark case/current no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark case/projects no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark case/artifacts no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark case/history no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark task/analysis no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark report no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark draft no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark work no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark assets no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark delivery no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark setup no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark dialog keyboard focus remains inside 0",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark dialog keyboard focus remains inside 1",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark dialog keyboard focus remains inside 2",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark dialog keyboard focus remains inside 3",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark dialog keyboard focus remains inside 4",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark dialog keyboard focus remains inside 5",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark dialog keyboard focus remains inside 6",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark dialog keyboard focus remains inside 7",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark dialog keyboard focus remains inside 8",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark dialog keyboard focus remains inside 9",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark dialog keyboard focus remains inside 10",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark dialog keyboard focus remains inside 11",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark dialog keyboard focus remains inside 12",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark dialog keyboard focus remains inside 13",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark dialog keyboard focus remains inside 14",
+      "result": "PASS"
+    },
+    {
+      "label": "1440 dark Escape returns to invoking authorization button",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light home no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light cases no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light projects no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light project no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light case/current no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light case/projects no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light case/artifacts no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light case/history no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light task/analysis no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light report no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light draft no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light work no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light assets no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light delivery no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light setup no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light dialog keyboard focus remains inside 0",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light dialog keyboard focus remains inside 1",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light dialog keyboard focus remains inside 2",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light dialog keyboard focus remains inside 3",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light dialog keyboard focus remains inside 4",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light dialog keyboard focus remains inside 5",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light dialog keyboard focus remains inside 6",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light dialog keyboard focus remains inside 7",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light dialog keyboard focus remains inside 8",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light dialog keyboard focus remains inside 9",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light dialog keyboard focus remains inside 10",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light dialog keyboard focus remains inside 11",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light dialog keyboard focus remains inside 12",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light dialog keyboard focus remains inside 13",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light dialog keyboard focus remains inside 14",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 light Escape returns to invoking authorization button",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark home no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark cases no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark projects no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark project no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark case/current no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark case/projects no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark case/artifacts no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark case/history no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark task/analysis no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark report no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark draft no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark work no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark assets no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark delivery no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark setup no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark dialog keyboard focus remains inside 0",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark dialog keyboard focus remains inside 1",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark dialog keyboard focus remains inside 2",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark dialog keyboard focus remains inside 3",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark dialog keyboard focus remains inside 4",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark dialog keyboard focus remains inside 5",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark dialog keyboard focus remains inside 6",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark dialog keyboard focus remains inside 7",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark dialog keyboard focus remains inside 8",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark dialog keyboard focus remains inside 9",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark dialog keyboard focus remains inside 10",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark dialog keyboard focus remains inside 11",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark dialog keyboard focus remains inside 12",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark dialog keyboard focus remains inside 13",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark dialog keyboard focus remains inside 14",
+      "result": "PASS"
+    },
+    {
+      "label": "1024 dark Escape returns to invoking authorization button",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light home no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light cases no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light projects no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light project no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light case/current no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light case/projects no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light case/artifacts no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light case/history no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light task/analysis no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light report no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light draft no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light work no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light assets no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light delivery no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light setup no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light dialog keyboard focus remains inside 0",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light dialog keyboard focus remains inside 1",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light dialog keyboard focus remains inside 2",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light dialog keyboard focus remains inside 3",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light dialog keyboard focus remains inside 4",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light dialog keyboard focus remains inside 5",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light dialog keyboard focus remains inside 6",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light dialog keyboard focus remains inside 7",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light dialog keyboard focus remains inside 8",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light dialog keyboard focus remains inside 9",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light dialog keyboard focus remains inside 10",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light dialog keyboard focus remains inside 11",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light dialog keyboard focus remains inside 12",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light dialog keyboard focus remains inside 13",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light dialog keyboard focus remains inside 14",
+      "result": "PASS"
+    },
+    {
+      "label": "390 light Escape returns to invoking authorization button",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark home no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark cases no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark projects no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark project no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark case/current no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark case/projects no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark case/artifacts no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark case/history no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark task/analysis no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark report no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark draft no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark work no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark assets no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark delivery no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark setup no document overflow",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark dialog keyboard focus remains inside 0",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark dialog keyboard focus remains inside 1",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark dialog keyboard focus remains inside 2",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark dialog keyboard focus remains inside 3",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark dialog keyboard focus remains inside 4",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark dialog keyboard focus remains inside 5",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark dialog keyboard focus remains inside 6",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark dialog keyboard focus remains inside 7",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark dialog keyboard focus remains inside 8",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark dialog keyboard focus remains inside 9",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark dialog keyboard focus remains inside 10",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark dialog keyboard focus remains inside 11",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark dialog keyboard focus remains inside 12",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark dialog keyboard focus remains inside 13",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark dialog keyboard focus remains inside 14",
+      "result": "PASS"
+    },
+    {
+      "label": "390 dark Escape returns to invoking authorization button",
+      "result": "PASS"
+    },
+    {
+      "label": "mobile current-issue selector keeps exact issue identity",
+      "result": "PASS"
+    },
+    {
+      "label": "mobile navigation dialog returns keyboard focus",
+      "result": "PASS"
+    },
+    {
+      "label": "zero runtime errors",
+      "result": "PASS"
+    },
+    {
+      "label": "zero external HTTP requests",
+      "result": "PASS"
+    }
+  ],
+  "errors": [],
+  "requests": []
+}

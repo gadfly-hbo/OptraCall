@@ -1,0 +1,29 @@
+{
+  "result": "FAIL",
+  "expected": "f2c10eb3c3b8f13a991b0d3c1de244c041916c8b81d645db946738d40a9b8f52",
+  "checks": [
+    "fixed HTML before navigation",
+    "one Decision Case primary navigation",
+    "Task carries exact source Case navigation",
+    "390 grant fits viewport",
+    "grant keeps keyboard focus inside",
+    "Escape restores grant trigger focus",
+    "dismissed dialog leaves authorization empty",
+    "one grant autonomously accepts original analysis work",
+    "mapping remains outside actual reads",
+    "both artifacts show actual simulated bytes",
+    "version and mapping restriction stay accurate",
+    "original Task draft remains exact",
+    "source Case tab preserved",
+    "source Case selected issue preserved",
+    "manual all-Case scope preserved",
+    "focus restored to originating Task link",
+    "Case only summarizes original work",
+    "original Case draft remains exact",
+    "Case original artifact retained",
+    "Case does not automatically list external attachment"
+  ],
+  "errors": [],
+  "external": [],
+  "error": "TimeoutError: locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('nav-home')\u001b[22m\n\u001b[2m    - locator resolved to <a class=\"\" href=\"#home\" data-nav=\"home\" data-testid=\"nav-home\">…</a>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not visible\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not visible\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    58 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is not visible\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n"
+}

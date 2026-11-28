@@ -1,0 +1,145 @@
+{
+  "hash": "004fe7bd17f25ee0d80e9f3311d0140e2237976f9cc44bf15b7ff4daa1fa79be",
+  "store": "optracall.external-collaboration.demo.v2",
+  "checks": [
+    {
+      "label": "default daily home matches new main",
+      "result": "PASS"
+    },
+    {
+      "label": "desktop sidebar is 180px",
+      "result": "PASS"
+    },
+    {
+      "label": "single Decision Case primary entry replaces separate map links",
+      "result": "PASS"
+    },
+    {
+      "label": "home draft survives Cases and global project browsing",
+      "result": "PASS"
+    },
+    {
+      "label": "home keeps exactly two original response requests",
+      "result": "PASS"
+    },
+    {
+      "label": "choose request opens exact original issue/round",
+      "result": "PASS"
+    },
+    {
+      "label": "request modal returns focus to actual current issue control",
+      "result": "PASS"
+    },
+    {
+      "label": "observe request keeps exact independent original issue",
+      "result": "PASS"
+    },
+    {
+      "label": "observe modal focus returns to current issue action",
+      "result": "PASS"
+    },
+    {
+      "label": "explicit issue selection defaults scope to current",
+      "result": "PASS"
+    },
+    {
+      "label": "current scope only shows explicit task associations",
+      "result": "PASS"
+    },
+    {
+      "label": "all Case scope includes six existing task records",
+      "result": "PASS"
+    },
+    {
+      "label": "manually selected other scope survives tab redraw",
+      "result": "PASS"
+    },
+    {
+      "label": "other issue empty artifact scope never substitutes analysis report",
+      "result": "PASS"
+    },
+    {
+      "label": "Case scope opens exact original Task without reassignment",
+      "result": "PASS"
+    },
+    {
+      "label": "report/draft roundtrip preserves original Task draft",
+      "result": "PASS"
+    },
+    {
+      "label": "return restores exact issue/tab/manual scope",
+      "result": "PASS"
+    },
+    {
+      "label": "return restores exact task-link focus",
+      "result": "PASS"
+    },
+    {
+      "label": "original project returns to same Case scope",
+      "result": "PASS"
+    },
+    {
+      "label": "optional Task card pause exists while original model idle",
+      "result": "PASS"
+    },
+    {
+      "label": "Task card pause only pauses continuation, preserves external auth",
+      "result": "PASS"
+    },
+    {
+      "label": "normal path autonomously accepts after valid per-artifact preservation",
+      "result": "PASS"
+    },
+    {
+      "label": "Case linked-task summary reflects separate external work",
+      "result": "PASS"
+    },
+    {
+      "label": "acceptance never changes Case issue and round",
+      "result": "PASS"
+    },
+    {
+      "label": "Case artifacts remain original report and original source only",
+      "result": "PASS"
+    },
+    {
+      "label": "report return restores exact artifacts tab/manual scope",
+      "result": "PASS"
+    },
+    {
+      "label": "report return restores source artifact-button focus",
+      "result": "PASS"
+    },
+    {
+      "label": "external acceptance does not remove original requests",
+      "result": "PASS"
+    },
+    {
+      "label": "external acceptance does not rewrite ProjectWork wait",
+      "result": "PASS"
+    },
+    {
+      "label": "home has no newly invented external inbox",
+      "result": "PASS"
+    },
+    {
+      "label": "global project return preserves search",
+      "result": "PASS"
+    },
+    {
+      "label": "independent task open clears browsing Case origin",
+      "result": "PASS"
+    },
+    {
+      "label": "independent task keeps original saved draft",
+      "result": "PASS"
+    },
+    {
+      "label": "v0.2 retains supplement scenario",
+      "result": "PASS"
+    }
+  ],
+  "errors": [],
+  "requests": [],
+  "error": "AssertionError [ERR_ASSERTION]: v0.2 retains unknown scenario\n    at ck (file:///workspace/OptraCall/.local/agent-brain-main-update/ui/check-v02.mjs:4:22)\n    at file:///workspace/OptraCall/.local/agent-brain-main-update/ui/check-v02.mjs:17:620"
+}
