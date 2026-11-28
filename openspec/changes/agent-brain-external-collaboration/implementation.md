@@ -251,6 +251,7 @@
 - 结果：2/2 PASS；`npm run build` PASS。集成中修正测试自身三处形状假设（denial 载荷经 isError＋message 而非 structuredContent、read.sha256 直取、delivery 无 kind 字段），产品零回改。
 - **main 整合**：合并 origin/main `418a8f8`（merge commit `baeed726`），含 #156 Decision Case 观察/日常工作流恢复（修复既有 CNR-A4）、#157 连接存储竞态修复（正是 S2 范围外记录的锁竞态）、#159 工程规范 v1.18。冲突仅 ServiceConnections.tsx import 行（main 移除未用 `serviceScopeLabels`，我侧同未用），按 main＋保留 ExternalDispatchSettings 导入解决；App.tsx/server.ts/project-session.ts 自动合并。重读 v1.18 确认现行领取/独立复核/PR 门禁与 v1.17 一致（停用旧 Qoder→Codex 移交模式不影响本会话直接领取实施）。
 - 全量 `npm run check`：见后续记录（含 CNR-A4 已随 main 修复、闭环新增）。
+- **全量 `npm run check` 实跑结果（2026-11-29，候选 `dccef32`）：3884 测试 / 3773 PASS / 0 FAIL / 111 skipped；CNR-A4 全过；`check:agent-sessions` PASS；`npm run build` PASS（Trial build dccef32）。退出码 0。** 日志 `/tmp/oc155-fullcheck.log`（本机持久）。至此整合候选（E01–E07＋UI＋闭环＋main）完整通过。
 
 ## 范围外发现（记录并继续原任务）
 - `conclusion-review-handoff` CNR-A4 在干净基线 `7decc3b`（未含本变更）即失败（隔离 9/10），判定为既有问题，与 Issue #155 无关。按工程规范第3节范围管理记录于此，不在本单修复；建议另开返工项核实。`service-connection-manager` 一例隔离复跑 29/29，属全量负载抖动。两者均保留原结论，不改写为通过。
