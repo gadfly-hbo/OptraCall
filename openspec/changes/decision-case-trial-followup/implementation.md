@@ -100,3 +100,11 @@
 - 本次测试仍在 Ubuntu 24.04 Linux + 本地合成 Provider + 合成数据完成；**Mac mini / MacBook 实机体验环境及真实 GLM 模型实跑未在本机验证**，继续保留该未核边界。
 - `node_modules/` 与 `.local/issue-154/` 均属隔离本地验证产物（且 `node_modules/playwright` 临时全局软链已在构建/检查前清理），未写入 `package.json` 或 `package-lock.json`。
 - 遵循工程规范：本阶段仅推送新候选至任务分支并交回 PM 二审；在 PM 二审通过、向用户展示新候选真实产品截图并取得明确确认前，**不创建 PR（含 draft），不合并 `main`**。
+
+## 7. PM 二审接修与本轮截图候选（2026-11-28）
+
+PM 从 origin 接收 `3c2fb5f477297f89d0076dd62286ba7318bb8da0`，按二审终审规则直接补齐状态GET正文期限、过期读取错误丢弃、事项卸载后迟到导航抑制、首事项确认后的总览再次失效；未第三次退回。原首审FAIL、e72独立发现、中间0事项/过渡态图与探针基础设施失败分别保留，不能沿用其旧PASS。
+
+产品实现固定于 `b88af4aa6dfd7f998bfb3e5e119b87820b287d99`；实际正式构建与同源Host截图候选为 `a643bf00e79cba01933cbaa49a1616ecb675cf12`（a643仅一行浏览器等待定位器改为原本轮概览region，产品源码零变化）。PM核心54/54、正式build/SDK会话边界/高危审计、7条实际生产浏览器链路均通过；非作者独立71项、原样RED→GREEN、同实例实际只读浏览与新图逐项复核按[最终原文](verification/pm-final-independent/final-review.md)的固定身份与范围核定。3c原524文件全量结果与PM/独立增量分开，不相加或冒充重新跑全集；后续PR实际head完整CI仍待T10执行。
+
+详见[PM最终接修与逐项记录](pm-final-review.md)、[真实生产图/哈希](evidence/pm-final-product/manifest.json)及[运行身份](evidence/pm-final-product/runtime-identity.json)。本次证据提交只新增上述文档/原图/原始复核材料及本段状态，没有改变运行候选的产品、测试、SDK或冻结输入。用户尚未明确确认本组新截图；没有PR（含draft）、合并或main写入。用户确认与Git/CI后才关单，设备采用及真实模型质量另核。

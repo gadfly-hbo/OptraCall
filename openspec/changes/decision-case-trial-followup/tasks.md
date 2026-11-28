@@ -14,3 +14,5 @@
 - [ ] T10 PM审核集成最新main；展示新候选真实产品截图获用户明确确认后开PR；核实际head CI、获授权合并及main push CI；补结案回执。设备采用/真实模型质量另核。
 
 T01–T09 已由领取方完成单次返工、全量清洁去重验证、第二轮全新独立非作者复核及 `implementation.md`/`verification/second-review.md` 归档，停止写入并交回 PM 二审；T10（向用户展示新候选真实产品截图并取得明确确认后开 PR、核对 CI、合并与结案）留待 PM 执行。
+
+PM二审追加：已接收3c2fb5f并直接完成剩余接修，没有第三次领取。T09当前候选依据更新为[PM最终记录](pm-final-review.md)及[最终非作者原文](verification/pm-final-independent/final-review.md)，原作者报告/首审及e72发现保留。实际生产截图候选为a643bf00（产品代码b88af4aa），本证据补充对产品/测试零漂移；T10仍未勾选，等待用户新图明确确认后才开PR并核实际CI/合并/main CI。
