@@ -219,8 +219,16 @@
 - 工程实现取舍（如实记录）：额度门禁计入 prepared（进程崩溃残留的 prepared 保守占额占串行，避免并发双发；重启仅归一化外来 submitted）；`runJointTest` 仅在台账记联合事实与证据标记，合成工单/资产数据由 Host 装配方建立（本切片测试内存内构造，不落真实业务台账）；占位候选工作自身豁免跨工作串行门禁（"一项工作"以 workId 为界，修订晋升在真实流程先经核验闭环）。
 - 兼容回退：新台账键全部可选、旧 ledger 逐字节解析负例实测；S1–S4b 全部既有语义零改动（52+12+85+32 隔离复跑全过）；`ExternalDispatch` 构造参数纯增列（未注入时行为与旧一致，S1/S2 测试不改即绿）；回退后配置事实/触发尝试（含 UNKNOWN/拒绝）保留，不重放外部动作。
 
-## 范围外发现（记录并继续原任务）
+### S6a（E06，2026-11-28）：外派 UI——Host 路由＋客户端＋任务视图核心组件
 
+**候选 `89015b0f234ebf547ae2f44fbf2261602abaf870`**（子代理达轮限，主 Agent 核实后代提交）。
+
+- 实现：server.ts additive 路由（GET 摘要/设置、POST authorize/choose-internal/pause-resume/resume-resume/works cancel/publish）＋真实 Host 装配（memberPack profile 门、studio.enterpriseScope.sourceAllowed 资产资格、WorkBuddy 未配置 transport 诚实拒绝 503）。前端 `external-dispatch-client.ts`＋`TaskWorkModeCard.tsx`（工作方式卡）＋`ExternalDispatchDrawer.tsx`（授权抽屉 540px）＋`ExternalWorkPanel.tsx`（外部协作页＋台账时间线＋三个边界）＋`external-dispatch.css`（生产令牌）。App.tsx 增「外部协作」页签＋右栏工作方式卡＋抽屉挂载。
+- RED→GREEN：`tests/external-dispatch-ui.test.ts` 21/21 PASS（抽屉 grant 组合/缺企业仓库阻断、工作卡/双状态格/时间线/边界/回执、取消 amber 确认、暂停/恢复、状态色系不虚构成功）。`npm run check:agent-sessions` PASS；`npm run build` PASS（tsc＋frontend）。证据 `evidence/implementation/{red,green}/s6a-*`。
+- **真实产品同视口对照（主会话亲自，隔离合成实例 dataRoot=/tmp/oc155-uitest，dist 构建候选 89015b0，Pi 1.4.0，合成模型配置不发消息）**：首页、任务视图（外部协作页签）、工作方式卡、授权抽屉、外部协作页（未外派＋已外派）1440 亮、已外派 1440 暗、390 单列。与冻结 Demo 逐项核对：页签/工作方式卡双按钮/抽屉字段（业务目标/片段/接单方式WB禁用/执行者/仓库/资产/期限/确切内容快照/三按钮）/工作卡双状态格/台账时间线/三个边界/工单回执一致；真实数据差异如实呈现——无 GitHub 绑定时抽屉 amber 提示先连接、无资产时显示未提供（不伪造 Demo 内容）。390 无横向溢出、暗色可读。截图 `evidence/implementation/product/p01–p08b`。
+- 未验证/留后续：交付与验收页、资产依据页、设置外派分区、Case/项目任务行摘要（S6b）；已外派状态用 store 播种合成台账记录渲染（Issue#42/claim epoch 真实台账）；真实 GitHub 出站/实号 E07/E08。
+
+## 范围外发现（记录并继续原任务）
 - `conclusion-review-handoff` CNR-A4 在干净基线 `7decc3b`（未含本变更）即失败（隔离 9/10），判定为既有问题，与 Issue #155 无关。按工程规范第3节范围管理记录于此，不在本单修复；建议另开返工项核实。`service-connection-manager` 一例隔离复跑 29/29，属全量负载抖动。两者均保留原结论，不改写为通过。
 - `ServiceConnectionStore.#locked`（`service-connection-store.ts`）在锁 EEXIST→`#regular(this.lockPath)` 检查窗口未允许锁恰被释放（未传 allowMissing），并发争用时以 `unsafe_service_storage` 瞬态失败——与 S1 已在 `external-work-store.ts` 修复的同一竞态模式。S2 并发派发测试实际复现（60 轮扫描定位，A/B 双方均可能误判 rejected/unknown）。该文件不在本单允许修改路径内，本切片仅在外派派发侧加有界瞬态重试容错，未改 store；前台 `#call` 在高并发下理论上同样可触发。建议另开返工项对齐 S1 的锁窗口语义后再移除派发侧重试。
 

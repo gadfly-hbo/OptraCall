@@ -1,0 +1,321 @@
+- generic [ref=e3]:
+  - link "跳到主内容" [ref=e4] [cursor=pointer]:
+    - /url: "#main-content"
+  - complementary "工作台导航" [ref=e7]:
+    - generic [ref=e12]:
+      - strong [ref=e13]: OptraCall
+      - generic [ref=e14]: 持续做出更好的决策
+    - generic [ref=e15]:
+      - generic [aria-hidden] [ref=e16]: 当
+      - generic [ref=e17]:
+        - strong [ref=e18]: 当前工作区
+        - generic [ref=e19]: Case 与项目工作空间
+    - button "新建项目" [ref=e20] [cursor=pointer]
+    - button "主导航" [expanded] [ref=e23] [cursor=pointer]:
+      - text: 主导航
+      - generic [aria-hidden] [ref=e24]: ⌄
+    - navigation "主导航" [ref=e25]:
+      - paragraph [aria-hidden] [ref=e26]: 日常工作
+      - button "工作台首页" [ref=e27] [cursor=pointer]
+      - button "Decision Case" [ref=e33] [cursor=pointer]
+      - button "基础建设总览" [ref=e36] [cursor=pointer]:
+        - generic [aria-hidden] [ref=e38]: ›
+      - button "战略选择" [ref=e39] [cursor=pointer]
+      - button "目标管理" [ref=e42] [cursor=pointer]
+      - button "语义资产" [ref=e45] [cursor=pointer]
+      - button "分析资产" [ref=e48] [cursor=pointer]
+    - generic [ref=e54]:
+      - button "项目空间 (1)" [expanded] [ref=e97] [cursor=pointer]:
+        - text: 项目空间 (1)
+        - generic [aria-hidden] [ref=e56]: ⌄
+      - navigation "项目空间列表" [ref=e57]:
+        - list [ref=e98]:
+          - listitem [ref=e99]:
+            - generic [ref=e100]:
+              - button "收起项目 四店会员资料核查" [expanded] [ref=e101] [cursor=pointer]:
+                - generic [aria-hidden] [ref=e102]: ⌄
+              - button "四店会员资料核查" [ref=e103] [cursor=pointer]
+              - button "在 四店会员资料核查 中新建任务" [ref=e107] [cursor=pointer]:
+                - generic [aria-hidden] [ref=e108]: ＋
+              - group [ref=e109]:
+                - generic "项目操作 四店会员资料核查" [ref=e110] [cursor=pointer]: ⋯
+            - list "四店会员资料核查 的任务" [ref=e111]:
+              - listitem [ref=e112]:
+                - button "四店会员资料一致性核查" [ref=e113] [cursor=pointer]
+      - button "已归档项目 (0)" [ref=e59] [cursor=pointer]:
+        - text: 已归档项目 (0)
+        - generic [aria-hidden] [ref=e60]: ›
+    - generic [ref=e61]:
+      - button "设置" [ref=e62] [cursor=pointer]
+      - generic [ref=e116]: 已保存本机配置
+      - button "中英界面切换，后续支持" [disabled] [ref=e66]: 中／EN
+  - main [ref=e67]:
+    - generic [ref=e68]:
+      - generic [ref=e69]:
+        - button "收起侧栏" [expanded] [ref=e70] [cursor=pointer]
+        - generic [ref=e73]: 四店会员资料核查 / 四店会员资料一致性核查
+      - group "工作区切换" [ref=e74]:
+        - button "分析" [pressed] [ref=e75] [cursor=pointer]
+        - button "决策" [ref=e76] [cursor=pointer]
+      - generic [ref=e77]:
+        - button "搜索工作区" [ref=e78] [cursor=pointer]:
+          - generic [aria-hidden] [ref=e83]: /
+        - button "收起项目文件" [expanded] [ref=e196] [cursor=pointer]
+        - button "帮助" [ref=e84] [cursor=pointer]
+        - button "切换为深色" [ref=e88] [cursor=pointer]
+    - dialog "确认外派范围" [ref=e402]:
+      - generic [ref=e403]:
+        - generic [ref=e404]:
+          - heading "确认 GitHub 外派范围" [level=2] [ref=e405]
+          - paragraph [ref=e406]: 默认通用接单；不自动触发 WorkBuddy。
+        - button "关闭抽屉" [ref=e407] [cursor=pointer]: ×
+      - generic [ref=e408]:
+        - generic [ref=e409]: 发布后由获准的通用 Agent 认证领取，回交原任务核验。你仍可取消；取消是零外部动作。
+        - generic [ref=e410]:
+          - generic [ref=e411]: 业务目标
+          - textbox "业务目标" [ref=e412]:
+            - /placeholder: 为「四店会员资料一致性核查」写下这次外派要达成的业务目标
+        - generic [ref=e413]:
+          - strong [ref=e414]: 工作片段
+          - paragraph [ref=e415]: 四店会员资料一致性核查
+          - generic [ref=e416]: 只处理该片段约定内容；不改生产、不联系客户、不扩范围、不发布正式资产。
+        - generic [ref=e417]:
+          - generic [ref=e418]: 接单方式
+          - combobox "接单方式" [ref=e419]:
+            - option "GitHub Issue 通用接单（默认）" [selected]
+            - option "可选：远程触发已在线的 WorkBuddy（联合验证未通过，不可启用）" [disabled]
+          - paragraph [ref=e420]: WorkBuddy 是可选适配；API 在线或单项授权不能代替真实联合测试。此处仅展示真实台账中的验证状态。
+        - generic [ref=e421]:
+          - strong [ref=e422]: 允许的执行者
+          - paragraph [ref=e423]: 已批准通用 Agent 集合 · 首个认证有效领取；GitHub 留言不授予身份或资产权限。
+          - generic [ref=e424]: GitHub 私有业务仓库
+          - paragraph [ref=e425]: 本任务还没有已核验的 GitHub 协作绑定；请先在任务账号连接开启，再确认外派。
+          - generic [ref=e426]: 企业范围
+          - textbox "企业范围" [ref=e427]:
+            - /placeholder: 外派授权必须明确企业范围
+        - generic [ref=e428]:
+          - strong [ref=e429]: 获准资产 · 可缩小
+          - paragraph [ref=e430]: 本轮未提供可授资产；外部执行者不读取任何资产正文，仅按工单与交付标准执行。
+        - generic [ref=e431]:
+          - generic [ref=e432]: 期限
+          - combobox "期限" [ref=e433]:
+            - option "24 小时或工作结束，以先到为准" [selected]
+            - option "8 小时或工作结束，以先到为准"
+            - option "2 小时或工作结束，以先到为准"
+        - region "确切内容快照" [ref=e434]:
+          - heading "确切内容快照" [level=3] [ref=e435]
+          - generic [ref=e436]:
+            - generic [ref=e437]:
+              - term [ref=e438]: 业务目标
+              - definition [ref=e439]: （尚未填写）
+            - generic [ref=e440]:
+              - term [ref=e441]: 工作片段
+              - definition [ref=e442]: 四店会员资料一致性核查
+            - generic [ref=e443]:
+              - term [ref=e444]: 接单方式
+              - definition [ref=e445]: GitHub Issue 通用接单
+            - generic [ref=e446]:
+              - term [ref=e447]: 执行者
+              - definition [ref=e448]: 已批准通用 Agent 集合（首个认证有效领取）
+            - generic [ref=e449]:
+              - term [ref=e450]: 仓库
+              - definition [ref=e451]: （尚未选择） · private
+            - generic [ref=e452]:
+              - term [ref=e453]: 资产
+              - definition [ref=e454]: 无 · 不读取资产
+            - generic [ref=e455]:
+              - term [ref=e456]: 期限
+              - definition [ref=e457]: 24 小时或工作结束，以先到为准
+      - generic [ref=e458]:
+        - button "在 OptraCall 内完成" [ref=e459] [cursor=pointer]
+        - button "取消" [ref=e460] [cursor=pointer]
+        - button "确认外派，范围内自主推进" [disabled] [ref=e461]
+    - generic [ref=e91]:
+      - generic [ref=e199]:
+        - region "任务视图与来源" [ref=e200]:
+          - group "任务工作视图" [ref=e202]:
+            - button "任务对话" [pressed] [ref=e203] [cursor=pointer]
+            - button "结论报告" [ref=e205] [cursor=pointer]
+            - button "外部协作" [ref=e207] [cursor=pointer]
+        - group [ref=e208]:
+          - generic "本任务的用途与目标背景" [ref=e209]
+        - generic [ref=e210]:
+          - generic [ref=e211]:
+            - generic [ref=e212]:
+              - paragraph [ref=e213]: 四店会员资料核查
+              - heading "四店会员资料一致性核查" [level=1] [ref=e214]
+            - status [ref=e215]: 任务和历史已保存在本机
+          - navigation "分析任务步骤" [ref=e216]:
+            - list [ref=e217]:
+              - listitem [ref=e218]:
+                - button "资料准备 上传或查看项目文件" [ref=e219] [cursor=pointer]:
+                  - generic [aria-hidden] [ref=e220]: "1"
+                  - generic [ref=e221]:
+                    - strong [ref=e222]: 资料准备
+                    - generic [ref=e223]: 上传或查看项目文件
+              - listitem [ref=e224]:
+                - button "需求梳理 可选 · 整理分析目标" [ref=e225] [cursor=pointer]:
+                  - generic [aria-hidden] [ref=e226]: "2"
+                  - generic [ref=e227]:
+                    - strong [ref=e228]: 需求梳理
+                    - generic [ref=e229]: 可选 · 整理分析目标
+              - listitem [ref=e230]:
+                - button "分析对话 可直接开始" [ref=e231] [cursor=pointer]:
+                  - generic [aria-hidden] [ref=e232]: "3"
+                  - generic [ref=e233]:
+                    - strong [ref=e234]: 分析对话
+                    - generic [ref=e235]: 可直接开始
+              - listitem [ref=e236]:
+                - button "结果与审查 查看报告与审查记录" [ref=e237] [cursor=pointer]:
+                  - generic [aria-hidden] [ref=e238]: "4"
+                  - generic [ref=e239]:
+                    - strong [ref=e240]: 结果与审查
+                    - generic [ref=e241]: 查看报告与审查记录
+          - paragraph [ref=e242]: 按需准备资料与需求，也可以直接开始分析。
+        - button "归档此任务" [ref=e244] [cursor=pointer]
+        - group [ref=e245]:
+          - generic "报告、方案比较与专业能力" [ref=e246] [cursor=pointer]
+        - generic [ref=e247]:
+          - button "放大对话" [ref=e249] [cursor=pointer]
+          - generic [ref=e251]:
+            - paragraph [ref=e252]: 从一个问题开始，告诉 Pi 你想了解什么。
+            - generic [ref=e253]:
+              - group [ref=e254]:
+                - generic "本次分析背景按需选择" [ref=e255] [cursor=pointer]
+              - form "发送消息" [ref=e256]:
+                - generic [ref=e257]: 消息
+                - textbox "消息" [ref=e258]:
+                  - /placeholder: 今天想讨论什么？
+                - generic [ref=e259]:
+                  - button "synthetic-audit ⌄" [ref=e260] [cursor=pointer]:
+                    - text: synthetic-audit
+                    - generic [ref=e262]: ⌄
+                  - generic [ref=e263]:
+                    - button "打开项目文件上传" [ref=e264] [cursor=pointer]: ＋ 文件
+                    - button "发送消息" [disabled] [ref=e265]
+              - generic [ref=e268]:
+                - generic [ref=e269]: Enter 发送 · Shift + Enter 换行
+                - status [ref=e270]: 任务和历史已保存在本机
+        - generic [ref=e271]:
+          - group [ref=e272]:
+            - generic "任务账号连接" [ref=e273] [cursor=pointer]
+          - group [ref=e274]:
+            - generic "Pi 能力与命令" [ref=e275] [cursor=pointer]
+          - region "工作方式" [ref=e276]:
+            - generic [ref=e277]:
+              - heading "工作方式" [level=2] [ref=e278]
+              - generic [ref=e279]: 可自主选择
+            - generic [ref=e280]:
+              - generic [ref=e281]: Agent 的建议
+              - heading "四店会员资料一致性核查" [level=3] [ref=e282]
+              - paragraph [ref=e283]: 这段工作可借助外部能力。你也可以选择在 OptraCall 内完成；若现有能力不足，我会说明并由你决定。
+              - generic [ref=e284]:
+                - button "在 OptraCall 内完成" [ref=e285] [cursor=pointer]
+                - button "通过 GitHub 外派" [active] [ref=e286] [cursor=pointer]
+              - paragraph [ref=e287]: 未授权不发单、不触发外部执行者、不开放外部资产。内部工作沿原权限继续，无需配置任何外派连接。
+          - group [ref=e288]:
+            - generic "旧任务 · 未分类 · 交接与依据" [ref=e289] [cursor=pointer]
+          - region "结果与审查" [ref=e290]:
+            - heading "结果与审查" [level=2] [ref=e291]
+            - generic [ref=e293] [cursor=pointer]:
+              - checkbox "报告保存 全局设置" [ref=e294]
+              - generic [ref=e295]:
+                - text: 报告保存
+                - generic [ref=e296]: 全局设置
+            - generic [ref=e298] [cursor=pointer]:
+              - checkbox "审查与修订 全局设置" [ref=e299]
+              - generic [ref=e300]:
+                - text: 审查与修订
+                - generic [ref=e301]: 全局设置
+            - generic [ref=e303] [cursor=pointer]:
+              - checkbox "IR 方法提炼 全局设置" [ref=e304]
+              - generic [ref=e305]:
+                - text: IR 方法提炼
+                - generic [ref=e306]: 全局设置
+            - generic [ref=e308] [cursor=pointer]:
+              - checkbox "Case 反馈 全局设置" [ref=e309]
+              - generic [ref=e310]:
+                - text: Case 反馈
+                - generic [ref=e311]: 全局设置
+            - generic [ref=e313] [cursor=pointer]:
+              - checkbox "资产沉淀 全局设置" [ref=e314]
+              - generic [ref=e315]:
+                - text: 资产沉淀
+                - generic [ref=e316]: 全局设置
+            - button "项目需求与任务方案" [ref=e317] [cursor=pointer]
+            - region "提取分析方法" [ref=e318]:
+              - heading "把这次分析留下来" [level=3] [ref=e319]
+              - paragraph [ref=e320]: 任务结束后，可提炼方法、流程与判断依据，保存到 SAP 分析方法。提取不会自动发布，也不影响原分析交付。
+              - paragraph [ref=e321]: 此任务尚无可核对的会话来源，完成分析后再提取。
+              - button "本次分析已结束，提取方法" [disabled] [ref=e323]
+              - group [ref=e324]:
+                - generic "整理未完成的材料" [ref=e325]
+            - generic [ref=e326]:
+              - button "查看报告与依据" [ref=e327] [cursor=pointer]
+              - button "审查结论与建议" [ref=e328] [cursor=pointer]
+            - button "准备增量验证" [ref=e329] [cursor=pointer]
+            - button "带着本任务去核对新增 Case" [ref=e330] [cursor=pointer]
+        - generic [ref=e331]: 本机持久项目 · 任务独立对话 · 020_clean 分析与过程 · 060_reports 最终报告 · 请勿上传敏感数据
+      - region "任务检视区" [ref=e334]:
+        - generic [ref=e335]:
+          - navigation "检视区分类" [ref=e336]:
+            - button "项目文件" [pressed] [ref=e337] [cursor=pointer]
+            - button "报告与依据" [ref=e338] [cursor=pointer]
+            - button "审查结论" [ref=e339] [cursor=pointer]
+          - button "关闭检视区" [ref=e340] [cursor=pointer]: ×
+        - complementary "项目文件" [ref=e341]:
+          - generic [ref=e342]:
+            - generic [ref=e343]:
+              - generic [ref=e344]: 项目空间
+              - heading "项目文件" [level=2] [ref=e345]
+            - button "关闭项目文件栏" [ref=e346] [cursor=pointer]: ✕
+          - generic [ref=e350]:
+            - strong [ref=e351]: 四店会员资料核查
+            - generic [ref=e352]: 本机项目 · 3 个默认文件夹
+          - region "项目数据库资料" [ref=e353]:
+            - generic [ref=e354]:
+              - heading "数据库" [level=3] [ref=e355]
+              - button "共享连接" [ref=e356] [cursor=pointer]
+            - paragraph [ref=e357]: 任务默认继承项目来源，可仅在此任务排除。直接在对话中提出分析问题。
+            - paragraph [ref=e358]: 本项目尚未授权数据库。已有文件仍可继续分析。
+            - list
+            - button "引用连接并授权" [ref=e359] [cursor=pointer]
+            - generic [ref=e360]:
+              - heading "查询结果与来源" [level=3] [ref=e361]
+              - button "刷新" [ref=e362] [cursor=pointer]
+            - paragraph [ref=e363]: 尚无本任务结果。Agent 可按问题自主发现、取数和保存采用依据，无需先填写数据说明或进入 Studio。
+            - list
+            - generic [ref=e364]:
+              - button "数据说明 / 来源" [ref=e365] [cursor=pointer]
+              - button "前往 Studio" [ref=e366] [cursor=pointer]
+            - paragraph [ref=e367]: 报告计算复核沿原父请求；结论建议审查沿原入口。取数覆盖与固定结果上的重算分别表达。
+          - generic [ref=e368]:
+            - generic [ref=e369]: 上传位置
+            - combobox "上传位置" [ref=e370]:
+              - option "010_draw · 原件归档" [selected]
+              - option "020_clean · 分析资料与过程文件"
+            - button "上传文件" [ref=e371] [cursor=pointer]
+            - paragraph [ref=e372]: PDF / Word / HTML / MHTML / PPT / Excel / 文本 · 单文件 ≤ 50 MiB
+            - paragraph [ref=e373]: CSV / TSV / JSON / Markdown / TXT 需 UTF-8；保留原文件，上传不自动解析或开始分析。
+            - paragraph [ref=e374]: 目录用途不提供敏感数据隔离，请勿上传敏感数据。
+          - generic [ref=e375]:
+            - button "数据说明 / 来源" [ref=e376] [cursor=pointer]
+            - button "刷新文件" [ref=e377] [cursor=pointer]
+          - navigation "项目文件夹" [ref=e378]:
+            - group [ref=e379]:
+              - generic [ref=e380] [cursor=pointer]:
+                - generic [aria-hidden] [ref=e381]: ›
+                - code [ref=e384]: 010_draw
+            - group [ref=e385]:
+              - generic [ref=e386] [cursor=pointer]:
+                - generic [aria-hidden] [ref=e387]: ›
+                - code [ref=e390]: 020_clean
+              - paragraph [ref=e391]: 分析资料与过程文件
+              - paragraph [ref=e392]: 空文件夹 · 尚无文件
+            - group [ref=e393]:
+              - generic [ref=e394] [cursor=pointer]:
+                - generic [aria-hidden] [ref=e395]: ›
+                - code [ref=e398]: 060_reports
+          - generic [ref=e399]:
+            - generic [ref=e400]: 文件保存在本机
+            - code [ref=e401]: /tmp/oc155-uitest/projects/1bb2e604-cdd9-494b-8c3f-03d9abc58925

@@ -1,0 +1,54 @@
+- generic [ref=e3]:
+  - link "跳到主内容" [ref=e4] [cursor=pointer]:
+    - /url: "#main-content"
+  - complementary "工作台导航" [ref=e7]:
+    - generic [ref=e12]:
+      - strong [ref=e13]: OptraCall
+      - generic [ref=e14]: 持续做出更好的决策
+    - generic [ref=e15]:
+      - generic [aria-hidden] [ref=e16]: 当
+      - generic [ref=e17]:
+        - strong [ref=e18]: 当前工作区
+        - generic [ref=e19]: Case 与项目工作空间
+    - button "新建项目" [ref=e20] [cursor=pointer]
+    - button "主导航" [expanded] [ref=e23] [cursor=pointer]:
+      - text: 主导航
+      - generic [aria-hidden] [ref=e24]: ⌄
+    - navigation "主导航" [ref=e25]:
+      - paragraph [aria-hidden] [ref=e26]: 日常工作
+      - button "工作台首页" [ref=e27] [cursor=pointer]
+      - button "Decision Case" [ref=e33] [cursor=pointer]
+      - button "基础建设总览" [ref=e36] [cursor=pointer]:
+        - generic [aria-hidden] [ref=e38]: ›
+      - button "战略选择" [ref=e39] [cursor=pointer]
+      - button "目标管理" [ref=e42] [cursor=pointer]
+      - button "语义资产" [ref=e45] [cursor=pointer]
+      - button "分析资产" [ref=e48] [cursor=pointer]
+    - generic [ref=e54]:
+      - button "项目空间 (0)" [expanded] [ref=e55] [cursor=pointer]:
+        - text: 项目空间 (0)
+        - generic [aria-hidden] [ref=e56]: ⌄
+      - navigation "项目空间列表" [ref=e57]:
+        - paragraph [ref=e58]: 正在读取项目…
+      - button "已归档项目 (0)" [ref=e59] [cursor=pointer]:
+        - text: 已归档项目 (0)
+        - generic [aria-hidden] [ref=e60]: ›
+    - generic [ref=e61]:
+      - button "设置" [ref=e62] [cursor=pointer]
+      - button "中英界面切换，后续支持" [disabled] [ref=e66]: 中／EN
+  - main [ref=e67]:
+    - generic [ref=e68]:
+      - generic [ref=e69]:
+        - button "收起侧栏" [expanded] [ref=e70] [cursor=pointer]
+        - generic [ref=e73]: 工作台首页
+      - group "工作区切换" [ref=e74]:
+        - button "分析" [ref=e75] [cursor=pointer]
+        - button "决策" [ref=e76] [cursor=pointer]
+      - generic [ref=e77]:
+        - button "搜索工作区" [ref=e78] [cursor=pointer]:
+          - generic [aria-hidden] [ref=e83]: /
+        - button "帮助" [ref=e84] [cursor=pointer]
+        - button "切换为深色" [ref=e88] [cursor=pointer]
+    - generic [ref=e94]:
+      - status [ref=e95]: 正在读取工作区记录…
+      - button "打开项目地图" [ref=e96] [cursor=pointer]

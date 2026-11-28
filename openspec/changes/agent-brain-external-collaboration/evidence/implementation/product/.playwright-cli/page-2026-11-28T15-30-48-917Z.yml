@@ -1,0 +1,165 @@
+- generic [ref=f1e3]:
+  - link "跳到主内容" [ref=f1e4] [cursor=pointer]:
+    - /url: "#main-content"
+  - complementary "工作台导航" [ref=f1e7]:
+    - generic [ref=f1e12]:
+      - strong [ref=f1e13]: OptraCall
+      - generic [ref=f1e14]: 持续做出更好的决策
+    - generic [ref=f1e15]:
+      - generic [aria-hidden] [ref=f1e16]: 当
+      - generic [ref=f1e17]:
+        - strong [ref=f1e18]: 当前工作区
+        - generic [ref=f1e19]: Case 与项目工作空间
+    - button "新建项目" [ref=f1e20] [cursor=pointer]
+    - button "主导航" [expanded] [ref=f1e23] [cursor=pointer]:
+      - text: 主导航
+      - generic [aria-hidden] [ref=f1e24]: ⌄
+    - navigation "主导航" [ref=f1e25]:
+      - paragraph [aria-hidden] [ref=f1e26]: 日常工作
+      - button "工作台首页" [ref=f1e27] [cursor=pointer]
+      - button "Decision Case" [ref=f1e33] [cursor=pointer]
+      - button "基础建设总览" [ref=f1e36] [cursor=pointer]:
+        - generic [aria-hidden] [ref=f1e38]: ›
+      - button "战略选择" [ref=f1e39] [cursor=pointer]
+      - button "目标管理" [ref=f1e42] [cursor=pointer]
+      - button "语义资产" [ref=f1e45] [cursor=pointer]
+      - button "分析资产" [ref=f1e48] [cursor=pointer]
+    - generic [ref=f1e54]:
+      - button "项目空间 (1)" [expanded] [ref=f1e55] [cursor=pointer]:
+        - text: 项目空间 (1)
+        - generic [aria-hidden] [ref=f1e56]: ⌄
+      - navigation "项目空间列表" [ref=f1e57]:
+        - list [ref=f1e58]:
+          - listitem [ref=f1e59]:
+            - generic [ref=f1e60]:
+              - button "收起项目 四店会员资料核查" [expanded] [ref=f1e61] [cursor=pointer]:
+                - generic [aria-hidden] [ref=f1e62]: ⌄
+              - button "四店会员资料核查" [ref=f1e63] [cursor=pointer]
+              - button "在 四店会员资料核查 中新建任务" [ref=f1e67] [cursor=pointer]:
+                - generic [aria-hidden] [ref=f1e68]: ＋
+              - group [ref=f1e69]:
+                - generic "项目操作 四店会员资料核查" [ref=f1e70] [cursor=pointer]: ⋯
+            - list "四店会员资料核查 的任务" [ref=f1e71]:
+              - listitem [ref=f1e72]:
+                - button "四店会员资料一致性核查" [ref=f1e73] [cursor=pointer]
+      - button "已归档项目 (0)" [ref=f1e75] [cursor=pointer]:
+        - text: 已归档项目 (0)
+        - generic [aria-hidden] [ref=f1e76]: ›
+    - generic [ref=f1e77]:
+      - button "设置" [ref=f1e78] [cursor=pointer]
+      - generic [ref=f1e83]: 已保存本机配置
+      - button "中英界面切换，后续支持" [disabled] [ref=f1e84]: 中／EN
+  - main [ref=f1e85]:
+    - generic [ref=f1e86]:
+      - generic [ref=f1e87]:
+        - button "收起侧栏" [expanded] [ref=f1e88] [cursor=pointer]
+        - generic [ref=f1e91]: 四店会员资料核查 / 四店会员资料一致性核查
+      - group "工作区切换" [ref=f1e92]:
+        - button "分析" [pressed] [ref=f1e93] [cursor=pointer]
+        - button "决策" [ref=f1e94] [cursor=pointer]
+      - generic [ref=f1e95]:
+        - button "搜索工作区" [ref=f1e96] [cursor=pointer]:
+          - generic [aria-hidden] [ref=f1e101]: /
+        - button "展开项目文件" [ref=f1e102] [cursor=pointer]
+        - button "帮助" [ref=f1e105] [cursor=pointer]
+        - button "切换为深色" [ref=f1e109] [cursor=pointer]
+    - generic [ref=f1e114]:
+      - region "任务视图与来源" [ref=f1e115]:
+        - group "任务工作视图" [ref=f1e117]:
+          - button "任务对话" [pressed] [ref=f1e118] [cursor=pointer]
+          - button "结论报告" [ref=f1e120] [cursor=pointer]
+          - button "外部协作" [ref=f1e122] [cursor=pointer]
+      - group [ref=f1e123]:
+        - generic "本任务的用途与目标背景" [ref=f1e124]
+      - generic [ref=f1e125]:
+        - generic [ref=f1e126]:
+          - generic [ref=f1e127]:
+            - paragraph [ref=f1e128]: 四店会员资料核查
+            - heading "四店会员资料一致性核查" [level=1] [ref=f1e129]
+          - status [ref=f1e130]: 任务连接待恢复
+        - navigation "分析任务步骤" [ref=f1e131]:
+          - list [ref=f1e132]:
+            - listitem [ref=f1e133]:
+              - button "资料准备 上传或查看项目文件" [ref=f1e134] [cursor=pointer]:
+                - generic [aria-hidden] [ref=f1e135]: "1"
+                - generic [ref=f1e136]:
+                  - strong [ref=f1e137]: 资料准备
+                  - generic [ref=f1e138]: 上传或查看项目文件
+            - listitem [ref=f1e139]:
+              - button "需求梳理 可选 · 整理分析目标" [ref=f1e140] [cursor=pointer]:
+                - generic [aria-hidden] [ref=f1e141]: "2"
+                - generic [ref=f1e142]:
+                  - strong [ref=f1e143]: 需求梳理
+                  - generic [ref=f1e144]: 可选 · 整理分析目标
+            - listitem [ref=f1e145]:
+              - button "分析对话 可直接开始" [ref=f1e146] [cursor=pointer]:
+                - generic [aria-hidden] [ref=f1e147]: "3"
+                - generic [ref=f1e148]:
+                  - strong [ref=f1e149]: 分析对话
+                  - generic [ref=f1e150]: 可直接开始
+            - listitem [ref=f1e151]:
+              - button "结果与审查 查看报告与审查记录" [ref=f1e152] [cursor=pointer]:
+                - generic [aria-hidden] [ref=f1e153]: "4"
+                - generic [ref=f1e154]:
+                  - strong [ref=f1e155]: 结果与审查
+                  - generic [ref=f1e156]: 查看报告与审查记录
+        - paragraph [ref=f1e157]: 按需准备资料与需求，也可以直接开始分析。
+      - button "归档此任务" [ref=f1e159] [cursor=pointer]
+      - group [ref=f1e160]:
+        - generic "报告、方案比较与专业能力" [ref=f1e161] [cursor=pointer]
+      - generic [ref=f1e162]:
+        - button "放大对话" [ref=f1e164] [cursor=pointer]
+        - generic [ref=f1e166]:
+          - paragraph [ref=f1e167]: 从一个问题开始，告诉 Pi 你想了解什么。
+          - generic [ref=f1e168]:
+            - group [ref=f1e169]:
+              - generic "本次分析背景按需选择" [ref=f1e170] [cursor=pointer]
+            - form "发送消息" [ref=f1e171]:
+              - generic [ref=f1e172]: 消息
+              - textbox "消息" [ref=f1e173]:
+                - /placeholder: 今天想讨论什么？
+              - generic [ref=f1e174]:
+                - button "synthetic-audit ⌄" [ref=f1e175] [cursor=pointer]:
+                  - text: synthetic-audit
+                  - generic [ref=f1e177]: ⌄
+                - generic [ref=f1e178]:
+                  - button "打开项目文件上传" [ref=f1e179] [cursor=pointer]: ＋ 文件
+                  - button "发送消息" [disabled] [ref=f1e180]
+            - generic [ref=f1e183]:
+              - generic [ref=f1e184]: Enter 发送 · Shift + Enter 换行
+              - status [ref=f1e185]: 任务连接待恢复
+      - generic [ref=f1e186]:
+        - group [ref=f1e187]:
+          - generic "任务账号连接" [ref=f1e188] [cursor=pointer]
+        - group [ref=f1e189]:
+          - generic "Pi 能力与命令" [ref=f1e190] [cursor=pointer]
+        - region "工作方式" [ref=f1e191]:
+          - generic [ref=f1e192]:
+            - heading "工作方式" [level=2] [ref=f1e193]
+            - generic [ref=f1e194]: 可自主选择
+          - generic [ref=f1e195]:
+            - generic [ref=f1e196]: Agent 的建议
+            - heading "四店会员资料一致性核查" [level=3] [ref=f1e197]
+            - paragraph [ref=f1e198]: 这段工作可借助外部能力。你也可以选择在 OptraCall 内完成；若现有能力不足，我会说明并由你决定。
+            - generic [ref=f1e199]:
+              - button "在 OptraCall 内完成" [ref=f1e200] [cursor=pointer]
+              - button "通过 GitHub 外派" [ref=f1e201] [cursor=pointer]
+            - paragraph [ref=f1e202]: 未授权不发单、不触发外部执行者、不开放外部资产。内部工作沿原权限继续，无需配置任何外派连接。
+        - group [ref=f1e203]:
+          - generic "旧任务 · 未分类 · 交接与依据" [ref=f1e204] [cursor=pointer]
+        - region "结果与审查" [ref=f1e205]:
+          - heading "结果与审查" [level=2] [ref=f1e206]
+          - button "项目需求与任务方案" [ref=f1e207] [cursor=pointer]
+          - region "提取分析方法" [ref=f1e208]:
+            - heading "把这次分析留下来" [level=3] [ref=f1e209]
+            - paragraph [ref=f1e210]: 任务结束后，可提炼方法、流程与判断依据，保存到 SAP 分析方法。提取不会自动发布，也不影响原分析交付。
+            - paragraph [ref=f1e211]: 此任务尚无可核对的会话来源，完成分析后再提取。
+            - button "本次分析已结束，提取方法" [disabled] [ref=f1e213]
+            - group [ref=f1e214]:
+              - generic "整理未完成的材料" [ref=f1e215]
+          - generic [ref=f1e216]:
+            - button "查看报告与依据" [ref=f1e217] [cursor=pointer]
+            - button "审查结论与建议" [ref=f1e218] [cursor=pointer]
+          - button "准备增量验证" [ref=f1e219] [cursor=pointer]
+          - button "带着本任务去核对新增 Case" [ref=f1e220] [cursor=pointer]
+      - generic [ref=f1e221]: 本机持久项目 · 任务独立对话 · 020_clean 分析与过程 · 060_reports 最终报告 · 请勿上传敏感数据
