@@ -1,0 +1,13 @@
+{
+  "issue": "https://github.com/gadfly-hbo/OptraCall/issues/155",
+  "readback_exact": true,
+  "confirmed_commit": "2f6013fd759ebac5b37999c82817e3461a245107",
+  "state": "open",
+  "comments": 2,
+  "claim_comment": "https://github.com/gadfly-hbo/OptraCall/issues/155#issuecomment-7238712430",
+  "claim_preserved": true,
+  "changed_fields": [
+    "body"
+  ],
+  "new_claim_or_reassignment": false
+}
