@@ -1,0 +1,40 @@
+✔ settings OAuth uses real loopback state+PKCE, persists only private native credential, and resolves without a model/task (28.264083ms)
+✔ cancelled/rejected authorization closes callback and preserves existing credentials (3.8115ms)
+✔ native Pi locked refresh rotates once for concurrent token users and a repeated stale 401 (2.261583ms)
+✔ Feishu public MCP OAuth discovers, dynamically registers, validates issuer and persists refresh context (4.640958ms)
+✔ untrusted Feishu discovery cannot send registration, credentials or browser URLs outside preset trust (1.237125ms)
+✔ native callback preserves configured localhost and Google Desktop public-client token exchange (3.703459ms)
+✔ native GitHub registered-app flow uses fixed trusted metadata and native PKCE (1.953583ms)
+✔ native issuer validation rejects another authorization server before exchanging Google code (1.065792ms)
+✔ native Feishu RFC9207 rejects missing and mismatched issuers and accepts the discovered issuer (7.349291ms)
+✔ native Feishu protected-resource audience cannot be changed to another service (1.69875ms)
+✔ native exchange cancellation and post-refresh abort cannot persist late credentials (1.723625ms)
+✔ scoring port matches trade-area reference math (weights, sub-weight split, strict null, rounding) (1.375042ms)
+✔ TA04: finite weight scale 1e+308 preserves proportional scores and missing semantics (31.482125ms)
+✔ TA04: finite weight scale 5e-324 preserves proportional scores and missing semantics (20.449208ms)
+✔ TA04: proportional fractional scores survive subnormal products even with a normal total weight (0.16325ms)
+✔ import writes immutable snapshot with version identity, verifies score equivalence, reports dirty provinces (20.6235ms)
+✔ re-import of identical source is an idempotent no-op; changed source gets a new digest (44.923542ms)
+✔ R1: a lazy reader remains on its original complete snapshot after explicit re-import (48.593125ms)
+✔ TA02: incomplete source details fail closed and preserve the current snapshot (23.753667ms)
+✔ R1: upgrading a legacy flat snapshot preserves its reader, bytes and complete historical data (55.030958ms)
+✔ R1: identical re-import detects stored corruption without overwriting or pretending an unchanged success (23.292084ms)
+✔ import fails closed when stored scores disagree with the scoring port (0.824ms)
+✔ store search filters by province, keyword, rating and metric thresholds with paging (20.542458ms)
+✔ store detail returns full dimension records across shards and honest missing ids (23.676ms)
+✔ store score uses caller weights with strict missing semantics and honest nulls (21.377958ms)
+✔ tools reject invalid parameters with structured envelopes (18.514459ms)
+✔ server exposes three read-only tools over the MCP protocol with structured results and errors (29.726875ms)
+✔ store without an imported snapshot answers data_unavailable instead of guessing (0.462584ms)
+✔ TA05: MCP preserves and rejects unknown or incomplete object keys with structured errors (19.664083ms)
+✔ TA05: pages beyond the filtered result range return invalid_param, not a misleading empty page (19.418791ms)
+✔ TA03: dirty province text remains raw data but cannot masquerade as an accepted province filter (23.813875ms)
+✔ TA05: invalid numeric filter intervals are errors rather than empty or silently unbounded results (24.064ms)
+ℹ tests 32
+ℹ suites 0
+ℹ pass 32
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 750.95775

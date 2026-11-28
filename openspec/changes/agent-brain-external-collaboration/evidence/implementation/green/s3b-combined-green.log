@@ -1,0 +1,34 @@
+✔ asset/work tool surface is exactly the read-only whitelist; reason/pack-read/writes are absent (200.457167ms)
+✔ full loop: catalog filters to the exact allowlist and never leaks directory-wide metadata (99.322ms)
+✔ positive read returns exact authority/id/version/hash with paging within the 512KiB fragment ceiling (101.577125ms)
+✔ fragment/args/offset limits are explicit denials or pagination, never silent truncation (104.543917ms)
+✔ read-source returns exact locator fragments; oversize fragments are rejected (104.478708ms)
+✔ trace expands only within authorized refs and drops out-of-scope targets without leaking them (100.083667ms)
+✔ unclaimed or wrong principals get a bare denial with no metadata and no body (100.590917ms)
+✔ wrong epoch, cancelled work, expired grant and lapsed lease are distinct explicit denials (477.15525ms)
+✔ missing version, unknown version, wrong hash and out-of-allowlist refs are distinct denials with no latest fallback (111.689208ms)
+✔ reader content hash mismatch is an explicit denial, not corrected content (129.297375ms)
+✔ original project/Studio qualification: revoked, missing, legacy-no-enterprise and enterprise mismatch are distinct denials (656.1965ms)
+✔ revocation during an async read never returns the late body (125.648625ms)
+✔ work.read lists only explicitly allowed works with non-sensitive descriptions (89.187584ms)
+✔ work.read lists only explicitly allowed works; others see an empty catalog (231.1005ms)
+✔ concurrent claims admit exactly one winner; the competitor receives a conflict (162.831ms)
+✔ repeated claim by the same principal returns the original receipt (110.434333ms)
+✔ self-reported identity is ignored; the verified token principal is the only identity (128.238375ms)
+✔ claim requires a published, verified work: pending and unknown publications are refused (221.122625ms)
+✔ cancelled work and expired grants refuse new claims (231.904667ms)
+✔ renew verifies current claimant, epoch and timeliness; expiry facts are persisted before denial (347.185542ms)
+✔ release is owner-only; releasing again conflicts and release never proves real completion (234.2775ms)
+✔ deliver binds the current claim and manifest; idempotency returns the original receipt or conflicts (151.77725ms)
+✔ deliver verifies principal, epoch and current work revision (160.877041ms)
+✔ deliver enforces file-count, size, manifest-size, path and URL limits (135.569584ms)
+✔ missing pieces keep preservation pending and are never marked preserved (119.114458ms)
+✔ old-epoch late evidence is isolated: recorded as late, never overrides the current delivery, and never restores asset eligibility (188.822875ms)
+ℹ tests 26
+ℹ suites 0
+ℹ pass 26
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2717.590459

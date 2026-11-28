@@ -1,0 +1,270 @@
+✖ asset/work tool surface is exactly the read-only whitelist; reason/pack-read/writes are absent (83.18525ms)
+✖ full loop: catalog filters to the exact allowlist and never leaks directory-wide metadata (74.488209ms)
+✖ positive read returns exact authority/id/version/hash with paging within the 512KiB fragment ceiling (74.089459ms)
+✖ fragment/args/offset limits are explicit denials or pagination, never silent truncation (78.140667ms)
+✖ read-source returns exact locator fragments; oversize fragments are rejected (76.700375ms)
+✖ trace expands only within authorized refs and drops out-of-scope targets without leaking them (79.785292ms)
+✖ unclaimed or wrong principals get a bare denial with no metadata and no body (78.233ms)
+✖ wrong epoch, cancelled work, expired grant and lapsed lease are distinct explicit denials (80.808ms)
+✖ missing version, unknown version, wrong hash and out-of-allowlist refs are distinct denials with no latest fallback (69.445459ms)
+✖ reader content hash mismatch is an explicit denial, not corrected content (80.663041ms)
+✖ original project/Studio qualification: revoked, missing, legacy-no-enterprise and enterprise mismatch are distinct denials (75.490166ms)
+✖ revocation during an async read never returns the late body (77.824667ms)
+✖ work.read lists only explicitly allowed works with non-sensitive descriptions (76.68625ms)
+✖ work.read lists only explicitly allowed works; others see an empty catalog (146.740416ms)
+✖ concurrent claims admit exactly one winner; the competitor receives a conflict (73.893917ms)
+✖ repeated claim by the same principal returns the original receipt (75.88675ms)
+✖ self-reported identity is ignored; the verified token principal is the only identity (84.096458ms)
+✖ claim requires a published, verified work: pending and unknown publications are refused (83.85675ms)
+✖ cancelled work and expired grants refuse new claims (78.364625ms)
+✖ renew verifies current claimant, epoch and timeliness; expiry facts are persisted before denial (69.136542ms)
+✖ release is owner-only; releasing again conflicts and release never proves real completion (77.335875ms)
+✖ deliver binds the current claim and manifest; idempotency returns the original receipt or conflicts (73.897042ms)
+✖ deliver verifies principal, epoch and current work revision (86.150375ms)
+✖ deliver enforces file-count, size, manifest-size, path and URL limits (74.784375ms)
+✖ missing pieces keep preservation pending and are never marked preserved (79.813083ms)
+✖ old-epoch late evidence is isolated: recorded as late, never overrides the current delivery, and never restores asset eligibility (36.719041ms)
+ℹ tests 26
+ℹ suites 0
+ℹ pass 0
+ℹ fail 26
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1404.165458
+
+✖ failing tests:
+
+test at tests/external-mcp-asset.test.ts:223:1
+✖ asset/work tool surface is exactly the read-only whitelist; reason/pack-read/writes are absent (83.18525ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:197:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:224:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)
+
+test at tests/external-mcp-asset.test.ts:236:1
+✖ full loop: catalog filters to the exact allowlist and never leaks directory-wide metadata (74.488209ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:197:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:237:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-asset.test.ts:246:1
+✖ positive read returns exact authority/id/version/hash with paging within the 512KiB fragment ceiling (74.089459ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:197:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:247:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-asset.test.ts:263:1
+✖ fragment/args/offset limits are explicit denials or pagination, never silent truncation (78.140667ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:197:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:264:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-asset.test.ts:270:1
+✖ read-source returns exact locator fragments; oversize fragments are rejected (76.700375ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:197:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:271:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-asset.test.ts:279:1
+✖ trace expands only within authorized refs and drops out-of-scope targets without leaking them (79.785292ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:197:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:280:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-asset.test.ts:287:1
+✖ unclaimed or wrong principals get a bare denial with no metadata and no body (78.233ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:197:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:288:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-asset.test.ts:299:1
+✖ wrong epoch, cancelled work, expired grant and lapsed lease are distinct explicit denials (80.808ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:197:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:300:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-asset.test.ts:317:1
+✖ missing version, unknown version, wrong hash and out-of-allowlist refs are distinct denials with no latest fallback (69.445459ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:197:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:318:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-asset.test.ts:328:1
+✖ reader content hash mismatch is an explicit denial, not corrected content (80.663041ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:197:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:329:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-asset.test.ts:334:1
+✖ original project/Studio qualification: revoked, missing, legacy-no-enterprise and enterprise mismatch are distinct denials (75.490166ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:197:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:343:15)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-asset.test.ts:350:1
+✖ revocation during an async read never returns the late body (77.824667ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:197:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:351:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-asset.test.ts:359:1
+✖ work.read lists only explicitly allowed works with non-sensitive descriptions (76.68625ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:197:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-asset.test.ts:360:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-work.test.ts:190:1
+✖ work.read lists only explicitly allowed works; others see an empty catalog (146.740416ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:168:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:191:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)
+
+test at tests/external-mcp-work.test.ts:204:1
+✖ concurrent claims admit exactly one winner; the competitor receives a conflict (73.893917ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:168:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:205:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-work.test.ts:218:1
+✖ repeated claim by the same principal returns the original receipt (75.88675ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:168:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:219:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-work.test.ts:226:1
+✖ self-reported identity is ignored; the verified token principal is the only identity (84.096458ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:168:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:227:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-work.test.ts:237:1
+✖ claim requires a published, verified work: pending and unknown publications are refused (83.85675ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:168:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:238:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-work.test.ts:252:1
+✖ cancelled work and expired grants refuse new claims (78.364625ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:168:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:253:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-work.test.ts:261:1
+✖ renew verifies current claimant, epoch and timeliness; expiry facts are persisted before denial (69.136542ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:168:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:262:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-work.test.ts:275:1
+✖ release is owner-only; releasing again conflicts and release never proves real completion (77.335875ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:168:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:276:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-work.test.ts:287:1
+✖ deliver binds the current claim and manifest; idempotency returns the original receipt or conflicts (73.897042ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:168:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:288:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-work.test.ts:301:1
+✖ deliver verifies principal, epoch and current work revision (86.150375ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:168:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:302:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-work.test.ts:310:1
+✖ deliver enforces file-count, size, manifest-size, path and URL limits (74.784375ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:168:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:311:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-work.test.ts:325:1
+✖ missing pieces keep preservation pending and are never marked preserved (79.813083ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:168:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:326:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-work.test.ts:333:1
+✖ old-epoch late evidence is isolated: recorded as late, never overrides the current delivery, and never restores asset eligibility (36.719041ms)
+  Error: external_mcp_intersection_unimplemented
+      at createAssetIntersection (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/intersection.ts:8:9)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:168:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-work.test.ts:334:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)

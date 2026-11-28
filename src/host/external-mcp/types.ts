@@ -12,6 +12,19 @@ export class ExternalMcpOauthError extends Error {
   }
 }
 
+/** S3b 业务工具面（资产只读交集 / work.* 台账操作）的拒绝语义：
+ * code 明确区分版本缺失/hash 不符/资格撤回/过期等，绝不落 latest、绝不携带正文或额外元信息。 */
+export class ExternalMcpDenied extends Error {
+  readonly code: string;
+  readonly status: number;
+  constructor(code: string, status: number, description: string) {
+    super(description || code);
+    this.name = 'ExternalMcpDenied';
+    this.code = code;
+    this.status = status;
+  }
+}
+
 /** 预注册客户端登记：由本地受信管理面注入，不是任意动态注册（DCR 不采用）。
  * clientSecret 存在 → 机密客户端（client_secret_post）；缺省 → 公共客户端（token_endpoint_auth_method=none）。 */
 export interface ExternalMcpClientRegistration {

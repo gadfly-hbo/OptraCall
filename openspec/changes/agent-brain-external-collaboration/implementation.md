@@ -28,7 +28,7 @@
 - [x] D01 最小接口/持久迁移与回退设计 → [design.md](design.md)；后端接缝实测 [seam-report](evidence/implementation/seam-report.md)
 - [~] E01 内部/外派选择与授权、身份/持久记录；内部/取消零外部动作 —— S1 切片完成（store＋grant＋internal/external choice＋owner-bound port）；Host 接线（server.ts/工作方式卡）待后续切片
 - [~] E02 GitHub 独立发布/修订/回执 + 通用认证领取、原子单 claim/UNKNOWN 幂等 —— S2 切片完成（Host-only 发布编排＋UNKNOWN 只读核对＋只读收件适配＋manager Host-only 派发接缝）；原子单 claim 在 S1 store 已完成本轮复用；发布/收件的真实 GitHub 出站与 server.ts 接线属 E07/后续切片
-- [ ] E03 受保护资产/工作 MCP、OAuth/精确交集/只读/错误与分片边界 —— S3a 切片完成（OAuth 2.1 授权/资源服务器＋受保护 Streamable HTTP 传输入口＋自签 TLS 闭环）；资产/work 业务工具与精确交集属 S3b
+- [~] E03 受保护资产/工作 MCP、OAuth/精确交集/只读/错误与分片边界 —— S3a 切片完成（OAuth 2.1 授权/资源服务器＋受保护 Streamable HTTP 传输入口＋自签 TLS 闭环）；S3b 切片完成（资产只读交集＋asset.*/work.* 工具接入 S3a 服务器）；真实 Studio/原实例资格装配属 E07
 - [ ] E04 字节保全/ExternalDeliveryRef、原 owner 指纹/providedContext/非用户原话、busy/重启/暂停/取消/迟到、Agent 核验/原工具保存
 - [ ] E05 WorkBuddy 可选适配工程合同（默认未验证禁用）
 - [ ] E06 UI 编码（沿映射）+ 三路径 + 1440/1024/390 亮暗/键盘/焦点 + 原消费者回归
@@ -114,6 +114,30 @@
 - S3a 未验证（明确不在本轮范围）：真实公网/域名/网关部署与实号执行者接入（E08/部署切片）、资产/work 业务工具与精确交集（S3b）、大文件分片（S3b）、refresh token 轮换与审计外发（E07）、会话数量配额（部署切片）、多实例共享状态（部署架构决定）。
 - 工程实现取舍（如实记录）：访问令牌为 HMAC 对称签名（密钥受信管理面注入），生产若需非对称/JWKS 另按部署授权实施；令牌/授权码/pending 为进程内存态，多实例部署需共享存储（当前单实例运行前提与主 Host 一致）；集成测试自签证书经 openssl CLI 生成（仅测试期，macOS/Linux 标准工具，非新增 npm 依赖）。
 - 兼容回退：净新模块，零既有文件改动；不开放端口、不复制资产、不部署（spec §7）；主 Host API 与 localhost/Origin 管理面守卫不受影响；S3b 接入资产/work 工具时经同一 Bearer/白名单，不动传输层契约。
+
+### S3b（E03，2026-11-28）：资产只读精确交集 + asset.*/work.* 工具接入 S3a 服务器
+
+**本轮交付**（接 S3a 传输与 S1 台账；不接主 Host server.ts/UI；真实 Studio 装配与大文件宿主字节保全明确留后续——前者属 E07，后者属 S4）：
+
+- `src/host/external-mcp/intersection.ts`：资产只读交集裁定 `createAssetIntersection`。每次 authorize 同时核对：服务端核验 principal（S3a authInfo，自报一律拒绝）∩ 有效 grant（窗口期内、与 work 绑定一致）∩ 有效 work/claim（当前 revision、active、租约未过期、epoch 准确）∩ 显式企业（经 qualify 回调核 enterprise 归属；`legacy-no-enterprise`/`enterprise-mismatch` 分别拒绝——旧项目无企业/legacy 默认放行不外露）∩ 工作资产精确 allowlist（authority/id 逐字、version 逐字、hash 逐字；`version_required`/`version_missing`/`hash_required`/`hash_mismatch`/`not_allowlisted` 各自明确，绝不落 latest）∩ 原项目/Studio 当前资格（注入 `qualify` 接缝：revoked/missing/hash-mismatch 分别拒绝）。目录范围请求对整个 allowlist 逐一核资格；精确读取核该 ref。未知工作与未领取同样按 `external_asset_no_claim` 裸拒绝，不给元信息或正文。`recheck()` 供异步读取后/返回前复核——撤销/取消不返回迟到正文。共享导出：`verifiedPrincipal`（只认 authInfo.principal/clientId）、`assertArgsSize`（单请求参数 ≤1MiB）、`denialResult`（拒绝信封只含 denied/message，不携带正文或额外元信息）。
+- `src/host/external-mcp/asset-tools.ts`：只读工具 `asset.catalog/read/read-source/trace`（不含 reason/pack-read/写图/修订/发布/任意代码 SQL；合法读取不逐条审批，交集自动裁定）。catalog 仅返回 allowlist 命中条目（reader 故意超范围返回亦被过滤，不先泄露后筛选；hash 不符条目显式标 `hash-conflict` 不回退）；read 按精确 ref 返回并支持 ≤512KiB 分页（`offset/bytes`，越界/超限明确拒绝，`nextOffset` 分页收据）；read-source 返回准确片段+locator（片段 ≤512KiB）；trace 关系仅在已授权 refs 范围内展开（范围外目标返回前丢弃）。每工具：authorize → 读取 → 内容 hash 对 allowlist 复核 → recheck → 返回准确 authority/id/version/hash/来源/限制；读取回执固定声明「只证交付内容与范围，不证专业正确」。`OriginalAssetReader` 为包注入收窄读取接缝（代表原实例 createSemanticContextReadPort/studio.port analysisOnly；本轮合成实现，真实装配属 E07）。
+- `src/host/external-mcp/work-tools.ts`：`work.read/claim/renew/release/deliver` 接 S1 store CAS。work.read 只列当前核验 principal 被明确允许（allowedExecutors∩授权窗口∩authorized）的工作与非敏感说明（不含其他 Task/企业目录，不暴露他人 principal）。work.claim：仅对已发布且无未核外部动作（unknown publication 待核即拒，核定后恢复）的准确 workId/revision 原子领取（revision 显式旧版拒绝）；`args.principal` 永不作身份，台账只记核验 principal（自报身份负例实测）。work.renew/release：核当前领取者（非所有者 `external_work_claim_not_owned`）/epoch/授权/时效；过期事实先持久化再报 `external_claim_expired`；release 回执注明不证明真实操作结束。work.deliver：核当前领取/输入工作版本（旧 revision 领取在修订晋升后失效）/manifest（规范化 sha256 内容承诺，path 排序序无关）；幂等键同内容回原收据、异内容 `external_delivery_conflict`；assetsUsed 逐 ref 对 grant allowlist 复核（越范围拒绝）；旧 epoch/工作撤销后的历史已授权身份（同一核验 principal）经公开 `mutate` CAS 提交隔离迟到证据（`late:true`、完整复刻台账不变式、不覆盖当前交付、不恢复资产资格），其他 principal 借历史 claimId 保存材料一律拒绝。限额（spec §8）：参数 ≤1MiB、manifest ≤256KiB、≤20 文件/累计 100MiB/单文件 ≤50MiB；路径仅逻辑名（拒绝绝对路径/`..`/反斜杠/盘符/控制字符，Host 分配存储路径属后续切片）；文件对象带 `url` 一律拒绝（不从任意 URL 下载）；facts 必报（done/notDone/failed/unknown），缺件/pending 永不标保全——本轮 preservation 恒为 `pending`，大文件分块宿主保全属 S4。
+- `src/host/external-mcp/types.ts`：最小扩展 `ExternalMcpDenied`（code+status 拒绝语义类型）。`server.ts` 零改动：工具经 S3a 预留的 `registerTools` 注入缝注册，自动处于同一 Bearer/路径白名单/限流/管理面守卫之下（S3a 默认工具面仍仅 `ping`，其既有测试不改即绿即证）。
+
+**TDD 证据（先真实 RED 后最小 GREEN）**：
+
+- RED（桩阶段哨兵行为错误，非导入/环境错误）：`red/s3b-combined-red.log`（exit=1，26 tests 0 pass 26 fail，全部 `external_mcp_intersection_unimplemented`/`external_mcp_asset_tools_unimplemented`/`external_mcp_work_tools_unimplemented`）。
+- GREEN：终版代码 `node --test tests/external-mcp-asset.test.ts tests/external-mcp-work.test.ts` → 26/26 PASS 连跑 2 次（`green/s3b-combined-green.log`、`green/s3b-combined-green-rerun.log`，各约 2.4s）。修复记录：两次测试侧修正（rig 时钟毫秒 vs OAuth 秒单位换算；`recordClaim` 幂等路径返回原领取导致短租约fixture未生效，先释放再建），产品代码零回改。
+- 检查：`npm run check:agent-sessions` PASS（`green/s3b-check-agent-sessions-green.log`）；`npm run build` PASS（`green/s3b-build-green.log`；首轮两处测试文件 `t.after` 回调类型错误已修，产品代码无类型错误）。
+- 回归（隔离复跑全过）：S3a `tests/external-mcp-oauth.test.ts`+`tests/external-mcp-server.test.ts` 24/24（`green/s3b-regression-s3a-green.log`）；S1/S2 store/dispatch/publish/inbox 52/52（`green/s3b-regression-s1s2-green.log`）；相邻域 trade-area-mcp+service-connection-oauth 32/32（`green/s3b-regression-neighbor-green.log`）。
+
+**关键负例覆盖（对应交接清单）**：工具面恰为只读白名单九个，`asset.reason`/`asset.pack-read`/写图/发布/SQL 等未知工具一律拒绝（资产只读，合法读取无逐条审批）；未领取/错 principal（含拿他人 claimId）→ `external_asset_no_claim` 裸拒绝且响应不含正文或额外元信息；跨 allowlist/越 trace（范围外目标丢弃不泄露）/越目录（catalog 过滤超范围条目）/越分页（offset 越界拒绝）；错版（`version_missing`）、缺版本（`version_required`）、缺 hash（`hash_required`）、hash 不符（allowlist 与 reader 内容两侧）、reader 内容 hash 失配均明确拒绝且不落 latest；撤回（cancelWork 后即时读取与异步读取后 recheck 均拒，迟到正文不返回）；grant 过期/租约过期/claim 释放/错 epoch 分别明确；legacy 无企业与企业不匹配分别拒绝（legacy 默认放行不外露）；work.read 只列被允许工作、他 Task/企业不出现在目录；并发 claim 恰一胜者、同 principal 幂等回原收据、未发布/待核 unknown publication/取消/过期授权/越集合 principal/自报身份（台账实证记核验 principal）拒绝；renew/release 错 epoch/非所有者拒绝、过期事实先持久化、release 不证明结束、释放后可再领取（epoch 递增）；deliver 同键同文回原收据/异文冲突、错 epoch/非所有者/旧 revision 失效拒绝、21 文件/单文件>50MiB/累计>100MiB/manifest>256KiB/路径穿越（`../`、绝对路径、反斜杠、盘符）/任意 URL/facts 缺失/assetsUsed 越范围全部拒绝、缺件 preservation=pending 永不标保全、旧 epoch 迟到证据隔离（late=true、不覆盖当前交付、claim 不复活、他人不可借 claimId 保存）；标准 MCP 客户端经 S3a 自签 TLS+OAuth 2.1+Bearer 全流程调用 asset/work 工具闭环（合成 reader/store/qualify，不触真实网络/凭据）。
+
+**失败/跳过/未验证项**：
+
+- S3b 未验证（明确不在本轮范围）：真实 Studio/原实例资格装配（`qualify`/`OriginalAssetReader` 本轮为注入接缝，真实装配属 E07）、大文件分块上传与宿主字节保全（S4，本轮 deliver 仅台账引用且 preservation=pending）、分片临时文件 24h 清理（S4）、主 Host server.ts 与 UI 接线（后续切片）、真实公网部署与实号执行者（E08）、实际删除/写图等写路径（不存在——工具面未含任何写工具，非“拒绝实现”而是“不外露”）。
+- 工程实现取舍（如实记录）：迟到隔离证据经 store 公开 `mutate` CAS 落账（S1 store 文件本切片冻结不改，其 `recordDelivery` 当前领取语义保持原样；late 路径在 work-tools 内完整复刻台账不变式——引用完整/幂等键唯一/容量上限，随 store 演进需回并）；read 分页按 UTF-16 码元切片、字节预算在实切片复核（多字节字符页内不越限，跨页切点在 E07 真实装配时按原工具上限复核）；拒绝信封统一 `{denied, message}`，正文级断言由测试保证。
+- 兼容回退：`ExternalWorkStore`/S3a 传输与 OAuth 语义零改动；新增工具经 `registerTools` 注入缝挂接，缺省服务器工具面不变（S3a 测试不改即绿）；ledger 新增 late 交付记录沿用 schema:1 严格解析，旧记录与旧行为不受影响。
 
 ## 范围外发现（记录并继续原任务）
 

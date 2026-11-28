@@ -1,0 +1,34 @@
+✔ asset/work tool surface is exactly the read-only whitelist; reason/pack-read/writes are absent (206.986917ms)
+✔ full loop: catalog filters to the exact allowlist and never leaks directory-wide metadata (100.115792ms)
+✔ positive read returns exact authority/id/version/hash with paging within the 512KiB fragment ceiling (116.512625ms)
+✔ fragment/args/offset limits are explicit denials or pagination, never silent truncation (105.556666ms)
+✔ read-source returns exact locator fragments; oversize fragments are rejected (93.653083ms)
+✔ trace expands only within authorized refs and drops out-of-scope targets without leaking them (102.384583ms)
+✔ unclaimed or wrong principals get a bare denial with no metadata and no body (104.138125ms)
+✔ wrong epoch, cancelled work, expired grant and lapsed lease are distinct explicit denials (447.72025ms)
+✔ missing version, unknown version, wrong hash and out-of-allowlist refs are distinct denials with no latest fallback (94.905625ms)
+✔ reader content hash mismatch is an explicit denial, not corrected content (93.1195ms)
+✔ original project/Studio qualification: revoked, missing, legacy-no-enterprise and enterprise mismatch are distinct denials (467.696792ms)
+✔ revocation during an async read never returns the late body (110.443459ms)
+✔ work.read lists only explicitly allowed works with non-sensitive descriptions (86.118125ms)
+✔ work.read lists only explicitly allowed works; others see an empty catalog (220.469625ms)
+✔ concurrent claims admit exactly one winner; the competitor receives a conflict (189.041334ms)
+✔ repeated claim by the same principal returns the original receipt (102.810583ms)
+✔ self-reported identity is ignored; the verified token principal is the only identity (106.375375ms)
+✔ claim requires a published, verified work: pending and unknown publications are refused (216.207042ms)
+✔ cancelled work and expired grants refuse new claims (234.936625ms)
+✔ renew verifies current claimant, epoch and timeliness; expiry facts are persisted before denial (297.921833ms)
+✔ release is owner-only; releasing again conflicts and release never proves real completion (157.570584ms)
+✔ deliver binds the current claim and manifest; idempotency returns the original receipt or conflicts (137.018708ms)
+✔ deliver verifies principal, epoch and current work revision (125.778917ms)
+✔ deliver enforces file-count, size, manifest-size, path and URL limits (103.206458ms)
+✔ missing pieces keep preservation pending and are never marked preserved (97.951375ms)
+✔ old-epoch late evidence is isolated: recorded as late, never overrides the current delivery, and never restores asset eligibility (160.360375ms)
+ℹ tests 26
+ℹ suites 0
+ℹ pass 26
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2391.371208
