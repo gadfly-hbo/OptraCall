@@ -28,7 +28,7 @@
 - [x] D01 最小接口/持久迁移与回退设计 → [design.md](design.md)；后端接缝实测 [seam-report](evidence/implementation/seam-report.md)
 - [~] E01 内部/外派选择与授权、身份/持久记录；内部/取消零外部动作 —— S1 切片完成（store＋grant＋internal/external choice＋owner-bound port）；Host 接线（server.ts/工作方式卡）待后续切片
 - [~] E02 GitHub 独立发布/修订/回执 + 通用认证领取、原子单 claim/UNKNOWN 幂等 —— S2 切片完成（Host-only 发布编排＋UNKNOWN 只读核对＋只读收件适配＋manager Host-only 派发接缝）；原子单 claim 在 S1 store 已完成本轮复用；发布/收件的真实 GitHub 出站与 server.ts 接线属 E07/后续切片
-- [ ] E03 受保护资产/工作 MCP、OAuth/精确交集/只读/错误与分片边界
+- [ ] E03 受保护资产/工作 MCP、OAuth/精确交集/只读/错误与分片边界 —— S3a 切片完成（OAuth 2.1 授权/资源服务器＋受保护 Streamable HTTP 传输入口＋自签 TLS 闭环）；资产/work 业务工具与精确交集属 S3b
 - [ ] E04 字节保全/ExternalDeliveryRef、原 owner 指纹/providedContext/非用户原话、busy/重启/暂停/取消/迟到、Agent 核验/原工具保存
 - [ ] E05 WorkBuddy 可选适配工程合同（默认未验证禁用）
 - [ ] E06 UI 编码（沿映射）+ 三路径 + 1440/1024/390 亮暗/键盘/焦点 + 原消费者回归
@@ -87,6 +87,33 @@
 
 - S2 未验证（明确不在本轮范围）：真实 GitHub 出站（E07 模拟供应商/实号）、grant→binding 的 server.ts Host 装配（后续切片）、外派续接（E04）、WorkBuddy 触发（E05）、UI（E06）；`ExternalPublisher` 的 hostContext 注入与 reconcile probe 为接缝，真实账户身份核对在装配时生效。修订晋升（supplement→revision+1）的宿主入口未在本切片交付。
 - 兼容回退：`ExternalWorkStore`/既有前台 port 行为零改动；新增记录沿用 S1 ledger（含 UNKNOWN/拒绝事实），回退不重放外部动作；inbox 游标为内存态，重启由台账去重兜底，无新增持久结构。
+
+### S3a（E03，2026-11-28）：受保护远端 MCP 的鉴权与传输层
+
+**本轮交付**（净新鉴权/传输切片，不含资产/work 业务工具——那是 S3b；不接 server.ts 主 Host API，真实公网部署另授权）：
+
+- `src/host/external-mcp/types.ts`：预注册客户端登记（精确 redirectUris/scopes/可选机密 secret）、pending/收据/令牌授予/核验结果类型与 `ExternalMcpOauthError`（code+HTTP status）。
+- `src/host/external-mcp/oauth.ts`：OAuth 2.1 授权/资源服务器最小实现。仅预注册客户端（受信管理面注入，不做 DCR）；授权码+PKCE 仅 S256（verifier RFC 7636 校验，redirect_uri 两次逐字精确匹配）；访问令牌 HMAC-SHA256 签名绑定 `iss`/`aud`(=resource)/`sub`(=principal)/`scope`/`exp`/`jti`；逐请求校验签名→issuer→audience→有效期→撤销（其他资源令牌 `audience_mismatch` 拒绝，不透传）；授权码一次性，重放撤销该 code 已签发令牌且不牵连无关令牌（RFC 6749 §4.1.2）；**公共授权请求只产生 pending，code 只能经 `authorize()` 的受信管理面令牌签发（URL 上的 approve/consent/decision 参数一律无效）**；RFC 9728 资源元数据与 RFC 8414 AS 元数据准确（scopes_supported 按登记并集）。注入式 clock 支撑过期/重放语义测试。
+- `src/host/external-mcp/server.ts`：受保护 Streamable HTTP 传输入口。官方 SDK 1.32.2 公开 `StreamableHTTPServerTransport`（实际核实导出：Node 包装类，`handleRequest(req,res,parsedBody?)`，`req.auth?: AuthInfo` 透传至工具回调 `extra.authInfo`；stateful 模式单实例单会话，故按 `mcp-session-id` 会话注册表承载多客户端，未知会话 404、无会话 GET/DELETE 400）；路径白名单仅 RFC 9728（根+`/mcp` 后缀形态）/8414 发现、`/authorize`（只产 pending）、`/token`（form）、`/approve`、`/mcp`，白名单外一律 404、路径存在方法不允许 405；Bearer 中间件：缺头/无效/过期/错 audience/错 issuer/已撤销→401（含 `resource_metadata` 挑战）、scope 不足→403、每 principal 固定窗口超限→429（Retry-After）、**URL 携带 token 一律 400 拒绝**（含并发合法 Authorization 头）；`/approve` 管理面守卫镜像主 Host 约定（Host 须 127.0.0.1/localhost+准确端口、Origin 白名单）另加常量时间管理令牌比较；S3a 工具面仅 `ping`（回显核验 principal/scope，证明 Bearer 上下文贯通至工具回调）；`close()` 级联会话与 HTTPS server。`createOauth(origin)` 在实际绑定后以准确 origin 构造 issuer/resource。
+- `src/host/external-mcp/README.md`：部署/接入说明（受保护 HTTPS 入口、预注册客户端、token audience、路径白名单、管理面批准流、密钥治理、实际公网另授权、refresh token/会话配额/审计外发未含项）。
+- 边界检查零修改：`scripts/check-agent-session-boundary.mjs` 的 SDK 单入口规则仅约束 Pi 系包（`@earendil-works/pi-*`），MCP SDK 导入与 `extensions/connectors/trade-area-mcp/server.ts` 既有先例一致，交接预设的"精确 documented 例外"条件未触发。
+
+**SDK server transport 实际导出核实**（node_modules 实读，非凭记忆）：`@modelcontextprotocol/sdk@1.32.2` `dist/esm/server/streamableHttp.js` 导出 `StreamableHTTPServerTransport`（`@hono/node-server` 包装 web-standard transport；options 含 `sessionIdGenerator`/`onsessioninitialized`/`enableJsonResponse`）；`server/auth` 全量 router 依赖 express（本项目未装、不可新增依赖）→ OAuth 按设计净新自实现，MCP 协议层用 SDK 公开 transport+`McpServer.registerTool`（与 trade-area-mcp 同模式）；`shared/protocol.d.ts` `RequestHandlerExtra.authInfo` 存在，`StreamableHTTPClientTransport` 支持 `requestInit.headers`+自定义 `fetch`。
+
+**TDD 证据（先真实 RED 后最小 GREEN）**：
+
+- RED（桩阶段哨兵行为错误，非导入/环境错误）：`red/s3a-oauth-red.log`（exit=1，16/16 失败）、`red/s3a-server-red.log`（exit=1，8/8 失败）、`red/s3a-combined-red.log`（exit=1，24 tests 0 pass 24 fail，全部 `external_mcp_oauth_unimplemented`/`external_mcp_server_unimplemented`）。
+- GREEN：终版代码 `node --test tests/external-mcp-oauth.test.ts tests/external-mcp-server.test.ts` → 24/24 PASS 连跑 2 次（`green/s3a-combined-green.log`、`green/s3a-combined-green-rerun.log`，各约 0.4s）。
+- 检查：`npm run check:agent-sessions` PASS（`green/s3a-check-agent-sessions-green.log`）；`npm run build` PASS（`green/s3a-build-green.log`）。
+- 相邻域回归（零共享接缝改动下的 sanity）：`tests/service-connection-oauth.test.ts`+`tests/trade-area-mcp.test.ts` 32/32 PASS（`green/s3a-regression-oauth-tradearea-green.log`）。
+
+**关键负例覆盖（对应交接清单）**：错误 audience 令牌（oauth 层 `audience_mismatch`＋server 层 401 invalid_token）、过期/无效签名 401、scope 不足 403、超限 429+Retry-After；URL token 400 拒绝且并发合法头仍拒；未预注册客户端、redirect 非精确（后缀/参数/换端口/外域）拒绝；PKCE 错 verifier/超短 verifier/plain/S512/缺 challenge 拒绝；公共授权参数（approve/consent/decision/prompt）不产生 code、伪造 code 换令牌 invalid_grant；机密客户端错/缺 secret 拒绝、公共客户端带 secret 拒绝；code 重放 invalid_grant 并撤销原令牌、无关令牌不牵连；过期 code/令牌（注入 clock）；错 issuer/他资源 audience/篡改 payload/异密钥/坏格式令牌拒绝；RFC 9728/8414 元数据 resource/authorization_servers/端点/S256 准确；白名单外 404（含 /api/projects、/api/settings、/favicon.ico）、GET /token 405、裸 TLS 路径穿越 `/token/../mcp` 不落白名单内容；管理面守卫：裸 socket 伪造 Host（attacker.example.invalid）、伪造 Origin（https://attacker.example.invalid）、缺/错管理令牌全部 403，正确 loopback+令牌才批准；**标准 MCP 客户端（StreamableHTTPClientTransport+undici 自签 TLS fetch+Bearer）完成 initialize→tools/list→tools/call ping 闭环**，ping 回显核验 principal 与 scope，tools 仅 `ping`（S3b 业务工具未混入）。
+
+**失败/跳过/未验证项**：
+
+- S3a 未验证（明确不在本轮范围）：真实公网/域名/网关部署与实号执行者接入（E08/部署切片）、资产/work 业务工具与精确交集（S3b）、大文件分片（S3b）、refresh token 轮换与审计外发（E07）、会话数量配额（部署切片）、多实例共享状态（部署架构决定）。
+- 工程实现取舍（如实记录）：访问令牌为 HMAC 对称签名（密钥受信管理面注入），生产若需非对称/JWKS 另按部署授权实施；令牌/授权码/pending 为进程内存态，多实例部署需共享存储（当前单实例运行前提与主 Host 一致）；集成测试自签证书经 openssl CLI 生成（仅测试期，macOS/Linux 标准工具，非新增 npm 依赖）。
+- 兼容回退：净新模块，零既有文件改动；不开放端口、不复制资产、不部署（spec §7）；主 Host API 与 localhost/Origin 管理面守卫不受影响；S3b 接入资产/work 工具时经同一 Bearer/白名单，不动传输层契约。
 
 ## 范围外发现（记录并继续原任务）
 

@@ -1,0 +1,106 @@
+✖ RFC 9728 discovery and AS metadata are public and accurate over TLS (45.274584ms)
+✖ MCP endpoint rejects missing, malformed and expired bearers with 401 challenges (0.541333ms)
+✖ tokens for another audience or without required scope are rejected (0.121417ms)
+✖ over-limit principals receive 429 with Retry-After (0.086833ms)
+✖ tokens in the URL are rejected outright and never honored (0.089666ms)
+✖ only whitelisted paths are served; the Host API is not exposed (0.080291ms)
+✖ authorization cannot be approved from the public network or forged URLs (0.113583ms)
+✖ a standard MCP client completes initialize/tools/list/ping over TLS with the OAuth loop (0.114625ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 0
+ℹ fail 8
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 365.854667
+
+✖ failing tests:
+
+test at tests/external-mcp-server.test.ts:132:1
+✖ RFC 9728 discovery and AS metadata are public and accurate over TLS (45.274584ms)
+  Error: external_mcp_server_unimplemented: protected Streamable HTTP entry is not implemented in this slice
+      at Object.listen (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/server.ts:24:13)
+      at startServer (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:91:15)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:133:24)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)
+
+test at tests/external-mcp-server.test.ts:146:1
+✖ MCP endpoint rejects missing, malformed and expired bearers with 401 challenges (0.541333ms)
+  Error: external_mcp_server_unimplemented: protected Streamable HTTP entry is not implemented in this slice
+      at Object.listen (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/server.ts:24:13)
+      at startServer (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:91:15)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:148:24)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-server.test.ts:168:1
+✖ tokens for another audience or without required scope are rejected (0.121417ms)
+  Error: external_mcp_server_unimplemented: protected Streamable HTTP entry is not implemented in this slice
+      at Object.listen (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/server.ts:24:13)
+      at startServer (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:91:15)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:169:24)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-server.test.ts:193:1
+✖ over-limit principals receive 429 with Retry-After (0.086833ms)
+  Error: external_mcp_server_unimplemented: protected Streamable HTTP entry is not implemented in this slice
+      at Object.listen (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/server.ts:24:13)
+      at startServer (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:91:15)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:194:24)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-server.test.ts:204:1
+✖ tokens in the URL are rejected outright and never honored (0.089666ms)
+  Error: external_mcp_server_unimplemented: protected Streamable HTTP entry is not implemented in this slice
+      at Object.listen (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/server.ts:24:13)
+      at startServer (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:91:15)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:205:24)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-server.test.ts:216:1
+✖ only whitelisted paths are served; the Host API is not exposed (0.080291ms)
+  Error: external_mcp_server_unimplemented: protected Streamable HTTP entry is not implemented in this slice
+      at Object.listen (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/server.ts:24:13)
+      at startServer (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:91:15)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:217:24)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-server.test.ts:225:1
+✖ authorization cannot be approved from the public network or forged URLs (0.113583ms)
+  Error: external_mcp_server_unimplemented: protected Streamable HTTP entry is not implemented in this slice
+      at Object.listen (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/server.ts:24:13)
+      at startServer (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:91:15)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:226:24)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-server.test.ts:277:1
+✖ a standard MCP client completes initialize/tools/list/ping over TLS with the OAuth loop (0.114625ms)
+  Error: external_mcp_server_unimplemented: protected Streamable HTTP entry is not implemented in this slice
+      at Object.listen (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/server.ts:24:13)
+      at startServer (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:91:15)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:278:24)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)

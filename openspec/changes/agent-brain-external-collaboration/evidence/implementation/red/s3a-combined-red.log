@@ -1,0 +1,373 @@
+✖ token issuance requires management-plane approval, binds exact audience/issuer/scope and verifies (2.476209ms)
+✖ unregistered clients and non-exact redirect URIs cannot start authorization (1.287166ms)
+✖ authorization requires PKCE S256 and rejects plain or missing challenges (0.336084ms)
+✖ cross-resource authorization is rejected; absent resource binds the protected resource (0.357333ms)
+✖ scope requests outside the client registration are rejected (0.417167ms)
+✖ approval requires the management token, a live pending request and honors expiry (0.333125ms)
+✖ public authorization parameters can never approve: fabricated consent flags yield no code (0.207542ms)
+✖ token exchange rejects wrong verifier, malformed verifier, wrong redirect and bad client auth (0.211167ms)
+✖ confidential clients must present their secret; public clients must not authenticate by secret (0.167083ms)
+✖ authorization codes are single-use: replay rejects and revokes the previously issued token (0.1885ms)
+✖ replay of a consumed code revokes the token issued from that code (0.091625ms)
+✖ expired codes and expired access tokens are rejected by the injected clock (0.097709ms)
+✖ tokens for other audiences or issuers cannot pass verification (no passthrough) (0.088084ms)
+✖ tampered payloads and foreign signing keys are rejected as invalid tokens (0.089958ms)
+✖ RFC 9728 protected resource metadata and AS metadata are accurate (0.085958ms)
+✖ unsupported grant types and missing exchange fields are rejected (0.103541ms)
+✖ RFC 9728 discovery and AS metadata are public and accurate over TLS (68.752083ms)
+✖ MCP endpoint rejects missing, malformed and expired bearers with 401 challenges (0.501625ms)
+✖ tokens for another audience or without required scope are rejected (0.103166ms)
+✖ over-limit principals receive 429 with Retry-After (0.083417ms)
+✖ tokens in the URL are rejected outright and never honored (0.081959ms)
+✖ only whitelisted paths are served; the Host API is not exposed (0.067042ms)
+✖ authorization cannot be approved from the public network or forged URLs (0.408625ms)
+✖ a standard MCP client completes initialize/tools/list/ping over TLS with the OAuth loop (0.244709ms)
+ℹ tests 24
+ℹ suites 0
+ℹ pass 0
+ℹ fail 24
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 376.435625
+
+✖ failing tests:
+
+test at tests/external-mcp-oauth.test.ts:73:1
+✖ token issuance requires management-plane approval, binds exact audience/issuer/scope and verifies (2.476209ms)
+  Error [ExternalMcpOauthError]: external MCP OAuth is not implemented in this slice
+      at sentinel (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:61:41)
+      at Object.createAuthorizationRequest (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:63:39)
+      at happyPath (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:40:31)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:75:45)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    code: 'external_mcp_oauth_unimplemented',
+    status: 500
+  }
+
+test at tests/external-mcp-oauth.test.ts:95:1
+✖ unregistered clients and non-exact redirect URIs cannot start authorization (1.287166ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  ExternalMcpOauthError: external MCP OAuth is not implemented in this slice
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:98:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: ExternalMcpOauthError: external MCP OAuth is not implemented in this slice
+        at sentinel (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:61:41)
+        at Object.createAuthorizationRequest (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:63:39)
+        at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:99:11)
+        at async Test.run (node:internal/test_runner/test:1208:7)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:831:7),
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at tests/external-mcp-oauth.test.ts:111:1
+✖ authorization requires PKCE S256 and rejects plain or missing challenges (0.336084ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  ExternalMcpOauthError: external MCP OAuth is not implemented in this slice
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:114:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: ExternalMcpOauthError: external MCP OAuth is not implemented in this slice
+        at sentinel (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:61:41)
+        at Object.createAuthorizationRequest (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:63:39)
+        at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:115:11)
+        at async Test.run (node:internal/test_runner/test:1208:7)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:831:7),
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at tests/external-mcp-oauth.test.ts:132:1
+✖ cross-resource authorization is rejected; absent resource binds the protected resource (0.357333ms)
+  AssertionError [ERR_ASSERTION]: a request for another resource must never start an authorization here
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:135:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: ExternalMcpOauthError: external MCP OAuth is not implemented in this slice
+        at sentinel (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:61:41)
+        at Object.createAuthorizationRequest (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:63:39)
+        at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:136:11)
+        at async Test.run (node:internal/test_runner/test:1208:7)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:831:7),
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at tests/external-mcp-oauth.test.ts:148:1
+✖ scope requests outside the client registration are rejected (0.417167ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  ExternalMcpOauthError: external MCP OAuth is not implemented in this slice
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:151:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: ExternalMcpOauthError: external MCP OAuth is not implemented in this slice
+        at sentinel (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:61:41)
+        at Object.createAuthorizationRequest (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:63:39)
+        at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:152:11)
+        at async Test.run (node:internal/test_runner/test:1208:7)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:831:7),
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at tests/external-mcp-oauth.test.ts:157:1
+✖ approval requires the management token, a live pending request and honors expiry (0.333125ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  ExternalMcpOauthError: external MCP OAuth is not implemented in this slice
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:160:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: ExternalMcpOauthError: external MCP OAuth is not implemented in this slice
+        at sentinel (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:61:41)
+        at Object.authorize (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:64:22)
+        at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:161:11)
+        at async Test.run (node:internal/test_runner/test:1208:7)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:831:7),
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at tests/external-mcp-oauth.test.ts:181:1
+✖ public authorization parameters can never approve: fabricated consent flags yield no code (0.207542ms)
+  Error [ExternalMcpOauthError]: external MCP OAuth is not implemented in this slice
+      at sentinel (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:61:41)
+      at Object.createAuthorizationRequest (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:63:39)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:185:31)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_mcp_oauth_unimplemented',
+    status: 500
+  }
+
+test at tests/external-mcp-oauth.test.ts:202:1
+✖ token exchange rejects wrong verifier, malformed verifier, wrong redirect and bad client auth (0.211167ms)
+  Error [ExternalMcpOauthError]: external MCP OAuth is not implemented in this slice
+      at sentinel (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:61:41)
+      at Object.createAuthorizationRequest (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:63:39)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:205:31)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_mcp_oauth_unimplemented',
+    status: 500
+  }
+
+test at tests/external-mcp-oauth.test.ts:230:1
+✖ confidential clients must present their secret; public clients must not authenticate by secret (0.167083ms)
+  Error [ExternalMcpOauthError]: external MCP OAuth is not implemented in this slice
+      at sentinel (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:61:41)
+      at Object.createAuthorizationRequest (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:63:39)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:233:31)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_mcp_oauth_unimplemented',
+    status: 500
+  }
+
+test at tests/external-mcp-oauth.test.ts:254:1
+✖ authorization codes are single-use: replay rejects and revokes the previously issued token (0.1885ms)
+  Error [ExternalMcpOauthError]: external MCP OAuth is not implemented in this slice
+      at sentinel (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:61:41)
+      at Object.createAuthorizationRequest (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:63:39)
+      at happyPath (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:40:31)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:256:27)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_mcp_oauth_unimplemented',
+    status: 500
+  }
+
+test at tests/external-mcp-oauth.test.ts:275:1
+✖ replay of a consumed code revokes the token issued from that code (0.091625ms)
+  Error [ExternalMcpOauthError]: external MCP OAuth is not implemented in this slice
+      at sentinel (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:61:41)
+      at Object.createAuthorizationRequest (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:63:39)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:278:31)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_mcp_oauth_unimplemented',
+    status: 500
+  }
+
+test at tests/external-mcp-oauth.test.ts:293:1
+✖ expired codes and expired access tokens are rejected by the injected clock (0.097709ms)
+  Error [ExternalMcpOauthError]: external MCP OAuth is not implemented in this slice
+      at sentinel (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:61:41)
+      at Object.createAuthorizationRequest (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:63:39)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:296:31)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_mcp_oauth_unimplemented',
+    status: 500
+  }
+
+test at tests/external-mcp-oauth.test.ts:313:1
+✖ tokens for other audiences or issuers cannot pass verification (no passthrough) (0.088084ms)
+  Error [ExternalMcpOauthError]: external MCP OAuth is not implemented in this slice
+      at sentinel (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:61:41)
+      at Object.createAuthorizationRequest (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:63:39)
+      at happyPath (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:40:31)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:324:31)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_mcp_oauth_unimplemented',
+    status: 500
+  }
+
+test at tests/external-mcp-oauth.test.ts:345:1
+✖ tampered payloads and foreign signing keys are rejected as invalid tokens (0.089958ms)
+  Error [ExternalMcpOauthError]: external MCP OAuth is not implemented in this slice
+      at sentinel (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:61:41)
+      at Object.createAuthorizationRequest (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:63:39)
+      at happyPath (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:40:31)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:347:27)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_mcp_oauth_unimplemented',
+    status: 500
+  }
+
+test at tests/external-mcp-oauth.test.ts:373:1
+✖ RFC 9728 protected resource metadata and AS metadata are accurate (0.085958ms)
+  TypeError: Cannot read properties of undefined (reading 'protectedResourceMetadata')
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:382:26)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+      at Test.postRun (node:internal/test_runner/test:1330:19)
+      at Test.run (node:internal/test_runner/test:1258:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-oauth.test.ts:395:1
+✖ unsupported grant types and missing exchange fields are rejected (0.103541ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  ExternalMcpOauthError: external MCP OAuth is not implemented in this slice
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:398:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: ExternalMcpOauthError: external MCP OAuth is not implemented in this slice
+        at sentinel (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:61:41)
+        at Object.exchangeToken (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/oauth.ts:65:26)
+        at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-oauth.test.ts:399:11)
+        at async Test.run (node:internal/test_runner/test:1208:7)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:831:7),
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at tests/external-mcp-server.test.ts:132:1
+✖ RFC 9728 discovery and AS metadata are public and accurate over TLS (68.752083ms)
+  Error: external_mcp_server_unimplemented: protected Streamable HTTP entry is not implemented in this slice
+      at Object.listen (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/server.ts:24:13)
+      at startServer (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:91:15)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:133:24)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)
+
+test at tests/external-mcp-server.test.ts:146:1
+✖ MCP endpoint rejects missing, malformed and expired bearers with 401 challenges (0.501625ms)
+  Error: external_mcp_server_unimplemented: protected Streamable HTTP entry is not implemented in this slice
+      at Object.listen (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/server.ts:24:13)
+      at startServer (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:91:15)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:148:24)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-server.test.ts:168:1
+✖ tokens for another audience or without required scope are rejected (0.103166ms)
+  Error: external_mcp_server_unimplemented: protected Streamable HTTP entry is not implemented in this slice
+      at Object.listen (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/server.ts:24:13)
+      at startServer (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:91:15)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:169:24)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-server.test.ts:193:1
+✖ over-limit principals receive 429 with Retry-After (0.083417ms)
+  Error: external_mcp_server_unimplemented: protected Streamable HTTP entry is not implemented in this slice
+      at Object.listen (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/server.ts:24:13)
+      at startServer (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:91:15)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:194:24)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-server.test.ts:204:1
+✖ tokens in the URL are rejected outright and never honored (0.081959ms)
+  Error: external_mcp_server_unimplemented: protected Streamable HTTP entry is not implemented in this slice
+      at Object.listen (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/server.ts:24:13)
+      at startServer (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:91:15)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:205:24)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-server.test.ts:216:1
+✖ only whitelisted paths are served; the Host API is not exposed (0.067042ms)
+  Error: external_mcp_server_unimplemented: protected Streamable HTTP entry is not implemented in this slice
+      at Object.listen (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/server.ts:24:13)
+      at startServer (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:91:15)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:217:24)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-server.test.ts:225:1
+✖ authorization cannot be approved from the public network or forged URLs (0.408625ms)
+  Error: external_mcp_server_unimplemented: protected Streamable HTTP entry is not implemented in this slice
+      at Object.listen (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/server.ts:24:13)
+      at startServer (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:91:15)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:226:24)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-mcp-server.test.ts:277:1
+✖ a standard MCP client completes initialize/tools/list/ping over TLS with the OAuth loop (0.244709ms)
+  Error: external_mcp_server_unimplemented: protected Streamable HTTP entry is not implemented in this slice
+      at Object.listen (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-mcp/server.ts:24:13)
+      at startServer (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:91:15)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-server.test.ts:278:24)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
