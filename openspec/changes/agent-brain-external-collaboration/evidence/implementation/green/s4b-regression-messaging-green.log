@@ -1,0 +1,17 @@
+✔ A23/A24: an explicit Agent delivery is kept in the same native session; default-off optional saving does not cancel self-checks (1887.124542ms)
+✔ A13/A21: optional saving reads the current global node and uses the Agent filename and original bound-report receipt (1558.080541ms)
+✔ A14/A22: the global review node reviews the exact saved draft and automatically returns its opinion to the original author session (2204.258375ms)
+✔ A17/A24: IR reads the fixed original source only after explicit normal delivery; an ordinary completed turn does not trigger it (2240.891583ms)
+✔ A22: stopping during the original Task automatic review cancels that review and prevents IR without rewriting the completed author run (2123.313ms)
+✔ A13: repeated saving of the same bound filename and content reuses its exact original report without another file or invented authorship (1606.9105ms)
+✔ A14: automatic review uses only declared exact basis versions and never silently changes to a newer file (2178.62275ms)
+✔ six manual task types survive reload, same-type tasks keep separate sessions, and absent historical type remains unknown (141.513541ms)
+✔ an independent project can set optional stage terms and complete a stage without touching its working Tasks (49.297083ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 13929.494125

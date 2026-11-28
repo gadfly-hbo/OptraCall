@@ -1,0 +1,53 @@
+✔ S4b external resume: busy keeps the delivery pending and dispatches exactly once when idle (101.633125ms)
+✔ S4b external resume: duplicate events and repeated scans never re-run the model (98.241916ms)
+✖ S4b external resume: gate conditions keep unqualified deliveries pending without dispatch (105.775125ms)
+✖ S4b external resume: after restart an accepted-unknown receipt is read back before anything re-runs (295.757541ms)
+✔ S4b external resume: the composed input carries only the saved delivery reference and original work terms (81.638541ms)
+✔ S4b external resume: pause state, receipt transitions and legacy ledgers stay durable and guarded (151.996916ms)
+✔ S4b external resume: listResumeTargets and scanAll only touch tasks with recorded events (166.598209ms)
+✔ S4b cancelWork: claims are revoked and the external stop request is recorded honestly (170.439417ms)
+✔ S4b external resume: a delivery arriving for a cancelled work never revives the authorization (69.363208ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 7
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1367.092333
+
+✖ failing tests:
+
+test at tests/external-resume.test.ts:159:1
+✖ S4b external resume: gate conditions keep unqualified deliveries pending without dispatch (105.775125ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-work-store.ts:618:72
+      at file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-work-store.ts:472:27
+      at async #locked (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-work-store.ts:459:126)
+      at async seedClaim (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:93:11)
+      at async seedPreservedDelivery (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:97:17)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:170:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_grant_not_valid',
+    status: 409
+  }
+
+test at tests/external-resume.test.ts:234:1
+✖ S4b external resume: after restart an accepted-unknown receipt is read back before anything re-runs (295.757541ms)
+  AssertionError [ERR_ASSERTION]: the reserved requestId is re-dispatched verbatim, never swapped for a fresh one
+  + actual - expected
+  
+  + '2f907edc-a785-89ea-b1e0-7988b0e6649d'
+  - 'f2a6f256-a564-8f68-a4cf-866cf0989399'
+  
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:271:10)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '2f907edc-a785-89ea-b1e0-7988b0e6649d',
+    expected: 'f2a6f256-a564-8f68-a4cf-866cf0989399',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

@@ -1,0 +1,19 @@
+✔ S4b/AB13: a preserved external delivery resumes the same owner task once with the external identity in fingerprint and providedContext (2592.408084ms)
+✔ S4b/AB14: the public stop route pauses automatic resume persistently while a stale cleanup request never pauses (4326.3755ms)
+✔ S4b external resume: busy keeps the delivery pending and dispatches exactly once when idle (109.905667ms)
+✔ S4b external resume: duplicate events and repeated scans never re-run the model (102.621125ms)
+✔ S4b external resume: gate conditions keep unqualified deliveries pending without dispatch (771.156625ms)
+✔ S4b external resume: after restart an accepted-unknown receipt is read back before anything re-runs (405.249625ms)
+✔ S4b external resume: the composed input carries only the saved delivery reference and original work terms (86.784375ms)
+✔ S4b external resume: pause state, receipt transitions and legacy ledgers stay durable and guarded (139.91ms)
+✔ S4b external resume: listResumeTargets and scanAll only touch tasks with recorded events (162.375833ms)
+✔ S4b cancelWork: claims are revoked and the external stop request is recorded honestly (224.987625ms)
+✔ S4b external resume: a delivery arriving for a cancelled work never revives the authorization (98.029167ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7058.093417

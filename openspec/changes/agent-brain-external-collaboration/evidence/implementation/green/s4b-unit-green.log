@@ -1,0 +1,17 @@
+✔ S4b external resume: busy keeps the delivery pending and dispatches exactly once when idle (91.326292ms)
+✔ S4b external resume: duplicate events and repeated scans never re-run the model (91.847334ms)
+✔ S4b external resume: gate conditions keep unqualified deliveries pending without dispatch (659.891667ms)
+✔ S4b external resume: after restart an accepted-unknown receipt is read back before anything re-runs (302.492375ms)
+✔ S4b external resume: the composed input carries only the saved delivery reference and original work terms (118.119834ms)
+✔ S4b external resume: pause state, receipt transitions and legacy ledgers stay durable and guarded (166.468167ms)
+✔ S4b external resume: listResumeTargets and scanAll only touch tasks with recorded events (142.542791ms)
+✔ S4b cancelWork: claims are revoked and the external stop request is recorded honestly (213.12275ms)
+✔ S4b external resume: a delivery arriving for a cancelled work never revives the authorization (71.637375ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1970.493958

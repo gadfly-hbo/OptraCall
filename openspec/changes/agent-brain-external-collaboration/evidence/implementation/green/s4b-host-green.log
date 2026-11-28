@@ -1,0 +1,10 @@
+✔ S4b/AB13: a preserved external delivery resumes the same owner task once with the external identity in fingerprint and providedContext (2346.201542ms)
+✔ S4b/AB14: the public stop route pauses automatic resume persistently while a stale cleanup request never pauses (4222.708625ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6698.174667

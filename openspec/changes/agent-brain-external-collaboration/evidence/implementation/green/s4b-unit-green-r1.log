@@ -1,0 +1,83 @@
+✔ S4b external resume: busy keeps the delivery pending and dispatches exactly once when idle (103.759916ms)
+✖ S4b external resume: duplicate events and repeated scans never re-run the model (107.366791ms)
+✖ S4b external resume: gate conditions keep unqualified deliveries pending without dispatch (71.617959ms)
+✖ S4b external resume: after restart an accepted-unknown receipt is read back before anything re-runs (292.23675ms)
+✔ S4b external resume: the composed input carries only the saved delivery reference and original work terms (78.046042ms)
+✖ S4b external resume: pause state, receipt transitions and legacy ledgers stay durable and guarded (70.913292ms)
+✔ S4b external resume: listResumeTargets and scanAll only touch tasks with recorded events (144.668333ms)
+✔ S4b cancelWork: claims are revoked and the external stop request is recorded honestly (190.28425ms)
+✔ S4b external resume: a delivery arriving for a cancelled work never revives the authorization (69.134084ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 5
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1250.413875
+
+✖ failing tests:
+
+test at tests/external-resume.test.ts:134:1
+✖ S4b external resume: duplicate events and repeated scans never re-run the model (107.366791ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  2 !== 1
+  
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:144:10)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-resume.test.ts:158:1
+✖ S4b external resume: gate conditions keep unqualified deliveries pending without dispatch (71.617959ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at parseGrant (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-work-store.ts:109:124)
+      at ExternalWorkStore.createGrantWithWork (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-work-store.ts:524:19)
+      at seedWork (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:70:15)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:168:30)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_grant_invalid',
+    status: 400
+  }
+
+test at tests/external-resume.test.ts:233:1
+✖ S4b external resume: after restart an accepted-unknown receipt is read back before anything re-runs (292.23675ms)
+  AssertionError [ERR_ASSERTION]: the reserved requestId is never swapped for a fresh one
+  + actual - expected
+  
+  + '82c766ae-c2f5-8800-9fab-946f7ee0700e'
+  - '44baade5-a34b-8740-931f-a75bb4c69b5a'
+  
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:270:10)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '82c766ae-c2f5-8800-9fab-946f7ee0700e',
+    expected: '44baade5-a34b-8740-931f-a75bb4c69b5a',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-resume.test.ts:291:1
+✖ S4b external resume: pause state, receipt transitions and legacy ledgers stay durable and guarded (70.913292ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-work-store.ts:618:72
+      at file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-work-store.ts:472:27
+      at async #locked (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-work-store.ts:459:126)
+      at async seedClaim (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:92:11)
+      at async seedPreservedDelivery (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:96:17)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:314:20)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_grant_not_valid',
+    status: 409
+  }

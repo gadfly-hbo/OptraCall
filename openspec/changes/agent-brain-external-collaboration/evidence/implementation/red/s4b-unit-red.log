@@ -1,0 +1,142 @@
+✖ S4b external resume: busy keeps the delivery pending and dispatches exactly once when idle (10.188542ms)
+✖ S4b external resume: duplicate events and repeated scans never re-run the model (8.163333ms)
+✖ S4b external resume: gate conditions keep unqualified deliveries pending without dispatch (8.972584ms)
+✖ S4b external resume: after restart an accepted-unknown receipt is read back before anything re-runs (9.0425ms)
+✖ S4b external resume: the composed input carries only the saved delivery reference and original work terms (8.959ms)
+✖ S4b external resume: pause state, receipt transitions and legacy ledgers stay durable and guarded (9.96025ms)
+✖ S4b external resume: listResumeTargets and scanAll only touch tasks with recorded events (7.9885ms)
+✖ S4b cancelWork: claims are revoked and the external stop request is recorded honestly (7.966417ms)
+✖ S4b external resume: a delivery arriving for a cancelled work never revives the authorization (9.105208ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 0
+ℹ fail 9
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 206.999917
+
+✖ failing tests:
+
+test at tests/external-resume.test.ts:111:1
+✖ S4b external resume: busy keeps the delivery pending and dispatches exactly once when idle (10.188542ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-resume.ts:17:44)
+      at createExternalResumeCoordinator (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-resume.ts:23:10)
+      at coordinatorFor (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:27:10)
+      at harness (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:61:18)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:112:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    code: 'external_resume_unimplemented',
+    status: 503
+  }
+
+test at tests/external-resume.test.ts:134:1
+✖ S4b external resume: duplicate events and repeated scans never re-run the model (8.163333ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-resume.ts:17:44)
+      at createExternalResumeCoordinator (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-resume.ts:23:10)
+      at coordinatorFor (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:27:10)
+      at harness (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:61:18)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:135:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_resume_unimplemented',
+    status: 503
+  }
+
+test at tests/external-resume.test.ts:158:1
+✖ S4b external resume: gate conditions keep unqualified deliveries pending without dispatch (8.972584ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-resume.ts:17:44)
+      at createExternalResumeCoordinator (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-resume.ts:23:10)
+      at coordinatorFor (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:27:10)
+      at harness (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:61:18)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:159:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_resume_unimplemented',
+    status: 503
+  }
+
+test at tests/external-resume.test.ts:233:1
+✖ S4b external resume: after restart an accepted-unknown receipt is read back before anything re-runs (9.0425ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-resume.ts:17:44)
+      at createExternalResumeCoordinator (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-resume.ts:23:10)
+      at coordinatorFor (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:27:10)
+      at harness (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:61:18)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:234:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_resume_unimplemented',
+    status: 503
+  }
+
+test at tests/external-resume.test.ts:273:1
+✖ S4b external resume: the composed input carries only the saved delivery reference and original work terms (8.959ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-resume.ts:17:44)
+      at createExternalResumeCoordinator (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-resume.ts:23:10)
+      at coordinatorFor (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:27:10)
+      at harness (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:61:18)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:274:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_resume_unimplemented',
+    status: 503
+  }
+
+test at tests/external-resume.test.ts:291:1
+✖ S4b external resume: pause state, receipt transitions and legacy ledgers stay durable and guarded (9.96025ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalWorkStore.pauseResume (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-work-store.ts:710:47)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:298:30)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_store_pause_unimplemented',
+    status: 503
+  }
+
+test at tests/external-resume.test.ts:338:1
+✖ S4b external resume: listResumeTargets and scanAll only touch tasks with recorded events (7.9885ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-resume.ts:17:44)
+      at createExternalResumeCoordinator (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-resume.ts:23:10)
+      at coordinatorFor (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:27:10)
+      at harness (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:61:18)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:339:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_resume_unimplemented',
+    status: 503
+  }
+
+test at tests/external-resume.test.ts:353:1
+✖ S4b cancelWork: claims are revoked and the external stop request is recorded honestly (7.966417ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-resume.ts:17:44)
+      at createExternalResumeCoordinator (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-resume.ts:23:10)
+      at coordinatorFor (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:27:10)
+      at harness (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:61:18)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:354:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_resume_unimplemented',
+    status: 503
+  }
+
+test at tests/external-resume.test.ts:390:1
+✖ S4b external resume: a delivery arriving for a cancelled work never revives the authorization (9.105208ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-resume.ts:17:44)
+      at createExternalResumeCoordinator (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-resume.ts:23:10)
+      at coordinatorFor (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:27:10)
+      at harness (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:61:18)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume.test.ts:391:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_resume_unimplemented',
+    status: 503
+  }

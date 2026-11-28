@@ -26,7 +26,15 @@ export type StoredExternalState = {
   inboxEvents: InboxEvent[];
   resumeReceipts: ResumeReceipt[];
   internalChoices: InternalChoice[];
+  resumePauses: ResumePauseRecord[];
+  stopRequests: ExternalStopRequestRecord[];
 };
+
+/** Persistent per-task pause of the external-delivery automatic resume (S4b). One record per owner. */
+export type ResumePauseRecord = { projectId: string; taskId: string; reason: string; pausedAt: string };
+export type ExternalStopRequestStatus = 'requested' | 'confirmed' | 'unknown' | 'failed' | 'unsupported';
+/** Durable record of one outbound external-stop request for a cancelled work (pending verification until confirmed). */
+export type ExternalStopRequestRecord = { stopRequestId: string; workId: string; status: ExternalStopRequestStatus; createdAt: string; updatedAt: string };
 
 const MAX_FILE_BYTES = 64 * 1024 * 1024;
 const MAX_RECORDS = 10000;
@@ -39,7 +47,8 @@ const PRESERVATIONS: readonly ExternalDeliveryRef['preservation'][] = ['pending'
 const PRESERVED_OUTCOMES: readonly ExternalDeliveryRef['preservation'][] = ['preserved', 'failed', 'link-only'];
 const REVIEW_DECISIONS: readonly ExternalReviewDecisionKind[] = ['accepted', 'needs-supplement', 'rejected'];
 const RESUME_STATUSES: readonly ResumeStatus[] = ['reserved', 'accepted', 'settled', 'unknown'];
-const emptyState = (): StoredExternalState => ({ schema: 1, version: 0, grants: [], works: [], claims: [], publications: [], deliveries: [], reviews: [], inboxEvents: [], resumeReceipts: [], internalChoices: [] });
+const STOP_REQUEST_STATUSES: readonly ExternalStopRequestStatus[] = ['requested', 'confirmed', 'unknown', 'failed', 'unsupported'];
+const emptyState = (): StoredExternalState => ({ schema: 1, version: 0, grants: [], works: [], claims: [], publications: [], deliveries: [], reviews: [], inboxEvents: [], resumeReceipts: [], internalChoices: [], resumePauses: [], stopRequests: [] });
 
 /** Drop explicit `undefined` optional fields so strict key checks stay exact. */
 function clean(value: Record<string, unknown>): Record<string, unknown> {
@@ -250,17 +259,38 @@ function parseInternalChoice(input: unknown, corrupt = 'external_record_invalid'
     return { projectId: externalId(input.projectId), taskId: externalId(input.taskId), mode: 'internal', decidedAt: externalDate(input.decidedAt) };
   } catch (error) { if (error instanceof ExternalWorkError && error.code !== 'external_record_invalid') throw error; throw new ExternalWorkError(corrupt, corrupt === 'external_store_corrupt' ? 503 : 400); }
 }
+function parseResumePause(input: unknown, corrupt = 'external_record_invalid'): ResumePauseRecord {
+  try {
+    if (!externalRecord(input)) throw new Error();
+    externalKeys(clean(input), ['projectId', 'taskId', 'reason', 'pausedAt']);
+    return { projectId: externalId(input.projectId), taskId: externalId(input.taskId), reason: externalText(input.reason, 200), pausedAt: externalDate(input.pausedAt) };
+  } catch (error) { if (error instanceof ExternalWorkError && error.code !== 'external_record_invalid') throw error; throw new ExternalWorkError(corrupt, corrupt === 'external_store_corrupt' ? 503 : 400); }
+}
+function parseStopRequest(input: unknown, corrupt = 'external_record_invalid'): ExternalStopRequestRecord {
+  try {
+    if (!externalRecord(input)) throw new Error();
+    externalKeys(clean(input), ['stopRequestId', 'workId', 'status', 'createdAt', 'updatedAt']);
+    const record: ExternalStopRequestRecord = {
+      stopRequestId: externalId(input.stopRequestId), workId: externalId(input.workId),
+      status: input.status as ExternalStopRequestStatus,
+      createdAt: externalDate(input.createdAt), updatedAt: externalDate(input.updatedAt),
+    };
+    if (!STOP_REQUEST_STATUSES.includes(record.status)) throw new Error();
+    return record;
+  } catch (error) { if (error instanceof ExternalWorkError && error.code !== 'external_record_invalid') throw error; throw new ExternalWorkError(corrupt, corrupt === 'external_store_corrupt' ? 503 : 400); }
+}
 
 function parseState(input: unknown): StoredExternalState {
   const corrupt = (message = 'external_store_corrupt'): ExternalWorkError => new ExternalWorkError(message, 503);
   try {
     if (!externalRecord(input) || input.schema !== 1 || !Number.isSafeInteger(input.version) || Number(input.version) < 0) throw corrupt();
-    externalKeys(input, ['schema', 'version', 'grants', 'works', 'claims', 'publications', 'deliveries', 'reviews', 'inboxEvents', 'resumeReceipts', 'internalChoices']);
-    const lists = ['grants', 'works', 'claims', 'publications', 'deliveries', 'reviews', 'inboxEvents', 'resumeReceipts', 'internalChoices'] as const;
-    for (const key of lists) { if (!Array.isArray(input[key]) || (input[key] as unknown[]).length > MAX_RECORDS) throw corrupt(); }
-    const total = lists.reduce((sum, key) => sum + (input[key] as unknown[]).length, 0);
+    externalKeys(input, ['schema', 'version', 'grants', 'works', 'claims', 'publications', 'deliveries', 'reviews', 'inboxEvents', 'resumeReceipts', 'internalChoices', 'resumePauses', 'stopRequests']);
+    // S4b optional keys: ledgers written before them stay readable (missing → empty).
+    const lists = ['grants', 'works', 'claims', 'publications', 'deliveries', 'reviews', 'inboxEvents', 'resumeReceipts', 'internalChoices', 'resumePauses', 'stopRequests'] as const;
+    for (const key of lists) { const raw = input[key] ?? []; if (!Array.isArray(raw) || (raw as unknown[]).length > MAX_RECORDS) throw corrupt(); }
+    const total = lists.reduce((sum, key) => sum + ((input[key] ?? []) as unknown[]).length, 0);
     if (total > MAX_RECORDS) throw corrupt('external_store_full');
-    const state: StoredExternalState = { schema: 1, version: Number(input.version), grants: [], works: [], claims: [], publications: [], deliveries: [], reviews: [], inboxEvents: [], resumeReceipts: [], internalChoices: [] };
+    const state: StoredExternalState = { schema: 1, version: Number(input.version), grants: [], works: [], claims: [], publications: [], deliveries: [], reviews: [], inboxEvents: [], resumeReceipts: [], internalChoices: [], resumePauses: [], stopRequests: [] };
     state.grants = (input.grants as unknown[]).map(item => parseGrant(item, 'external_store_corrupt'));
     state.works = (input.works as unknown[]).map(item => parseWork(item, 'external_store_corrupt'));
     state.claims = (input.claims as unknown[]).map(item => parseClaim(item, 'external_store_corrupt'));
@@ -270,6 +300,8 @@ function parseState(input: unknown): StoredExternalState {
     state.inboxEvents = (input.inboxEvents as unknown[]).map(item => parseInboxEvent(item, 'external_store_corrupt'));
     state.resumeReceipts = (input.resumeReceipts as unknown[]).map(item => parseResumeReceipt(item, 'external_store_corrupt'));
     state.internalChoices = (input.internalChoices as unknown[]).map(item => parseInternalChoice(item, 'external_store_corrupt'));
+    state.resumePauses = ((input.resumePauses ?? []) as unknown[]).map(item => parseResumePause(item, 'external_store_corrupt'));
+    state.stopRequests = ((input.stopRequests ?? []) as unknown[]).map(item => parseStopRequest(item, 'external_store_corrupt'));
     const unique = <T, K>(items: T[], key: (item: T) => K, message = 'external_store_corrupt') => {
       const seen = new Set<K>();
       for (const item of items) { const identity = key(item); if (seen.has(identity)) throw corrupt(message); seen.add(identity); }
@@ -284,6 +316,8 @@ function parseState(input: unknown): StoredExternalState {
     unique(state.inboxEvents, item => item.eventKey);
     unique(state.resumeReceipts, item => item.requestId);
     unique(state.internalChoices, item => `${item.projectId}\u0000${item.taskId}`);
+    unique(state.resumePauses, item => `${item.projectId}\u0000${item.taskId}`);
+    unique(state.stopRequests, item => item.stopRequestId);
     const grants = new Map(state.grants.map(item => [item.grantId, item]));
     const works = new Map(state.works.map(item => [item.workId, item]));
     const claims = new Map(state.claims.map(item => [item.claimId, item]));
@@ -317,6 +351,9 @@ function parseState(input: unknown): StoredExternalState {
     for (const receipt of state.resumeReceipts) {
       const work = works.get(receipt.workId), delivery = deliveries.get(receipt.deliveryId);
       if (!work || !delivery || delivery.workId !== receipt.workId) throw corrupt();
+    }
+    for (const stopRequest of state.stopRequests) {
+      if (!works.has(stopRequest.workId)) throw corrupt();
     }
     return state;
   } catch (error) { if (error instanceof ExternalWorkError && error.code !== 'external_record_invalid') throw error; throw new ExternalWorkError('external_store_corrupt', 503); }
@@ -443,7 +480,7 @@ export class ExternalWorkStore {
     return this.mutate(operation);
   }
   #capacity(state: StoredExternalState, add = 1): void {
-    const total = state.grants.length + state.works.length + state.claims.length + state.publications.length + state.deliveries.length + state.reviews.length + state.inboxEvents.length + state.resumeReceipts.length + state.internalChoices.length;
+    const total = state.grants.length + state.works.length + state.claims.length + state.publications.length + state.deliveries.length + state.reviews.length + state.inboxEvents.length + state.resumeReceipts.length + state.internalChoices.length + state.resumePauses.length + state.stopRequests.length;
     if (total + add > MAX_RECORDS) throw new ExternalWorkError('external_store_full', 413);
   }
   async version(): Promise<number> { this.#assertReady(); return (await this.#load()).version; }
@@ -702,6 +739,102 @@ export class ExternalWorkStore {
       state.resumeReceipts.push(receipt);
       return { receipt: structuredClone(receipt), idempotent: false };
     });
+  }
+
+  // —— S4b 续接/暂停/停止待核扩展（schema:1 可选键，旧台账缺键照常解析） ——
+
+  /** Persistent per-task resume pause; one upserted record per owner. */
+  async pauseResume(input: { projectId: string; taskId: string; reason: string }): Promise<ResumePauseRecord> {
+    const record: ResumePauseRecord = { projectId: externalId(input.projectId), taskId: externalId(input.taskId), reason: externalText(input.reason, 200), pausedAt: this.#stamp() };
+    return this.#change(state => {
+      const existing = state.resumePauses.find(item => item.projectId === record.projectId && item.taskId === record.taskId);
+      if (existing) { existing.reason = record.reason; existing.pausedAt = record.pausedAt; return structuredClone(existing); }
+      this.#capacity(state);
+      state.resumePauses.push(record);
+      return structuredClone(record);
+    });
+  }
+  /** Clear the pause; returns the removed record, or null when none was set. */
+  async resumeResume(input: { projectId: string; taskId: string }): Promise<ResumePauseRecord | null> {
+    const owner = { projectId: externalId(input.projectId), taskId: externalId(input.taskId) };
+    return this.#change(state => {
+      const index = state.resumePauses.findIndex(item => item.projectId === owner.projectId && item.taskId === owner.taskId);
+      if (index < 0) return null;
+      const [removed] = state.resumePauses.splice(index, 1);
+      return structuredClone(removed!);
+    });
+  }
+  async getResumePause(projectId: string, taskId: string): Promise<ResumePauseRecord | null> {
+    this.#assertReady();
+    const owner = { projectId: externalId(projectId), taskId: externalId(taskId) };
+    return structuredClone((await this.#load()).resumePauses.find(item => item.projectId === owner.projectId && item.taskId === owner.taskId) ?? null);
+  }
+  async listResumePauses(): Promise<ResumePauseRecord[]> { this.#assertReady(); return structuredClone((await this.#load()).resumePauses); }
+
+  /**
+   * Guarded resume-receipt transition (reserved→accepted/settled/unknown,
+   * accepted→settled/unknown, unknown→accepted/settled). Same-status repeats
+   * are idempotent; settled receipts are final and never rewound.
+   */
+  async transitionResumeReceipt(requestId: string, status: ResumeStatus): Promise<ResumeReceipt> {
+    const target = externalId(requestId);
+    if (!RESUME_STATUSES.includes(status)) throw new ExternalWorkError('external_resume_invalid', 400);
+    return this.#change(state => {
+      const receipt = state.resumeReceipts.find(item => item.requestId === target);
+      if (!receipt) throw new ExternalWorkError('external_resume_not_found', 404);
+      if (receipt.status !== status) {
+        const allowed: Record<ResumeStatus, ResumeStatus[]> = { reserved: ['accepted', 'settled', 'unknown'], accepted: ['settled', 'unknown'], unknown: ['accepted', 'settled'], settled: [] };
+        if (!allowed[receipt.status].includes(status)) throw new ExternalWorkError('external_resume_transition_forbidden', 409);
+        receipt.status = status; receipt.updatedAt = this.#stamp();
+      }
+      return structuredClone(receipt);
+    });
+  }
+
+  /** Durable outbound stop-request fact; the stable per-work identity keeps repeats idempotent. */
+  async recordStopRequest(input: { stopRequestId: string; workId: string; status: ExternalStopRequestStatus }): Promise<ExternalStopRequestRecord> {
+    const record: ExternalStopRequestRecord = { stopRequestId: externalId(input.stopRequestId), workId: externalId(input.workId), status: input.status as ExternalStopRequestStatus, createdAt: this.#stamp(), updatedAt: this.#stamp() };
+    if (!STOP_REQUEST_STATUSES.includes(record.status)) throw new ExternalWorkError('external_stop_request_invalid', 400);
+    return this.#change(state => {
+      const existing = state.stopRequests.find(item => item.stopRequestId === record.stopRequestId);
+      if (existing) return structuredClone(existing);
+      if (!state.works.some(item => item.workId === record.workId)) throw new ExternalWorkError('external_work_not_found', 404);
+      this.#capacity(state);
+      state.stopRequests.push(record);
+      return structuredClone(record);
+    });
+  }
+  /** requested→confirmed/unknown/failed/unsupported; unknown may resolve later; terminal states never change. */
+  async transitionStopRequest(stopRequestId: string, status: ExternalStopRequestStatus): Promise<ExternalStopRequestRecord> {
+    const target = externalId(stopRequestId);
+    if (!STOP_REQUEST_STATUSES.includes(status)) throw new ExternalWorkError('external_stop_request_invalid', 400);
+    return this.#change(state => {
+      const record = state.stopRequests.find(item => item.stopRequestId === target);
+      if (!record) throw new ExternalWorkError('external_stop_request_not_found', 404);
+      if (record.status !== status) {
+        const allowed: Record<ExternalStopRequestStatus, ExternalStopRequestStatus[]> = { requested: ['confirmed', 'unknown', 'failed', 'unsupported'], confirmed: [], unknown: ['confirmed', 'failed'], failed: [], unsupported: [] };
+        if (!allowed[record.status].includes(status)) throw new ExternalWorkError('external_stop_request_transition_forbidden', 409);
+        record.status = status; record.updatedAt = this.#stamp();
+      }
+      return structuredClone(record);
+    });
+  }
+  async getStopRequest(stopRequestId: string): Promise<ExternalStopRequestRecord | null> {
+    this.#assertReady();
+    const target = externalId(stopRequestId);
+    return structuredClone((await this.#load()).stopRequests.find(item => item.stopRequestId === target) ?? null);
+  }
+  async listStopRequests(workId?: string): Promise<ExternalStopRequestRecord[]> {
+    this.#assertReady();
+    const target = workId === undefined ? undefined : externalId(workId);
+    return structuredClone((await this.#load()).stopRequests.filter(item => target === undefined || item.workId === target));
+  }
+  /** Distinct owners with recorded inbox events; the restart scan walks exactly these. */
+  async listResumeTargets(): Promise<{ projectId: string; taskId: string }[]> {
+    this.#assertReady();
+    const seen = new Map<string, { projectId: string; taskId: string }>();
+    for (const event of (await this.#load()).inboxEvents) seen.set(`${event.projectId}\u0000${event.taskId}`, { projectId: event.projectId, taskId: event.taskId });
+    return [...seen.values()];
   }
 
   // —— S4a 交付保全扩展（schema 兼容；S1 recordDelivery 语义保持不动） ——

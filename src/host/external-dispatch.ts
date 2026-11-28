@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import {
   DEFAULT_EXTERNAL_RESOURCE_POLICY, ExternalWorkError,
   externalAssetRefText, externalDate, externalText, parseExternalAssetRef,
@@ -7,8 +7,14 @@ import type {
   ExternalAssetRef, ExternalRepositoryRef, ExternalResourcePolicy, ExternalTaskSummary,
   ExternalWork, ExternalWorkSummaryEntry, InternalChoice, WorkGrant,
 } from './external-work-types.ts';
-import type { ExternalWorkStore } from './external-work-store.ts';
+import type { ExternalStopRequestRecord, ExternalStopRequestStatus, ExternalWorkStore } from './external-work-store.ts';
 import type { ExternalPublisher, PublishAction, PublishResult } from './external-publish.ts';
+
+/** Stable per-work external-stop request identity (uuid-shaped, never a claim or delivery id). */
+export const externalStopRequestId = (workId: string): string => {
+  const hash = createHash('sha256').update(JSON.stringify(['optracall-external-stop-v1', externalText(workId, 100)])).digest('hex');
+  return `${hash.slice(0,8)}-${hash.slice(8,12)}-8${hash.slice(13,16)}-${((parseInt(hash[16]!,16)&3)|8).toString(16)}${hash.slice(17,20)}-${hash.slice(20,32)}`;
+};
 
 /** Host-supplied profile view; the derived server.ts admission rules stay the single source. */
 export type ExternalTaskProfile = { externalDispatchAllowed: boolean; reason?: string };
@@ -65,12 +71,14 @@ export class ExternalDispatch {
   readonly #profiles: ExternalProfileLookup;
   readonly #qualifyAssets: ExternalAssetQualification;
   readonly #publisher?: ExternalPublisher;
+  readonly #requestExternalStop?: (input: { workId: string; reason: string }) => Promise<{ outcome: 'confirmed' | 'unknown' | 'failed' | 'unsupported'; detail?: string }>;
   readonly #now: () => number;
-  constructor(options: { store: ExternalWorkStore; profiles: ExternalProfileLookup; qualifyAssets: ExternalAssetQualification; now?: () => number; publisher?: ExternalPublisher }) {
+  constructor(options: { store: ExternalWorkStore; profiles: ExternalProfileLookup; qualifyAssets: ExternalAssetQualification; now?: () => number; publisher?: ExternalPublisher; requestExternalStop?: (input: { workId: string; reason: string }) => Promise<{ outcome: 'confirmed' | 'unknown' | 'failed' | 'unsupported'; detail?: string }> }) {
     this.#store = options.store;
     this.#profiles = options.profiles;
     this.#qualifyAssets = options.qualifyAssets;
     this.#publisher = options.publisher;
+    this.#requestExternalStop = options.requestExternalStop;
     this.#now = options.now ?? (() => Date.now());
   }
 
@@ -231,9 +239,32 @@ export class ExternalDispatch {
     return this.#store.createGrantWithWork(grant, work);
   }
 
-  /** Host-side cancellation. Zero external action; facts and UNKNOWN stay recorded. */
-  async cancelWork(workId: string, reason: string): Promise<ExternalWork> {
-    return this.#store.cancelWork(externalText(workId, 100), externalText(reason, 500));
+  /**
+   * Host-side cancellation. Zero external action; facts and UNKNOWN stay recorded.
+   * The claims lose validity first; then the external stop request is recorded
+   * durably before the injected seam runs. An unconfirmed or failing request is
+   * kept pending verification ('unknown') — never reported as stopped. Terminal
+   * records are never re-sent for the same work.
+   */
+  async cancelWork(workId: string, reason: string): Promise<{ work: ExternalWork; stopRequest: ExternalStopRequestRecord }> {
+    const why = externalText(reason, 500);
+    const work = await this.#store.cancelWork(externalText(workId, 100), why);
+    const stopRequestId = externalStopRequestId(work.workId);
+    const existing = await this.#store.getStopRequest(stopRequestId);
+    if (existing && existing.status !== 'requested') return { work, stopRequest: existing };
+    if (!this.#requestExternalStop) {
+      return { work, stopRequest: existing ?? await this.#store.recordStopRequest({ stopRequestId, workId: work.workId, status: 'unsupported' }) };
+    }
+    await (existing ?? await this.#store.recordStopRequest({ stopRequestId, workId: work.workId, status: 'requested' }));
+    let outcome: ExternalStopRequestStatus;
+    try {
+      const result = await this.#requestExternalStop({ workId: work.workId, reason: why });
+      outcome = result && ['confirmed', 'unknown', 'failed', 'unsupported'].includes(result.outcome) ? result.outcome : 'unknown';
+    } catch {
+      // The outbound effect is uncertain; the request stays pending verification.
+      outcome = 'unknown';
+    }
+    return { work, stopRequest: await this.#store.transitionStopRequest(stopRequestId, outcome) };
   }
 
   /**

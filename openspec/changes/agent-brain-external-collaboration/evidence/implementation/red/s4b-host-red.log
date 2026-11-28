@@ -1,0 +1,35 @@
+✖ S4b/AB13: a preserved external delivery resumes the same owner task once with the external identity in fingerprint and providedContext (941.017834ms)
+✖ S4b/AB14: the public stop route pauses automatic resume persistently while a stale cleanup request never pauses (878.891042ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1956.226208
+
+✖ failing tests:
+
+test at tests/external-resume-host.test.ts:72:1
+✖ S4b/AB13: a preserved external delivery resumes the same owner task once with the external identity in fingerprint and providedContext (941.017834ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-resume.ts:17:44)
+      at resumeRequestId (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-resume.ts:20:52)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume-host.test.ts:90:29)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    code: 'external_resume_unimplemented',
+    status: 503
+  }
+
+test at tests/external-resume-host.test.ts:134:1
+✖ S4b/AB14: the public stop route pauses automatic resume persistently while a stale cleanup request never pauses (878.891042ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalWorkStore.getResumePause (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-work-store.ts:712:50)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-resume-host.test.ts:153:40)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_store_pause_unimplemented',
+    status: 503
+  }

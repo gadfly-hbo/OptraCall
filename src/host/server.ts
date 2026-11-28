@@ -85,6 +85,8 @@ import { ModelPackStore } from './model-pack-store.ts';
 import { createModelPackRoutes } from './model-pack-routes.ts';
 import { isTaskCapability } from './task-capabilities.ts';
 import { ServiceConnectionManager } from './service-connection-manager.ts';
+import { ExternalWorkStore } from './external-work-store.ts';
+import { createExternalResumeCoordinator, parseExternalResumeIdentity } from './external-resume.ts';
 import { ServiceConnectionError, isServiceId, serviceKeys, serviceRecord, servicePolicyFingerprint, type TaskServiceBindings } from './service-connection-types.ts';
 import { readTradeAreaStatus } from './trade-area-status.ts';
 import { CaseStore, CaseStoreError } from './case-store.ts';
@@ -492,7 +494,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
   }
   const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 15_000;
   if (!Number.isSafeInteger(heartbeatIntervalMs) || heartbeatIntervalMs < 10) throw new Error('Invalid observer heartbeat interval.');
-  const ready = Promise.resolve().then(async () => { if (options.staticUiRoot) staticUi = await loadStaticUi(options.staticUiRoot); await projects.init(); await serviceConnections.init(); await cases.init(); await configuration.init(); await dbLinks.init(); await boardStore.init(); await decisionFeedback.init(); await verification.reconcileInterrupted(); await automatic.init(); });
+  const ready = Promise.resolve().then(async () => { if (options.staticUiRoot) staticUi = await loadStaticUi(options.staticUiRoot); await projects.init(); await serviceConnections.init(); await cases.init(); await configuration.init(); await dbLinks.init(); await boardStore.init(); await decisionFeedback.init(); await verification.reconcileInterrupted(); await automatic.init(); await externalWorkStore.init(); });
+  // The restart scan never gates request readiness; pending deliveries stay in
+  // the ledger until their task is scannable again.
+  void ready.then(() => externalResume.scanAll()).catch(() => { });
   type ProjectOwner = { project: ProjectRecord; task: TaskRecord; reviewAdmission?: ReviewAdmissionContract };
   const streams = new Map<string, Set<ServerResponse>>();
   const streamRequests = new WeakMap<ServerResponse, { request: IncomingMessage; statusOnly: boolean }>();
@@ -2104,6 +2109,11 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     return { ...snapshot, messages, ...(active && context ? { capabilities: { ...snapshot.capabilities, semanticContext: { ...context, rap: active.rap } } } : {}) };
   }
   const requestFingerprint = async (input: Record<string, unknown>, projectId: string, taskId: string): Promise<string | undefined> => {
+    // S4b: an optional external dispatch identity rides on same-owner resume
+    // turns; without it the fingerprint is byte-for-byte the pre-existing one.
+    let externalContext: ReturnType<typeof parseExternalResumeIdentity>;
+    try { externalContext = parseExternalResumeIdentity(input.externalContext); }
+    catch { throw new RequestFault(400, 'invalid_external_context'); }
     const requirement = requirementSelection(input);
     const enterprise = await enterpriseRequestIdentity(enterpriseMaterials, input, (await enterpriseContextFor(projectId))?.sourceAllowed);
     const feedback = await decisionFeedback.requestIdentity(projectId, taskId, input.feedbackContext as FeedbackContextSelection | undefined);
@@ -2112,14 +2122,18 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     const personal = selectedPersonal.length ? selectedPersonal : undefined;
     const studioSelection = input.studioContext;
     if (studioSelection !== undefined && (!studioSelection || typeof studioSelection !== 'object' || Array.isArray(studioSelection) || Object.keys(studioSelection).some(key => !['systemId','purpose'].includes(key)) || !/^[a-f0-9-]{36}$/.test(String((studioSelection as any).systemId)) || !['construction','analysis'].includes(String((studioSelection as any).purpose)))) throw new StudioError('invalid_studio_context');
-    if (!requirement && !enterprise && feedback === undefined && projectData === undefined && personal === undefined && studioSelection === undefined && input.projectPlan === undefined) return undefined;
+    if (!requirement && !enterprise && feedback === undefined && projectData === undefined && personal === undefined && studioSelection === undefined && input.projectPlan === undefined && externalContext === undefined) return undefined;
     const selection = input.caseContext as CaseContextSelection | undefined;
     const caseContext = selection && typeof selection === 'object' && !Array.isArray(selection) ? { caseId: selection.caseId, caseRevision: selection.caseRevision, projectWorkRevision: selection.projectWorkRevision, selectedReferenceIds: selection.selectedReferenceIds } : selection ?? null;
     const identity = personal ? ['optracall_request_personal_context_v1', projectId, taskId, input.text, caseContext, requirement ?? null, enterprise ?? null, feedback ?? null, projectData ?? null, personal]
       : projectData ? ['optracall_request_project_data_v1', projectId, taskId, input.text, caseContext, requirement ?? null, enterprise ?? null, feedback ?? null, projectData]
       : feedback !== undefined ? ['optracall_request_feedback_v1',projectId,taskId,input.text,caseContext,requirement ?? null,enterprise ?? null,feedback]
       : enterprise ? ['optracall_request_enterprise_v1', input.text, caseContext, requirement ?? null, enterprise] : ['optracall_request_v1', input.text, caseContext, requirement];
-    return createHash('sha256').update(JSON.stringify(input.projectPlan !== undefined ? ['optracall_request_project_plan_v1', identity, studioSelection ?? null, input.projectPlan] : studioSelection === undefined ? identity : ['optracall_request_studio_v1', identity, studioSelection])).digest('hex');
+    return createHash('sha256').update(JSON.stringify(
+      externalContext !== undefined ? ['optracall_request_external_dispatch_v1', identity, externalContext]
+        : input.projectPlan !== undefined ? ['optracall_request_project_plan_v1', identity, studioSelection ?? null, input.projectPlan]
+        : studioSelection === undefined ? identity : ['optracall_request_studio_v1', identity, studioSelection]
+    )).digest('hex');
   };
   async function prepareCasePrompt(projectId: string, taskId: string, input: Record<string, unknown>, accepted = false) {    const operationId = contextOperationId(projectId, taskId, input.requestId as string);
     const existing = cases.getStatus().state === 'ready' ? cases.getOperation(operationId) : null;
@@ -2153,6 +2167,28 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     return businessDiscussions.domain.busyInScope({projectId}) || requirementSessions.busy(projectPlanPreparationOwner(projectId)) || project.tasks.some(task => projectSessions.busy(projectSessions.ref({ project, task }))) || await verification.busy(projectId) || boardSessions.busy(projectId) || refinerSessions.busyProject(projectId) || sapMethodFeature.busyInScope({ projectId }) || Boolean(studioSessions?.busyInScope({ projectId }));
   }
   const priorRequest = priorTaskRequest;
+  // S4b: Host-only same-owner external delivery resume. The coordinator only
+  // ever reaches turns through startProjectMessage with { userText: false };
+  // pause state, reservations and stop requests live in the external ledger.
+  const externalWorkStore = new ExternalWorkStore({ dataRoot });
+  const externalResume = createExternalResumeCoordinator({
+    store: externalWorkStore,
+    startMessage: (projectId, taskId, input, origin) => startProjectMessage(projectId, taskId, input, origin),
+    busy: async (projectId, taskId) => {
+      const owner = await pair(projectId, taskId);
+      return projectSessions.busy(projectSessions.ref(owner));
+    },
+    taskAvailable: async (projectId, taskId) => {
+      const owner = await pair(projectId, taskId);
+      if (owner.project.archivedAt !== null || owner.task.archivedAt) return { available: false, reason: 'archived' };
+      return availableConfiguration(owner.task.configuration.id, owner.task.configuration.revision) ? { available: true } : { available: false, reason: 'configuration_required' };
+    },
+    nativeStatus: async (projectId, taskId, requestId) => {
+      const owner = await pair(projectId, taskId);
+      return priorRequest(owner.project, owner.task, requestId, undefined);
+    },
+    schedule: (delayMs, task) => { const handle = setTimeout(task, delayMs); handle.unref(); return () => clearTimeout(handle); },
+  });
   const savedHistory = (project: ProjectRecord, task: TaskRecord, capabilities: Record<string, unknown> = {}) => savedTaskHistory(project, task, SDK_VERSION, capabilities);
   async function taskServiceEligibility(projectId: string, taskId: string): Promise<{ supported: boolean; reason?: string }> {
     if (studio.memberPack.getProjectToolScope(projectId)) return { supported: false, reason: '当前任务使用企业会员包的受限资源，个人账号连接不可用。' };
@@ -2758,6 +2794,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           const withoutStudio = personal ? `本次人明确指定的历史参考（不是本次指令、权限或已核实事实）：\n${personal.text}\n\n${withFeedback}` : withFeedback;
           const analysisOnly = (owner.reviewAdmission ?? (reviewTransition.legacyAdmissionAllowed() ? 'legacy' : 'conclusion')) === 'legacy' && (await automatic.store.readSettings({ projectId, taskId })).enabled;
           const studioContext = await studio.prepareContext(projectId, taskId, input.studioContext, { analysisOnly });
+          // S4b: an optional external delivery receipt binds the turn to the
+          // exact external work/delivery identity. Such a turn never gains
+          // user-quote eligibility, whatever origin it arrived through.
+          const externalContext = parseExternalResumeIdentity(input.externalContext);
           const assignment = task.assignment;
           if (assignment) checkAssignmentSkill(project, assignment);
           const agreement = assignment?.agreementVersion ? project.agreements?.find(a => a.version === assignment.agreementVersion) : assignment && await originalPlanAgreement(projectId, assignment);
@@ -2774,7 +2814,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             ...(assignment ? { taskAssignment: assignment } : {}),
             ...(round ? taskRoundReceipts(assignment!.type==='do'?'do':'teach',round) : {}),
             originalUserText: input.text as string,
-            userQuoteEligible: origin.userText,
+            userQuoteEligible: origin.userText && externalContext === undefined,
+            ...(externalContext ? { external: { kind: 'external-delivery' as const, ...externalContext } } : {}),
             ...(deliveredPlan ? { projectPlan: deliveredPlan } : {}),
             ...(studioContext ? { studio: studioContext } : {}),
             ...(suppliedRequirement ? { rap: suppliedRequirement } : {}),
@@ -3853,6 +3894,10 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             }
             await projectSessions.stop(ref);
             await Promise.all([verification.stopForTask(projectId, taskId), sapMethodFeature.stopForTask(projectId, taskId), studioSessions?.stopForTask(projectId, taskId)]);
+            // S4b: stopping the round also pauses this task's external delivery
+            // auto-resume durably; external work keeps its real status and the
+            // per-task pause entry is the way back.
+            await externalResume.pauseResume(projectId, taskId, 'task-stop');
             json(response, 200, { stopped: true }); return;
           }
           if (operation === 'ui-response' && request.method === 'POST') {

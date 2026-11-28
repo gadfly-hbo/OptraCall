@@ -1,0 +1,25 @@
+✔ PG04 native discovery binds only final same-session completed replies and spends one native snapshot budget (100.513375ms)
+✔ PG04 report-backed requests retain reports while a separate no-file request remains discoverable (65.347833ms)
+✔ PG04 failed, cancelled, unsettled, legacy and inherited runs do not acquire completed-result authority (55.957125ms)
+✔ PG04 a completed marker on a different branch cannot adopt another branch reply (58.279ms)
+✔ PG04 a completed run without an actual final assistant reply cannot promote an earlier answer (58.958917ms)
+✔ PG04 confirmed scope discovers exact source refs without bodies and reads through the original native-reply reader (63.353833ms)
+✔ PG04 changed reply text invalidates the discovered id and never falls forward to new text (68.610167ms)
+✔ PG04 late permission withdrawal and native read failure expose no body or successful read claim (79.278875ms)
+✔ PG04 native reading rechecks original cancellation, duplicate-native ambiguity, and existing source budgets (67.84325ms)
+✔ PG04 the legacy report-only reader keeps duplicate matching report proof readable despite unrelated ambiguous chat history (67.940417ms)
+✔ archiving one Task preserves its identity, draft and native bytes while other Tasks stay writable (70.358667ms)
+✔ Task restore retains the original session and never starts a run (58.367959ms)
+✔ running and Host-occupied Tasks cannot archive; archived Task and project writes remain closed (58.246542ms)
+✔ old Tasks without archive fields are read without metadata rewrites; invalid future archive data stays explicit (20.207208ms)
+✔ a repeated plan creation reuses its Task after later user edits and rejects another origin (44.442209ms)
+✔ an interrupted Task outcome remains unknown and cannot be archived as idle (49.125458ms)
+✔ plan-created Tasks inherit only the capability flags explicitly supplied by the Host (53.101ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1104.346625
