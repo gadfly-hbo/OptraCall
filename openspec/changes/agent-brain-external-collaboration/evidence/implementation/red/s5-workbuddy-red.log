@@ -1,0 +1,217 @@
+✖ AB03/E05: 适配默认 integration_unverified 禁用；API/在线与 Connector 单项通过不足以启用 (15.194792ms)
+✖ AB03/E05: 只有联合测试通过（隔离合成闭环）才就绪可选；闭环失败保持禁用 (9.844334ms)
+✖ AB15/S5 store: 就绪不变量损坏拒绝；不含新键的旧台账照常解析 (9.973125ms)
+✖ AB02/S5: 纯 GitHub 授权与内部选择零 WB 调用、零额度占用（即使适配已就绪） (7.737375ms)
+✖ AB02/E05: 3 次触发额度含修订；submitted/UNKNOWN 占额；跨 turn/重启不重置；超限拒绝 (8.954959ms)
+✖ AB02/E05: 明确拒绝（离线助手）不占额度；恢复后同 revision 可再次触发 (9.075542ms)
+✖ AB03/E05: 串行占用——第二项工作保留等待，不二次触发、不占额 (7.815958ms)
+✖ AB03/E05: 首项 UNKNOWN 在途不释放串行；交付＋核验＋释放后释放；取消立即释放 (8.974667ms)
+✖ S5 store: 触发尝试转移表守卫（prepared/submitted/unknown/message_id/expectedStatus） (37.06875ms)
+✖ S5 store: 触发尝试记录完整性损坏拒绝；有效记录照常回读 (41.896291ms)
+✖ E05: message_id 仅游标/回执——不可准确关联的消息不归属、正文不进台账不进模型 (8.943167ms)
+✖ E05: claim/delivery 证据仅在准确核对后关联；伪造引用不产生交付或核验 (8.891959ms)
+✖ E05: 读失败游标原地不推进；恢复后同窗口重读 (9.043791ms)
+✖ E05: 离线/失败不静默重派、不自动第二条；纯 GitHub 路径不受影响 (7.992125ms)
+✖ S5 dispatch: mode 选用门槛——未配置/未就绪/受限 profile/归属各自拒绝，通用路径不变 (8.901875ms)
+✖ E05: 触发消息只交付工作指令＋定位信息；令牌材料一律拒绝出站 (8.981542ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 0
+ℹ fail 16
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 328.981
+
+✖ failing tests:
+
+test at tests/external-workbuddy.test.ts:120:1
+✖ AB03/E05: 适配默认 integration_unverified 禁用；API/在线与 Connector 单项通过不足以启用 (15.194792ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at new WorkBuddyAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/workbuddy-adapter.ts:44:11)
+      at makeAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:80:10)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:123:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    code: 'external_workbuddy_unimplemented',
+    status: 501
+  }
+
+test at tests/external-workbuddy.test.ts:164:1
+✖ AB03/E05: 只有联合测试通过（隔离合成闭环）才就绪可选；闭环失败保持禁用 (9.844334ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at new WorkBuddyAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/workbuddy-adapter.ts:44:11)
+      at makeAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:80:10)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:167:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_workbuddy_unimplemented',
+    status: 501
+  }
+
+test at tests/external-workbuddy.test.ts:195:1
+✖ AB15/S5 store: 就绪不变量损坏拒绝；不含新键的旧台账照常解析 (9.973125ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at new WorkBuddyAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/workbuddy-adapter.ts:44:11)
+      at makeAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:80:10)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:198:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_workbuddy_unimplemented',
+    status: 501
+  }
+
+test at tests/external-workbuddy.test.ts:220:1
+✖ AB02/S5: 纯 GitHub 授权与内部选择零 WB 调用、零额度占用（即使适配已就绪） (7.737375ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at new WorkBuddyAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/workbuddy-adapter.ts:44:11)
+      at makeAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:80:10)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:223:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_workbuddy_unimplemented',
+    status: 501
+  }
+
+test at tests/external-workbuddy.test.ts:249:1
+✖ AB02/E05: 3 次触发额度含修订；submitted/UNKNOWN 占额；跨 turn/重启不重置；超限拒绝 (8.954959ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at new WorkBuddyAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/workbuddy-adapter.ts:44:11)
+      at makeAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:80:10)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:252:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_workbuddy_unimplemented',
+    status: 501
+  }
+
+test at tests/external-workbuddy.test.ts:286:1
+✖ AB02/E05: 明确拒绝（离线助手）不占额度；恢复后同 revision 可再次触发 (9.075542ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at new WorkBuddyAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/workbuddy-adapter.ts:44:11)
+      at makeAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:80:10)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:289:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_workbuddy_unimplemented',
+    status: 501
+  }
+
+test at tests/external-workbuddy.test.ts:316:1
+✖ AB03/E05: 串行占用——第二项工作保留等待，不二次触发、不占额 (7.815958ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at new WorkBuddyAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/workbuddy-adapter.ts:44:11)
+      at makeAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:80:10)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:319:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_workbuddy_unimplemented',
+    status: 501
+  }
+
+test at tests/external-workbuddy.test.ts:340:1
+✖ AB03/E05: 首项 UNKNOWN 在途不释放串行；交付＋核验＋释放后释放；取消立即释放 (8.974667ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at new WorkBuddyAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/workbuddy-adapter.ts:44:11)
+      at makeAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:80:10)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:343:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_workbuddy_unimplemented',
+    status: 501
+  }
+
+test at tests/external-workbuddy.test.ts:380:1
+✖ S5 store: 触发尝试转移表守卫（prepared/submitted/unknown/message_id/expectedStatus） (37.06875ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalWorkStore.recordExecutorAttempt (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-work-store.ts:978:188)
+      at reserve (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:384:31)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:387:25)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_store_workbuddy_unimplemented',
+    status: 501
+  }
+
+test at tests/external-workbuddy.test.ts:412:1
+✖ S5 store: 触发尝试记录完整性损坏拒绝；有效记录照常回读 (41.896291ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalWorkStore.recordExecutorAttempt (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-work-store.ts:978:188)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:416:31)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_store_workbuddy_unimplemented',
+    status: 501
+  }
+
+test at tests/external-workbuddy.test.ts:448:1
+✖ E05: message_id 仅游标/回执——不可准确关联的消息不归属、正文不进台账不进模型 (8.943167ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at new WorkBuddyAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/workbuddy-adapter.ts:44:11)
+      at makeAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:80:10)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:451:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_workbuddy_unimplemented',
+    status: 501
+  }
+
+test at tests/external-workbuddy.test.ts:485:1
+✖ E05: claim/delivery 证据仅在准确核对后关联；伪造引用不产生交付或核验 (8.891959ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at new WorkBuddyAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/workbuddy-adapter.ts:44:11)
+      at makeAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:80:10)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:488:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_workbuddy_unimplemented',
+    status: 501
+  }
+
+test at tests/external-workbuddy.test.ts:512:1
+✖ E05: 读失败游标原地不推进；恢复后同窗口重读 (9.043791ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at new WorkBuddyAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/workbuddy-adapter.ts:44:11)
+      at makeAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:80:10)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:515:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_workbuddy_unimplemented',
+    status: 501
+  }
+
+test at tests/external-workbuddy.test.ts:543:1
+✖ E05: 离线/失败不静默重派、不自动第二条；纯 GitHub 路径不受影响 (7.992125ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at new WorkBuddyAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/workbuddy-adapter.ts:44:11)
+      at makeAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:80:10)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:546:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_workbuddy_unimplemented',
+    status: 501
+  }
+
+test at tests/external-workbuddy.test.ts:578:1
+✖ S5 dispatch: mode 选用门槛——未配置/未就绪/受限 profile/归属各自拒绝，通用路径不变 (8.901875ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at new WorkBuddyAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/workbuddy-adapter.ts:44:11)
+      at makeAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:80:10)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:581:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_workbuddy_unimplemented',
+    status: 501
+  }
+
+test at tests/external-workbuddy.test.ts:623:1
+✖ E05: 触发消息只交付工作指令＋定位信息；令牌材料一律拒绝出站 (8.981542ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at new WorkBuddyAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/workbuddy-adapter.ts:44:11)
+      at makeAdapter (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:80:10)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-workbuddy.test.ts:626:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_workbuddy_unimplemented',
+    status: 501
+  }

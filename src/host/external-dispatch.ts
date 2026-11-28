@@ -7,8 +7,11 @@ import type {
   ExternalAssetRef, ExternalRepositoryRef, ExternalResourcePolicy, ExternalTaskSummary,
   ExternalWork, ExternalWorkSummaryEntry, InternalChoice, WorkGrant,
 } from './external-work-types.ts';
-import type { ExternalStopRequestRecord, ExternalStopRequestStatus, ExternalWorkStore } from './external-work-store.ts';
+import type { ExternalStopRequestRecord, ExternalStopRequestStatus, ExecutorAttempt, ExternalWorkStore } from './external-work-store.ts';
 import type { ExternalPublisher, PublishAction, PublishResult } from './external-publish.ts';
+
+/** Optional WorkBuddy trigger port (S5); the Host injects the ready adapter, dispatch adds the mode gate. */
+export type WorkBuddyTriggerPort = { trigger(input: { workId: string; revision: number }): Promise<{ attempt: ExecutorAttempt; dispatched: boolean }> };
 
 /** Stable per-work external-stop request identity (uuid-shaped, never a claim or delivery id). */
 export const externalStopRequestId = (workId: string): string => {
@@ -72,13 +75,15 @@ export class ExternalDispatch {
   readonly #qualifyAssets: ExternalAssetQualification;
   readonly #publisher?: ExternalPublisher;
   readonly #requestExternalStop?: (input: { workId: string; reason: string }) => Promise<{ outcome: 'confirmed' | 'unknown' | 'failed' | 'unsupported'; detail?: string }>;
+  readonly #workbuddy?: WorkBuddyTriggerPort;
   readonly #now: () => number;
-  constructor(options: { store: ExternalWorkStore; profiles: ExternalProfileLookup; qualifyAssets: ExternalAssetQualification; now?: () => number; publisher?: ExternalPublisher; requestExternalStop?: (input: { workId: string; reason: string }) => Promise<{ outcome: 'confirmed' | 'unknown' | 'failed' | 'unsupported'; detail?: string }> }) {
+  constructor(options: { store: ExternalWorkStore; profiles: ExternalProfileLookup; qualifyAssets: ExternalAssetQualification; now?: () => number; publisher?: ExternalPublisher; requestExternalStop?: (input: { workId: string; reason: string }) => Promise<{ outcome: 'confirmed' | 'unknown' | 'failed' | 'unsupported'; detail?: string }>; workbuddy?: WorkBuddyTriggerPort }) {
     this.#store = options.store;
     this.#profiles = options.profiles;
     this.#qualifyAssets = options.qualifyAssets;
     this.#publisher = options.publisher;
     this.#requestExternalStop = options.requestExternalStop;
+    this.#workbuddy = options.workbuddy;
     this.#now = options.now ?? (() => Date.now());
   }
 
@@ -282,5 +287,22 @@ export class ExternalDispatch {
     const work = await this.#store.getWork(workId);
     if (!work || work.projectId !== owner.projectId || work.taskId !== owner.taskId) throw new ExternalWorkError('external_work_not_found', 404);
     return this.#publisher.publish({ workId: work.workId, revision: input.revision, action: input.action, body: input.body });
+  }
+
+  /**
+   * Optional WorkBuddy mode (S5). The adapter is Host-injected; without one the mode is
+   * simply unavailable and the pure GitHub path is untouched. The mode gate checks the
+   * restricted profile and exact work ownership before delegating to the adapter, which
+   * enforces the integration_unverified readiness, quota and serial-occupancy contract.
+   */
+  async triggerWorkBuddy(projectId: string, taskId: string, input: { workId: string; revision: number }): Promise<{ attempt: ExecutorAttempt; dispatched: boolean }> {
+    if (!this.#workbuddy) throw new ExternalWorkError('external_workbuddy_unconfigured', 503);
+    const owner = this.#owner(projectId, taskId);
+    const profile = this.#profiles(owner.projectId, owner.taskId);
+    if (!profile || profile.externalDispatchAllowed !== true) throw new ExternalWorkError('external_profile_forbidden', 403);
+    const workId = externalText(input.workId, 100);
+    const work = await this.#store.getWork(workId);
+    if (!work || work.projectId !== owner.projectId || work.taskId !== owner.taskId) throw new ExternalWorkError('external_work_not_found', 404);
+    return this.#workbuddy.trigger({ workId: work.workId, revision: input.revision });
   }
 }

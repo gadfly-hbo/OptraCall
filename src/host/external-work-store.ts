@@ -28,6 +28,44 @@ export type StoredExternalState = {
   internalChoices: InternalChoice[];
   resumePauses: ResumePauseRecord[];
   stopRequests: ExternalStopRequestRecord[];
+  workbuddyConfigs: WorkBuddyConfigRecord[];
+  executorAttempts: ExecutorAttempt[];
+};
+
+// —— S5 WorkBuddy 可选适配记录（schema:1 可选键；桩阶段仅类型与哨兵） ——
+
+export const WORKBUDDY_TRIGGER_QUOTA = 3;
+export type WorkBuddyTestStatus = 'unverified' | 'passed' | 'failed';
+export type WorkBuddyConfigRecord = {
+  configId: string;
+  connection: string;
+  apiOnline: WorkBuddyTestStatus;
+  connector: WorkBuddyTestStatus;
+  joint: WorkBuddyTestStatus;
+  /** Derived invariant: true if and only if joint === 'passed'. Enforced at parse. */
+  ready: boolean;
+  jointEvidence?: string;
+  replyCursor?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+export type ExecutorAttemptStatus = 'prepared' | 'submitted' | 'unknown' | 'succeeded' | 'rejected';
+export type ExecutorAttempt = {
+  attemptId: string;
+  grantId: string;
+  grantVersion: number;
+  workId: string;
+  revision: number;
+  connection: string;
+  /** SHA-256 of the exact outbound trigger message. */
+  bodyHash: string;
+  /** Official message-history cursor/trigger receipt; never a task, session or claim identity. */
+  messageId?: string;
+  submissionProcess?: string;
+  reason?: string;
+  status: ExecutorAttemptStatus;
+  createdAt: string;
+  updatedAt: string;
 };
 
 /** Persistent per-task pause of the external-delivery automatic resume (S4b). One record per owner. */
@@ -48,7 +86,9 @@ const PRESERVED_OUTCOMES: readonly ExternalDeliveryRef['preservation'][] = ['pre
 const REVIEW_DECISIONS: readonly ExternalReviewDecisionKind[] = ['accepted', 'needs-supplement', 'rejected'];
 const RESUME_STATUSES: readonly ResumeStatus[] = ['reserved', 'accepted', 'settled', 'unknown'];
 const STOP_REQUEST_STATUSES: readonly ExternalStopRequestStatus[] = ['requested', 'confirmed', 'unknown', 'failed', 'unsupported'];
-const emptyState = (): StoredExternalState => ({ schema: 1, version: 0, grants: [], works: [], claims: [], publications: [], deliveries: [], reviews: [], inboxEvents: [], resumeReceipts: [], internalChoices: [], resumePauses: [], stopRequests: [] });
+const WORKBUDDY_TEST_STATUSES: readonly WorkBuddyTestStatus[] = ['unverified', 'passed', 'failed'];
+const EXECUTOR_ATTEMPT_STATUSES: readonly ExecutorAttemptStatus[] = ['prepared', 'submitted', 'unknown', 'succeeded', 'rejected'];
+const emptyState = (): StoredExternalState => ({ schema: 1, version: 0, grants: [], works: [], claims: [], publications: [], deliveries: [], reviews: [], inboxEvents: [], resumeReceipts: [], internalChoices: [], resumePauses: [], stopRequests: [], workbuddyConfigs: [], executorAttempts: [] });
 
 /** Drop explicit `undefined` optional fields so strict key checks stay exact. */
 function clean(value: Record<string, unknown>): Record<string, unknown> {
@@ -279,18 +319,77 @@ function parseStopRequest(input: unknown, corrupt = 'external_record_invalid'): 
     return record;
   } catch (error) { if (error instanceof ExternalWorkError && error.code !== 'external_record_invalid') throw error; throw new ExternalWorkError(corrupt, corrupt === 'external_store_corrupt' ? 503 : 400); }
 }
+/** The user-selectable readiness is exactly the joint-test fact; no single test or combination of singles may enable it. */
+function parseWorkBuddyConfig(input: unknown, corrupt = 'external_record_invalid'): WorkBuddyConfigRecord {
+  try {
+    if (!externalRecord(input)) throw new Error();
+    externalKeys(clean(input), ['configId', 'connection', 'apiOnline', 'connector', 'joint', 'jointEvidence', 'ready', 'replyCursor', 'createdAt', 'updatedAt']);
+    const config: WorkBuddyConfigRecord = {
+      configId: externalId(input.configId), connection: externalText(input.connection, 200),
+      apiOnline: input.apiOnline as WorkBuddyTestStatus, connector: input.connector as WorkBuddyTestStatus, joint: input.joint as WorkBuddyTestStatus,
+      ready: input.ready === true,
+      createdAt: externalDate(input.createdAt), updatedAt: externalDate(input.updatedAt),
+    };
+    if (!WORKBUDDY_TEST_STATUSES.includes(config.apiOnline) || !WORKBUDDY_TEST_STATUSES.includes(config.connector) || !WORKBUDDY_TEST_STATUSES.includes(config.joint)) throw new Error();
+    if (config.ready !== (config.joint === 'passed')) throw new Error();
+    if (input.jointEvidence !== undefined) config.jointEvidence = externalText(input.jointEvidence, 300);
+    if (input.replyCursor !== undefined) config.replyCursor = externalText(input.replyCursor, 200);
+    return config;
+  } catch (error) { if (error instanceof ExternalWorkError && error.code !== 'external_record_invalid') throw error; throw new ExternalWorkError(corrupt, corrupt === 'external_store_corrupt' ? 503 : 400); }
+}
+function parseExecutorAttempt(input: unknown, corrupt = 'external_record_invalid'): ExecutorAttempt {
+  try {
+    if (!externalRecord(input)) throw new Error();
+    externalKeys(clean(input), ['attemptId', 'grantId', 'grantVersion', 'workId', 'revision', 'connection', 'bodyHash', 'messageId', 'submissionProcess', 'reason', 'status', 'createdAt', 'updatedAt']);
+    const attempt: ExecutorAttempt = {
+      attemptId: externalId(input.attemptId), grantId: externalId(input.grantId), grantVersion: externalRevision(input.grantVersion),
+      workId: externalId(input.workId), revision: externalRevision(input.revision),
+      connection: externalText(input.connection, 200), bodyHash: externalHash(input.bodyHash),
+      status: input.status as ExecutorAttemptStatus,
+      createdAt: externalDate(input.createdAt), updatedAt: externalDate(input.updatedAt),
+    };
+    if (!EXECUTOR_ATTEMPT_STATUSES.includes(attempt.status)) throw new Error();
+    // A succeeded trigger exists only with its message-history receipt (cursor, not an identity of its own).
+    if (attempt.status === 'succeeded' && typeof input.messageId !== 'string') throw new Error();
+    if (input.messageId !== undefined) attempt.messageId = externalText(input.messageId, 200);
+    if (input.submissionProcess !== undefined) attempt.submissionProcess = externalText(input.submissionProcess, 100);
+    if (input.reason !== undefined) attempt.reason = externalText(input.reason, 300);
+    return attempt;
+  } catch (error) { if (error instanceof ExternalWorkError && error.code !== 'external_record_invalid') throw error; throw new ExternalWorkError(corrupt, corrupt === 'external_store_corrupt' ? 503 : 400); }
+}
+/**
+ * Serial occupancy of one WorkBuddy connection: at most one OptraCall work may sit in a
+ * triggered/claimed execution phase. Unresolved in-flight triggers (prepared/submitted/unknown),
+ * an active claim, or an unclosed succeeded trigger keep the phase occupied — never released by
+ * "no messages" or timeouts alone.
+ */
+function workBuddyExecutionPhase(state: StoredExternalState, connection: string, now: number): { workId: string; reason: 'trigger-in-flight' | 'claim-active' | 'triggered-awaiting-closure' } | null {
+  for (const work of state.works) {
+    if (work.status === 'cancelled') continue;
+    const attempts = state.executorAttempts.filter(item => item.workId === work.workId && item.connection === connection);
+    if (attempts.some(item => item.status === 'prepared' || item.status === 'submitted' || item.status === 'unknown')) return { workId: work.workId, reason: 'trigger-in-flight' };
+    const activeClaim = state.claims.find(claim => claim.workId === work.workId && claim.status === 'active' && Date.parse(claim.leaseDeadline) > now);
+    if (activeClaim) return { workId: work.workId, reason: 'claim-active' };
+    const grant = state.grants.find(item => item.grantId === work.grantId && item.grantVersion === work.grantVersion);
+    if (!grant || Date.parse(grant.validUntil) <= now) continue;
+    const openTriggered = attempts.some(item => item.status === 'succeeded' && !state.deliveries.some(delivery => delivery.workId === work.workId && delivery.revision === item.revision && state.reviews.some(review => review.deliveryId === delivery.deliveryId)));
+    if (openTriggered) return { workId: work.workId, reason: 'triggered-awaiting-closure' };
+  }
+  return null;
+}
 
-function parseState(input: unknown): StoredExternalState {
-  const corrupt = (message = 'external_store_corrupt'): ExternalWorkError => new ExternalWorkError(message, 503);
+function parseState(input: unknown): StoredExternalState {  const corrupt = (message = 'external_store_corrupt'): ExternalWorkError => new ExternalWorkError(message, 503);
   try {
     if (!externalRecord(input) || input.schema !== 1 || !Number.isSafeInteger(input.version) || Number(input.version) < 0) throw corrupt();
-    externalKeys(input, ['schema', 'version', 'grants', 'works', 'claims', 'publications', 'deliveries', 'reviews', 'inboxEvents', 'resumeReceipts', 'internalChoices', 'resumePauses', 'stopRequests']);
-    // S4b optional keys: ledgers written before them stay readable (missing → empty).
-    const lists = ['grants', 'works', 'claims', 'publications', 'deliveries', 'reviews', 'inboxEvents', 'resumeReceipts', 'internalChoices', 'resumePauses', 'stopRequests'] as const;
+    externalKeys(input, ['schema', 'version', 'grants', 'works', 'claims', 'publications', 'deliveries', 'reviews', 'inboxEvents', 'resumeReceipts', 'internalChoices', 'resumePauses', 'stopRequests', 'workbuddyConfigs', 'executorAttempts']);
+    // S4b/S5 optional keys: ledgers written before them stay readable (missing → empty).
+    const lists = ['grants', 'works', 'claims', 'publications', 'deliveries', 'reviews', 'inboxEvents', 'resumeReceipts', 'internalChoices', 'resumePauses', 'stopRequests', 'workbuddyConfigs', 'executorAttempts'] as const;
     for (const key of lists) { const raw = input[key] ?? []; if (!Array.isArray(raw) || (raw as unknown[]).length > MAX_RECORDS) throw corrupt(); }
     const total = lists.reduce((sum, key) => sum + ((input[key] ?? []) as unknown[]).length, 0);
     if (total > MAX_RECORDS) throw corrupt('external_store_full');
-    const state: StoredExternalState = { schema: 1, version: Number(input.version), grants: [], works: [], claims: [], publications: [], deliveries: [], reviews: [], inboxEvents: [], resumeReceipts: [], internalChoices: [], resumePauses: [], stopRequests: [] };
+    const state: StoredExternalState = { schema: 1, version: Number(input.version), grants: [], works: [], claims: [], publications: [], deliveries: [], reviews: [], inboxEvents: [], resumeReceipts: [], internalChoices: [], resumePauses: [], stopRequests: [], workbuddyConfigs: [], executorAttempts: [] };
+    state.workbuddyConfigs = ((input.workbuddyConfigs ?? []) as unknown[]).map(item => parseWorkBuddyConfig(item, 'external_store_corrupt'));
+    state.executorAttempts = ((input.executorAttempts ?? []) as unknown[]).map(item => parseExecutorAttempt(item, 'external_store_corrupt'));
     state.grants = (input.grants as unknown[]).map(item => parseGrant(item, 'external_store_corrupt'));
     state.works = (input.works as unknown[]).map(item => parseWork(item, 'external_store_corrupt'));
     state.claims = (input.claims as unknown[]).map(item => parseClaim(item, 'external_store_corrupt'));
@@ -355,6 +454,20 @@ function parseState(input: unknown): StoredExternalState {
     for (const stopRequest of state.stopRequests) {
       if (!works.has(stopRequest.workId)) throw corrupt();
     }
+    unique(state.workbuddyConfigs, item => item.configId);
+    unique(state.workbuddyConfigs, item => item.connection);
+    unique(state.executorAttempts, item => item.attemptId);
+    const openTriggers = new Set<string>();
+    for (const attempt of state.executorAttempts) {
+      const work = works.get(attempt.workId);
+      if (!work || attempt.revision > work.revision) throw corrupt();
+      if (attempt.grantId !== work.grantId || attempt.grantVersion !== work.grantVersion) throw corrupt();
+      if (attempt.status !== 'rejected') {
+        const key = `${attempt.workId}\u0000${attempt.revision}`;
+        if (openTriggers.has(key)) throw corrupt();
+        openTriggers.add(key);
+      }
+    }
     return state;
   } catch (error) { if (error instanceof ExternalWorkError && error.code !== 'external_record_invalid') throw error; throw new ExternalWorkError('external_store_corrupt', 503); }
 }
@@ -396,6 +509,10 @@ export class ExternalWorkStore {
       for (const publication of state.publications) {
         // An interrupted submission can have taken effect; startup never retries it.
         if (publication.status === 'submitted' && publication.submissionProcess !== this.#instance) { publication.status = 'unknown'; publication.updatedAt = this.#stamp(); changed = true; }
+      }
+      for (const attempt of state.executorAttempts) {
+        // Same rule for WorkBuddy trigger attempts: a foreign submitted receipt is uncertain.
+        if (attempt.status === 'submitted' && attempt.submissionProcess !== this.#instance) { attempt.status = 'unknown'; attempt.updatedAt = this.#stamp(); changed = true; }
       }
       for (const claim of state.claims) {
         if (claim.status === 'active' && Date.parse(claim.leaseDeadline) <= this.#now()) { claim.status = 'expired'; claim.reason = 'lease_expired'; claim.updatedAt = this.#stamp(); changed = true; }
@@ -480,7 +597,7 @@ export class ExternalWorkStore {
     return this.mutate(operation);
   }
   #capacity(state: StoredExternalState, add = 1): void {
-    const total = state.grants.length + state.works.length + state.claims.length + state.publications.length + state.deliveries.length + state.reviews.length + state.inboxEvents.length + state.resumeReceipts.length + state.internalChoices.length + state.resumePauses.length + state.stopRequests.length;
+    const total = state.grants.length + state.works.length + state.claims.length + state.publications.length + state.deliveries.length + state.reviews.length + state.inboxEvents.length + state.resumeReceipts.length + state.internalChoices.length + state.resumePauses.length + state.stopRequests.length + state.workbuddyConfigs.length + state.executorAttempts.length;
     if (total + add > MAX_RECORDS) throw new ExternalWorkError('external_store_full', 413);
   }
   async version(): Promise<number> { this.#assertReady(); return (await this.#load()).version; }
@@ -924,5 +1041,138 @@ export class ExternalWorkStore {
       state.deliveries.push(delivery);
       return { delivery: structuredClone(delivery), idempotent: false };
     });
+  }
+
+  // —— S5 WorkBuddy 可选适配：配置状态机与触发额度/串行台账 ——
+
+  /** Register the optional adapter configuration; the created record is integration_unverified and disabled. */
+  async recordWorkBuddyConfig(input: { configId: string; connection: string }): Promise<WorkBuddyConfigRecord> {
+    const request = { configId: externalId(input.configId), connection: externalText(input.connection, 200) };
+    return this.#change(state => {
+      const existing = state.workbuddyConfigs.find(item => item.configId === request.configId || item.connection === request.connection);
+      if (existing) {
+        if (existing.configId !== request.configId || existing.connection !== request.connection) throw new ExternalWorkError('external_workbuddy_conflict', 409);
+        return structuredClone(existing);
+      }
+      this.#capacity(state);
+      const config: WorkBuddyConfigRecord = { ...request, apiOnline: 'unverified', connector: 'unverified', joint: 'unverified', ready: false, createdAt: this.#stamp(), updatedAt: this.#stamp() };
+      state.workbuddyConfigs.push(config);
+      return structuredClone(config);
+    });
+  }
+  /** Single API/online or Connector fact. It never touches readiness — only the joint test may enable. */
+  async recordWorkBuddySingleTest(input: { configId: string; kind: 'api-online' | 'connector'; outcome: 'passed' | 'failed' }): Promise<WorkBuddyConfigRecord> {
+    if ((input.kind !== 'api-online' && input.kind !== 'connector') || (input.outcome !== 'passed' && input.outcome !== 'failed')) throw new ExternalWorkError('external_workbuddy_invalid', 400);
+    return this.#change(state => {
+      const config = state.workbuddyConfigs.find(item => item.configId === externalId(input.configId));
+      if (!config) throw new ExternalWorkError('external_workbuddy_config_missing', 404);
+      if (input.kind === 'api-online') config.apiOnline = input.outcome; else config.connector = input.outcome;
+      config.ready = config.joint === 'passed';
+      config.updatedAt = this.#stamp();
+      return structuredClone(config);
+    });
+  }
+  /** Joint closed-loop verdict (engineering: isolated synthetic vendor simulation; real account is E08). */
+  async markWorkBuddyJointTest(input: { configId: string; outcome: 'passed' | 'failed'; evidence?: string }): Promise<WorkBuddyConfigRecord> {
+    if (input.outcome !== 'passed' && input.outcome !== 'failed') throw new ExternalWorkError('external_workbuddy_invalid', 400);
+    const evidence = input.evidence === undefined ? undefined : externalText(input.evidence, 300);
+    return this.#change(state => {
+      const config = state.workbuddyConfigs.find(item => item.configId === externalId(input.configId));
+      if (!config) throw new ExternalWorkError('external_workbuddy_config_missing', 404);
+      config.joint = input.outcome;
+      config.ready = input.outcome === 'passed';
+      if (evidence !== undefined) config.jointEvidence = evidence;
+      config.updatedAt = this.#stamp();
+      return structuredClone(config);
+    });
+  }
+  async getWorkBuddyConfig(configId: string): Promise<WorkBuddyConfigRecord | null> {
+    this.#assertReady();
+    const target = externalId(configId);
+    const found = (await this.#load()).workbuddyConfigs.find(item => item.configId === target);
+    return found ? structuredClone(found) : null;
+  }
+  async setWorkBuddyReplyCursor(configId: string, cursor: string): Promise<WorkBuddyConfigRecord> {
+    const target = externalId(configId), value = externalText(cursor, 200);
+    return this.#change(state => {
+      const config = state.workbuddyConfigs.find(item => item.configId === target);
+      if (!config) throw new ExternalWorkError('external_workbuddy_config_missing', 404);
+      config.replyCursor = value;
+      config.updatedAt = this.#stamp();
+      return structuredClone(config);
+    });
+  }
+  /** Read-only serial-occupancy view for one connection. */
+  async getWorkBuddyActiveExecution(connection: string): Promise<{ workId: string; reason: string } | null> {
+    this.#assertReady();
+    const target = externalText(connection, 200);
+    const phase = workBuddyExecutionPhase(await this.#load(), target, this.#now());
+    return phase ? structuredClone(phase) : null;
+  }
+  /**
+   * Reserve the unique trigger attempt for one (work, revision). Gates run inside the atomic
+   * mutation: idempotent repeat (same body) returns the original attempt; the per-grant quota
+   * counts every non-rejected attempt across turns/revisions (submitted/UNKNOWN occupy); another
+   * work holding the connection's execution phase refuses the new trigger without consuming quota.
+   */
+  async recordExecutorAttempt(input: { grantId: string; grantVersion: number; workId: string; revision: number; connection: string; bodyHash: string }): Promise<ExecutorAttempt> {
+    const request = { grantId: externalId(input.grantId), grantVersion: externalRevision(input.grantVersion), workId: externalId(input.workId), revision: externalRevision(input.revision), connection: externalText(input.connection, 200), bodyHash: externalHash(input.bodyHash) };
+    return this.#change(state => {
+      const work = state.works.find(item => item.workId === request.workId);
+      if (!work || request.revision > work.revision) throw new ExternalWorkError('external_workbuddy_invalid', 400);
+      if (work.status === 'cancelled') throw new ExternalWorkError('external_work_cancelled', 409);
+      const grant = state.grants.find(item => item.grantId === request.grantId && item.grantVersion === request.grantVersion);
+      if (!grant || grant.grantId !== work.grantId || grant.grantVersion !== work.grantVersion) throw new ExternalWorkError('external_workbuddy_invalid', 400);
+      if (Date.parse(grant.validUntil) <= this.#now()) throw new ExternalWorkError('external_grant_not_valid', 409);
+      const existing = state.executorAttempts.find(item => item.workId === request.workId && item.revision === request.revision && item.status !== 'rejected');
+      if (existing) {
+        if (existing.bodyHash !== request.bodyHash) throw new ExternalWorkError('external_workbuddy_trigger_conflict', 409);
+        return structuredClone(existing);
+      }
+      const used = state.executorAttempts.filter(item => item.grantId === request.grantId && item.status !== 'rejected').length;
+      if (used >= WORKBUDDY_TRIGGER_QUOTA) throw new ExternalWorkError('external_workbuddy_quota_exhausted', 429);
+      const phase = workBuddyExecutionPhase(state, request.connection, this.#now());
+      if (phase && phase.workId !== request.workId) throw new ExternalWorkError('external_workbuddy_serial_occupied', 409);
+      this.#capacity(state);
+      const attempt: ExecutorAttempt = { attemptId: randomUUID(), ...request, status: 'prepared', createdAt: this.#stamp(), updatedAt: this.#stamp() };
+      state.executorAttempts.push(attempt);
+      return structuredClone(attempt);
+    });
+  }
+  /**
+   * Guarded trigger transition. prepared→submitted/rejected; submitted→succeeded/rejected/unknown;
+   * unknown resolves only with `reconciled`; terminal states never change. succeeded requires the
+   * message receipt (cursor) — without it the caller must degrade to unknown.
+   */
+  async transitionExecutorAttempt(attemptId: string, status: ExecutorAttemptStatus, options: { expectedStatus?: ExecutorAttemptStatus; reconciled?: boolean; messageId?: string; reason?: string } = {}): Promise<ExecutorAttempt> {
+    const target = externalId(attemptId);
+    if (status === 'prepared' || !EXECUTOR_ATTEMPT_STATUSES.includes(status)) throw new ExternalWorkError('external_workbuddy_invalid', 400);
+    return this.#change(state => {
+      const attempt = state.executorAttempts.find(item => item.attemptId === target);
+      if (!attempt) throw new ExternalWorkError('external_workbuddy_attempt_not_found', 404);
+      if (options.expectedStatus !== undefined && attempt.status !== options.expectedStatus) throw new ExternalWorkError('external_workbuddy_conflict', 409);
+      const allowed: Record<ExecutorAttemptStatus, ExecutorAttemptStatus[]> = { prepared: ['submitted', 'rejected'], submitted: ['succeeded', 'rejected', 'unknown'], unknown: options.reconciled === true ? ['succeeded', 'rejected'] : [], succeeded: [], rejected: [] };
+      if (!allowed[attempt.status].includes(status)) throw new ExternalWorkError('external_workbuddy_transition_forbidden', 409);
+      if (status === 'succeeded') {
+        if (typeof options.messageId !== 'string' || !options.messageId.length) throw new ExternalWorkError('external_workbuddy_result_required', 400);
+        attempt.messageId = externalText(options.messageId, 200);
+      }
+      if (status === 'submitted') attempt.submissionProcess = this.#instance;
+      if (options.reason !== undefined) attempt.reason = externalText(options.reason, 300);
+      attempt.status = status;
+      attempt.updatedAt = this.#stamp();
+      return structuredClone(attempt);
+    });
+  }
+  async getExecutorAttempt(attemptId: string): Promise<ExecutorAttempt | null> {
+    this.#assertReady();
+    const target = externalId(attemptId);
+    const found = (await this.#load()).executorAttempts.find(item => item.attemptId === target);
+    return found ? structuredClone(found) : null;
+  }
+  async listExecutorAttempts(workId?: string): Promise<ExecutorAttempt[]> {
+    this.#assertReady();
+    const target = workId === undefined ? undefined : externalId(workId);
+    return structuredClone((await this.#load()).executorAttempts.filter(item => target === undefined || item.workId === target));
   }
 }

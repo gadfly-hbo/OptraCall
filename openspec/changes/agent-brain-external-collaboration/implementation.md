@@ -30,7 +30,7 @@
 - [~] E02 GitHub 独立发布/修订/回执 + 通用认证领取、原子单 claim/UNKNOWN 幂等 —— S2 切片完成（Host-only 发布编排＋UNKNOWN 只读核对＋只读收件适配＋manager Host-only 派发接缝）；原子单 claim 在 S1 store 已完成本轮复用；发布/收件的真实 GitHub 出站与 server.ts 接线属 E07/后续切片
 - [~] E03 受保护资产/工作 MCP、OAuth/精确交集/只读/错误与分片边界 —— S3a 切片完成（OAuth 2.1 授权/资源服务器＋受保护 Streamable HTTP 传输入口＋自签 TLS 闭环）；S3b 切片完成（资产只读交集＋asset.*/work.* 工具接入 S3a 服务器）；真实 Studio/原实例资格装配属 E07
 - [~] E04 字节保全/ExternalDeliveryRef、原 owner 指纹/providedContext/非用户原话、busy/重启/暂停/取消/迟到、Agent 核验/原工具保存 —— S4a 切片完成（交付字节保全：分块上传＋manifest 校验＋原子宿主保存＋独立 ExternalDeliveryRef；迟到不变式回并台账单一来源）；S4b 切片完成（同 owner 续接调度＋指纹/providedContext 外派身份扩展＋busy 待处理/重启回读/持久暂停/停止路由设暂停/cancelWork 外部停止待核）；markSettled 实时接线、收件→续接真实装配与 pause/cancel HTTP 入口属 E06/E07，Agent 核验工具接线属 E07
-- [ ] E05 WorkBuddy 可选适配工程合同（默认未验证禁用）
+- [~] E05 WorkBuddy 可选适配工程合同（默认未验证禁用）—— S5 切片完成（配置状态机＋联合测试启用门槛＋官方本机 API 薄适配＋message_id 游标归属＋3 次触发额度＋串行占用＋dispatch mode 门槛；全部合成 transport/台账验证）；实号联合验证属 E08，设置路由/UI 接线属 E06
 - [ ] E06 UI 编码（沿映射）+ 三路径 + 1440/1024/390 亮暗/键盘/焦点 + 原消费者回归
 - [ ] E07 隔离 Host/Pi/标准 MCP/TLS/OAuth/GitHub 模拟供应商核心闭环 + 三冻结基准逐项非作者复核
 - [ ] G01 真实产品同视口对照 + 开 PR 前截图用户确认（PM 门禁）
@@ -195,6 +195,29 @@
 - 未接线（明确不在本切片）：`markSettled` 的 run.settled 实时接线（restart 回读已覆盖 settled 归一化）；收件→续接的真实 `ExternalInbox→notifyEvent` 装配与 grant→subscription Host 装配（E07）；pause/resume 与 cancelWork 的 HTTP 入口（E06 UI）；Case 绑定任务的续接回归（本切片合成任务无 Case 绑定；Case 注入 caseContext 的既有路径未改动）；真实 GitHub/模型（E07/E08）。
 - 边界备注（如实记录）：`src/agent/project-runtime.ts`/`project-session.ts` 各一行加列在交接允许路径清单之外，依据 spec §12 "src/agent 的任务端口与工具/上下文交付" 与交接目标"providedContext 增可选 external receipt"的持久化必要性；纯加列，`git diff` 可独立复核。忙→重试定时器默认 30s（服务策略可配属装配切片）；每扫描至多派一 turn，多交付按 FIFO 排队。
 - 兼容回退：新台账键全部可选、旧 ledger 逐字节解析负例实测；指纹无外派输入逐字节不变；`cancelWork` 返回形状由 `ExternalWork` 扩为 `{work, stopRequest}`（既有调用点均不消费返回值，S1/S2 测试不改即绿）；回退后暂停/停止请求/预留记录保留，不重放外部动作。
+
+### S5（E05，2026-11-28）：WorkBuddy 可选适配工程合同——默认未验证禁用、触发额度与串行占用
+
+**本轮交付**（接 S1 台账与 S2 发布锚点；不接 UI/真实 WorkBuddy/网络/凭据；实号联合验证明确属 E08）：
+
+- `src/host/workbuddy-adapter.ts`（新增）：`WorkBuddyAdapter`（每连接一实例）。配置状态机：`ensureConfig` 幂等注册（connection 派生稳定 configId，默认 `integration_unverified` 禁用）；`recordSingleTest` 仅记录 API/在线或 Connector 单项事实（`settingsView` 供 E06 设置分区展示核心/可选分别状态，含 quota limit 3）；单项通过（含两项齐备）永不置 `ready`——`ready` 恒等于联合测试事实（台账 parse 强制该不变式，`ready=true` 且 joint≠passed 视为 corrupt）。`runJointTest(harness)`：五阶段（触发→领取→资产读取→work.deliver 交回→原 Task 核验）经注入接缝逐段独立确认，全过才 `markWorkBuddyJointTest('passed')` 置就绪（工程用隔离合成供应商模拟闭环，证据标 `synthetic-vendor-simulation`；实号属 E08），任一阶段失败记 failed 并保持禁用。`trigger(workId, revision)`：门槛依序=就绪配置→work/grant 存在→GitHub succeeded issue-create 锚点（触发消息定位信息）→合成消息凭据扫描→台账原子预留（幂等/额度/串行门禁）→GET localassistant 在线事实（明确离线→`rejected/assistant_offline`，不占额、不发消息）→POST message(msg_type text)→成功须带 message_id（缺失降级 unknown）→明确拒绝/回执丢失如实落账。触发消息仅由持久记录（目标/范围/禁做/交付标准/资产定位 refs/仓库#Issue/MCP 入口）合成，不接受自由文本；内置令牌形状扫描＋注入 `credentialValues` 精确值卫（Host 记忆的凭据），命中 `external_workbuddy_secret_rejected` 且不落 attempt 不出站。`readReplies()`：经 transport 增量读账号消息历史（GET message?message_id 游标）；归属仅认精确 `wb-correlation:<workId>@<revision>` 标记且该 work/revision 在本连接有记录的触发尝试（message_id 仅游标/回执，不据其后消息/时间邻近/最近触发判归属）；claim/delivery 证据仅当引用身份在台账准确存在且绑定同 work/revision 才升级；不可关联消息只回 messageId，正文不返回、不进台账（事务正文零落账负例实测）；消息永不替代 work.deliver、不产生交付/核验记录；游标仅整批成功后推进，读失败原地（同窗口重读）。`quotaUsed(grantId)` 供快照/设置展示。
+- `src/host/external-work-store.ts` 最小扩展（schema:1 可选键，旧台账缺键照常解析——旧格式回读负例保留）：`workbuddyConfigs`（每连接一条：apiOnline/connector/joint 三事实＋派生 ready 不变量＋jointEvidence/replyCursor）与 `executorAttempts`（稳定 attemptId、grant 绑定校验、bodyHash 同文幂等/异文冲突、message_id 可选回执、submissionProcess 支持重启外来 submitted→unknown 归一化）。方法：config 注册/单项/联合/游标/读取；`recordExecutorAttempt` 原子门禁=work/revision/grant 绑定校验→取消拒绝→非 rejected 同 (work,revision) 幂等回原 attempt→每 grant 非 rejected 尝试 ≥3 拒 `external_workbuddy_quota_exhausted`（submitted/UNKNOWN/succeeded 占额、跨 turn/revision 不重置）→同连接另一工作处于执行阶段拒 `external_workbuddy_serial_occupied`（不占额、不落记录）；`transitionExecutorAttempt` 转移表守卫（prepared→submitted/rejected；submitted→succeeded/rejected/unknown；unknown 仅 reconciled 可核定；succeeded 必须 message_id，缺失 `external_workbuddy_result_required` 由调用方降级 unknown）；`getWorkBuddyActiveExecution(connection)` 只读串行占用视图（在途 prepared/submitted/unknown→有效领取→已触发未闭环[该 revision 无交付+核验、grant 有效期内]；取消/闭环/授权到期释放；候选工作自身推进下一 revision 不算跨工作占用——"一项工作"以 workId 为界）。parse 完整性：configId/connection 唯一、ready 不变量、attempt 唯一/悬挂引用/grant 绑定不符/同 (work,revision) 双非 rejected 全部 corrupt。
+- `src/host/external-dispatch.ts` 最小扩展：可选注入 `workbuddy` 端口＋`triggerWorkBuddy(projectId, taskId, input)` mode 选用门槛——未注入 `external_workbuddy_unconfigured`（纯 GitHub 路径零影响）、受限 profile 拒绝、跨 owner 404，就绪/额度/串行由适配器合同执行。
+
+**TDD 证据（先真实 RED 后最小 GREEN）**：
+
+- RED（桩阶段哨兵行为错误，非导入/环境错误）：`red/s5-workbuddy-red.log`（exit=1，16 tests 0 pass 16 fail，全部 `external_workbuddy_unimplemented`/`external_store_workbuddy_unimplemented`）。
+- GREEN：`node --test tests/external-workbuddy.test.ts` → 16/16 PASS 连跑 2 次（`green/s5-combined-green.log`、`green/s5-combined-green-rerun.log`）。迭代记录：测试侧修正三处（内部任务负例改用已注入适配器的 dispatch 以越过未配置前置门禁验证 404；串行释放用例先经 reconciled 只读核定 A 的 UNKNOWN 再闭环；jointHarness overrides 类型 `Partial<WorkBuddyJointTestHarness>`），产品侧零回改、断言未削弱。
+- 检查：`npm run check:agent-sessions` PASS（`green/s5-check-agent-sessions-green.log`）；`npm run build` PASS（`green/s5-build-green.log`）。
+- 回归（隔离复跑全过）：S1+S2 store/dispatch/publish/inbox 52/52（`green/s5-regression-s1s2-green.log`）；S4b resume/host＋service-connection-host 12/12（`green/s5-regression-s4b-green.log`）；外派家族其余 delivery/mcp×4/home-external-waiting/host-dispatch 85/85（`green/s5-regression-external-family-green.log`）；核心 agent-sessions+project-history 32/32（`green/s5-regression-core-green.log`）。
+
+**关键负例覆盖（对应交接清单）**：默认 `integration_unverified` 禁用（未注册/已注册均拒触发，零出站）；API/在线单项、Connector 单项、两项齐备均不足以启用；联合闭环失败保持禁用、全过才就绪且触发 E2E 打通；台账 ready 不变量损坏 corrupt、旧格式（无新键）照常解析；纯 GitHub 授权/发布与内部选择在适配已就绪时仍零 WB 调用/零 attempt/零额度，内部任务不申请外派授权（无 work 404）；3 次额度含修订（r1/r2/r3）、UNKNOWN 占额（同 revision 重发回原 attempt 零二次 POST）、超限拒绝、新 adapter 实例（重启/新 turn）不重置；明确拒绝（离线 assistant_offline）不占额、恢复后同 revision 新 attempt 可触发；串行——第二项工作 serial_occupied 拒绝、零二次 POST、零 attempt 记录、quota 不动，占用视图准确；首项 UNKNOWN 在途不释放（B 二次拒绝），仅 reconciled 只读核定后闭环（claim→deliver→review→release）才释放，取消立即释放；转移表守卫（prepared 不可直接 succeeded、expectedStatus 冲突、unknown 非 reconciled 拒、succeeded 缺 message_id 拒、终态不可改）；attempt 记录悬挂引用/grant 绑定不符/同键双开 corrupt；message_id 仅游标——相邻未标记消息不错误归属、错误 workId/未触发 revision 不归属、正文不进台账字节级验证；claim/delivery 证据仅准确核对升级、伪造 delivery 引用不产生交付/核验记录；游标整批成功推进、读失败原地同窗重读；离线/失败不静默重派、UNKNOWN 不自动第二条（重启后同 attempt）、纯 GitHub 同工作 issue-comment 不受影响；dispatch mode 门槛四负例＋就绪正例；触发消息逐字段定位断言（marker/仓库#Issue/MCP 入口/目标/标准/资产 ref、msg_type text）且零令牌形状，业务文本夹带令牌形状/Host 记忆凭据值均出站前拒绝（不落 attempt、零 POST、零额度）。
+
+**失败/跳过/未验证项**：
+
+- S5 未验证（明确不在本轮范围）：真实 WorkBuddy API/实号联合验证（E08——真实账号 OAuth、在线助手、Connector、真实闭环全部 NOT_RUN，不因工程模拟闭环冒已联通）；server.ts 设置路由与 UI 展示（E06 用 `settingsView`/`quotaUsed` 接线）；permission_response 工具审批载荷（官方未实测字段，未实现）；串行占用的跨进程并发压测（单实例文件锁语义沿用台账既有模式）；触发消息长度与官方字段超限行为的真实边界（以 200k 上限防御，实号另核）。
+- 工程实现取舍（如实记录）：额度门禁计入 prepared（进程崩溃残留的 prepared 保守占额占串行，避免并发双发；重启仅归一化外来 submitted）；`runJointTest` 仅在台账记联合事实与证据标记，合成工单/资产数据由 Host 装配方建立（本切片测试内存内构造，不落真实业务台账）；占位候选工作自身豁免跨工作串行门禁（"一项工作"以 workId 为界，修订晋升在真实流程先经核验闭环）。
+- 兼容回退：新台账键全部可选、旧 ledger 逐字节解析负例实测；S1–S4b 全部既有语义零改动（52+12+85+32 隔离复跑全过）；`ExternalDispatch` 构造参数纯增列（未注入时行为与旧一致，S1/S2 测试不改即绿）；回退后配置事实/触发尝试（含 UNKNOWN/拒绝）保留，不重放外部动作。
 
 ## 范围外发现（记录并继续原任务）
 
