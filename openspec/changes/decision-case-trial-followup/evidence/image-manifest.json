@@ -1,0 +1,56 @@
+[
+  {
+    "path": "01-empty-choice.png",
+    "bytes": 155745,
+    "sha256": "48d446294643260ef2b08b1bc5f3385aa58816a4c702da7926340f9995e3f6ec",
+    "kind": "actual App/Host and production CSS in isolated synthetic scenario; not Mac original"
+  },
+  {
+    "path": "03-case-eof-waiting.png",
+    "bytes": 123836,
+    "sha256": "d24874997d6ece10fb57e0baf1882db63b0f08c38dc49d086f746b725fc036ab",
+    "kind": "actual App/Host and production CSS in isolated synthetic scenario; not Mac original"
+  },
+  {
+    "path": "03-case-after-readback.png",
+    "bytes": 125558,
+    "sha256": "11429384e3ffcc9507b82963c8f6a3f45fe7fef4fe07ec19163cbb2c8b73a865",
+    "kind": "actual App/Host and production CSS in isolated synthetic scenario; not Mac original"
+  },
+  {
+    "path": "05-component-missing-name.png",
+    "bytes": 118399,
+    "sha256": "fbcd33e502b14b2350c08cfc6d5454c79e09cfbe74f73be525ccf0b151274101",
+    "kind": "isolated React component with HTTP fixture, no production CSS; validates field/error behavior only"
+  },
+  {
+    "path": "06-before-refresh.png",
+    "bytes": 174120,
+    "sha256": "32088fd06baa11723350cfff4f718bc9ac91e362d506788ae755a2e186b38677",
+    "kind": "actual App/Host and production CSS in isolated synthetic scenario; not Mac original"
+  },
+  {
+    "path": "06-after-refresh.png",
+    "bytes": 201738,
+    "sha256": "e6edf386c82a77522faca8cf62dc5be31a24b2405c42f5c658ff5041df7757f4",
+    "kind": "actual App/Host and production CSS in isolated synthetic scenario; not Mac original"
+  },
+  {
+    "path": "07-single-case-shared-zero.png",
+    "bytes": 89890,
+    "sha256": "fc61240399e52317c49da949ac932f211a682e6fba9159ba0fd028a78b7f611f",
+    "kind": "actual App/Host and production CSS in isolated synthetic scenario; not Mac original"
+  },
+  {
+    "path": "07-two-cases-shared-one.png",
+    "bytes": 92851,
+    "sha256": "519609092ec686358f9f20b7d50b938e48041daab98ff18c8800beb38021ff68",
+    "kind": "actual App/Host and production CSS in isolated synthetic scenario; not Mac original"
+  },
+  {
+    "path": "09-after-restore.png",
+    "bytes": 97655,
+    "sha256": "43616754499e82580b6763d62b6210188b2436bfd3c2cbca1391477943531377",
+    "kind": "actual App/Host and production CSS in isolated synthetic scenario; not Mac original"
+  }
+]
