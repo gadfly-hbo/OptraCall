@@ -1,11 +1,14 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { CaseDecisionIssue } from '../case-decision-types.ts';
 import type { CaseProjectLink, CaseRecord } from '../case-types.ts';
 import { taskPurpose, taskTypes } from '../task-assignment.ts';
 import { caseTasksInScope, type CaseAuxScope } from './case-board-navigation-model.ts';
 import { caseDate, workStatusLabel } from './CaseDialogs.tsx';
+import { readProjectExternalSummaries } from './external-dispatch-client.ts';
+import { externalWorkStatusView, type WorkStatusTone } from './ExternalWorkPanel.tsx';
 import type { ClientProject, ClientTask } from './project-types.ts';
 import './daily-case-projects.css';
+import './external-dispatch.css';
 
 export type DailyCaseProjectsProps = {
   record: CaseRecord;
@@ -40,6 +43,29 @@ function ExternalIcon() {
 /** Presents existing Case/project/task records; navigation and all writes remain with the board. */
 export function DailyCaseProjects({ record, issues, scope, scopeControl, linkedProjects, projectLinks, onLinkProject, onEditWork, onUnlinkProject, onOpenTask, onContinueTask, onOpenProject, onCreateTask }: DailyCaseProjectsProps) {
   const active = record.status !== 'closed';
+  // S6b: read-only external-dispatch summaries keyed by real task identity; the inset is
+  // injected only into rows this Case actually renders (assignment.issue scope), never
+  // into other-Case or unbound tasks of a shared project.
+  const summaryProjectsKey = linkedProjects.map(item => item.link.projectId).join(',');
+  const [externalByTask, setExternalByTask] = useState<Record<string, { label: string; tone: WorkStatusTone }>>({});
+  useEffect(() => {
+    const controller = new AbortController();
+    const projectIds = summaryProjectsKey ? summaryProjectsKey.split(',') : [];
+    Promise.all(projectIds.map(projectId => readProjectExternalSummaries(projectId, controller.signal).catch(fault => {
+      if ((fault as Error)?.name === 'AbortError' || controller.signal.aborted) throw fault;
+      return { projectId, tasks: [] };
+    }))).then(results => {
+      if (controller.signal.aborted) return;
+      const next: Record<string, { label: string; tone: WorkStatusTone }> = {};
+      for (const result of results) for (const entry of result.tasks) {
+        const activeWorks = entry.works.filter(work => work.status !== 'cancelled');
+        const latest = activeWorks[activeWorks.length - 1];
+        if (latest) next[entry.taskId] = externalWorkStatusView(latest);
+      }
+      setExternalByTask(next);
+    }).catch(() => { /* a failed read keeps the table; it never blocks Case rows */ });
+    return () => controller.abort();
+  }, [summaryProjectsKey]);
   return <section className="daily-case-tab-page daily-case-projects" aria-label="项目与任务">
     <header className="dcp-page-heading">
       <div><h2>项目与任务</h2><p>在共享项目里做具体工作，保留任务原来的会话与成果。</p></div>
@@ -61,7 +87,13 @@ export function DailyCaseProjects({ record, issues, scope, scopeControl, linkedP
               <colgroup><col style={{ width: '43%' }} /><col style={{ width: '24%' }} /><col style={{ width: '17%' }} /><col style={{ width: '16%' }} /></colgroup>
               <thead><tr><th scope="col">原任务</th><th scope="col">用途</th><th scope="col">当前记录</th><th scope="col">继续工作</th></tr></thead>
               <tbody>{tasks.map(task => <tr key={task.id}>
-                <td><button type="button" className="dcp-task-name" onClick={() => onOpenTask(project, task)}>{task.name}<small>原关联：{record.title} / {issues.find(issue => issue.id === task.assignment?.issue?.issueId)?.title ?? '原事项暂不可读取'}</small></button></td>
+                <td><button type="button" className="dcp-task-name" onClick={() => onOpenTask(project, task)}>{task.name}<small>原关联：{record.title} / {issues.find(issue => issue.id === task.assignment?.issue?.issueId)?.title ?? '原事项暂不可读取'}</small></button>
+                  {externalByTask[task.id] && <div className="dcp-external-summary" aria-label="本任务外派摘要">
+                    <strong>本 Task 外部协作</strong>
+                    <span><span className="ed-pill" data-tone={externalByTask[task.id].tone}>{externalByTask[task.id].label}</span> · 独立外派工作台账</span>
+                    <small>不代表本 Task / Case 已完成；不改变人的待回应、项目等待记录或当前轮次。</small>
+                  </div>}
+                </td>
                 <td><span className="dcp-task-type">{task.assignment ? taskPurpose[task.assignment.type].label : '用途未设置'}</span></td>
                 <td><span className={`dcp-task-status${task.lastRun?.status === 'completed' && !task.archivedAt ? ' is-recorded' : ''}`}>{task.archivedAt ? '任务已归档' : task.lastRun ? runLabels[task.lastRun.status] : '尚无运行记录'}</span><small className="dcp-updated">更新于 {caseDate(task.updatedAt)}</small></td>
                 <td><button type="button" className="dcp-source-link" onClick={() => onOpenTask(project, task)}>打开原任务 <ExternalIcon /></button></td>

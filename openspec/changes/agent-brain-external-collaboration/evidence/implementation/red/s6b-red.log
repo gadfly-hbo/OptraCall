@@ -1,0 +1,221 @@
+✖ S6b routes: deliveries view is a read-only GET composed from real ledger facts (915.602375ms)
+✖ S6b routes: assets view returns the exact allowlist and delivery-declared references (849.657875ms)
+✖ S6b routes: project summaries expose per-task works for Case rows without mutating records (865.443084ms)
+✔ S6b routes: settings view keeps real core facts and the unverified optional gate (846.802708ms)
+✖ S6b client: delivery/asset/summary reads are GET with exact owner paths and owner checks (2.13375ms)
+✖ S6b delivery panel: verification table, manifest preservation facts, references and the agent conclusion render from ledger facts (13.411125ms)
+✖ S6b delivery panel: late delivery shows the quarantine callout and no-work task shows the honest empty state (5.783542ms)
+✖ S6b assets panel: exact allowlist, version detail with hash, references and entry availability render honestly (5.831ms)
+✖ S6b assets panel: without reads or grants the panel stays honest and never invents usage (5.433125ms)
+✖ S6b settings partition: core four rows, optional three rows unverified-disabled, no simulation buttons (5.145583ms)
+✖ S6b settings partition: a verified GitHub core surfaces green while the optional gate stays honest (5.291041ms)
+✖ S6b case rows: the dispatch summary inset appears only on the truly bound task row (13.550208ms)
+✔ S6b case rows: without external works no inset renders and reads never break the table (8.269875ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 2
+ℹ fail 11
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3658.934833
+
+✖ failing tests:
+
+test at tests/external-delivery-ui.test.ts:21:1
+✖ S6b routes: deliveries view is a read-only GET composed from real ledger facts (915.602375ms)
+  AssertionError [ERR_ASSERTION]: {"code":"not_found","message":"请求未完成，请检查输入或本地服务后重试。"}
+  
+  404 !== 200
+  
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery-ui.test.ts:26:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 404,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-delivery-ui.test.ts:77:1
+✖ S6b routes: assets view returns the exact allowlist and delivery-declared references (849.657875ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  
+  undefined !== []
+  
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery-ui.test.ts:82:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-delivery-ui.test.ts:103:1
+✖ S6b routes: project summaries expose per-task works for Case rows without mutating records (865.443084ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    {
+  +   code: 'not_found',
+  +   message: '请求未完成，请检查输入或本地服务后重试。'
+  -   projectId: 'a6e6588f-08ad-4b2d-96f8-e056d65df2eb',
+  -   tasks: [
+  -     {
+  -       taskId: '91c79567-b0cd-4ce7-b313-05aeef862159',
+  -       works: []
+  -     },
+  -     {
+  -       taskId: 'f899a80e-8f26-4083-8d1b-523b1fc4c8ff',
+  -       works: []
+  -     }
+  -   ]
+    }
+  
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery-ui.test.ts:113:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { code: 'not_found', message: '请求未完成，请检查输入或本地服务后重试。' },
+    expected: { projectId: 'a6e6588f-08ad-4b2d-96f8-e056d65df2eb', tasks: [ [Object], [Object] ] },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-delivery-ui.test.ts:223:1
+✖ S6b client: delivery/asset/summary reads are GET with exact owner paths and owner checks (2.13375ms)
+  Error [ExternalDispatchRequestError]: 外派操作未完成，原任务与输入保留，请核对原记录后重试。
+      at unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/ui/external-dispatch-client.ts:154:56)
+      at Module.readTaskExternalDeliveries (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/ui/external-dispatch-client.ts:157:3)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery-ui.test.ts:234:35)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_delivery_ui_unimplemented',
+    status: 501
+  }
+
+test at tests/external-delivery-ui.test.ts:353:1
+✖ S6b delivery panel: verification table, manifest preservation facts, references and the agent conclusion render from ledger facts (13.411125ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /外部交付，核验后接回原任务/. Input:
+  
+  'external_delivery_ui_unimplemented — 暂时无法读取外派台账，请检查本机服务后重试。'
+  
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery-ui.test.ts:361:12)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'external_delivery_ui_unimplemented — 暂时无法读取外派台账，请检查本机服务后重试。',
+    expected: /外部交付，核验后接回原任务/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/external-delivery-ui.test.ts:397:1
+✖ S6b delivery panel: late delivery shows the quarantine callout and no-work task shows the honest empty state (5.783542ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /迟到交付已隔离保存/. Input:
+  
+  'external_delivery_ui_unimplemented — 暂时无法读取外派台账，请检查本机服务后重试。'
+  
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery-ui.test.ts:404:12)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'external_delivery_ui_unimplemented — 暂时无法读取外派台账，请检查本机服务后重试。',
+    expected: /迟到交付已隔离保存/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/external-delivery-ui.test.ts:417:1
+✖ S6b assets panel: exact allowlist, version detail with hash, references and entry availability render honestly (5.831ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /外部读取的是获准依据/. Input:
+  
+  'external_asset_ui_unimplemented'
+  
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery-ui.test.ts:430:12)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'external_asset_ui_unimplemented',
+    expected: /外部读取的是获准依据/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/external-delivery-ui.test.ts:452:1
+✖ S6b assets panel: without reads or grants the panel stays honest and never invents usage (5.433125ms)
+  AssertionError [ERR_ASSERTION]: the empty receipt note is exact
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery-ui.test.ts:459:12)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'external_asset_ui_unimplemented',
+    expected: /尚无外部读取回执|资产被列出不等于已经读取或采用/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/external-delivery-ui.test.ts:464:1
+✖ S6b settings partition: core four rows, optional three rows unverified-disabled, no simulation buttons (5.145583ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /外派与执行方式/. Input:
+  
+  'external_settings_ui_unimplemented'
+  
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery-ui.test.ts:469:12)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'external_settings_ui_unimplemented',
+    expected: /外派与执行方式/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/external-delivery-ui.test.ts:489:1
+✖ S6b settings partition: a verified GitHub core surfaces green while the optional gate stays honest (5.291041ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /gadfly-hbo/. Input:
+  
+  'external_settings_ui_unimplemented'
+  
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery-ui.test.ts:502:12)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'external_settings_ui_unimplemented',
+    expected: /gadfly-hbo/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/external-delivery-ui.test.ts:519:1
+✖ S6b case rows: the dispatch summary inset appears only on the truly bound task row (13.550208ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /本 Task 外部协作/. Input:
+  
+  '项目与任务在共享项目里做具体工作，保留任务原来的会话与成果。会员资料治理四店会员资料核查原项目 · 查看全局工作1 个任务原任务用途当前记录继续工作四店会员资料一致性核查原关联：会员资料治理 / 资料一致性核查分析 Analysis尚无运行记录更新于 11/28 22:47打开原任务 项目共用信息与管理2 个原任务 · 1 个 Case 共用 · 工作状态未设置承接人未设置工作范围未设置下一步未设置＋ 在项目中新建任务编辑工作信息解除关联带着此 Case 继续协作（明确选择后进入原任务）四店会员资料一致性核查按此 Case 继续六类任务分别用来做什么？按需要选用，可以重复，也可以缺少需求 Requirement待决问题、范围、判断标准和资料缺口分析 Analysis可核对的发现、证据、备选解释及改判条件计划 Plan具体行动方案、备选、负责人、资源、时间、观察指标及退出条件决策 Decision对照标准比较准确方案、风险，提交负责人取舍执行 Do按实际授权记录行动、偏差、未执行原因和观察反馈 Teach对照当时预期与实际观察，提出改判、下一步或结轮理由项目由多个事项共享。打开原任务只是查看已有内容；带着此 Case 继续协作需要明确选择。最近运行完成不等于目标已经达成。关联项目项目业务信息全局共享，任务与文件仍属于原项目；共享项目不代表其中全部资料自动属于此 Case。＋ 关联项目'
+  
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery-ui.test.ts:535:12)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '项目与任务在共享项目里做具体工作，保留任务原来的会话与成果。会员资料治理四店会员资料核查原项目 · 查看全局工作1 个任务原任务用途当前记录继续工作四店会员资料一致性核查原关联：会员资料治理 / 资料一致性核查分析 Analysis尚无运行记录更新于 11/28 22:47打开原任务 项目共用信息与管理2 个原任务 · 1 个 Case 共用 · 工作状态未设置承接人未设置工作范围未设置下一步未设置＋ 在项目中新建任务编辑工作信息解除关联带着此 Case 继续协作（明确选择后进入原任务）四店会员资料一致性核查按此 Case 继续六类任务分别用来做什么？按需要选用，可以重复，也可以缺少需求 Requirement待决问题、范围、判断标准和资料缺口分析 Analysis可核对的发现、证据、备选解释及改判条件计划 Plan具体行动方案、备选、负责人、资源、时间、观察指标及退出条件决策 Decision对照标准比较准确方案、风险，提交负责人取舍执行 Do按实际授权记录行动、偏差、未执行原因和观察反馈 Teach对照当时预期与实际观察，提出改判、下一步或结轮理由项目由多个事项共享。打开原任务只是查看已有内容；带着此 Case 继续协作需要明确选择。最近运行完成不等于目标已经达成。关联项目项目业务信息全局共享，任务与文件仍属于原项目；共享项目不代表其中全部资料自动属于此 Case。＋ 关联项目',
+    expected: /本 Task 外部协作/,
+    operator: 'match',
+    diff: 'simple'
+  }

@@ -1,0 +1,42 @@
+✔ S6b routes: deliveries view is a read-only GET composed from real ledger facts (1432.403458ms)
+✔ S6b routes: assets view returns the exact allowlist and delivery-declared references (1011.821042ms)
+✔ S6b routes: project summaries expose per-task works for Case rows without mutating records (1069.5795ms)
+✔ S6b routes: settings view keeps real core facts and the unverified optional gate (1014.714708ms)
+✔ S6b client: delivery/asset/summary reads are GET with exact owner paths and owner checks (2.888708ms)
+✔ S6b delivery panel: verification table, manifest preservation facts, references and the agent conclusion render from ledger facts (16.725791ms)
+✔ S6b delivery panel: late delivery shows the quarantine callout and no-work task shows the honest empty state (7.266584ms)
+✔ S6b assets panel: exact allowlist, version detail with hash, references and entry availability render honestly (7.062875ms)
+✔ S6b assets panel: without reads or grants the panel stays honest and never invents usage (6.24775ms)
+✔ S6b settings partition: core four rows, optional three rows unverified-disabled, no simulation buttons (7.125083ms)
+✔ S6b settings partition: a verified GitHub core surfaces green while the optional gate stays honest (6.22575ms)
+✔ S6b case rows: the dispatch summary inset appears only on the truly bound task row (15.44925ms)
+✔ S6b case rows: without external works no inset renders and reads never break the table (5.552083ms)
+✔ S6a routes: task external-dispatch summary is read-only GET with zero records and pause state (1410.737833ms)
+✔ S6a routes: authorize validates grant input, explicit enterprise and original asset qualification (1019.678292ms)
+✔ S6a routes: authorize persists grant+work, summary reflects it and choose-internal stays blocked until cancel (1089.778708ms)
+✔ S6a routes: cancel keeps every ledger fact, records the stop request as unsupported without an external seam and is idempotent (1056.821375ms)
+✔ S6a routes: pause-resume / resume-resume persist the auto-resume pause for this task only (910.672375ms)
+✔ S6a routes: publish requires the task GitHub binding and records nothing without it (899.91175ms)
+✔ S6a routes: external settings view reports real core connection state and the optional workbuddy gate (866.185333ms)
+✔ S6a client: summary/pause reads are GET, actions keep exact owner paths and bodies (2.817667ms)
+✔ S6a client: another owner summary is refused and backend codes map to typed errors (0.39525ms)
+✔ S6a card: no external work renders the agent suggestion with internal primary and dispatch secondary and zero external note (10.817792ms)
+✔ S6a card: an authorized external work switches the card to the status snapshot with the work shortcut (4.415375ms)
+✔ S6a card: backend refusal on choose-internal is shown, never silently retried (4.073833ms)
+✔ S6a drawer: frozen fields render with workbuddy disabled and the exact-content snapshot, and confirm posts the grant (6.873791ms)
+✔ S6a drawer: escape closes and focus restore hooks register (3.598792ms)
+✔ S6a drawer: confirm composes the real grant input (goal/scope/enterprise/repo/assets/expiry) and reports the result (5.498417ms)
+✔ S6a drawer: missing enterprise or repository blocks confirm with visible reasons (4.698542ms)
+✔ S6a panel: dispatched work renders the work card, dual status grid, ledger timeline, three boundaries and receipt (15.839042ms)
+✔ S6a panel: no work yet renders the hand-off CTA into the authorization drawer (3.393541ms)
+✔ S6a panel: cancel flows through the amber confirmation and shows the honest stop-request state (13.582625ms)
+✔ S6a panel: paused auto-resume offers resume and the pause reason stays visible (2.649541ms)
+✔ S6a status view: ledger facts map to the frozen tone system without inventing success (2.660209ms)
+ℹ tests 34
+ℹ suites 0
+ℹ pass 34
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7457.905625

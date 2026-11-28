@@ -26,6 +26,10 @@
 .ed-callout { margin: 8px 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--accent-wash); color: var(--muted); font-size: 12px; line-height: 1.8; }
 .ed-callout.amber { color: #98631c; background: #f7ecd9; border-color: #e4cf9f; }
 .app[data-theme="dark"] .ed-callout.amber { color: #e7c381; background: #3b3021; border-color: #6b5631; }
+.ed-callout.red { color: #a64354; background: #f7e3e7; border-color: #e3bfc7; }
+.app[data-theme="dark"] .ed-callout.red { color: #f0a2b1; background: #3f2630; border-color: #71434f; }
+.ed-callout[data-tone="green"] { color: #28704e; background: #e4f3ea; border-color: #bfdcc9; }
+.app[data-theme="dark"] .ed-callout[data-tone="green"] { color: #8bd6ac; background: #22382d; border-color: #3b624b; }
 
 .ed-notice { margin: 8px 0; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font-size: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .ed-notice[data-tone="error"] { border-color: #e3bfc7; background: #f7e3e7; color: #a64354; }
@@ -119,4 +123,38 @@
   .ed-drawer { width: 100vw; border-radius: 0; }
   .ed-two-stat { grid-template-columns: minmax(0, 1fr); }
   .ed-drawer-foot .primary-button { margin-left: 0; width: 100%; }
+}
+
+/* S6b：交付与验收页 —— 核验表/manifest/旧交付保留（表格容器滚动，页面不横溢） */
+.ed-table-wrap { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); overflow-x: auto; }
+.ed-table-wrap table { width: 100%; min-width: 520px; border-collapse: collapse; font-size: 12px; }
+.ed-table-wrap th, .ed-table-wrap td { text-align: left; padding: 10px 12px; border-top: 1px solid var(--line); vertical-align: top; }
+.ed-table-wrap thead th { border-top: 0; background: var(--subtle); color: var(--faint); font-size: 11px; white-space: nowrap; }
+.ed-table-wrap tbody tr:first-child th, .ed-table-wrap tbody tr:first-child td { border-top: 0; }
+.ed-manifest { display: grid; gap: 9px; margin: 10px 0; }
+.ed-manifest-item { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.ed-manifest-item > div { min-width: 0; }
+.ed-manifest-item strong { display: block; font-size: 12px; overflow-wrap: anywhere; }
+.ed-manifest-item p { margin: 3px 0; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.ed-file-icon { background: var(--accent-soft); color: var(--accent); border-radius: 6px; font-size: 11px; padding: 5px 7px; flex: none; }
+.ed-old-delivery { border: 1px dashed var(--line-strong); border-radius: 10px; padding: 12px 14px; background: var(--canvas); }
+.ed-old-delivery > strong { font-size: 13px; }
+.ed-old-delivery p { margin: 6px 0 0; }
+
+/* S6b：资产依据页 */
+.ed-asset-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.ed-asset-choice { padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--canvas); color: var(--muted); font-size: 12px; }
+.ed-asset-choice.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.ed-asset-detail h3 { margin: 0 0 8px; font-size: 14px; }
+
+/* S6b：设置「外派与执行方式」分区 */
+.ed-settings { margin-top: 26px; border-top: 1px solid var(--line); padding-top: 18px; }
+.ed-settings-intro { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-bottom: 14px; }
+.ed-settings-intro h3 { margin: 0; font-size: 15px; }
+.ed-settings-intro p { margin: 0; color: var(--muted); font-size: 12px; }
+.ed-settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 18px; align-items: start; }
+
+@media (max-width: 620px) {
+  .ed-settings-grid { grid-template-columns: minmax(0, 1fr); }
+  .ed-table-wrap table { min-width: 460px; }
 }

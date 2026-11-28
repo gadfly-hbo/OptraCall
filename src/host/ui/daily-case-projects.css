@@ -58,3 +58,9 @@
   .daily-case-projects .dcp-type-guide summary span { display: block; margin-left: 0; }
   .daily-case-projects .dcp-outcome-note { font-size: 11px; }
 }
+
+/* S6b：原任务行下的只读外派摘要 inset（浅紫，沿生产令牌；不改变行内导航与权威记录） */
+.daily-case-projects .dcp-external-summary { display: grid; gap: 3px; margin-top: 10px; padding: 8px 11px; border-left: 2px solid var(--accent); background: var(--accent-soft); border-radius: 0 6px 6px 0; font-size: 11px; color: var(--muted); text-align: left; }
+.daily-case-projects .dcp-external-summary strong { font-size: 11px; color: var(--accent); font-weight: 650; }
+.daily-case-projects .dcp-external-summary span { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--ink); font-size: 11px; }
+.daily-case-projects .dcp-external-summary small { font-size: 10px; margin: 0; line-height: 1.7; }

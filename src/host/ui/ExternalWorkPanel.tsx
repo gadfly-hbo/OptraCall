@@ -76,7 +76,7 @@ export type ExternalWorkPanelProps = {
   archived?: boolean;
   panel: string;
   externalCount?: number;
-  onSwitchPanel(panel: 'chat' | 'report' | 'external'): void;
+  onSwitchPanel(panel: 'chat' | 'report' | 'external' | 'delivery' | 'assets'): void;
   onOpenDrawer(): void;
 };
 
@@ -155,6 +155,8 @@ export function ExternalWorkPanel({ projectId, taskId, taskName, archived, panel
                   <div className="ed-stat-box"><small>Host 台账 / 原任务验收</small><strong>{hostState(work, status)}</strong></div>
                 </div>
                 <div className="ed-actions section-space">
+                  <button type="button" className="text-button" onClick={() => onSwitchPanel('delivery')}>查看交付与验收</button>
+                  <button type="button" className="text-button" onClick={() => onSwitchPanel('assets')}>查看资产取用</button>
                   <button type="button" className="text-button" onClick={onOpenDrawer}>查看本次授权</button>
                   {work.status === 'authorized' && !archived && (confirmCancel === work.workId
                     ? <span className="ed-cancel-confirm">

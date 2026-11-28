@@ -1,0 +1,22 @@
+✔ service tools require a current explicit grant and are registered through the existing real Pi task (449.184834ms)
+▶ real Pi direct and nested calls preserve the task, original invocation, precise schema and saved history
+  ✔ direct (1012.812875ms)
+  ✔ nested (1012.999417ms)
+✔ real Pi direct and nested calls preserve the task, original invocation, precise schema and saved history (2026.103917ms)
+✔ service schemas fail closed, narrowing survives metadata mutation and credentials never reach dispatch (1.480708ms)
+✔ original fixed profiles and business workspaces never acquire personal service tools (2977.956625ms)
+▶ trusted confirmation uses the original browser dialog and an exact current tool invocation
+  ✔ approved (522.899792ms)
+  ✔ declined (532.130584ms)
+✔ trusted confirmation uses the original browser dialog and an exact current tool invocation (1055.389166ms)
+✔ cancel while awaiting approval dismisses it, closes this call and prevents late dispatch or replay (504.707792ms)
+✔ retaining a completed Host callback cannot dispatch while the same original model turn remains active (522.466792ms)
+✔ service cleanup uncertainty retains the original owner and only explicit cleanup retry can release it (526.468667ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8258.895042

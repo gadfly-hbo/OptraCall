@@ -1,0 +1,5 @@
+
+> optracall@0.1.0-mvp.4 build
+> tsc --noEmit && node scripts/frontend.mjs build && node scripts/stamp-build.mjs
+
+Trial build: 0.1.0-mvp.4 f5cdb24+local-changes

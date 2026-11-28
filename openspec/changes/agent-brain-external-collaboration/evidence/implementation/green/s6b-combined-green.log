@@ -1,0 +1,21 @@
+✔ S6b routes: deliveries view is a read-only GET composed from real ledger facts (917.440833ms)
+✔ S6b routes: assets view returns the exact allowlist and delivery-declared references (897.140583ms)
+✔ S6b routes: project summaries expose per-task works for Case rows without mutating records (899.064541ms)
+✔ S6b routes: settings view keeps real core facts and the unverified optional gate (878.281ms)
+✔ S6b client: delivery/asset/summary reads are GET with exact owner paths and owner checks (2.561792ms)
+✔ S6b delivery panel: verification table, manifest preservation facts, references and the agent conclusion render from ledger facts (14.377125ms)
+✔ S6b delivery panel: late delivery shows the quarantine callout and no-work task shows the honest empty state (6.824541ms)
+✔ S6b assets panel: exact allowlist, version detail with hash, references and entry availability render honestly (6.149833ms)
+✔ S6b assets panel: without reads or grants the panel stays honest and never invents usage (5.690584ms)
+✔ S6b settings partition: core four rows, optional three rows unverified-disabled, no simulation buttons (6.679ms)
+✔ S6b settings partition: a verified GitHub core surfaces green while the optional gate stays honest (5.742ms)
+✔ S6b case rows: the dispatch summary inset appears only on the truly bound task row (15.5545ms)
+✔ S6b case rows: without external works no inset renders and reads never break the table (5.807958ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3789.303459

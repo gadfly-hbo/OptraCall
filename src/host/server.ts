@@ -3279,6 +3279,19 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
       if (request.headers['x-optracall-client'] !== '1' || (request.method !== 'GET' && !origin)) throw new RequestFault(403, 'client_rejected');
       if (url.pathname === '/api/service-connections' && request.method === 'GET') { json(response, 200, { connections: await serviceConnections.list() }); return; }
+      const externalSummariesRoute = /^\/api\/projects\/([a-f0-9-]+)\/external-dispatch\/summaries$/.exec(url.pathname);
+      if (externalSummariesRoute && request.method === 'GET') {
+        // S6b additive read-only feed for Case/project task rows: per-task works only,
+        // matched downstream by real task identity (never by project sharing).
+        const summariesProjectId = externalSummariesRoute[1]!;
+        let summariesProject;
+        try { summariesProject = await projects.get(summariesProjectId); }
+        catch { throw new RequestFault(404, 'not_found'); }
+        const tasks = [];
+        for (const task of summariesProject.tasks) tasks.push({ taskId: task.id, works: (await externalDispatch.summarize(summariesProjectId, task.id)).works });
+        json(response, 200, { projectId: summariesProjectId, tasks });
+        return;
+      }
       if (url.pathname === '/api/external-dispatch/settings' && request.method === 'GET') {
         // S6a: real facts only — the GitHub core row comes from the actual connection;
         // the protected MCP endpoint and the generic executor closed loop are not
@@ -3917,13 +3930,50 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             }
             throw new RequestFault(404, 'not_found');
           }
-          const externalDispatchRoute = /^external-dispatch(?:\/(authorize|choose-internal|pause-resume|resume-resume|works\/([a-f0-9-]{36})\/(cancel|publish)))?$/.exec(operation ?? '');
+          const externalDispatchRoute = /^external-dispatch(?:\/(authorize|choose-internal|pause-resume|resume-resume|deliveries|assets|works\/([a-f0-9-]{36})\/(cancel|publish)))?$/.exec(operation ?? '');
           if (externalDispatchRoute) {
             const dispatchOwner = await pair(projectId, taskId, request.method !== 'GET');
             const summaryRoute = `/api/projects/${projectId}/tasks/${taskId}/external-dispatch`;
             if (!externalDispatchRoute[1] && request.method === 'GET') {
               const [summary, pause] = await Promise.all([externalDispatch.summarize(projectId, taskId), externalWorkStore.getResumePause(projectId, taskId)]);
               json(response, 200, { summary, pause });
+              return;
+            }
+            // S6b additive read-only views: delivery details and the asset allowlist/references.
+            if (request.method === 'GET' && (externalDispatchRoute[1] === 'deliveries' || externalDispatchRoute[1] === 'assets')) {
+              const works = await externalWorkStore.listWorks({ projectId, taskId });
+              const entries = [];
+              for (const work of works) {
+                const grant = await externalWorkStore.getGrant(work.grantId);
+                const grantView = grant && grant.grantVersion === work.grantVersion && grant.projectId === projectId && grant.taskId === taskId
+                  ? {
+                      grantId: grant.grantId, grantVersion: grant.grantVersion, goal: grant.goal, scope: grant.scope, enterprise: grant.enterprise,
+                      allowedExecutors: grant.allowedExecutors, repository: grant.repository, validFrom: grant.validFrom, validUntil: grant.validUntil, assetRefs: grant.assetRefs,
+                    }
+                  : null;
+                if (externalDispatchRoute[1] === 'deliveries') {
+                  const [publications, claims, deliveries, reviews] = await Promise.all([
+                    externalWorkStore.listPublications(work.workId),
+                    externalWorkStore.listClaims(work.workId),
+                    externalWorkStore.listDeliveries(work.workId),
+                    externalWorkStore.listReviews(work.workId),
+                  ]);
+                  const activeClaim = claims.find(claim => claim.status === 'active' && claim.revision === work.revision);
+                  entries.push({
+                    workId: work.workId, revision: work.revision, status: work.status, summary: work.summary, deliveryCriteria: work.deliveryCriteria, createdAt: work.createdAt,
+                    publications: publications.map(publication => ({ operationId: publication.operationId, action: publication.action, status: publication.status, ...(publication.issueId === undefined ? {} : { issueId: publication.issueId }) })),
+                    claim: activeClaim ? { claimId: activeClaim.claimId, principal: activeClaim.principal, epoch: activeClaim.epoch, leaseDeadline: activeClaim.leaseDeadline, status: activeClaim.status } : null,
+                    grant: grantView, deliveries, reviews,
+                  });
+                } else {
+                  const deliveries = await externalWorkStore.listDeliveries(work.workId);
+                  entries.push({
+                    workId: work.workId, revision: work.revision, status: work.status, summary: work.summary, grant: grantView,
+                    references: deliveries.map(delivery => ({ deliveryId: delivery.deliveryId, revision: delivery.revision, createdAt: delivery.createdAt, preservation: delivery.preservation, assetsUsed: delivery.assetsUsed })),
+                  });
+                }
+              }
+              json(response, 200, { projectId, taskId, works: entries });
               return;
             }
             if (request.method === 'POST' && ['authorize', 'choose-internal', 'pause-resume', 'resume-resume'].includes(externalDispatchRoute[1]!)) {

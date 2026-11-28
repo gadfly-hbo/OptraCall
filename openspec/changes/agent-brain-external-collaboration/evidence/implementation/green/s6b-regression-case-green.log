@@ -1,0 +1,20 @@
+✔ explicit selection resets a manual auxiliary scope while restoration and ordinary redraw retain it (1.144459ms)
+✔ an empty Case or a removed issue cannot retain another Case issue scope (0.062583ms)
+✔ all current Case requires an exact task binding and never absorbs foreign or independent project tasks (0.136042ms)
+✔ the latest original round alone supplies judgement, next step and exact source identities (0.236083ms)
+✔ missing reviews and limited action history remain unknown instead of borrowing older conclusions (0.373625ms)
+✔ action progress preserves the exact current authorization and observation identities (0.122416ms)
+✔ DW02: overview current round includes only the exact open choice request that follows the latest saved choice (29.034667ms)
+✔ DW04: a restored selected issue beyond the directory first 20 is read by exact ID, never replaced by the first issue (1.075084ms)
+✔ DW16: an unreadable restored issue is not silently replaced by the first readable issue (1.081041ms)
+✔ DW03: tree mode survives tab unmount/remount and remains isolated by Case identity (2.105333ms)
+✔ DW02: other owners, answered requests and nonmatching previous choices never create a pending round on the overview (4.733208ms)
+✔ DW16: unreadable request projection remains unknown instead of claiming the latest saved round is the current round (0.6975ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 154.357833

@@ -1,4 +1,4 @@
-import type { ExternalWork, WorkGrant, PublicationAttempt, ExternalTaskSummary, InternalChoice, ExternalAssetRef } from '../external-work-types.ts';
+import type { ExternalWork, WorkGrant, PublicationAttempt, ExternalTaskSummary, InternalChoice, ExternalAssetRef, ExternalDeliveryRef, ExternalWorkSummaryEntry, ExternalWorkStatus, ExternalPublicationAction, ExternalPublicationStatus, ReviewDecision, ClaimStatus } from '../external-work-types.ts';
 import type { ExternalStopRequestRecord, ResumePauseRecord } from '../external-work-store.ts';
 
 /** S6a browser client for the owner-bound external dispatch routes (same pattern as service-connections-client). */
@@ -82,14 +82,14 @@ async function request<T>(path: string, method = 'GET', body?: unknown, signal?:
 
 const owner = (path: string) => `${path}/external-dispatch`;
 
-function assertOwner(summary: ExternalTaskSummary, projectId: string, taskId: string): ExternalTaskSummary {
+function assertOwner(summary: { projectId: string; taskId: string; works: unknown[] }, projectId: string, taskId: string): void {
   if (!summary || summary.projectId !== projectId || summary.taskId !== taskId || !Array.isArray(summary.works)) throw new ExternalDispatchRequestError('external_dispatch_owner_mismatch', 409);
-  return summary;
 }
 
 export async function readTaskExternalDispatch(projectId: string, taskId: string, signal?: AbortSignal): Promise<ExternalDispatchView> {
   const value = await request<{ summary: ExternalTaskSummary; pause: ResumePauseRecord | null }>(owner(`/api/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}`), 'GET', undefined, signal);
-  return { summary: assertOwner(value.summary, projectId, taskId), pause: value.pause ?? null };
+  assertOwner(value.summary, projectId, taskId);
+  return { summary: value.summary, pause: value.pause ?? null };
 }
 export async function authorizeExternalWork(projectId: string, taskId: string, grant: ExternalDispatchGrantInput): Promise<ExternalAuthorizeResult> {
   const value = await request<ExternalAuthorizeResult>(`${owner(`/api/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}`)}/authorize`, 'POST', grant);
@@ -115,4 +115,52 @@ export async function publishExternalWork(projectId: string, taskId: string, wor
 }
 export async function readExternalDispatchSettings(signal?: AbortSignal): Promise<ExternalDispatchSettings> {
   return request('/api/external-dispatch/settings', 'GET', undefined, signal);
+}
+
+/** S6b read-only delivery view: per-work ledger facts (publications/claim/grant/deliveries/reviews), never a merged success flag. */
+export type ExternalDeliveryGrantView = {
+  grantId: string;
+  grantVersion: number;
+  goal: string;
+  scope: string;
+  enterprise: string;
+  allowedExecutors: string[];
+  repository: { stableId: string; visibility: 'private' | 'public' };
+  validFrom: string;
+  validUntil: string;
+  assetRefs: ExternalAssetRef[];
+};
+export type ExternalDeliveryWorkEntry = {
+  workId: string;
+  revision: number;
+  status: ExternalWorkStatus;
+  summary: string;
+  deliveryCriteria: string;
+  createdAt: string;
+  publications: Array<{ operationId: string; action: ExternalPublicationAction; status: ExternalPublicationStatus; issueId?: string }>;
+  claim: { claimId: string; principal: string; epoch: number; leaseDeadline: string; status: ClaimStatus } | null;
+  grant: ExternalDeliveryGrantView | null;
+  deliveries: ExternalDeliveryRef[];
+  reviews: ReviewDecision[];
+};
+export type ExternalDeliveriesView = { projectId: string; taskId: string; works: ExternalDeliveryWorkEntry[] };
+/** S6b read-only asset view: the exact allowlist plus delivery-declared references. */
+export type ExternalAssetReferenceEntry = { deliveryId: string; revision: number; createdAt: string; preservation: string; assetsUsed: ExternalAssetRef[] };
+export type ExternalAssetWorkEntry = { workId: string; revision: number; status: ExternalWorkStatus; summary: string; grant: ExternalDeliveryGrantView | null; references: ExternalAssetReferenceEntry[] };
+export type ExternalAssetsView = { projectId: string; taskId: string; works: ExternalAssetWorkEntry[] };
+/** S6b read-only per-project summary feed for Case/project task rows. */
+export type ExternalProjectSummaries = { projectId: string; tasks: Array<{ taskId: string; works: ExternalWorkSummaryEntry[] }> };
+
+export async function readTaskExternalDeliveries(projectId: string, taskId: string, signal?: AbortSignal): Promise<ExternalDeliveriesView> {
+  const value = await request<ExternalDeliveriesView>(`${owner(`/api/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}`)}/deliveries`, 'GET', undefined, signal);
+  assertOwner(value, projectId, taskId);
+  return value;
+}
+export async function readTaskExternalAssets(projectId: string, taskId: string, signal?: AbortSignal): Promise<ExternalAssetsView> {
+  const value = await request<ExternalAssetsView>(`${owner(`/api/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}`)}/assets`, 'GET', undefined, signal);
+  assertOwner(value, projectId, taskId);
+  return value;
+}
+export async function readProjectExternalSummaries(projectId: string, signal?: AbortSignal): Promise<ExternalProjectSummaries> {
+  return request<ExternalProjectSummaries>(`/api/projects/${encodeURIComponent(projectId)}/external-dispatch/summaries`, 'GET', undefined, signal);
 }

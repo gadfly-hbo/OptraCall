@@ -1,0 +1,41 @@
+✔ read and subscribe do not construct resources; refs are restricted to their domain (1.706ms)
+✔ Host scope busy reads the existing operation through preparation and finalization without opening or blocking other scopes (0.467208ms)
+✔ Host scope busy includes matching resource retirement until actual close completion (2.301458ms)
+✔ accepted preserves busy until completion; newer operation invalidates captured callbacks (0.419666ms)
+✔ three profiles use one implementation with separate owners, events and cancellation (0.414708ms)
+✔ a domain waiting for startup UI does not block unrelated domains (1.161208ms)
+✔ concurrent explicit opens share transport and startup cancellation prevents a prompt (0.278041ms)
+✔ provider close can cancel ownership waiting behind the Host mutation gate (0.212375ms)
+✔ lease fixes configuration across turns, owns the gap and cannot escape its callback (0.382334ms)
+✔ one lease rejects concurrent turns and preserves its first run identity (0.186542ms)
+✔ gap cancellation prevents a second turn without releasing somebody else’s operation (0.435708ms)
+✔ abandoned in-flight lease drains before becoming idle and preserves callback failure (0.672083ms)
+✔ return during native opening closes the opening and never dispatches the abandoned run (0.487167ms)
+✔ closing old provider A keeps replacement B opening and late A callbacks isolated (0.555875ms)
+✔ explicit close permits replacement while its old generation is still draining (0.246417ms)
+✔ closing an accepted run retains busy until its resource has safely closed (0.22725ms)
+✔ failed resource close remains busy and is available to a later explicit close (0.1935ms)
+✔ R2: an MCP loader opening failure releases its owner only after actual cleanup succeeds (0.515292ms)
+▶ R2: failed or unknown cleanup after an MCP loader opening failure quarantines only the original owner
+  ✔ synthetic_cleanup_failed (0.276083ms)
+  ✔ protected_cleanup_unknown (0.115916ms)
+✔ R2: failed or unknown cleanup after an MCP loader opening failure quarantines only the original owner (0.548375ms)
+✔ failed close of idle A preserves an already admitted replacement B and retries only A (0.15025ms)
+✔ UI works during opening, expired answers reject, and commands need declared capabilities (0.692583ms)
+✔ configuration identity includes model and thinking settings even with unchanged credentials (0.085333ms)
+✔ business-only lease preflight can return without creating a worker (0.04525ms)
+✔ explicit open rechecks business admission even when reusing an idle transport (0.091792ms)
+✔ one close failure does not skip other resources and is not reported as success (0.0975ms)
+✔ ER01: owner cancellation overrides stale failure diagnostics while preserving native retry count (0.167416ms)
+✔ V020 exact stop observes the original request atomically; a stale preparation id cannot cancel a newer owned run (0.282041ms)
+✔ V020 automatic receipt uses the original idle lease and cannot append after cancellation (0.168583ms)
+✔ memberPackExecutionScope drains and retires Turn 1 resource so Turn 2 spawns a fresh executor without protected_executor_draining (0.312625ms)
+✔ policyFingerprint change retires cached idle session and spawns a fresh session with updated permissions (R2 Round-6) (0.198875ms)
+ℹ tests 32
+ℹ suites 0
+ℹ pass 32
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 208.563041

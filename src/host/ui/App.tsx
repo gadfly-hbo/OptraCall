@@ -90,6 +90,8 @@ import { TaskReportDesk, type TaskReportDeskPersistedState } from './TaskReportD
 import { TaskWorkModeCard } from './TaskWorkModeCard.tsx';
 import { ExternalDispatchDrawer } from './ExternalDispatchDrawer.tsx';
 import { ExternalWorkPanel } from './ExternalWorkPanel.tsx';
+import { ExternalDeliveryPanel } from './ExternalDeliveryPanel.tsx';
+import { ExternalAssetAccessPanel } from './ExternalAssetAccessPanel.tsx';
 import { chooseInternalCompletion, type ExternalAuthorizeResult } from './external-dispatch-client.ts';
 import type { ExternalTaskSummary } from '../external-work-types.ts';
 import './external-dispatch.css';
@@ -209,7 +211,7 @@ export function App() {
     const projectId = params.get('project'), taskId = params.get('task'), caseId = params.get('case');
     return projectId && taskId && caseId ? { taskKey: taskKey(projectId, taskId), caseId } : undefined;
   });
-  const [taskPanelByTask, setTaskPanelByTask] = useState<Record<string, 'chat' | 'report' | 'external'>>(() => {
+  const [taskPanelByTask, setTaskPanelByTask] = useState<Record<string, 'chat' | 'report' | 'external' | 'delivery' | 'assets'>>(() => {
     const params = new URL(window.location.href).searchParams;
     const projectId = params.get('project'), taskId = params.get('task');
     return projectId && taskId && params.get('panel') === 'report' ? { [taskKey(projectId, taskId)]: 'report' } : {};
@@ -1067,7 +1069,7 @@ export function App() {
     : activeKey && activeTaskSourceCase?.taskKey === activeKey
       ? { caseId: activeTaskSourceCase.caseId, caseTitle: activeTaskSourceCase.caseTitle }
       : undefined;
-  const currentTaskPanel: 'chat' | 'report' | 'external' = view === 'chat' && activeKey ? (taskPanelByTask[activeKey] ?? 'chat') : 'chat';
+  const currentTaskPanel: 'chat' | 'report' | 'external' | 'delivery' | 'assets' = view === 'chat' && activeKey ? (taskPanelByTask[activeKey] ?? 'chat') : 'chat';
   const externalCount = activeKey ? (externalSummaryByTask[activeKey]?.works.filter(work => work.status !== 'cancelled').length ?? 0) : 0;
   useEffect(() => {
     if (view !== 'chat' || !activeId) return;
@@ -1086,7 +1088,7 @@ export function App() {
     }
     if (url.href !== window.location.href) window.history.replaceState(null, '', url);
   }, [view, activeId, activeTaskId, currentTaskPanel, currentTaskSourceCase?.caseId, inspectedVersion?.relativePath, inspectedVersion?.sha256]);
-  const switchTaskPanel = (panel: 'chat' | 'report' | 'external') => {
+  const switchTaskPanel = (panel: 'chat' | 'report' | 'external' | 'delivery' | 'assets') => {
     if (!activeKey) return;
     setTaskPanelByTask(previous => ({ ...previous, [activeKey]: panel }));
     if (panel === 'report') {
@@ -1105,6 +1107,23 @@ export function App() {
       externalCount={externalCount}
       onSwitchPanel={switchTaskPanel}
       onOpenDrawer={() => setDispatchDrawerTask({ projectId: active.id, taskId: activeTask.id })}
+    />
+  ) : view === 'chat' && currentTaskPanel === 'delivery' ? (
+    <ExternalDeliveryPanel
+      key={`delivery-${activeKey}`}
+      projectId={active.id}
+      taskId={activeTask.id}
+      taskName={activeTask.name}
+      onSwitchPanel={switchTaskPanel}
+    />
+  ) : view === 'chat' && currentTaskPanel === 'assets' ? (
+    <ExternalAssetAccessPanel
+      key={`assets-${activeKey}`}
+      projectId={active.id}
+      taskId={activeTask.id}
+      taskName={activeTask.name}
+      onSwitchPanel={switchTaskPanel}
+      onOpenSettings={() => openSettingsView('connection-settings')}
     />
   ) : view === 'chat' && currentTaskPanel === 'report' ? (
     <TaskReportDesk

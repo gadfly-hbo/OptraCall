@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { SERVICE_IDS, SERVICE_SCOPES, SERVICE_URLS, TENCENT_MAIL_SERVERS, type ServiceConnection, type ServiceConnectionConfig, type ServiceConnectionCredentials, type ServiceId, type ServiceScope } from '../service-connection-types.ts';
 import { actOnServiceConnection, cancelServiceAuthorization, listServiceConnections, readServiceConnection, saveServiceConnection, serviceAuthorizationObservation, serviceConnectionErrorText, serviceMailboxLabel, serviceNames, serviceScopeLabels, serviceScopeSelection, serviceScopeSummary, serviceStateLabels, type ServiceAuthorization, type ServiceConnectionSnapshot } from './service-connections-client.ts';
+import { ExternalDispatchSettings } from './ExternalDispatchSettings.tsx';
 import './service-connections.css';
 export { TaskServiceConnections } from './TaskServiceConnections.tsx';
 
@@ -101,6 +102,8 @@ export function ServiceConnectionsSettings({ onProject }: { onProject?: () => vo
       </article>;
     })}</div>
     <p className="service-connections-note">授权在当前设备保存。连接完成不会自动读取资料或运行任务；更换账号、邮箱类型或企业后，原任务须核对并重新选择。</p>
+    {/* S6b additive: the external-dispatch partition (core path + optional adapter) — the four service connections above are untouched. */}
+    <ExternalDispatchSettings />
     {editing && <ConnectionEditor key={editing} service={editing} initial={connections?.find(item => item.service === editing)} onUpdate={update} onClose={message => { if (message) setNotice(message); setEditing(undefined); }} />}
     {disconnecting && <ServiceConnectionDialog title={`断开 ${serviceNames[disconnecting]}`} busy={busy === disconnecting} onClose={() => setDisconnecting(undefined)}><p>断开后，使用该连接的任务将失去调用资格，并收尾正在使用的连接资源。任务原有账号选择和草稿继续保留。</p>{actionError && <p className="service-connection-notice" data-tone="error" role="alert">{actionError}</p>}{affectedTasks?.length ? <div className="service-connection-notice">受影响任务：<ul>{affectedTasks.map(task => <li key={task}>{task}</li>)}</ul></div> : <p className="field-help">{affectedTasks ? '当前没有已绑定该连接的任务。' : '正在核对受影响任务…'}</p>}<div className="service-connection-dialog-actions"><button type="button" className="secondary-button" disabled={Boolean(busy)} onClick={() => setDisconnecting(undefined)}>保留连接</button><button type="button" className="primary-button" disabled={Boolean(busy)} onClick={async () => {
       const connection = connections?.find(item => item.service === disconnecting); if (!connection) return;
