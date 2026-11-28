@@ -244,7 +244,7 @@ try {
   await page.getByRole('button', { name: 'CF05 验证准备件', exact: true }).click();
   const detailRegion = page.getByRole('region', { name: 'Case 详情', exact: true });
   await detailRegion.getByRole('heading', { level: 1, name: 'CF05 验证准备件', exact: true }).waitFor();
-  await detailRegion.getByText('本轮概览', { exact: true }).waitFor();
+  await detailRegion.getByRole('region', { name: '本轮概览', exact: true }).waitFor();
   await page.screenshot({ path: path.join(outDir, '05-case-detail-1440.png'), fullPage: true });
 
   // CF03 Part A: No linked active project -> open 记录取舍 -> see guidance + 去关联或新建项目 + draft preserved
