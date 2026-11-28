@@ -6,6 +6,8 @@
 
 开发前，按[任务目标执行清单与范围管理](docs/engineering-workflow.md#任务目标执行清单与范围管理)列出目标和阶段任务，执行中逐项更新并据此处理新发现的问题。
 
+领取、返工或 PM 接修涉及已冻结 UI Demo 时，受影响 UI 编码前必须执行[冻结 Demo 实际阅读与开发要求](docs/engineering-workflow.md#领取方的冻结-ui-demo-阅读与开发要求)：用浏览器渲染并实际查看画面/截图，读取相关 DOM/CSS 骨架，建立到生产视图的映射；开发及返工中对照同视口 Demo 与真实产品。只读 spec/guide、核 hash 或检查 `innerText` 不算视觉验收；交回须有阅读和对照证据，详细规则只在工程规范维护。
+
 新产品、新功能和试用修正以云端开发为主，均通过 GitHub Issue 发单、领取、交接和结案。按[两类开发流程](docs/engineering-workflow.md#github-issues-问题收件与结案)找到入口，再按[GitHub 开发任务外发与交付](docs/engineering-workflow.md#github-开发任务外发与交付)执行。PM Agent 通常由 Codex 担任，也可由其他 Agent 担任或代理。具备任务分支推送权限的 Agent（包括 Codex）均可领取。
 
 为 MacBook 上的 Qoder 编写或维护反馈项目规则时，先读取仓库文件 `docs/engineering-workflow.md` 的「MacBook 端 Qoder 整理与提交」小节；反馈会话工作区与产品源码目录分开，按该节的绝对路径读取约定接入同一规范。
