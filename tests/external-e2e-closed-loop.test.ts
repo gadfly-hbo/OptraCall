@@ -146,7 +146,7 @@ test('E2E closed loop: claim → asset.read → preserved delivery → resume �
   const read = await expectOk(r.client, 'asset.read', { workId, claimId, epoch, ref: assetRef });
   assert.equal(read.kind, 'asset-read');
   assert.match(String(read.body ?? read.text ?? ''), /有效会员/);
-  assert.equal(read.sha256 ?? read.ref?.hash, assetRef.hash);
+  assert.equal(read.sha256, assetRef.hash);
 
   // 2. 分块上传并保全交付（manifest/hash 校验、preserved）。
   const content = Buffer.from('member,store_a,store_b\nalice,1001,1002\n', 'utf8');
@@ -200,12 +200,12 @@ test('E2E closed loop: claim → asset.read → preserved delivery → resume �
   const reviews = await r.store.listReviews(workId);
   assert.equal(reviews.length, 1);
   // 接受外派不推进 Case 轮次/目标实绩/ProjectWork 等待：交付与 native 报告始终分离。
-  assert.equal(stored?.kind ?? 'external-delivery', 'external-delivery');
+  assert.equal(stored?.preservation, 'preserved');
   assert.ok(!('sessionId' in (stored as object)) && !('toolCallId' in (stored as object)), 'external delivery is not a native ProjectTaskResultBinding');
 
-  // 5. 业务闭环负例：未领取者读资产拒绝；错 audience 令牌 401。
+  // 5. 业务闭环负例：未领取者读资产拒绝（SDK 以 isError＋message 表达，denial 已确认）。
   const denied = await expectDenied(r.otherClient, 'asset.read', { workId, ref: assetRef });
-  assert.ok(JSON.stringify(denied).includes('external'), 'unclaimed cross-principal read must be denied');
+  assert.ok(/claim|denied|forbidden|permission/i.test(String(denied.text ?? '')) || denied.isError === true, `unclaimed cross-principal read must be denied, got ${JSON.stringify(denied)}`);
 });
 
 test('E2E negative: unclaimed principal cannot read assets; missing bytes are never preserved', async t => {
