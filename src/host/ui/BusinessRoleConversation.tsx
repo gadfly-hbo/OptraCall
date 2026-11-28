@@ -145,10 +145,22 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,open
     if(value)sessionStorage.setItem(storage+'.request',JSON.stringify(value));else sessionStorage.removeItem(storage+'.request');
     pendingRef.current=value;setPending(value);
   },[storage]);
+  const ownerReadSignal=useRef<AbortSignal|undefined>(undefined);
   const load=useCallback(async(signal?:AbortSignal)=>{
     const ticket=++seq.current;
     const request=pendingRef.current;
-    const next:RoleView=await call('','GET',undefined,signal,request?.requestId);
+    const lifetime=ownerReadSignal.current;
+    const deadline=new AbortController();
+    const timer=setTimeout(()=>deadline.abort(),10000);
+    let next:RoleView;
+    try{
+      const readSignal=AbortSignal.any([deadline.signal,...(signal?[signal]:[]),...(lifetime?[lifetime]:[])]);
+      next=await call('','GET',undefined,readSignal,request?.requestId);
+    }catch(failure){
+      if(deadline.signal.aborted&&!signal?.aborted&&!lifetime?.aborted)
+        throw new Error('读取原对话状态超时，原输入与原请求已保留；未重发消息，可点击「核对原操作」继续读取。');
+      throw failure;
+    }finally{clearTimeout(timer);}
     if(!alive.current||ticket!==seq.current)return;
     if(!next.busy)setStream('');
     setView(next);if(next.discussion)setModel(next.discussion.configurationId);
@@ -173,6 +185,7 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,open
   useEffect(()=>{
     alive.current=true;
     const controller=new AbortController();
+    ownerReadSignal.current=controller.signal;
     void load(controller.signal).catch(f=>{if(!controller.signal.aborted)onError(f);});
     void readConfigurations(controller.signal).then(v=>{if(alive.current){setConfigs(v.configurations);}}).catch(f=>{if(!controller.signal.aborted)onError(f);});
     return ()=>{alive.current=false;controller.abort();};

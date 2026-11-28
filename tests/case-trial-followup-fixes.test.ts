@@ -987,3 +987,44 @@ test('FR01: watchStrategyDiscussion eventIdleTimeoutMs ignores comment heartbeat
     assert.deepEqual(writes, ['messages', 'messages'], 'failed GET reconciliation must never replay messages or stop');
   } finally { ui.close(); }
 });
+
+test('PM: a role reconciliation GET with headers but stalled JSON body has a finite read deadline', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let sent = '', hangBody = false, abortedReads = 0, stalledReads = 0;
+  const writes: string[] = [];
+  const fetcher: typeof fetch = async (input, init) => {
+    const url = new URL(String(input), 'http://localhost'), method = init?.method ?? 'GET';
+    if (url.pathname === '/api/configurations') return Response.json({ configurations: [{ id: 'cfg', revision: 1, name: 'Synthetic', model: 'synthetic', hasApiKey: true }], selectedId: 'cfg' });
+    if (url.pathname !== '/api/business-role') return Response.json({});
+    const action = url.searchParams.get('action');
+    if (action === 'events') return new Response(new ReadableStream({ start(c) {
+      c.enqueue(new TextEncoder().encode('data: '+JSON.stringify({type:'snapshot',snapshot:{sessionId:'s',sdkVersion:'1.4.0',status:'idle',messages:[],tools:[]}})+'\n\n'));
+      init?.signal?.addEventListener('abort',()=>{try{c.close();}catch{}},{once:true});
+    }}),{headers:{'content-type':'text/event-stream'}});
+    if (method !== 'GET') { writes.push(action!); sent=JSON.parse(String(init?.body)).requestId; return Response.json({requestId:sent,discussion:{id:'d',revision:1,configurationId:'cfg',configurationRevision:1}},{status:202}); }
+    if (hangBody) {
+      stalledReads++;
+      return new Response(new ReadableStream({start(c) {
+        c.enqueue(new TextEncoder().encode('{"discussion":'));
+        init?.signal?.addEventListener('abort',()=>{abortedReads++;c.error(new DOMException('Aborted','AbortError'));},{once:true});
+      }}),{headers:{'content-type':'application/json'}});
+    }
+    return Response.json({discussion:{id:'d',revision:1,configurationId:'cfg',configurationRevision:1,...(sent?{lastRun:{id:sent,status:'accepted'}}:{})},busy:!!sent,snapshot:{sessionId:'s',sdkVersion:'1.4.0',status:sent?'running':'idle',messages:[],tools:[]}});
+  };
+  const ui=await mountBusinessRole(fetcher,{role:'project',projectId:'pm-read-body-hang'});
+  try {
+    ui.nodes().find(n=>n.type==='textarea')!.props.onChange({target:{value:'保留这轮原话'}}); await ui.settle();
+    ui.nodes().find(n=>n.type==='form')!.props.onSubmit({preventDefault(){}}); await ui.settle();
+    hangBody=true;
+    t.mock.timers.tick(3500); await ui.settle(8);
+    assert.equal(stalledReads,1,'quiet reconciliation must actually enter the stalled JSON read');
+    t.mock.timers.tick(15000); await ui.settle(8);
+    assert.ok(abortedReads>=1,'a stalled reconciliation response body must be aborted within a finite read window');
+    assert.deepEqual(writes,['messages'],'read recovery must never stop/open/replay business messages');
+    assert.equal(ui.nodes().find(n=>n.type==='textarea')!.props.value,'保留这轮原话','a timed out read must preserve pending input');
+    t.mock.timers.tick(500); await ui.settle(8);
+    assert.equal(stalledReads,2,'the bounded read failure may retry only the original GET');
+    ui.close();
+    assert.equal(abortedReads,2,'unmount must immediately abort an in-flight body read rather than await its deadline');
+  } finally {ui.close();}
+});
