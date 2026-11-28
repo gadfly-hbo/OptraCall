@@ -64,3 +64,7 @@
 - S1 未验证（明确不在本轮范围）：真实 GitHub/WorkBuddy 出站动作（E02/E05）、远端 MCP 与真实资产资格接线（E03，`qualifyAssets` 本轮为合成回调）、交付字节保全与续接/停止/取消外部请求（E04）、UI（E06）、真实公网部署（E08）。store 层未做跨进程文件锁的破坏性压测（沿用与 ServiceConnectionStore 相同的 inode 校验模式，其既有覆盖不重复）。
 - 兼容回退：ledger 为新增可选业务记录；旧项目/会话/native/草稿不迁移不改写；缺 `external-work/` 目录按空台账读取（AB15 legacy 读取已测）；损坏台账拒绝服务不静默重建；新增记录含 UNKNOWN/撤销事实，回退不重放外部动作。
 
+## 范围外发现（记录并继续原任务）
+
+- `conclusion-review-handoff` CNR-A4 在干净基线 `7decc3b`（未含本变更）即失败（隔离 9/10），判定为既有问题，与 Issue #155 无关。按工程规范第3节范围管理记录于此，不在本单修复；建议另开返工项核实。`service-connection-manager` 一例隔离复跑 29/29，属全量负载抖动。两者均保留原结论，不改写为通过。
+
