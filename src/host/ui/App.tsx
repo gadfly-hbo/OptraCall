@@ -87,6 +87,12 @@ import type { RequirementContextSelection } from './requirement-types.ts';
 import { taskPurpose } from '../task-assignment.ts';
 import { FoundationOverview } from './FoundationOverview.tsx';
 import { TaskReportDesk, type TaskReportDeskPersistedState } from './TaskReportDesk.tsx';
+import { TaskWorkModeCard } from './TaskWorkModeCard.tsx';
+import { ExternalDispatchDrawer } from './ExternalDispatchDrawer.tsx';
+import { ExternalWorkPanel } from './ExternalWorkPanel.tsx';
+import { chooseInternalCompletion, type ExternalAuthorizeResult } from './external-dispatch-client.ts';
+import type { ExternalTaskSummary } from '../external-work-types.ts';
+import './external-dispatch.css';
 import { WorkspaceHome, type WorkspaceHomeReportTarget } from './WorkspaceHome.tsx';
 import { WorkspaceSearchDialog } from './WorkspaceSearchDialog.tsx';
 import { resolveInitialWorkspaceView, type HomeFoundationId, type WorkspaceSearchTarget } from './workspace-home-model.ts';
@@ -203,11 +209,15 @@ export function App() {
     const projectId = params.get('project'), taskId = params.get('task'), caseId = params.get('case');
     return projectId && taskId && caseId ? { taskKey: taskKey(projectId, taskId), caseId } : undefined;
   });
-  const [taskPanelByTask, setTaskPanelByTask] = useState<Record<string, 'chat' | 'report'>>(() => {
+  const [taskPanelByTask, setTaskPanelByTask] = useState<Record<string, 'chat' | 'report' | 'external'>>(() => {
     const params = new URL(window.location.href).searchParams;
     const projectId = params.get('project'), taskId = params.get('task');
     return projectId && taskId && params.get('panel') === 'report' ? { [taskKey(projectId, taskId)]: 'report' } : {};
   });
+  // S6a: external collaboration — right-column work-mode card, dispatch drawer and the external work page.
+  const [externalSummaryByTask, setExternalSummaryByTask] = useState<Record<string, ExternalTaskSummary>>({});
+  const [dispatchDrawerTask, setDispatchDrawerTask] = useState<{ projectId: string; taskId: string }>();
+  const [dispatchNonce, setDispatchNonce] = useState(0);
   const [reportPreviewOpenByTask, setReportPreviewOpenByTask] = useState<Record<string, boolean>>({});
   const [deskStateByTask, setDeskStateByTask] = useState<Record<string, TaskReportDeskPersistedState>>({});
   const [autoOpenReportKey, setAutoOpenReportKey] = useState<string>();
@@ -1057,7 +1067,8 @@ export function App() {
     : activeKey && activeTaskSourceCase?.taskKey === activeKey
       ? { caseId: activeTaskSourceCase.caseId, caseTitle: activeTaskSourceCase.caseTitle }
       : undefined;
-  const currentTaskPanel: 'chat' | 'report' = view === 'chat' && activeKey ? (taskPanelByTask[activeKey] ?? 'chat') : 'chat';
+  const currentTaskPanel: 'chat' | 'report' | 'external' = view === 'chat' && activeKey ? (taskPanelByTask[activeKey] ?? 'chat') : 'chat';
+  const externalCount = activeKey ? (externalSummaryByTask[activeKey]?.works.filter(work => work.status !== 'cancelled').length ?? 0) : 0;
   useEffect(() => {
     if (view !== 'chat' || !activeId) return;
     const url = new URL(window.location.href);
@@ -1075,7 +1086,7 @@ export function App() {
     }
     if (url.href !== window.location.href) window.history.replaceState(null, '', url);
   }, [view, activeId, activeTaskId, currentTaskPanel, currentTaskSourceCase?.caseId, inspectedVersion?.relativePath, inspectedVersion?.sha256]);
-  const switchTaskPanel = (panel: 'chat' | 'report') => {
+  const switchTaskPanel = (panel: 'chat' | 'report' | 'external') => {
     if (!activeKey) return;
     setTaskPanelByTask(previous => ({ ...previous, [activeKey]: panel }));
     if (panel === 'report') {
@@ -1083,7 +1094,19 @@ export function App() {
       setFilesOpen(false);
     }
   };
-  const chatContent = active && activeTask ? (view === 'chat' && currentTaskPanel === 'report' ? (
+  const chatContent = active && activeTask ? (view === 'chat' && currentTaskPanel === 'external' ? (
+    <ExternalWorkPanel
+      key={`external-${activeKey}`}
+      projectId={active.id}
+      taskId={activeTask.id}
+      taskName={activeTask.name}
+      archived={Boolean(active.archivedAt || activeTask.archivedAt)}
+      panel={currentTaskPanel}
+      externalCount={externalCount}
+      onSwitchPanel={switchTaskPanel}
+      onOpenDrawer={() => setDispatchDrawerTask({ projectId: active.id, taskId: activeTask.id })}
+    />
+  ) : view === 'chat' && currentTaskPanel === 'report' ? (
     <TaskReportDesk
       key={`desk-${activeKey}`}
       projectId={active.id}
@@ -1123,13 +1146,16 @@ export function App() {
           <div className="task-mode-strip" role="region" aria-label="任务视图与来源">
             <div className="task-mode-strip-inner">
               <div className="task-mode-tabs" role="group" aria-label="任务工作视图">
-                <button type="button" aria-pressed={true} onClick={() => switchTaskPanel('chat')}>
+                <button type="button" aria-pressed={currentTaskPanel === 'chat'} onClick={() => switchTaskPanel('chat')}>
                   <span className="pv-chat-icon" aria-hidden="true" />
                   任务对话
                 </button>
-                <button type="button" aria-pressed={false} onClick={() => switchTaskPanel('report')}>
+                <button type="button" aria-pressed={currentTaskPanel === 'report'} onClick={() => switchTaskPanel('report')}>
                   <span className="pv-paper-icon" aria-hidden="true" />
                   结论报告
+                </button>
+                <button type="button" aria-pressed={currentTaskPanel === 'external'} onClick={() => switchTaskPanel('external')}>
+                  外部协作{externalCount ? <span className="ed-tab-count">{externalCount}</span> : null}
                 </button>
               </div>
               {currentTaskSourceCase && (
@@ -1185,6 +1211,18 @@ export function App() {
         </ConversationDrawer>
         <div className="task-workspace-tools">
           {!archived && <><div className="report-action-row">{lastAssistant && !busy && <button className="secondary-button" type="button" onClick={async () => { const projectId = active.id, key = activeKey!; try { await saveReport(projectId, messageText(lastAssistant)); setFilesRevision(previous => previous + 1); changeUI(key, old => ({ ...old, notice: '这条回复已明确保存为 060_reports 中的最终报告。' })); } catch (error) { changeUI(key, old => ({ ...old, error: safeError(error) })); } }}>将最新回复保存为最终报告</button>}</div><details className="harness-panel task-account-panel"><summary>任务账号连接</summary><TaskServiceConnections key={`services-${activeKey}`} projectId={active.id} taskId={activeTask.id} bindings={activeTask.serviceConnections} unavailableReason={active.memberPackScoped ? '当前任务使用企业会员包的受限资源，个人账号连接不可用。' : current?.snapshot?.capabilities?.protectedExecution ? '当前任务采用受管执行环境，个人账号连接不可用。' : (current?.snapshot?.capabilities?.serviceConnections as { supported?: boolean; reason?: string } | undefined)?.supported === false ? (current?.snapshot?.capabilities?.serviceConnections as { reason?: string }).reason : undefined} disabled={contextLocked || capabilityUpdating} archived={archived} onSettings={() => openSettingsView('connection-settings')} onChanged={task => { updateTask(active.id, activeTask.id, () => task); void refreshTask(active.id, activeTask.id); }} /></details><details className="harness-panel task-pi-capabilities"><summary>Pi 能力与命令</summary><p>可用工具：{current?.snapshot?.tools.join(' · ') || '执行任务或打开会话后显示'}</p><TaskCapabilityList key={activeKey} settings={activeTask} disabled={contextLocked || capabilityUpdating || !current?.connected} context="session" onChange={(capability, enabled) => { const key = activeKey!; void toggleTaskCapability(capability, enabled).catch(error => changeUI(key, old => ({ ...old, error: safeError(error) }))); }} /><p>Python 通过 bash 执行。默认从 020_clean 读取分析资料并保存过程文件；最终报告由 Pi 写入 060_reports，也可明确保存。目录用途约定不提供敏感数据隔离。</p><div>{['/tools', '/skills', '/session', '/tree', '/compact', '/reload'].map(command => <button className="text-button" type="button" key={command} disabled={contextLocked || !current?.connected} onClick={() => { void persistDraft(active.id, activeTask.id, command).catch(() => {}); textarea.current?.focus(); }}>{command}</button>)}</div></details></>}
+          {view !== 'studio' && <TaskWorkModeCard
+            key={`work-mode-${activeKey}`}
+            projectId={active.id}
+            taskId={activeTask.id}
+            suggestion={activeTask.assignment ? taskPurpose[activeTask.assignment.type].deliverable : activeTask.name}
+            busy={contextLocked || capabilityUpdating}
+            archived={archived}
+            refreshToken={dispatchNonce}
+            onSummary={summary => setExternalSummaryByTask(previous => ({ ...previous, [activeKey!]: summary }))}
+            onAuthorize={() => setDispatchDrawerTask({ projectId: active.id, taskId: activeTask.id })}
+            onOpenWork={() => switchTaskPanel('external')}
+          />}
           {view !== 'studio' && <TaskAssignmentPanel key={activeKey} project={active} task={activeTask} busy={contextLocked || capabilityUpdating} onUpdated={task => updateTask(active.id, task.id, () => task)} onCreate={intent => showTaskDialog(active, document.activeElement as HTMLElement, intent)} />}
           {view !== 'studio' && <section ref={resultsPanel} tabIndex={-1} className="task-results" aria-label="结果与审查"><h2>结果与审查</h2><AutomaticActionLocalSwitch node="save" /><AutomaticActionLocalSwitch node="review" /><AutomaticActionLocalSwitch node="ir" /><AutomaticActionLocalSwitch node="case" /><AutomaticActionLocalSwitch node="assets" /><button type="button" className="text-button" onClick={() => openProjectPlan(active)}>项目需求与任务方案</button>
           <ReportCalculationReview projectId={active.id} taskId={activeTask.id} value={current?.snapshot?.capabilities?.reportCalculationReview} />
@@ -1236,6 +1274,26 @@ export function App() {
       {globalError && <div className="global-notice" role="alert"><span>{globalError}</span><button className="text-button" onClick={async () => { try { await refreshConfigurations(); const saved = await listProjects(); for (const project of saved) mergeProject(project); setGlobalError(''); } catch {} }}>重新连接</button><button className="text-button" onClick={() => setGlobalError('')}>关闭提示</button></div>}{globalNotice && <p className="project-notice" role="status">{globalNotice}</p>}
       {studioProjectAssociationPending && <div className="global-notice" role="alert"><span>项目 {studioProjectAssociationPending.projectId} 已创建；企业关联结果 UNKNOWN，原请求保持。</span><button type="button" className="secondary-button" onClick={() => { void inspectStudioProjectAssociation(); }}>核对原企业关联结果</button></div>}
       {studioUsePending && <div className="global-notice" role="alert"><span>进入分析结果 UNKNOWN；原请求 {studioUsePending.requestId} 保留，未重复创建任务。</span><button type="button" className="secondary-button" onClick={() => { void inspectStudioUse(); }}>核对原创建结果</button></div>}
+      {dispatchDrawerTask && active && activeTask && dispatchDrawerTask.projectId === active.id && dispatchDrawerTask.taskId === activeTask.id && !archived && <ExternalDispatchDrawer
+        open
+        projectId={active.id}
+        taskId={activeTask.id}
+        taskName={activeTask.name}
+        piece={activeTask.name}
+        repositories={[...(activeTask.serviceConnections?.github?.repositories ?? [])]}
+        assets={[]}
+        sourceCaseRef={activeTask.assignment?.issue ? { caseId: activeTask.assignment.issue.caseId, issueId: activeTask.assignment.issue.issueId } : undefined}
+        busy={capabilityUpdating || contextLocked}
+        onClose={() => setDispatchDrawerTask(undefined)}
+        onChooseInternal={() => { void chooseInternalCompletion(active.id, activeTask.id).catch(() => {}); setDispatchNonce(value => value + 1); setDispatchDrawerTask(undefined); }}
+        onAuthorized={(result: ExternalAuthorizeResult) => {
+          const key = taskKey(active.id, activeTask.id);
+          setDispatchNonce(value => value + 1);
+          setDispatchDrawerTask(undefined);
+          setTaskPanelByTask(previous => ({ ...previous, [key]: 'external' }));
+          changeUI(key, old => ({ ...old, notice: `外派授权已确认（工作 ${result.work.workId.slice(0, 8)}…）；台账与取消入口见「外部协作」页。` }));
+        }}
+      />}
       <HelpPage open={helpOpen} onBack={closeHelp} />
       <div hidden={helpOpen} className="workbench-content"><div className="workbench-view">
       {(inSettings || personalMounted || webSearchMounted) && <section className="settings-page" aria-labelledby="settings-title" hidden={!inSettings}>

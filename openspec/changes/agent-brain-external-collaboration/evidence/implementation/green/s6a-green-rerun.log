@@ -1,0 +1,29 @@
+✔ S6a routes: task external-dispatch summary is read-only GET with zero records and pause state (1318.452125ms)
+✔ S6a routes: authorize validates grant input, explicit enterprise and original asset qualification (894.205958ms)
+✔ S6a routes: authorize persists grant+work, summary reflects it and choose-internal stays blocked until cancel (923.649333ms)
+✔ S6a routes: cancel keeps every ledger fact, records the stop request as unsupported without an external seam and is idempotent (918.564333ms)
+✔ S6a routes: pause-resume / resume-resume persist the auto-resume pause for this task only (908.333208ms)
+✔ S6a routes: publish requires the task GitHub binding and records nothing without it (923.85675ms)
+✔ S6a routes: external settings view reports real core connection state and the optional workbuddy gate (913.319291ms)
+✔ S6a client: summary/pause reads are GET, actions keep exact owner paths and bodies (2.922542ms)
+✔ S6a client: another owner summary is refused and backend codes map to typed errors (0.44375ms)
+✔ S6a card: no external work renders the agent suggestion with internal primary and dispatch secondary and zero external note (35.991583ms)
+✔ S6a card: an authorized external work switches the card to the status snapshot with the work shortcut (3.916708ms)
+✔ S6a card: backend refusal on choose-internal is shown, never silently retried (3.654083ms)
+✔ S6a drawer: frozen fields render with workbuddy disabled and the exact-content snapshot, and confirm posts the grant (6.35ms)
+✔ S6a drawer: escape closes and focus restore hooks register (3.106833ms)
+✔ S6a drawer: confirm composes the real grant input (goal/scope/enterprise/repo/assets/expiry) and reports the result (4.456792ms)
+✔ S6a drawer: missing enterprise or repository blocks confirm with visible reasons (3.189375ms)
+✔ S6a panel: dispatched work renders the work card, dual status grid, ledger timeline, three boundaries and receipt (13.853458ms)
+✔ S6a panel: no work yet renders the hand-off CTA into the authorization drawer (3.292917ms)
+✔ S6a panel: cancel flows through the amber confirmation and shows the honest stop-request state (12.896ms)
+✔ S6a panel: paused auto-resume offers resume and the pause reason stays visible (2.837334ms)
+✔ S6a status view: ledger facts map to the frozen tone system without inventing success (3.015167ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7024.589416

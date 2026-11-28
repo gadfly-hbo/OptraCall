@@ -1,0 +1,328 @@
+✖ S6a routes: task external-dispatch summary is read-only GET with zero records and pause state (881.781084ms)
+✖ S6a routes: authorize validates grant input, explicit enterprise and original asset qualification (854.903584ms)
+✖ S6a routes: authorize persists grant+work, summary reflects it and choose-internal stays blocked until cancel (874.731959ms)
+✖ S6a routes: cancel keeps every ledger fact, records the stop request as unsupported without an external seam and is idempotent (859.75425ms)
+✖ S6a routes: pause-resume / resume-resume persist the auto-resume pause for this task only (890.114667ms)
+✖ S6a routes: publish requires the task GitHub binding and records nothing without it (896.137458ms)
+✖ S6a routes: external settings view reports real core connection state and the optional workbuddy gate (910.474333ms)
+✖ S6a client: summary/pause reads are GET, actions keep exact owner paths and bodies (1.616666ms)
+✖ S6a client: another owner summary is refused and backend codes map to typed errors (0.109375ms)
+✖ S6a card: no external work renders the agent suggestion with internal primary and dispatch secondary and zero external note (9.110917ms)
+✖ S6a card: an authorized external work switches the card to the status snapshot with the work shortcut (2.027792ms)
+✖ S6a card: backend refusal on choose-internal is shown, never silently retried (2.305792ms)
+✖ S6a drawer: frozen fields render with workbuddy disabled and the exact-content snapshot, and confirm posts the grant (2.031625ms)
+✖ S6a drawer: escape closes and focus restore hooks register (1.814208ms)
+✖ S6a drawer: confirm composes the real grant input (goal/scope/enterprise/repo/assets/expiry) and reports the result (3.6095ms)
+✖ S6a drawer: missing enterprise or repository blocks confirm with visible reasons (2.284917ms)
+✖ S6a panel: dispatched work renders the work card, dual status grid, ledger timeline, three boundaries and receipt (1.968375ms)
+✖ S6a panel: no work yet renders the hand-off CTA into the authorization drawer (2.026834ms)
+✖ S6a panel: cancel flows through the amber confirmation and shows the honest stop-request state (1.989583ms)
+✖ S6a panel: paused auto-resume offers resume and the pause reason stays visible (2.043625ms)
+✖ S6a status view: ledger facts map to the frozen tone system without inventing success (1.767333ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 0
+ℹ fail 21
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6322.561583
+
+✖ failing tests:
+
+test at tests/external-dispatch-ui.test.ts:21:1
+✖ S6a routes: task external-dispatch summary is read-only GET with zero records and pause state (881.781084ms)
+  AssertionError [ERR_ASSERTION]: {"code":"not_found","message":"请求未完成，请检查输入或本地服务后重试。"}
+  
+  404 !== 200
+  
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch-ui.test.ts:26:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 404,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-dispatch-ui.test.ts:39:1
+✖ S6a routes: authorize validates grant input, explicit enterprise and original asset qualification (854.903584ms)
+  AssertionError [ERR_ASSERTION]: {"code":"not_found","message":"请求未完成，请检查输入或本地服务后重试。"}
+  
+  404 !== 400
+  
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch-ui.test.ts:43:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 404,
+    expected: 400,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-dispatch-ui.test.ts:62:1
+✖ S6a routes: authorize persists grant+work, summary reflects it and choose-internal stays blocked until cancel (874.731959ms)
+  AssertionError [ERR_ASSERTION]: {"code":"not_found","message":"请求未完成，请检查输入或本地服务后重试。"}
+  
+  404 !== 201
+  
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch-ui.test.ts:66:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 404,
+    expected: 201,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-dispatch-ui.test.ts:89:1
+✖ S6a routes: cancel keeps every ledger fact, records the stop request as unsupported without an external seam and is idempotent (859.75425ms)
+  TypeError: Cannot read properties of undefined (reading 'workId')
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch-ui.test.ts:93:70)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-dispatch-ui.test.ts:106:1
+✖ S6a routes: pause-resume / resume-resume persist the auto-resume pause for this task only (890.114667ms)
+  AssertionError [ERR_ASSERTION]: {"code":"not_found","message":"请求未完成，请检查输入或本地服务后重试。"}
+  
+  404 !== 200
+  
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch-ui.test.ts:110:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 404,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-dispatch-ui.test.ts:123:1
+✖ S6a routes: publish requires the task GitHub binding and records nothing without it (896.137458ms)
+  TypeError: Cannot read properties of undefined (reading 'workId')
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch-ui.test.ts:127:61)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-dispatch-ui.test.ts:136:1
+✖ S6a routes: external settings view reports real core connection state and the optional workbuddy gate (910.474333ms)
+  TypeError: Cannot read properties of undefined (reading 'github')
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch-ui.test.ts:139:26)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-dispatch-ui.test.ts:193:1
+✖ S6a client: summary/pause reads are GET, actions keep exact owner paths and bodies (1.616666ms)
+  Error: external_dispatch_ui_unimplemented
+      at Module.unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/ui/external-dispatch-client.ts:10:44)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch-ui.test.ts:202:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-dispatch-ui.test.ts:220:1
+✖ S6a client: another owner summary is refused and backend codes map to typed errors (0.109375ms)
+  Error: external_dispatch_ui_unimplemented
+      at Module.unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/ui/external-dispatch-client.ts:10:44)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch-ui.test.ts:223:31)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-dispatch-ui.test.ts:294:1
+✖ S6a card: no external work renders the agent suggestion with internal primary and dispatch secondary and zero external note (9.110917ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /Agent 的建议/. Input:
+  
+  ''
+  
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch-ui.test.ts:304:12)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '',
+    expected: /Agent 的建议/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/external-dispatch-ui.test.ts:316:1
+✖ S6a card: an authorized external work switches the card to the status snapshot with the work shortcut (2.027792ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /核查四店会员字段映射与重复记录/. Input:
+  
+  ''
+  
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch-ui.test.ts:325:12)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '',
+    expected: /核查四店会员字段映射与重复记录/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/external-dispatch-ui.test.ts:335:1
+✖ S6a card: backend refusal on choose-internal is shown, never silently retried (2.305792ms)
+  AssertionError [ERR_ASSERTION]: expected a clickable node
+      at click (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch-ui.test.ts:250:10)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch-ui.test.ts:342:5)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/external-dispatch-ui.test.ts:348:1
+✖ S6a drawer: frozen fields render with workbuddy disabled and the exact-content snapshot, and confirm posts the grant (2.031625ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /业务目标/. Input:
+  
+  ''
+  
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch-ui.test.ts:366:12)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '',
+    expected: /业务目标/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/external-dispatch-ui.test.ts:386:1
+✖ S6a drawer: escape closes and focus restore hooks register (1.814208ms)
+  AssertionError [ERR_ASSERTION]: Escape closes the drawer
+  
+  0 !== 1
+  
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch-ui.test.ts:397:12)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-dispatch-ui.test.ts:406:1
+✖ S6a drawer: confirm composes the real grant input (goal/scope/enterprise/repo/assets/expiry) and reports the result (3.6095ms)
+  TypeError: Cannot read properties of undefined (reading 'props')
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch-ui.test.ts:423:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-dispatch-ui.test.ts:443:1
+✖ S6a drawer: missing enterprise or repository blocks confirm with visible reasons (2.284917ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /企业范围/. Input:
+  
+  ''
+  
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch-ui.test.ts:453:12)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '',
+    expected: /企业范围/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/external-dispatch-ui.test.ts:463:1
+✖ S6a panel: dispatched work renders the work card, dual status grid, ledger timeline, three boundaries and receipt (1.968375ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /一段工作，始终回到原任务/. Input:
+  
+  ''
+  
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch-ui.test.ts:473:12)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '',
+    expected: /一段工作，始终回到原任务/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/external-dispatch-ui.test.ts:493:1
+✖ S6a panel: no work yet renders the hand-off CTA into the authorization drawer (2.026834ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /把适合外部能力的片段交出去/. Input:
+  
+  ''
+  
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch-ui.test.ts:502:12)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '',
+    expected: /把适合外部能力的片段交出去/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/external-dispatch-ui.test.ts:508:1
+✖ S6a panel: cancel flows through the amber confirmation and shows the honest stop-request state (1.989583ms)
+  AssertionError [ERR_ASSERTION]: expected a clickable node
+      at click (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch-ui.test.ts:250:10)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch-ui.test.ts:526:5)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/external-dispatch-ui.test.ts:536:1
+✖ S6a panel: paused auto-resume offers resume and the pause reason stays visible (2.043625ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /自动续接已暂停|已暂停/. Input:
+  
+  ''
+  
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch-ui.test.ts:544:12)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '',
+    expected: /自动续接已暂停|已暂停/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/external-dispatch-ui.test.ts:549:1
+✖ S6a status view: ledger facts map to the frozen tone system without inventing success (1.767333ms)
+  Error: external_dispatch_ui_unimplemented
+      at Object.externalWorkStatusView (evalmachine.<anonymous>:44:11)
+      at view (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch-ui.test.ts:551:76)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch-ui.test.ts:552:20)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)

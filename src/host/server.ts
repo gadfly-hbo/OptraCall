@@ -87,6 +87,10 @@ import { isTaskCapability } from './task-capabilities.ts';
 import { ServiceConnectionManager } from './service-connection-manager.ts';
 import { ExternalWorkStore } from './external-work-store.ts';
 import { createExternalResumeCoordinator, parseExternalResumeIdentity } from './external-resume.ts';
+import { ExternalDispatch, type ExternalGrantInput, type ExternalTaskProfile } from './external-dispatch.ts';
+import { ExternalPublisher } from './external-publish.ts';
+import { WorkBuddyAdapter } from './workbuddy-adapter.ts';
+import { ExternalWorkError, externalAssetRefText } from './external-work-types.ts';
 import { ServiceConnectionError, isServiceId, serviceKeys, serviceRecord, servicePolicyFingerprint, type TaskServiceBindings } from './service-connection-types.ts';
 import { readTradeAreaStatus } from './trade-area-status.ts';
 import { CaseStore, CaseStoreError } from './case-store.ts';
@@ -2195,6 +2199,73 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     if (reviewTransition.legacyAdmissionAllowed() && (await automatic.store.readSettings({ projectId, taskId })).enabled && (await automatic.capabilities({ projectId, taskId })).supported) return { supported: false, reason: '当前任务采用受管执行环境，个人账号连接不可用。' };
     return { supported: true };
   }
+  // S6a: Host-bound external dispatch port. The dispatch facade stays owner-bound;
+  // the profile seam is refreshed by the write routes (full async eligibility) and
+  // falls back to the sync member-pack fact. Asset qualification intersects the
+  // grant input with the original Studio/semantic current qualification via the
+  // existing sourceAllowed contract. Publication rides the Host-only manager
+  // dispatch with the task's own verified GitHub binding; the optional WorkBuddy
+  // adapter is assembled for the settings view, and its transport is honestly
+  // unconfigured (no route reaches trigger before a real joint test marks ready).
+  const externalProfileByTask = new Map<string, ExternalTaskProfile>();
+  const externalWorkbuddy = new WorkBuddyAdapter({
+    store: externalWorkStore,
+    connection: 'local-workbuddy',
+    mcpEndpoint: 'unavailable (protected MCP endpoint not mounted in this slice)',
+    transport: {
+      getLocalAssistant: () => Promise.reject(new ExternalWorkError('external_workbuddy_transport_unconfigured', 503)),
+      postMessage: () => Promise.reject(new ExternalWorkError('external_workbuddy_transport_unconfigured', 503)),
+      getMessages: () => Promise.reject(new ExternalWorkError('external_workbuddy_transport_unconfigured', 503)),
+    },
+  });
+  const externalDispatch = new ExternalDispatch({
+    store: externalWorkStore,
+    profiles: (projectId, taskId) => externalProfileByTask.get(`${projectId}/${taskId}`)
+      ?? (studio.memberPack.getProjectToolScope(projectId) ? { externalDispatchAllowed: false, reason: 'member_pack_scope' } : { externalDispatchAllowed: true }),
+    qualifyAssets: async (projectId, refs) => {
+      const qualified = new Set<string>();
+      // 旧项目无企业或内部 legacy 默认放行不能成为远端授权（spec §7）：共享 Studio 资产
+      // 在未配置企业作用域时一律不在授权期资格交集内；配置后按现有 sourceAllowed
+      // 合同相交（studio-source 须实际发布、sap-metric 须项目启用等）。
+      const enterpriseScoped = studio.enterpriseScopes.list().enterprises.length > 0;
+      for (const ref of refs) {
+        if (['enterprise', 'sap-metric', 'sap-method', 'studio-source'].includes(ref.authority) && !enterpriseScoped) continue;
+        try {
+          if (await studio.enterpriseScope.sourceAllowed(projectId, { authority: ref.authority as StudioSourceRef['authority'], id: ref.id, version: ref.version, sha256: ref.hash })) qualified.add(externalAssetRefText(ref));
+        } catch { /* an unreadable ref stays unqualified */ }
+      }
+      return qualified;
+    },
+    publisher: new ExternalPublisher({
+      store: externalWorkStore,
+      transport: {
+        dispatch: async request => {
+          const work = await externalWorkStore.getWork(request.workId);
+          if (!work) return { outcome: 'rejected' };
+          const owner = await pair(work.projectId, work.taskId);
+          const binding = owner.task.serviceConnections?.github;
+          if (!binding) return { outcome: 'rejected' };
+          const result = await serviceConnections.dispatchHostOperation(binding, {
+            projectId: work.projectId, taskId: work.taskId, workId: request.workId, revision: request.revision,
+            action: request.action, repositoryId: request.repositoryId,
+            ...(request.title !== undefined ? { title: request.title } : {}),
+            ...(request.issueNumber !== undefined ? { issueNumber: request.issueNumber } : {}),
+            body: request.body, bodyHash: request.bodyHash,
+          });
+          return { outcome: result.outcome, ...(result.repositoryId !== undefined ? { repositoryId: result.repositoryId } : {}), ...(result.issueNumber !== undefined ? { issueNumber: result.issueNumber } : {}), ...(result.resultId !== undefined ? { serviceRef: result.resultId } : {}) };
+        },
+      },
+      hostContext: () => ({ assertCurrent: () => { if (closing) throw new RequestFault(409, 'host_closing'); } }),
+    }),
+    workbuddy: externalWorkbuddy,
+  });
+  async function externalDispatchProfile(projectId: string, taskId: string): Promise<ExternalTaskProfile> {
+    if (studio.memberPack.getProjectToolScope(projectId)) return { externalDispatchAllowed: false, reason: 'member_pack_scope' };
+    const eligibility = await taskServiceEligibility(projectId, taskId);
+    const profile: ExternalTaskProfile = { externalDispatchAllowed: eligibility.supported, ...(eligibility.supported ? {} : { reason: eligibility.reason }) };
+    externalProfileByTask.set(`${projectId}/${taskId}`, profile);
+    return profile;
+  }
   async function taskState(projectId: string, taskId: string, activate = false, inMutation = false) {
     let { project, task } = await pair(projectId, taskId);
     await checkReceivedHistory({ project, task }, { signal: AbortSignal.timeout(30000), assertCurrent() { if (closing) throw new RequestFault(409, 'host_closing'); } });
@@ -3208,6 +3279,21 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
       }
       if (request.headers['x-optracall-client'] !== '1' || (request.method !== 'GET' && !origin)) throw new RequestFault(403, 'client_rejected');
       if (url.pathname === '/api/service-connections' && request.method === 'GET') { json(response, 200, { connections: await serviceConnections.list() }); return; }
+      if (url.pathname === '/api/external-dispatch/settings' && request.method === 'GET') {
+        // S6a: real facts only — the GitHub core row comes from the actual connection;
+        // the protected MCP endpoint and the generic executor closed loop are not
+        // exercised in this slice and are reported as such (never pre-approved).
+        const github = (await serviceConnections.list()).find(connection => connection.service === 'github');
+        json(response, 200, {
+          core: {
+            github: { status: github?.status ?? 'disconnected', verified: github?.status === 'verified', ...(github?.accountLabel ? { accountLabel: github.accountLabel } : {}) },
+            protectedMcp: { available: false, reason: 'protected_mcp_endpoint_not_mounted' },
+            executorClosedLoop: { verified: false, reason: 'executor_closed_loop_not_exercised' },
+          },
+          optional: await externalWorkbuddy.settingsView(),
+        });
+        return;
+      }
       const serviceRoute = /^\/api\/service-connections\/([^/]+)(?:\/(status|connect|verify|disconnect|oauth\/start|oauth\/cancel))?$/.exec(url.pathname);
       if (serviceRoute) {
         const service = serviceRoute[1], action = serviceRoute[2];
@@ -3831,6 +3917,50 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
             }
             throw new RequestFault(404, 'not_found');
           }
+          const externalDispatchRoute = /^external-dispatch(?:\/(authorize|choose-internal|pause-resume|resume-resume|works\/([a-f0-9-]{36})\/(cancel|publish)))?$/.exec(operation ?? '');
+          if (externalDispatchRoute) {
+            const dispatchOwner = await pair(projectId, taskId, request.method !== 'GET');
+            const summaryRoute = `/api/projects/${projectId}/tasks/${taskId}/external-dispatch`;
+            if (!externalDispatchRoute[1] && request.method === 'GET') {
+              const [summary, pause] = await Promise.all([externalDispatch.summarize(projectId, taskId), externalWorkStore.getResumePause(projectId, taskId)]);
+              json(response, 200, { summary, pause });
+              return;
+            }
+            if (request.method === 'POST' && ['authorize', 'choose-internal', 'pause-resume', 'resume-resume'].includes(externalDispatchRoute[1]!)) {
+              const input = await body(request);
+              if (externalDispatchRoute[1] === 'authorize') {
+                const profile = await externalDispatchProfile(projectId, taskId);
+                if (!profile.externalDispatchAllowed) throw new RequestFault(403, 'external_profile_forbidden');
+                json(response, 201, await externalDispatch.authorize(projectId, taskId, input as unknown as ExternalGrantInput));
+                return;
+              }
+              if (externalDispatchRoute[1] === 'choose-internal') { json(response, 200, { choice: await externalDispatch.chooseInternal(projectId, taskId) }); return; }
+              if (externalDispatchRoute[1] === 'pause-resume') {
+                const reason = typeof input.reason === 'string' && input.reason.trim().length ? input.reason.trim().slice(0, 200) : 'manual';
+                json(response, 200, { pause: await externalResume.pauseResume(projectId, taskId, reason) });
+                return;
+              }
+              const resumed = await externalResume.resumeResume(projectId, taskId);
+              json(response, 200, { pause: null, ...(resumed ? { resumed } : {}) });
+              return;
+            }
+            const workId = externalDispatchRoute[2];
+            if (workId && request.method === 'POST' && externalDispatchRoute[3] === 'cancel') {
+              const input = await body(request);
+              const reason = typeof input.reason === 'string' && input.reason.trim().length ? input.reason.trim().slice(0, 500) : 'cancelled from the original task';
+              json(response, 200, await externalDispatch.cancelWork(workId, reason));
+              return;
+            }
+            if (workId && request.method === 'POST' && externalDispatchRoute[3] === 'publish') {
+              const input = await body(request);
+              const profile = await externalDispatchProfile(projectId, taskId);
+              if (!profile.externalDispatchAllowed) throw new RequestFault(403, 'external_profile_forbidden');
+              if (!dispatchOwner.task.serviceConnections?.github) throw new RequestFault(409, 'external_publish_binding_missing');
+              if (!Number.isSafeInteger(input.revision) || (input.revision as number) < 1 || !['issue-create', 'issue-comment'].includes(String(input.action)) || typeof input.body !== 'string' || !input.body.length) throw new RequestFault(400, 'external_publication_invalid');
+              json(response, 200, await externalDispatch.publish(projectId, taskId, { workId, revision: input.revision as number, action: input.action as 'issue-create' | 'issue-comment', body: input.body }));
+              return;
+            }
+          }
           if (!operation && request.method === 'GET') {
             assertCurrentProjectBorrower(request, projectId);
             await mutate(async () => {
@@ -3968,6 +4098,24 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
     } catch (error) {
       if (error instanceof ServiceConnectionError) { json(response, error.status, { code: error.code, message: '服务连接未完成，请核对当前账号、权限和原操作记录。' }); return; }
       const rejectedSend = (statusCode: number) => (messageSendRoute && statusCode >= 400 && statusCode < 500 ? { accepted: false as const } : {});
+      if (error instanceof ExternalWorkError) {
+        const externalMessages: Record<string, string> = {
+          external_profile_forbidden: '当前任务或项目不能使用外派；内部工作沿原权限继续。',
+          external_enterprise_required: '外派授权需要明确的企业范围；不回退默认。',
+          external_asset_not_qualified: '所选资产不在原 Studio/语义目录当前资格内；请缩小或更换资产范围。',
+          external_work_active: '已有进行中的外派工作；请先在原工作内取消或核对，再切换完成方式。',
+          external_policy_rate_limited: '当前窗口内外派次数已达上限；请先核对原工作。',
+          external_policy_exceeds_default: '资源策略不能超过默认上限；需要更高额度时另行确认。',
+          external_grant_expired: '授权期限必须明确晚于当前时间。',
+          external_work_not_found: '外派工作不存在或不属于当前任务。',
+          external_issue_already_created: '这项工作的 GitHub 工单已发布；修订在同一工单内追加，不重复创建。',
+          external_publication_anchor_missing: '尚无已确认的工单锚点；追加发布需等待首次发布核定。',
+          external_workbuddy_not_ready: 'WorkBuddy 联合验证未通过，保持禁用；纯 GitHub 路径不受影响。',
+          external_workbuddy_transport_unconfigured: 'WorkBuddy 触发通道尚未装配；本轮未产生任何出站动作。',
+        };
+        json(response, error.status, { code: error.code, ...rejectedSend(error.status), message: externalMessages[error.code] ?? '外派操作未完成；原任务与输入保留，请核对外派台账后重试。' });
+        return;
+      }
       if (messageSendRoute && error instanceof ProjectRuntimeError && error.code === 'native_run_start_rejected') {
         json(response, 500, { code: 'sdk_operation_failed', accepted: false, message: '原会话暂时无法写入，本次消息未被接受。请恢复写入权限后重试。' }); return;
       }
