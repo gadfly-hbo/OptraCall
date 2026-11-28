@@ -51,7 +51,6 @@ import type {
   ProgressBasisSuggestion,
   ProgressCaseChoice,
   ProgressEvidenceBasis,
-  ReachabilityEstimate,
   StrategyReturnInput,
   StrategyReturnRecord,
 } from './strategy-goal-decomposition-types.ts';

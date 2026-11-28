@@ -3003,6 +3003,8 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
           response.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive'});
           const unsubscribe=businessDiscussions.subscribe(view.discussion.id,event=>{if(!response.destroyed&&!response.writableEnded)response.write(`data: ${JSON.stringify(event)}\n\n`);});
           response.on('close',unsubscribe);
+          response.write(': role connection\n\n');
+          heartbeat(response,heartbeatIntervalMs);
           response.write(`data: ${JSON.stringify({type:'snapshot',snapshot:view.snapshot})}\n\n`);return;
         }
         const readInput = url.searchParams.has('requestId') ? {requestId:url.searchParams.get('requestId')} : {};
@@ -4052,7 +4054,19 @@ export function createHost(options: { cwd: string; uiPorts: number[]; transportV
                 streamTaskEvent(response, projectId, taskId, { type: 'snapshot', snapshot: state.snapshot });
               });
             }
-            catch { if (!response.destroyed && !response.writableEnded) { response.write(`data: ${JSON.stringify({ type: 'stream.error', message: '任务连接未就绪，请检查模型配置或重新连接。', projectId, taskId })}\n\n`); response.end(); } }
+            catch (streamError) {
+              if (!response.destroyed && !response.writableEnded) {
+                const payload = streamError instanceof ConfigurationStoreError
+                  ? { code: 'sse_configuration_unavailable', category: 'configuration', message: '任务连接的模型配置暂不可用或已变化，请检查模型设置后重新连接。' }
+                  : streamError instanceof NativeSnapshotError
+                    ? { code: 'sse_snapshot_read_failed', category: 'snapshot_read', message: '任务首帧历史或原生记录读取未完成，请核对原任务记录后重新连接。' }
+                    : streamError instanceof RequestFault
+                      ? { code: `sse_request_${streamError.code}`, category: 'request', message: '任务连接请求未就绪，请核对当前任务状态后重新连接。' }
+                      : { code: 'sse_stream_init_failed', category: 'stream_init', message: '任务实时连接首帧读取失败，请显式重新连接。' };
+                response.write(`data: ${JSON.stringify({ type: 'stream.error', ...payload, projectId, taskId })}\n\n`);
+                response.end();
+              }
+            }
             return;
           }
           if (operation === 'messages' && request.method === 'POST') {

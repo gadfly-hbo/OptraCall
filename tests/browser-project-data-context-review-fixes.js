@@ -79,7 +79,7 @@ async (page) => {
     assert(errors.length === 0, `Malformed import cannot white-screen or throw: ${errors.join(', ')}`);
     checks.push('B/C: fields:[null] rejected without page error, original draft and timestamp/native/artifact disclosure retained');
     await page.getByLabel(`项目操作 ${f.project.name}`, { exact: true }).click();
-    await page.getByRole('button', { name: '归档项目', exact: true }).click();
+    await page.getByRole('button', { name: `归档项目 ${f.project.name}`, exact: true }).click();
     await page.getByText('项目已归档，当前为只读查看。', { exact: true }).waitFor();
     if (!await panel.isVisible()) {
       if (!await files.isVisible()) await page.getByRole('button', { name: '展开项目文件', exact: true }).click();

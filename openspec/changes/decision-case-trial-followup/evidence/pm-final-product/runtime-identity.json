@@ -1,0 +1,10 @@
+{
+  "instanceId": "61e609cf-6867-40a9-920e-dd14996176bc",
+  "pid": 364066,
+  "codeRoot": "/workspace/OptraCall-issue154-second-review",
+  "version": "0.1.0-mvp.4",
+  "commit": "a643bf00e79cba01933cbaa49a1616ecb675cf12",
+  "tree": "d9ab4d03512adf10a46b7bcb83dc4f8345a63e35",
+  "builtAt": "2026-11-28T12:58:52.498Z",
+  "dirty": false
+}

@@ -1,66 +1,32 @@
 # OptraCall 工程入口
 
-开始任务、修改规范或准备交付时，先读 [工程规范](docs/engineering-workflow.md)；涉及产品方向、运行时或插件责任边界时，再读 [产品讨论稿 v0.4](docs/OptraCall_产品讨论稿_v0.4.md)。工程规范是开发流程的唯一详细来源，工具专属入口应引用它。
+开始任务、修改规范或准备交付时，先读[工程规范](docs/engineering-workflow.md)。它是开发流程的唯一详细来源；本文件和工具专属入口只维护必读条件、关键警示及同源指针。以当前明确用户决定和任务有效授权为准。
 
-**长期事故记忆（2026-11-28）：** Issue #149 / PR #151 工程结案后，用户报告真实产品 UI 与冻结 Demo 完全不一致，并明确指出这类事故重复发生，属于严重验收事故。PM 承认审核遗漏。原测试、独立复核和 CI 的 PASS 不证明冻结 UI 已落地；保留原证据和覆盖边界，不追溯改写为验收合规。所有 Agent 开工及交付前必须读取[冻结基准逐项复核与 PR 前截图确认](docs/engineering-workflow.md#冻结基准逐项复核与-pr-前截图确认)：按冻结 Demo、spec、任务清单逐项独立审核；有 UI 影响时，开 PR 前展示真实产品截图并取得用户明确确认。门禁在开 PR 前，领取 Agent 可按授权先提交和推送任务分支。详细规则只在工程规范维护。
+本项目遵循四点产品原则：**Host 管环境、Agent 自主执行、优先复用 Pi 已有能力、减少人的操作**。设计、开发、验收分别执行[职责及复用规则](docs/engineering-workflow.md#四点产品原则)、[前置检查](docs/engineering-workflow.md#设计确认与四原则前置检查)和[专项最终检查](docs/engineering-workflow.md#host-与-agent-职责边界及复用检查)。
 
-开发前，按[任务目标执行清单与范围管理](docs/engineering-workflow.md#任务目标执行清单与范围管理)列出目标和阶段任务，执行中逐项更新并据此处理新发现的问题。
+**严重验收事故警示（2026-11-28）。** Issue #149／PR #151 工程结案后，用户报告实际 UI 与冻结 Demo 完全不一致，并指出重复发生；PM 承认审核遗漏。测试、独立复核和 CI 的总 PASS 不能替代冻结 UI 一致性证据。保留原候选、旧结论及后续更正，详细经过见[历史索引](docs/engineering-workflow-history.md#严重验收事故)。
 
-领取、返工或 PM 接修涉及已冻结 UI Demo 时，受影响 UI 编码前必须执行[冻结 Demo 实际阅读与开发要求](docs/engineering-workflow.md#领取方的冻结-ui-demo-阅读与开发要求)：用浏览器渲染并实际查看画面/截图，读取相关 DOM/CSS 骨架，建立到生产视图的映射；开发及返工中对照同视口 Demo 与真实产品。只读 spec/guide、核 hash 或检查 `innerText` 不算视觉验收；交回须有阅读和对照证据，详细规则只在工程规范维护。
+有冻结 Demo 的 UI 工作，编码前须完成[浏览器实际阅读、DOM/CSS 骨架及生产映射](docs/engineering-workflow.md#领取方的冻结-ui-demo-阅读与开发要求)；有 UI 影响的交付，按[逐项复核与 PR 前截图确认](docs/engineering-workflow.md#冻结基准逐项复核与-pr-前截图确认)执行。门禁在开 PR 前（含 draft），已获授权的任务分支提交、推送和交接可先行。
 
-新产品、新功能和试用修正以云端开发为主，均通过 GitHub Issue 发单、领取、交接和结案。按[两类开发流程](docs/engineering-workflow.md#github-issues-问题收件与结案)找到入口，再按[GitHub 开发任务外发与交付](docs/engineering-workflow.md#github-开发任务外发与交付)执行。PM Agent 通常由 Codex 担任，也可由其他 Agent 担任或代理。具备任务分支推送权限的 Agent（包括 Codex）均可领取。
+按任务触发以下必读入口：
 
-为 MacBook 上的 Qoder 编写或维护反馈项目规则时，先读取仓库文件 `docs/engineering-workflow.md` 的「MacBook 端 Qoder 整理与提交」小节；反馈会话工作区与产品源码目录分开，按该节的绝对路径读取约定接入同一规范。
+| 任务涉及 | 开始受影响工作前读取 |
+| --- | --- |
+| 任意实际变更、排查中新发现问题、收尾 | [任务目标清单与范围管理](docs/engineering-workflow.md#任务目标执行清单与范围管理) |
+| 发单、领取、返工、接手、交付 | [GitHub 共享流程](docs/engineering-workflow.md#github-开发任务外发与交付)，核对最新 origin/main、工单决定和候选写入归属 |
+| SDK、依赖或 Pi 适配 | [官方 Pi 来源与版本约束](docs/engineering-workflow.md#官方-pi-sdk-来源与版本约束)及[升级流程](docs/engineering-workflow.md#pi-sdk-升级流程) |
+| Semantica 接入、依赖、适配或升级 | [官方组件规则](docs/engineering-workflow.md#semantica-官方组件来源与版本约束)及[资产兼容／回退](docs/engineering-workflow.md#semantica-升级验证与回退) |
+| Agent 交互、SDK、会话启停／恢复、模型配置或插件接入 | 工程规范的[IN01–IN07](docs/engineering-workflow.md#统一会话接入规范当前interface-v3兼容v1v2业务子集)及[统一会话接入说明](docs/agent-session-integration.md)，记录 Interface、owner/profile 和验收范围 |
+| 分析类 Skill 本体、随包参考资料、脚本或模板 | [分析类 Skill 编写规范](docs/分析类Skill编写规范.md) |
+| 修改 Skill 测评信息展示（包括纯前端、目录及元信息展示） | [Skill 测评信息统一展示规范](docs/skill-evaluation-display.md) |
+| MacBook Qoder 反馈项目规则、反馈整理或规范副本同步 | [MacBook 端 Qoder 整理与提交](docs/engineering-workflow.md#macbook-端-qoder-整理与提交)，按该节核对绝对路径及来源身份 |
+| 维护已有模块、处理旧失败或兼容问题 | [维护导航](docs/engineering-workflow-history.md#维护导航)，按模块读取规格、结果、后续验证及未解决限制 |
+| 产品方向、运行时或插件责任边界 | [产品讨论稿 v0.4](docs/OptraCall_产品讨论稿_v0.4.md)及工程规范第 2 节 |
+| 交接证据、归档或结束临时环境 | [证据与进度](docs/engineering-workflow.md#8-证据与进度)，确认持久副本和接收方实际访问情况 |
 
-编写或修改 OptraCall 分析类 Skill 本体时（含 `SKILL.md`、随包参考资料、脚本和模板），先读取项目根目录下的 [分析类 Skill 编写规范](docs/分析类Skill编写规范.md)，按规范编写并自检，按工程规范交付。
+项目是共享工作空间，任务在项目内创建，项目的真实默认目录为 `010_draw`、`020_clean`、`060_reports`。分析不读取 010 数据使用系统提示词软约束，不据此宣称敏感数据隔离；Host 不猜测最终报告。项目／任务、归档及旧会话迁移的维护边界按维护导航读取原合同。
 
-本项目遵循四点产品原则：**Host 管环境、Agent 自主执行、优先复用 Pi 已有能力、减少人的操作**。准备或修改 spec／UI、开发及验收时，必须按[工程规范第2节](docs/engineering-workflow.md#四点产品原则)与[前置检查](docs/engineering-workflow.md#3-连续-sdd-与-tdd)核对实际职责、复用依据和最少用户操作路径，完成[专项最终检查](docs/engineering-workflow.md#host-与-agent-职责边界及复用检查)；完整规则仅在工程规范维护。
-
-涉及 SDK、依赖或适配层的设计、实现与验收前，必须读取[官方 Pi SDK 来源与版本约束](docs/engineering-workflow.md#官方-pi-sdk-来源与版本约束)和[升级流程](docs/engineering-workflow.md#pi-sdk-升级流程)：统一使用未经修改的官方发布包，SDK 目标版本由用户明确指定，兼容适配在 OptraCall 自身完成。源码补丁、私有 fork、安装目录改写或绕过公开契约的运行时改写均不能作为修复手段；公开扩展机制按同一规范使用。当前[规则核对](openspec/changes/pi-sdk-governance/result.md)列有未处理风险，不能从规则已建立推断既有实现全部合规。
-
-[模型包消费端](openspec/changes/model-pack-consumer/result.md#合并交付与原位归档)已完成工程交付并原位归档。维护时先读规格、结果及[后续采用记录](openspec/changes/model-pack-consumer/live-validation.md)：MPS训练／导出，OptraCall消费v1纯计算包；任务显式开启、受管／封闭资源排除，快照不可变、损坏不静默修复。用户后续授权运行采用及设备更新，实际状态按后续收据核定；当前真实业务模型与LLM验收已由用户决定跳过。旧备份包有限检查、取消、原失败及历史前置TDD证明NOT_PROVED保留。
-
-维护[deep-research skill](openspec/changes/deep-research-skill/result.md#合并交付与原位归档)时，先读其归档记录。修改 Skill 测评信息展示时，按[统一展示规范](docs/skill-evaluation-display.md)处理。历史回执绑定被测版本，原工程修正的覆盖范围按归档中的用户裁定核对。
-
-维护[data-analysis skill](openspec/changes/data-analysis-skill/result.md#合并交付与原位归档)时，先读其规格、结果与独立复核。原失败、暂定结论、成本与验收边界保留，工程合并和运行采用分别核定。
-
-[商圈数据 MCP 连接器](openspec/changes/trade-area-mcp/result.md#合并交付与原位归档)与[天气连接器](openspec/changes/weather-mcp/result.md#合并交付与原位归档)已分别经非作者复核、实际head CI及获授权squash入main，OpenSpec原位归档；后续维护先读对应结果和[商圈IN06](openspec/changes/trade-area-mcp/spec.md#codex-接管补充2026-11-03)的SDK薄层复用边界。Qoder整体移交后只读，接缝及后续维护由Codex承接，原清单、移交包及失败保留。[后续真实模型记录](openspec/changes/weather-mcp/live-validation.md)为两轮工具／保存闭环完成、报告内容FAIL，不能当专业或用户产品验收；已授权MacBook main及同一正式快照采用，实际运行与保全按最终回执核定。Mac mini原运行服务保持，经营数据与凭据留在获准本机根，未来来源版本导入仍单独授权。
-
-当前用户已明确授权[PPT Host 接线修复](openspec/changes/ppt-host-wiring-repair/spec.md)：修复已核实的项目／配置归属、完整操作占用、保护、导出／差异及UI接缝，保留原FAIL、版本、会话与文件；适用检查、独立复核及Git／CI后合并main，不切换服务、不操作MacBook或新增真实模型实验。原检查“不通过”与本次修复结果分别记录。
-
-涉及 Semantica 接入、依赖、适配或升级时，必须读取[官方组件规则](docs/engineering-workflow.md#semantica-官方组件来源与版本约束)与[资产兼容及回退流程](docs/engineering-workflow.md#semantica-升级验证与回退)。Semantica 与 Pi 均采用官方原包，精确升级目标由用户指定；长期规则只在工程规范维护，规范本身不构成依赖升级或运行采用授权。
-
-涉及Agent交互、SDK接入、会话启停/恢复、模型配置或插件接入的变更，开始前必须读取工程规范的IN01–IN07及[统一会话接入说明](docs/agent-session-integration.md)，在本变更规格记录Interface版本、owner/profile和验收范围。Codex、Qoder共用这些规则；工具入口只引用同一来源。
-
-当前为[固定版本与MacBook试用交付](openspec/changes/current-version-trial-delivery/spec.md)：用户授权固定现有A/B/C、自动核算及托管优化候选，更新main并完成检查、非作者复核和CI后合并，再更新MacBook供用户体验。暂停新的模型全链路实验；保留专业FAIL、项目、会话和文件，不切换Mac mini运行服务。试用范围见[说明](docs/current-version-trial.md)，实际交付按[记录](openspec/changes/current-version-trial-delivery/result.md)分别核对。
-
-此前[B/C分析可靠性与核算范围](openspec/changes/analysis-verification-reliability/spec.md)的实施及检查见[实施记录](openspec/changes/analysis-verification-reliability/implementation.md)，真实模型结果见[专业验证](openspec/changes/analysis-verification-reliability/professional-evaluation.md)。Host只负责材料交付、权限和记录，Agent自主选择方法、工具及内部迭代。实验参考未通过专业标准，不推广到产品默认。后续可靠性工作先读该规格和评估协议，保留首次结果、取消、FAIL/UNKNOWN；使用未见结果修订候选时重新准备未见变体。以下历史授权不自动扩大当前范围。
-
-历史变更[业务语义增强与独立核算 Agent 一期](openspec/changes/business-semantics-verification/spec.md)：用户已确认方案v0.1 SV01–SV12，授权必要增强、合成资料真实模型对照、兼容及联合回归、非作者复核和Git/CI后合并main，合并前更新main。复用原RAP/SAP/Case、统一Pi和会话入口；新核算只核固定输入、先独立计算后对照，不重建IR或固定方法库。接入与使用见[核算说明](docs/verification-agent-integration.md)，实际结果见[记录](openspec/changes/business-semantics-verification/result.md)。保留项目/会话/文件，不自动切换服务或操作MacBook。
-
-**历史修订权限收尾：** 用户已确认并实施[修订权限收尾方案](docs/verification-revision-preservation-followup.md)：只读固定材料、输出新稿，由Host另存；采用同一公共生命周期的附属出稿资源，不改原任务指针/历史或普通分析工具，不加载执行扩展。旧原件破坏FAIL/UNKNOWN保留，不恢复或重放；新根有限复验与专业评分分开，新稿错误及复查漏报不可隐去，不宣称完整产品验收。最终工程/兼容/非作者复核和实际head CI约束Git交付，详情见实施记录；运行采用仍另授权。
-
-上一增量[工程可靠性收尾](openspec/changes/engineering-reliability/result.md)证据保留。原[Extension正确性建议](docs/extension-correctness-proposal.md)作为历史讨论，由用户已确认的SV01–SV12替代，不按旧EC清单开发。
-
-[统一会话接入一期](openspec/changes/unified-session-management-phase1/result.md)已交付，共用接口与少量实现、owner状态和业务策略分开。本次继续遵守同源接入规范。
-
-上一轮[requirements-flexibility](openspec/changes/requirements-flexibility/result.md)允许未确认框架草稿，取消澄清/假设凑数，支持描述性分析不引用假设，并补同会话一次有限格式修正；保留其正式发布、送入和兼容回退边界。
-
-上一轮[requirements-reliability](openspec/changes/requirements-reliability/result.md)已修复目标项目／发布版本选择、真实回答编辑、模型切换和会话隔离；涉及会话关闭或请求重试时，继续核对其归属与legacy回执兼容边界。
-
-[需求梳理初始实现](openspec/changes/requirements-elaboration/spec.md)为4-Stage软门禁、独立插件会话走统一Runtime、RAP 0.2及显式送入。A路线泛化由Qoder实施；原[交付证据](openspec/changes/requirements-elaboration/result.md)保留，本轮受影响接缝检查另记于可靠性结果。
-
-上一变更为 [Case一期](openspec/changes/decision-case/spec.md)（已合并 PR #4）及其后的 [macbook-trial-delivery](openspec/changes/macbook-trial-delivery/spec.md) 单向试用交付；各自的结果与授权范围保留在对应记录中。
-
-[项目多任务变更](openspec/changes/project-tasks-and-archive/result.md)已完成用户验收、PR #1合并及核定测试数据清理。模型过程偏离保留观察，不额外增加Host拦截。原 [first-chat-mvp](openspec/changes/first-chat-mvp/result.md)证据保留；旧四项完成前的Git／CI暂缓期已结束。后续执行核对实际分支、WIP和固定输入，Git／CI、安装和用户验收分别报告，不覆盖证据或自动重放中断任务。
-
-第4项允许持久保存五模型配置／凭据、定向读取本机Pi和SSH读取MacBook Pi指定MiMo凭据，经前端同一保存／导入入口配置；允许真实项目、上传、原生SDK多轮及完整macOS工具／bash／Python、用户安装原生扩展／skills／MCP的接入能力。只用合成数据验收，不代装数据分析skill。Host管环境，Agent管分析，不自建推理循环或Host补计算。
-
-项目是共享工作空间，任务只能在项目内创建；任务独立会话／草稿／运行状态，三目录由项目共享。产品界面支持项目重命名、归档／恢复，不提供删除入口；本次工程测试数据清理不改变该产品规则。归档只读且不自动停止运行，先满足已确认的空闲准入。schema2迁移保留旧原生JSONL路径／字节及父会话引用；具体字段和恢复规则以当前结构方案为准。
-
-真实默认目录严格为 `010_draw`、`020_clean`、`060_reports`。用户已撤下强制原件禁读沙箱／工具拦截，改为系统提示词软约束“分析不读取010中的数据”，使用用户020资料，过程输出默认020、最终报告060；前端提示不提供敏感数据隔离，勿放敏感数据。Host不猜测最终报告。第3项内存／空工具约束只代表历史阶段，不覆盖后续已确认范围。
-
-Codex 和 Qoder 均遵守工程规范；每次执行以已授权范围和实际证据为准。历史 v0.1 及 JuanerAI 参考资料不覆盖本项目最新确认，也不授予旧任务权限。
+历史任务的授权、候选、FAIL／UNKNOWN／NOT_PROVED 及限定接受保留在[历史索引](docs/engineering-workflow-history.md)与原变更记录。历史文字中的“当前”“第4项”“上一轮”等不授予本任务权限。规则建立、工程合并、设备运行采用与用户产品验收分别核对实际证据。
 
 <!-- codebase-memory-mcp:start -->
 # Codebase Knowledge Graph (codebase-memory-mcp)

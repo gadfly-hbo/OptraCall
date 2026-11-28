@@ -133,7 +133,7 @@ export function ProjectBoard({ visible = true, onOpenCase, onOpenCollaboration, 
         <button type="button" className="daily-project-back" onClick={dismissProject}><span aria-hidden="true">←</span>{initialProjectId && selectedId === initialProjectId && onInitialProjectClose ? '返回来源位置' : '返回全部项目 · 保留搜索与筛选'}</button>
         <header className="daily-project-detail-header">
           <div><p className="daily-project-eyebrow">PROJECT · SHARED WORKSPACE</p><div className="daily-project-detail-title"><h1 id={`${id}-project-title`} ref={pageHeading} tabIndex={-1}>{selected.name}</h1><span className={`daily-project-status ${selected.archivedAt ? 'archived' : ''}`}>{status(selected)}</span></div><p className="daily-project-detail-meta">{assignee(selected)} · {selected.tasks.length} 个原任务 · {countLabel(selected)}</p></div>
-          <button type="button" className="secondary-button" onClick={() => selected.archivedAt ? onRestore(selected) : onArchive(selected)}>{selected.archivedAt ? '恢复项目' : '归档项目'}</button>
+          <button type="button" className="secondary-button" aria-label={`${selected.archivedAt ? '恢复项目' : '归档项目'} ${selected.name}`} onClick={() => selected.archivedAt ? onRestore(selected) : onArchive(selected)}>{selected.archivedAt ? '恢复项目' : '归档项目'}</button>
         </header>
         {selected.archivedAt && <p className="daily-project-readonly">此项目已归档，任务、资料与原记录只读。恢复只改变本项目状态，不改变任何 Case、事项或历史结论。</p>}
         <section className="daily-project-shared-info" aria-label="项目共用工作信息">

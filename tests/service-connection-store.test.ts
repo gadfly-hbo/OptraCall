@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import { constants } from 'node:fs';
 import { mkdtemp, readFile, writeFile, stat, symlink, link, rm } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -52,6 +55,70 @@ test('cross-instance configuration CAS has one winner and unrelated service upda
   assert.deepEqual((await second.list()).map(value => value.service), ['github', 'gmail', 'tencent']);
   assert.equal((await store.getCredentials('gmail')).clientSecret, 'gmail-secret');
   assert.equal((await store.getCredentials('tencent')).authorizationCode, 'tencent-code');
+});
+
+test('a waiting writer can acquire the lock after its owner releases between EEXIST and path validation', { timeout: 10_000 }, async t => {
+  const { root, store } = await fixture(t); await connected(store);
+  const second = new ServiceConnectionStore({ dataRoot: root }); await second.init();
+  let entered!: () => void, release!: () => void;
+  const acquired = new Promise<void>(resolve => { entered = resolve; });
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const owner = store.modifyCredentials('github', async credentials => {
+    entered(); await gate;
+    return { credentials, result: 'released' };
+  });
+  await acquired;
+  const originalOpen = fs.open;
+  let interleaved = false;
+  // Both writers and all filesystem operations are real. Only schedule the
+  // owner's normal release after the contender's actual O_EXCL conflict.
+  const observedOpen = t.mock.method(fs, 'open', async (...args: Parameters<typeof fs.open>) => {
+    try { return await originalOpen(...args); }
+    catch (fault) {
+      if (!interleaved && String(args[0]) === second.lockPath && (fault as NodeJS.ErrnoException).code === 'EEXIST') {
+        interleaved = true; release(); await owner;
+      }
+      throw fault;
+    }
+  });
+  syncBuiltinESMExports();
+  try {
+    await second.saveConfiguration('gmail', { scopes: ['read'], credentials: { clientSecret: 'gmail-secret' } });
+    assert.equal(interleaved, true, 'the owner really released before contender validation');
+    assert.equal(await owner, 'released');
+    assert.deepEqual((await second.list()).map(value => value.service), ['github', 'gmail']);
+    assert.equal((await store.getCredentials('gmail')).clientSecret, 'gmail-secret');
+    assert.equal((await store.getCredentials('github')).accessToken, config.credentials.accessToken);
+  } finally {
+    release(); observedOpen.mock.restore(); syncBuiltinESMExports(); await owner;
+  }
+});
+
+test('an opened connection snapshot remains readable after another writer atomically replaces its file', async t => {
+  const { root, store } = await fixture(t); await connected(store);
+  const second = new ServiceConnectionStore({ dataRoot: root }); await second.init();
+  const before = await store.list(), originalOpen = fs.open;
+  let replaced = false, detachedLinks = -1;
+  const observedOpen = t.mock.method(fs, 'open', async (...args: Parameters<typeof fs.open>) => {
+    const handle = await originalOpen(...args);
+    if (!replaced && String(args[0]) === store.file && args[1] === (constants.O_RDONLY | constants.O_NOFOLLOW)) {
+      replaced = true;
+      // Replace the real file only after the reader has opened the old inode.
+      try {
+        await second.saveConfiguration('gmail', { scopes: ['read'], clientId: 'synthetic-desktop' });
+        detachedLinks = (await handle.stat()).nlink;
+      } catch (error) { await handle.close(); throw error; }
+    }
+    return handle;
+  });
+  syncBuiltinESMExports();
+  try {
+    assert.deepEqual(await store.list(), before, 'the opened old snapshot remains complete');
+    assert.equal(replaced, true); assert.equal(detachedLinks, 0);
+    assert.deepEqual((await second.list()).map(value => value.service), ['github', 'gmail']);
+    assert.equal((await store.getCredentials('github')).accessToken, config.credentials.accessToken);
+    assert.equal(JSON.parse(await readFile(store.file, 'utf8')).connections.gmail.config.clientId, 'synthetic-desktop');
+  } finally { observedOpen.mock.restore(); syncBuiltinESMExports(); }
 });
 
 test('disconnect preserves binding intent; only actually identical policy and stable identity restore it', async t => {
@@ -145,6 +212,10 @@ test('symlinks/hardlinks never become credential storage and lock ownership is n
   await rm(store.file); await writeFile(store.file, snapshot);
   const lockTarget = path.join(root, 'lock-target'); await writeFile(lockTarget, 'do not touch'); await symlink(lockTarget, store.lockPath);
   await assert.rejects(store.disconnect('github'), error('unsafe_service_storage'));
+  assert.equal(await readFile(lockTarget, 'utf8'), 'do not touch');
+  await rm(store.lockPath); await link(lockTarget, store.lockPath);
+  await assert.rejects(store.disconnect('github'), error('unsafe_service_storage'));
+  assert.equal((await stat(store.lockPath)).nlink, 2, 'another lock inode is never removed');
   assert.equal(await readFile(lockTarget, 'utf8'), 'do not touch');
 });
 

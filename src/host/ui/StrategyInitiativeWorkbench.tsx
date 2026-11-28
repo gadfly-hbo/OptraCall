@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { CaseDialog, CaseFormError, useOperationId } from './CaseDialogs.tsx';
 import { StrategyDiscussionTranscript } from './StrategyDiscussionReply.tsx';
-import { projectDiscussionSnapshot, projectDiscussionStreaming } from './strategy-discussion-projection.ts';
+import { projectDiscussionStreaming } from './strategy-discussion-projection.ts';
 import { fileBase64 } from './runtime-client.ts';
 import type { NativeMessage, PublicModelConfiguration } from './project-types.ts';
 import type { GoalScope } from '../strategy-goals-types.ts';

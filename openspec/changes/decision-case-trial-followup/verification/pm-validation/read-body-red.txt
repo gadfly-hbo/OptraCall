@@ -1,0 +1,25 @@
+✖ PM: a role reconciliation GET with headers but stalled JSON body has a finite read deadline (76.663711ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1321.381352
+
+✖ failing tests:
+
+test at tests/case-trial-followup-fixes.test.ts:991:1
+✖ PM: a role reconciliation GET with headers but stalled JSON body has a finite read deadline (76.663711ms)
+  AssertionError [ERR_ASSERTION]: a stalled reconciliation response body must be aborted within a finite read window
+      at TestContext.<anonymous> (file:///workspace/OptraCall-issue154-second-review/tests/case-trial-followup-fixes.test.ts:1022:12)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

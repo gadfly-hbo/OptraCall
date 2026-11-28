@@ -10,9 +10,6 @@ export type LegacyStrategyStage = 'direction' | 'compare' | 'handoff' | 'strateg
 const strategyViews: ReadonlyArray<[StrategyStage, string]> = [
   ['co-create', '战略共创'], ['strategy-check', '战略检验'], ['strategy-release', '战略发布'], ['strategy-versions', '版本管理'],
 ];
-const goalViews: ReadonlyArray<[GoalStage, string]> = [
-  ['goals', '目标与策略'], ['adopt', '核对与采用'], ['cases', '年度决策事项'], ['history', '版本与反馈'],
-];
 export const managementTitle = (route: ManagementRoute) => route.area === 'strategy' ? '战略选择' : '目标管理';
 
 export function ManagementTabs({route, onStage}: {route: ManagementRoute; onStage: (stage: ManagementStage) => void}) {

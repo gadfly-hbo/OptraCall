@@ -148,7 +148,8 @@ export class ServiceConnectionStore {
     try {
       handle = await open(this.file, constants.O_RDONLY | constants.O_NOFOLLOW);
       const entry = await handle.stat();
-      if (!entry.isFile() || entry.nlink !== 1 || entry.size > MAX_FILE_BYTES) throw new Error();
+      // Atomic replacement may unlink this already-open snapshot; extra links remain unsafe.
+      if (!entry.isFile() || entry.nlink > 1 || entry.size > MAX_FILE_BYTES) throw new Error();
       const bytes = await handle.readFile();
       if (bytes.byteLength > MAX_FILE_BYTES) throw new Error();
       return parseState(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));
@@ -179,7 +180,8 @@ export class ServiceConnectionStore {
       try { handle = await open(this.lockPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600); }
       catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw new ServiceConnectionError('unsafe_service_storage', 503);
-        await this.#regular(this.lockPath);
+        // The owner may release its lock between O_EXCL and this path check.
+        await this.#regular(this.lockPath, true);
         if (Date.now() >= deadline) throw new ServiceConnectionError('service_store_busy', 409);
         await new Promise(resolve => setTimeout(resolve, 10 + Math.floor(Math.random() * 15)));
       }

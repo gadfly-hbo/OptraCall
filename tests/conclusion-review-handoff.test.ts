@@ -29,7 +29,8 @@ async function fixture(t: TestContext, provider: { baseUrl: string; requests: re
   await mkdir(evidence, { recursive: true });
   const root = await mkdtemp(path.join(evidence, 'run-')), dataRoot = path.join(root, 'host'), projectsRoot = path.join(root, 'projects');
   await mkdir(path.join(dataRoot, 'pi'), { recursive: true });
-  await writeFile(path.join(dataRoot, 'pi/settings.json'), JSON.stringify({ retry: { enabled: false } }));
+  // Exact dispatch counts below isolate admission/replay from SDK maintenance.
+  await writeFile(path.join(dataRoot, 'pi/settings.json'), JSON.stringify({ retry: { enabled: false }, compaction: { enabled: false } }));
   const http: object[] = [], facts: Record<string, unknown> = {};
   let host = createHost({ reviewAdmission: 'legacy', cwd: process.cwd(), dataRoot, projectsRoot, uiPorts: [4183], transportVersion: 'synthetic-conclusion-handoff' });
   let baseUrl = '';

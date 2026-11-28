@@ -47,12 +47,61 @@ export function hasPendingDiscussionAdoption(id:string, ref:GoalVersion) {
 }
 export interface DiscussionAdoptionInput { operationId: string; goalId: string; version: number; expectedVersion: number; expectedAdoptedVersion?: number | null; goalContentSha256: string; decision: string }
 export async function adoptDiscussionGoal(id: string, input: DiscussionAdoptionInput) { const result = await request<{ goal: GoalVersion }>(`${path(id)}/adopt`, 'POST', input); if (result.goal?.goalId !== input.goalId || result.goal?.version !== input.version || result.goal?.status !== 'adopted') throw new StrategyDiscussionRequestError('strategy_discussion_goal_mismatch', 409, true); return result; }
-export async function watchStrategyDiscussion(id: string, onEvent: (event: ProjectEvent) => void, signal: AbortSignal, endpoint = `/api/strategy/discussions${path(id)}/events`): Promise<void> {
-  const response = await fetch(endpoint, { credentials: 'omit', cache: 'no-store', headers: { 'x-optracall-client': '1' }, signal });
-  if (!response.ok || !response.body) throw new StrategyDiscussionRequestError('strategy_discussion_events_unavailable', response.status);
-  const reader = response.body.getReader(), decoder = new TextDecoder(); let pending = '';
-  try { while (!signal.aborted) { const chunk = await reader.read(); if (chunk.done) break; pending += decoder.decode(chunk.value, { stream: true }); pending = pending.replace(/\r\n/g, '\n'); let boundary: number; while ((boundary = pending.indexOf('\n\n')) >= 0) { const block = pending.slice(0, boundary); pending = pending.slice(boundary + 2); const data = block.split('\n').filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n'); if (data && !signal.aborted) onEvent(JSON.parse(data)); } } }
-  finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+export type StrategyWatchOptions = { idleTimeoutMs?: number; eventIdleTimeoutMs?: number; shouldExpectEvents?: () => boolean };
+export async function watchStrategyDiscussion(id: string, onEvent: (event: ProjectEvent) => void, signal: AbortSignal, endpoint = `/api/strategy/discussions${path(id)}/events`, options: StrategyWatchOptions = {}): Promise<void> {
+  if (signal.aborted) return;
+  const observation = new AbortController(), observationSignal = AbortSignal.any([signal, observation.signal]);
+  let timer: ReturnType<typeof setTimeout> | undefined, eventTimer: ReturnType<typeof setTimeout> | undefined, timedOut = false;
+  const clearWatchdog = () => { if (timer !== undefined) clearTimeout(timer); timer = undefined; };
+  const clearEventWatchdog = () => { if (eventTimer !== undefined) clearTimeout(eventTimer); eventTimer = undefined; };
+  const clearTimers = () => { clearWatchdog(); clearEventWatchdog(); };
+  const touch = () => {
+    clearWatchdog();
+    if (options.idleTimeoutMs && options.idleTimeoutMs > 0) timer = setTimeout(() => { timedOut = true; observation.abort(); }, options.idleTimeoutMs);
+  };
+  const touchEvents = () => {
+    clearEventWatchdog();
+    if (options.eventIdleTimeoutMs && options.eventIdleTimeoutMs > 0) {
+      eventTimer = setTimeout(() => {
+        if (!options.shouldExpectEvents || options.shouldExpectEvents()) {
+          timedOut = true;
+          observation.abort();
+        } else {
+          touchEvents();
+        }
+      }, options.eventIdleTimeoutMs);
+    }
+  };
+  signal.addEventListener('abort', clearTimers, { once: true });
+  touch();
+  touchEvents();
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  try {
+    const response = await fetch(endpoint, { credentials: 'omit', cache: 'no-store', headers: { 'x-optracall-client': '1' }, signal: observationSignal });
+    if (!response.ok || !response.body) throw new StrategyDiscussionRequestError('strategy_discussion_events_unavailable', response.status);
+    reader = response.body.getReader(); const decoder = new TextDecoder(); let pending = '';
+    while (!signal.aborted) {
+      const chunk = await reader.read(); if (chunk.done) break;
+      touch();
+      pending += decoder.decode(chunk.value, { stream: true }); pending = pending.replace(/\r\n/g, '\n');
+      let boundary: number;
+      while ((boundary = pending.indexOf('\n\n')) >= 0) {
+        const block = pending.slice(0, boundary); pending = pending.slice(boundary + 2);
+        const data = block.split('\n').filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
+        if (data && !signal.aborted) {
+          touchEvents();
+          onEvent(JSON.parse(data));
+        }
+      }
+    }
+    if (timedOut && !signal.aborted) throw new StrategyDiscussionRequestError('strategy_discussion_events_timeout', 0, false, '实时对话观察超时，正在只读核对原记录。');
+  } catch (error) {
+    if (timedOut && !signal.aborted) throw new StrategyDiscussionRequestError('strategy_discussion_events_timeout', 0, false, '实时对话观察超时，正在只读核对原记录。');
+    if (!signal.aborted) throw error;
+  } finally {
+    clearTimers(); signal.removeEventListener('abort', clearTimers); observation.abort();
+    await reader?.cancel().catch(() => {}); reader?.releaseLock();
+  }
 }
 export type DiscussionPending = { kind: 'create'; input: StrategyDiscussionCreate } | { kind: 'message'; discussionId: string; input: StrategyDiscussionMessage } | { kind: 'update'; discussionId: string; input: StrategyDiscussionUpdate };
 const journalKey = 'optracall.strategy-discussions.pending.v1';

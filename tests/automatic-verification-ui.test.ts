@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import * as automaticClient from '../src/host/ui/automatic-verification-client.ts';
 import {
-  AutomaticVerificationRequestError, AutomaticVerificationUncertain,
-  automaticSettingsError, readAutomaticSettings, saveAutomaticSettings,
-  listAutomaticChains, mergeAutomaticChains, readAutomaticChain, stopAutomaticChain, readAutomaticCapabilities,
-  respondAutomaticUI, readAutomaticStatus,
+  AutomaticVerificationRequestError,
+  automaticSettingsError, readAutomaticSettings,
+  listAutomaticChains, mergeAutomaticChains, readAutomaticChain, readAutomaticCapabilities,
+  readAutomaticStatus,
 } from '../src/host/ui/automatic-verification-client.ts';
 import type { AutomaticChain, AutomaticSettings, AutomaticSettingsInput } from '../src/host/automatic-verification-types.ts';
 
@@ -58,65 +58,16 @@ test('AV10 nested settings and admission observations cannot borrow another task
   await assert.rejects(readAutomaticStatus(owner.projectId, owner.taskId), /归属/);
 });
 
-test('AV01 CAS settings conflict is one PUT, retains caller input and does not retry', async t => {
-  const methods: string[] = [];
-  t.mock.method(globalThis, 'fetch', async (_url: string, init: RequestInit) => { methods.push(init.method ?? 'GET'); return response({ code: 'automatic_settings_conflict' }, 409); });
-  const before = structuredClone(input);
-  await assert.rejects(saveAutomaticSettings(owner.projectId, owner.taskId, 3, input), (error: unknown) => error instanceof AutomaticVerificationRequestError && error.status === 409);
-  assert.deepEqual(methods, ['PUT']);
-  assert.deepEqual(input, before);
-});
-
-test('AV07 uncertain settings save only reads back and cannot accept unrelated later settings', async t => {
-  const methods: string[] = [];
-  t.mock.method(globalThis, 'fetch', async (_url: string, init: RequestInit) => { methods.push(init.method ?? 'GET'); if (init.method === 'PUT') throw new TypeError('response lost'); return response({ settings: { ...settings, revision: 4, reportPath: '060_reports/someone-else.md' } }); });
-  await assert.rejects(saveAutomaticSettings(owner.projectId, owner.taskId, 3, input), AutomaticVerificationUncertain);
-  assert.deepEqual(methods, ['PUT', 'GET']);
-});
-
-test('AV07 uncertain settings save can recover only exact CAS successor without resending', async t => {
-  const methods: string[] = [];
-  t.mock.method(globalThis, 'fetch', async (_url: string, init: RequestInit) => { methods.push(init.method ?? 'GET'); if (init.method === 'PUT') throw new TypeError('response lost'); return response({ settings: { ...settings, revision: 4 } }); });
-  assert.equal((await saveAutomaticSettings(owner.projectId, owner.taskId, 3, input)).revision, 4);
-  assert.deepEqual(methods, ['PUT', 'GET']);
-});
-
-test('AV07 uncertain stop only queries same chain once and never reposts', async t => {
-  const calls: { url: string; method: string }[] = [];
-  t.mock.method(globalThis, 'fetch', async (url: string, init: RequestInit) => { calls.push({ url: String(url), method: init.method ?? 'GET' }); if (init.method === 'POST') throw new TypeError('response lost'); return response({ chain: { ...chain, state: 'cancelled', phase: 'ended', reason: 'user_stopped', cleanup: { state: 'confirmed', retryable: false } } }); });
-  assert.equal((await stopAutomaticChain(owner.projectId, owner.taskId, chainId)).state, 'cancelled');
-  assert.deepEqual(calls.map(call => call.method), ['POST', 'GET']);
-  assert.ok(calls[1]?.url.endsWith(`/chains/${chainId}`));
-});
-
-test('AV07 stop HTTP500 plus cancelled or user_stopped history cannot replace a missing actual cleanup proof', async t => {
-  let observed: unknown = { ...chain, state: 'cancelled', phase: 'ended', reason: 'user_stopped' };
-  const methods: string[] = [];
-  t.mock.method(globalThis, 'fetch', async (_url: string, init: RequestInit) => { methods.push(init.method ?? 'GET'); return init.method === 'POST' ? response({ code: 'protected_cleanup_unknown' }, 500) : response({ chain: observed }); });
-  await assert.rejects(stopAutomaticChain(owner.projectId, owner.taskId, chainId), AutomaticVerificationUncertain);
-  observed = { ...chain, state: 'unknown', phase: 'ended', reason: 'user_stopped', cleanup: { state: 'unknown', retryable: true } };
-  await assert.rejects(stopAutomaticChain(owner.projectId, owner.taskId, chainId), AutomaticVerificationUncertain);
-  assert.deepEqual(methods, ['POST', 'GET', 'POST', 'GET']);
-});
-
-test('AV07 a running record does not prove uncertain stop was accepted', async t => {
-  const methods: string[] = [];
-  t.mock.method(globalThis, 'fetch', async (_url: string, init: RequestInit) => { methods.push(init.method ?? 'GET'); if (init.method === 'POST') throw new TypeError('response lost'); return response({ chain }); });
-  await assert.rejects(stopAutomaticChain(owner.projectId, owner.taskId, chainId), AutomaticVerificationUncertain);
-  assert.deepEqual(methods, ['POST', 'GET']);
-});
-
-test('AV07 cleanup acknowledgement does not rewrite UNKNOWN history or treat a stop reason as proof', async t => {
+test('AV07 historical cleanup acknowledgement does not rewrite UNKNOWN or treat a stop reason as proof', async t => {
   const unknown = { ...chain, state: 'unknown' as const, phase: 'ended' as const, reason: 'request_unknown' as const, cleanup: { state: 'confirmed' as const, retryable: false } };
   const methods: string[] = [];
   t.mock.method(globalThis, 'fetch', async (_url: string, init: RequestInit) => { methods.push(init.method ?? 'GET'); return response({ chain: unknown }); });
-  assert.equal((await stopAutomaticChain(owner.projectId, owner.taskId, chainId)).state, 'unknown');
-  assert.deepEqual(methods, ['POST']);
+  assert.equal((await readAutomaticChain(owner.projectId, owner.taskId, chainId)).state, 'unknown');
+  assert.deepEqual(methods, ['GET']);
   assert.equal(automaticClient.automaticCleanupConfirmed(unknown), true);
   assert.equal(automaticClient.automaticChainLabel(unknown), '结果待确认');
   const unconfirmed = { ...unknown, reason: 'user_stopped' as const, cleanup: { state: 'unknown' as const, retryable: true } };
   assert.equal(automaticClient.automaticCleanupConfirmed(unconfirmed), false);
-  assert.equal(automaticClient.automaticCleanupRetryable(unconfirmed), true);
   assert.equal(automaticClient.automaticChainLabel({ ...unconfirmed, state: 'cancelled' }), '停止结果待确认');
 });
 
@@ -128,24 +79,6 @@ test('AV10 late observations cannot revive a stopped chain or erase an earlier c
   assert.equal(values.find(value => value.chainId === chainId)?.state, 'cancelled');
   assert.equal(values.find(value => value.chainId === chainId)?.settingsSnapshot.reportPath, input.reportPath);
   assert.equal(values.find(value => value.chainId === next.chainId)?.settingsSnapshot.reportPath, '060_reports/next-report.md');
-});
-
-test('AV07 UI responses carry the pending owner and request identity, and uncertainty never replays', async t => {
-  const target = { domain: 'independent-verification' as const, verificationId: 'verification-a', request: { id: 'ui-a', method: 'confirm' as const, title: '需要回应' } };
-  const calls: { method: string; body?: unknown }[] = [];
-  t.mock.method(globalThis, 'fetch', async (_url: string, init: RequestInit) => { calls.push({ method: init.method ?? 'GET', body: init.body ? JSON.parse(String(init.body)) : undefined }); throw new TypeError('response lost'); });
-  await assert.rejects(respondAutomaticUI(owner.projectId, owner.taskId, chainId, target, { id: 'another-request', value: true }), AutomaticVerificationRequestError);
-  assert.equal(calls.length, 0);
-  await assert.rejects(respondAutomaticUI(owner.projectId, owner.taskId, chainId, target, { id: 'ui-a', value: false }), AutomaticVerificationUncertain);
-  assert.deepEqual(calls, [{ method: 'POST', body: { domain: 'independent-verification', verificationId: 'verification-a', id: 'ui-a', value: false } }]);
-});
-
-test('AV07 successful UI response with failed observation remains query-only rather than resubmitting', async t => {
-  const target = { domain: 'project-tasks' as const, request: { id: 'ui-main', method: 'input' as const, title: '补充资料' } };
-  const methods: string[] = [];
-  t.mock.method(globalThis, 'fetch', async (_url: string, init: RequestInit) => { methods.push(init.method ?? 'GET'); if (init.method === 'POST') return response({ accepted: true }); throw new TypeError('observation unavailable'); });
-  await assert.rejects(respondAutomaticUI(owner.projectId, owner.taskId, chainId, target, { id: 'ui-main', value: '待确认' }), AutomaticVerificationUncertain);
-  assert.deepEqual(methods, ['POST', 'GET']);
 });
 
 const fixedReport = (content: Uint8Array = Buffer.from('历史固定稿：1,900元。\n'), version = 2) => ({

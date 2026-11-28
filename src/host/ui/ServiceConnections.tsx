@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { SERVICE_IDS, SERVICE_SCOPES, SERVICE_URLS, TENCENT_MAIL_SERVERS, type ServiceConnection, type ServiceConnectionConfig, type ServiceConnectionCredentials, type ServiceId, type ServiceScope } from '../service-connection-types.ts';
-import { actOnServiceConnection, cancelServiceAuthorization, listServiceConnections, readServiceConnection, saveServiceConnection, serviceAuthorizationObservation, serviceConnectionErrorText, serviceMailboxLabel, serviceNames, serviceScopeLabels, serviceScopeSelection, serviceScopeSummary, serviceStateLabels, type ServiceAuthorization, type ServiceConnectionSnapshot } from './service-connections-client.ts';
+import { actOnServiceConnection, cancelServiceAuthorization, listServiceConnections, readServiceConnection, saveServiceConnection, serviceAuthorizationObservation, serviceConnectionErrorText, serviceMailboxLabel, serviceNames, serviceScopeSelection, serviceScopeSummary, serviceStateLabels, type ServiceAuthorization, type ServiceConnectionSnapshot } from './service-connections-client.ts';
 import { ExternalDispatchSettings } from './ExternalDispatchSettings.tsx';
 import './service-connections.css';
 export { TaskServiceConnections } from './TaskServiceConnections.tsx';

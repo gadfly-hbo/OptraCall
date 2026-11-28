@@ -59,7 +59,6 @@ export const errorText = (fault: unknown) => fault instanceof Error ? fault.mess
 
 export const listInitiatives = (signal?: AbortSignal) => request<{ initiatives: InitiativeRecord[] }>('', 'GET', undefined, signal);
 export const createInitiative = (input: { operationId: string; title: string; scopes: GoalScope[] }) => request<{ initiative: InitiativeRecord }>('', 'POST', input);
-export const readInitiative = (id: string) => request<{ initiative: InitiativeRecord }>(path(id));
 export const updateInitiative = (id: string, input: { expectedRevision: number; title?: string; scopes?: GoalScope[] }) => request<{ initiative: InitiativeRecord }>(path(id), 'PATCH', input);
 
 export const listInitiativeFiles = (id: string, scopeKey: string) => request<{ files: InitiativeFile[] }>(`${path(id)}/files${scopeQuery(scopeKey)}`);
