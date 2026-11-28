@@ -2,15 +2,15 @@
 
 目标：修复本包spec已证CF01–07，保留原业务权威、用户输入与已确认布局；不按错误预期更改G/S、共享或发送门禁。
 
-- [ ] T01 有效领取/回读；核最新main、独立工作树和唯一写入者；实际浏览冻结Demo/产品并在Issue记阅读、页面/状态、骨架和实现映射；盘点IN01–07/原工具/观察/恢复契约。
-- [ ] T02 CF01：保留clean EOF确定复现，修复Case普通请求观察恢复；正常、thinking/工具错误、断流/漏终态/切owner及受影响共享business-role/第三合成消费者覆盖，不stop/open/messages重放。
-- [ ] T03 CF02：保留有心跳无首帧复现，补有界首帧/安全错误诊断与显式重连；正常Case Plan首发及真实失联恢复均验证，不解除connected门禁、不提前开SDK。
-- [ ] T04 CF03：补无方案的说明和原Plan准备/接回路径，连到准确Case/事项；实际跑Plan→交回→取舍→历史及原授权/反馈入口回归，保留草稿；不自动物化G/S/造方案/扩写权限。
-- [ ] T05 CF04：补既有请求工具target/新建修订/null/CAS说明及字段级安全错误；合法choose/observe保存和首页派生通过，缺授权/错事项/旧基线拒绝，保留分页/UNKNOWN。
-- [ ] T06 CF05：缺个人归属名等确定字段错误定位正确、动作提示一致；无业务误写，补正后正常，旧回执/部分成功/UNKNOWN不丢不重放。
-- [ ] T07 CF06：创建后直接返回总览自动正确显示唯一Case，三个分支/不同来源/读取失败与筛选草稿回归，不靠手动刷新。
-- [ ] T08 CF07：归档/恢复动作AX名称含可区分项目上下文，原ID/准入/只读语义和键盘焦点保留，作用域正确。
-- [ ] T09 固定完整候选；适用完整检查、真实Host/SDK/浏览器、非作者逐项及四原则复核；FAIL/SKIP/UNKNOWN和原Mac未核边界不抹去；补当前结果与兼容回退，推任务分支回读SHA并在同Issue交回PM，停止写入。
+- [x] T01 有效领取/回读；核最新main、独立工作树和唯一写入者；实际浏览冻结Demo/产品并在Issue记阅读、页面/状态、骨架和实现映射；盘点IN01–07/原工具/观察/恢复契约。（领取 `#issuecomment-7235350681`；Demo 阅读/DOM-CSS 映射/IN01–07 `#issuecomment-7235447476`；`implementation.md`）
+- [x] T02 CF01：保留clean EOF确定复现，修复Case普通请求观察恢复；正常、thinking/工具错误、断流/漏终态/切owner及受影响共享business-role/第三合成消费者覆盖，不stop/open/messages重放。（`src/host/server.ts`、`src/host/ui/strategy-discussion-client.ts`、`src/host/ui/BusinessRoleConversation.tsx`；`tests/case-trial-followup-fixes.test.ts` + `tests/browser-case-trial-followup.mjs` `CF01+CF04` + `tests/agent-sessions.test.ts`）
+- [x] T03 CF02：保留有心跳无首帧复现，补有界首帧/安全错误诊断与显式重连；正常Case Plan首发及真实失联恢复均验证，不解除connected门禁、不提前开SDK。（`src/host/server.ts`、`src/host/ui/runtime-client.ts`；`tests/case-trial-followup-fixes.test.ts` + `tests/browser-case-trial-followup.mjs` `CF02`）
+- [x] T04 CF03：补无方案的说明和原Plan准备/接回路径，连到准确Case/事项；实际跑Plan→交回→取舍→历史及原授权/反馈入口回归，保留草稿；不自动物化G/S/造方案/扩写权限。（`src/host/ui/CaseBoard.tsx`、`src/host/ui/CaseIssuePanel.tsx`；`tests/case-trial-followup-fixes.test.ts` + `tests/browser-case-trial-followup.mjs` `CF03`）
+- [x] T05 CF04：补既有请求工具target/新建修订/null/CAS说明及字段级安全错误；合法choose/observe保存和首页派生通过，缺授权/错事项/旧基线拒绝，保留分页/UNKNOWN。（`src/agent/strategy-discussion.ts`、`src/agent/project-session.ts`、`src/host/strategy-discussion-host.ts`；`tests/case-trial-followup-fixes.test.ts` + `tests/browser-case-trial-followup.mjs` `CF01+CF04`）
+- [x] T06 CF05：缺个人归属名等确定字段错误定位正确、动作提示一致；无业务误写，补正后正常，旧回执/部分成功/UNKNOWN不丢不重放。（`src/host/ui/CasePreparation.tsx`、`tests/case-preparation-ui.test.ts`、`tests/case-trial-followup-fixes.test.ts` + `tests/browser-case-trial-followup.mjs` `CF05`）
+- [x] T07 CF06：创建后直接返回总览自动正确显示唯一Case，三个分支/不同来源/读取失败与筛选草稿回归，不靠手动刷新。（`src/host/ui/CaseBoard.tsx`、`src/host/ui/App.tsx`、`src/host/ui/CasePreparation.tsx`；`tests/case-trial-followup-fixes.test.ts` + `tests/browser-case-trial-followup.mjs` `CF06`）
+- [x] T08 CF07：归档/恢复动作AX名称含可区分项目上下文，原ID/准入/只读语义和键盘焦点保留，作用域正确。（`src/host/ui/ProjectNavigation.tsx`、`src/host/ui/ProjectBoard.tsx`；`tests/case-trial-followup-fixes.test.ts` + `tests/browser-case-trial-followup.mjs` `CF07`）
+- [x] T09 固定完整候选；适用完整检查、真实Host/SDK/浏览器、非作者逐项及四原则复核；FAIL/SKIP/UNKNOWN和原Mac未核边界不抹去；补当前结果与兼容回退，推任务分支回读SHA并在同Issue交回PM，停止写入。（完整 524 测试文件 + `build` + `check:agent-sessions` + `audit` + 浏览器 E2E + 独立只读复核 `5b9c9b174527f5a87eb984ab793296e7` 见 `implementation.md`）
 - [ ] T10 PM审核集成最新main；展示新候选真实产品截图获用户明确确认后开PR；核实际head CI、获授权合并及main push CI；补结案回执。设备采用/真实模型质量另核。
 
-当前仅准备核实/发单材料，未实施上述修复。证据与原报告核对见result.md；最终远端门禁按同一Issue的PM回执逐项核定，不预先勾选。
+T01–T09 已由领取方完成实现、全量验证、独立非作者复核及 `implementation.md` 归档，停止写入并交回 PM；T10（向用户展示新候选真实产品截图并取得明确确认后开 PR、核对 CI、合并与结案）留待 PM 执行。

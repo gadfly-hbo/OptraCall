@@ -261,10 +261,38 @@ export const goalReviewTool = {
   parameters:Type.Object({action:Type.Union([Type.Literal('goal-read-context'),Type.Literal('goal-propose-review')]),conclusions:Type.Optional(Type.Array(Type.Object({sourceRef:nonblank(500),title:nonblank(300),summary:nonblank(2000),originalScope:nonblank(500),applicableScope:nonblank(500),evidenceMature:Type.Boolean(),causalVerified:Type.Boolean(),targetScopeSameAsOriginal:Type.Boolean()},exact),{maxItems:30}))},exact),
 };
 
+const caseDeclarationUuid = (description?: string) => Type.String({ pattern: '^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$', ...(description ? { description } : {}) });
+const caseChooseTargetSchema = Type.Object({
+  kind: Type.Literal('choose'),
+  strategyRef: Type.Object({
+    type: Type.Literal('case-decision'),
+    caseStoreId: caseDeclarationUuid('来自 case-read-declarations(section="strategies") 的 strategyRef.caseStoreId'),
+    caseId: caseDeclarationUuid('来自 strategyRef.caseId'),
+    recordId: caseDeclarationUuid('来自 strategyRef.recordId'),
+    revision: Type.Integer({ minimum: 1, description: '来自 strategyRef.revision（正整数）' }),
+  }, exact),
+  expectedPreviousChoiceId: Type.Union([caseDeclarationUuid('当前事项最新 choiceId（来自 section="choices"）；尚无取舍时传 null'), Type.Null()]),
+}, { ...exact, description: 'choose 请求目标：strategyRef 必须来自 section="strategies"；expectedPreviousChoiceId 取 section="choices" 末条 choiceId，尚无取舍时传 null。' });
+const caseObserveTargetSchema = Type.Object({
+  kind: Type.Literal('observe'),
+  projectId: caseDeclarationUuid('来自 section="observations" 的 target.projectId'),
+  itemId: caseDeclarationUuid('来自 section="observations" 的 target.itemId'),
+  taskId: caseDeclarationUuid('来自 section="observations" 的 target.taskId'),
+  authorizationId: caseDeclarationUuid('来自 section="observations" 的 target.authorizationId（当前有效 Do 授权）'),
+  feedbackBaseRevisionId: Type.Union([caseDeclarationUuid('来自 section="observations" 的 target.feedbackBaseRevisionId；尚无历史反馈时传 null'), Type.Null()]),
+}, { ...exact, description: 'observe 请求目标：字段均必须来自 section="observations"；尚无历史反馈时 feedbackBaseRevisionId 传 null。' });
+
 export const caseDeclarationsTool = {
   name: strategyDiscussionTool.name,
   label: 'Case 事项关系与明确请求保存',
-  description: 'case-read-declarations 按 section 只读本案 issues/edges 和当前事项 requests/strategies/choices/observations，使用返回的准确身份与修订；limit 1–20，offset/nextOffset 或 strategies 的 continuation 分页，不把 partial 当完整结果。修订请求时省略assignee或dueDate保留原值，assignee子字段或dueDate传null明确清除。仅在用户明确声明本案两个事项的有向承接关系（case-save-issue-edge）或明确要求由谁对方案作取舍/补录观察（case-save-decision-request）时调用；Case 与当前事项归属由 Host 绑定，不接受模型改写他案。',
+  description: [
+    'case-read-declarations 按 section 只读本案 issues/edges 和当前事项 requests/strategies/choices/observations，使用返回的准确身份与修订；limit 1–20，offset/nextOffset 或 strategies 的 continuation 分页，不把 partial 当完整结果。',
+    '仅在用户明确声明本案两个事项的有向承接关系（case-save-issue-edge）或明确要求由谁对方案作取舍/补录观察（case-save-decision-request）时调用；Case 与当前事项归属由 Host 绑定，不接受模型改写他案。',
+    '保存 choose 请求须先读 strategies 与 choices：target.kind="choose"，传准确 strategyRef（type/caseStoreId/caseId/recordId/revision）和 expectedPreviousChoiceId（当前事项最新 choiceId 或尚无取舍时传 null）。',
+    '保存 observe 请求须先读 observations：target.kind="observe"，传返回的准确 projectId/itemId/taskId/authorizationId 与 feedbackBaseRevisionId（尚无历史观察时传 null）。',
+    '新建请求（requestAction="save" 或省略）时请省略 requestId，expectedRequestRevision 传 0 或省略；修订、withdraw 或 supersede 已有请求时必须传 section="requests" 返回的 requestId 与当前 revision 作为 expectedRequestRevision。修订时省略 assignee 或 dueDate 保留原值，assignee 子字段或 dueDate 传 null 明确清除。',
+    '若 strategies 或 observations 返回空列表，说明本事项缺少可用方案或当前取舍尚无有效行动授权：请向用户说明前置条件并保留原输入，不得猜测 ID 或伪造授权。',
+  ].join(' '),
   parameters: Type.Object({
     action: Type.Union([Type.Literal('case-read-declarations'), Type.Literal('case-save-issue-edge'), Type.Literal('case-save-decision-request')]),
     section: Type.Optional(Type.Union(['issues','edges','requests','strategies','choices','observations'].map(value => Type.Literal(value)))),
@@ -278,7 +306,7 @@ export const caseDeclarationsTool = {
     explanation: Type.Optional(Type.String({ maxLength: 1000 })),
     expectedEdgeRevision: Type.Optional(Type.Integer({ minimum: 0 })),
     sourceKind: Type.Optional(Type.Union([Type.Literal('user-declaration'), Type.Literal('adopted-candidate')])),
-    requestId: Type.Optional(Type.String()),
+    requestId: Type.Optional(caseDeclarationUuid('新建请求时请省略；修订/withdraw/supersede 已有请求时传 section="requests" 返回的 requestId')),
     requestAction: Type.Optional(Type.Union([Type.Literal('save'), Type.Literal('withdraw'), Type.Literal('supersede')])),
     kind: Type.Optional(Type.Union([Type.Literal('choose'), Type.Literal('observe')])),
     text: Type.Optional(Type.String({ maxLength: 4000 })),
@@ -287,7 +315,45 @@ export const caseDeclarationsTool = {
       source: Type.Optional(Type.Union([Type.String({ maxLength: 400 }), Type.Null()])),
     }, { additionalProperties: false })),
     dueDate: Type.Optional(Type.Union([Type.String(), Type.Null()])),
-    target: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
-    expectedRequestRevision: Type.Optional(Type.Integer({ minimum: 0 })),
+    target: Type.Optional(Type.Union([caseChooseTargetSchema, caseObserveTargetSchema])),
+    expectedRequestRevision: Type.Optional(Type.Integer({ minimum: 0, description: '新建传 0 或省略；修订/withdraw/supersede 时必须等于 section="requests" 的当前 revision' })),
   }, { additionalProperties: false }),
 };
+
+const caseDeclarationErrorReasons: Readonly<Record<string, string>> = {
+  invalid_case_decision_request: '请求参数或 target 结构不完整。新建请省略 requestId 并传 kind、text 与匹配的 target（choose 需 strategyRef+expectedPreviousChoiceId；observe 需 projectId/itemId/taskId/authorizationId/feedbackBaseRevisionId）；修订现有请求请传 requestId 与 expectedRequestRevision。',
+  invalid_case_decision_id: '某项 UUID 标识缺失或格式无效（如 target 内层 ID、expectedPreviousChoiceId 或 requestId）；请先用 case-read-declarations 核对准确只读记录，缺少前置记录时勿猜测 ID。',
+  invalid_case_decision_fields: '包含未允许字段或缺少必填字段，请按工具 schema 核对参数名与嵌套结构。',
+  invalid_case_decision_reference: 'target.strategyRef 必须完整提供 type="case-decision"、caseStoreId、caseId、recordId 与正整数 revision。',
+  invalid_case_decision_revision: 'revision 字段需为正整数（strategyRef.revision >= 1）；请从 case-read-declarations 读取最新版本号。',
+  invalid_revision: 'expectedRequestRevision 需为非负整数：新建传 0（或省略），修订/withdraw/supersede 传原请求的当前 revision。',
+  case_decision_request_not_found: '未找到指定 requestId（若为新建请求请勿传 requestId；若为修订请先读 section="requests" 核对原请求）。',
+  case_decision_request_conflict: 'expectedRequestRevision 与当前请求版本不一致，或修订时改动了原请求的 kind/issueId；请重新读取 section="requests" 后再试。',
+  case_decision_request_closed: '该请求已撤回或已被取代，不可再修订；如需新请求请省略 requestId 重新发起。',
+  case_choice_conflict: '当前事项的最新取舍已变化（expectedPreviousChoiceId 或观察授权所属取舍已过期）；请重新读取 choices 与 observations 后确认是否仍需请求。',
+  case_feedback_conflict: '该任务已有新的反馈记录，target.feedbackBaseRevisionId 已过期；请重新读取 section="observations" 获取最新 feedbackBaseRevisionId。',
+  case_do_authorization_unavailable: '目标行动当前没有适用于本事项最新取舍的有效 Do 授权；请读取 section="observations"，若为空请向用户说明需先授权行动。',
+  project_not_linked: 'target.projectId 所属项目尚未关联到当前 Case，或已解除关联；请先核对 section="observations" 中当前有效的已关联项目与授权。',
+  task_not_found: 'target.taskId 在目标项目中不存在；请从 section="observations" 读取准确的 taskId 与 authorizationId。',
+  case_decision_scope_mismatch: '目标任务或方案不属于当前 Case 与当前事项；请从当前事项的 case-read-declarations 重新核对。',
+  case_decision_not_found: '目标方案版本不存在；请先读取 section="strategies"，若为空说明当前事项尚无可选方案。',
+  case_decision_archived: '目标方案已归档，不可用于新建请求；请核对可用方案或向用户说明。',
+  case_decision_plan_required: '该方案尚未通过 Plan 核对前提，不能创建取舍请求；请向用户说明前置条件。',
+  case_decision_issue_not_found: '当前事项已不存在或无权读取，无法保存请求。',
+};
+
+export function explainCaseDeclarationError(error: unknown): unknown {
+  if (!(error instanceof Error)) return error;
+  if (/Validation failed|schema/i.test(error.message)) {
+    const explained = new Error(`${error.message}\n参数说明：choose 请求需传 target={ kind: "choose", strategyRef: { type: "case-decision", caseStoreId, caseId, recordId, revision }, expectedPreviousChoiceId }；observe 请求需传 target={ kind: "observe", projectId, itemId, taskId, authorizationId, feedbackBaseRevisionId }；新建请省略 requestId，修订请传 requestId 与 expectedRequestRevision。`);
+    if ('details' in error) (explained as { details?: unknown }).details = (error as { details?: unknown }).details;
+    return explained;
+  }
+  const codeMatch = /^([a-z][a-z0-9_]+)(?::\s*([\s\S]*))?$/.exec(error.message);
+  const code = codeMatch?.[1] ?? error.message;
+  if (!Object.hasOwn(caseDeclarationErrorReasons, code)) return error;
+  const suffix = codeMatch?.[2] ? `（${codeMatch[2]}）` : '';
+  const explained = new Error(`${code}：${caseDeclarationErrorReasons[code]}${suffix}`);
+  if ('details' in error) (explained as { details?: unknown }).details = (error as { details?: unknown }).details;
+  return explained;
+}

@@ -27,6 +27,7 @@ type Session = ReturnType<typeof createPreparationDraftSession>;
 export type CasePreparationProps = {
   onOpenCase: (caseId: string, issueId?: string) => void;
   onCreateCase?: () => void;
+  onCaseChanged?: () => void;
   onOpenAllProjects?: () => void;
   onRegisterFlush?: (flush: (() => Promise<boolean>) | null) => void;
   refreshToken?: number;
@@ -53,7 +54,7 @@ const sameScope = (a: GoalScope, b: GoalScope) => a.kind === b.kind && a.id === 
 const blankGoal = (scope: GoalScope): GoalDraftInput => ({ title: '', outcome: '', strategies: [''], perspective: scope.kind === 'personal' ? 'personal' : 'profit', scope, measurement: { kind: 'deliverable', criterion: '' }, baseline: { state: 'pending', description: '待补可比基线；本次按已说明的可核成果核定。' }, responsible: '' });
 
 /** One recoverable preparation intent, shared by Home and the Case overview. No Agent request runs on open. */
-export function CasePreparation({ onOpenCase, onCreateCase, onOpenAllProjects, onRegisterFlush, refreshToken = 0, expanded = false, initialGoal, initialSource }: CasePreparationProps) {
+export function CasePreparation({ onOpenCase, onCreateCase, onCaseChanged, onOpenAllProjects, onRegisterFlush, refreshToken = 0, expanded = false, initialGoal, initialSource }: CasePreparationProps) {
   const inputId = useId();
   const sessionRef = useRef<Session | null>(null);
   const [, redraw] = useState(0);
@@ -66,6 +67,19 @@ export function CasePreparation({ onOpenCase, onCreateCase, onOpenAllProjects, o
   const directoryGeneration = useRef(0);
   const [searching, setSearching] = useState(false), [creating, setCreating] = useState(false), [result, setResult] = useState<ThreeBranchCreateResult | null>(null);
   const busyRef = useRef(false);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const scopeSelectRef = useRef<HTMLSelectElement>(null);
+  const personalNameInputRef = useRef<HTMLInputElement>(null);
+  const goalTitleInputRef = useRef<HTMLInputElement>(null);
+  const goalOutcomeRef = useRef<HTMLTextAreaElement>(null);
+  const goalStrategyRef = useRef<HTMLTextAreaElement>(null);
+  const goalCriterionRef = useRef<HTMLInputElement>(null);
+  const goalResponsibleRef = useRef<HTMLInputElement>(null);
+  const selectedStrategyRef = useRef<HTMLSelectElement>(null);
+  const focusField = (target: { current: HTMLElement | null }) => {
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => target.current?.focus());
+    else target.current?.focus();
+  };
   const notify = () => redraw(n => n + 1);
   const remember = (record: WorkspaceDraftRecord<PreparationDraftPayload>) => setSaved(old => [record, ...old.filter(d => d.id !== record.id)]);
   const install = (record?: WorkspaceDraftRecord<PreparationDraftPayload>, initial?: Partial<Payload>) => {
@@ -239,20 +253,32 @@ export function CasePreparation({ onOpenCase, onCreateCase, onOpenAllProjects, o
     if (state.creationState === 'completed') {
       if (!state.creationReceipt) { setError('这份准备已完成；请开始另一份准备。'); return; }
       busyRef.current = true; setCreating(true);
-      try { if (await finishFirstIssue(session, state.creationReceipt.caseId, state.createAttempt ?? undefined)) { setError(''); setNotice('已核对原创建结果与第一件事项；完整准备原文作为待带入片段保留。'); } }
+      try { if (await finishFirstIssue(session, state.creationReceipt.caseId, state.createAttempt ?? undefined)) { setError(''); onCaseChanged?.(); setNotice('已核对原创建结果与第一件事项；完整准备原文作为待带入片段保留。'); } }
       catch (failure) { setError(`Case 已创建；第一件事项或原文片段尚未确认。原操作与输入保留，请继续核对。${caseError(failure)}`); }
       finally { busyRef.current = false; setCreating(false); notify(); }
       return;
     }
-    if (!state.title.trim()) { setError('请填写这件事的名字。'); return; }
+    if (!state.title.trim()) { setError('请填写这件事的名字。'); setPrepOpen(true); focusField(titleInputRef); return; }
+    let selected = state.selectedGoal;
+    if (!selected && !state.createAttempt) {
+      const fields = state.goalAttempt ?? state.goalDraft;
+      const effectiveScope = state.scope ?? (fields?.scope.id.trim() && fields?.scope.name.trim() ? fields.scope : null);
+      if (!effectiveScope) { setError('请选择目标归属：已有企业或个人。'); setPrepOpen(true); setManualOpen(true); focusField(scopeSelectRef); return; }
+      if (effectiveScope.kind === 'personal' && (!effectiveScope.name.trim() || !effectiveScope.id.trim())) { setError('已选择个人目标，请填写个人归属名称。'); setPrepOpen(true); setManualOpen(true); focusField(personalNameInputRef); return; }
+      if (effectiveScope.kind !== 'personal' && (!effectiveScope.id.trim() || !effectiveScope.name.trim() || (!enterprises.some(e => e.id === effectiveScope.id) && !fields?.roleSuggestion))) { setError('请选择实际可读的已有企业，或改选个人归属。'); setPrepOpen(true); setManualOpen(true); focusField(scopeSelectRef); return; }
+      if (!fields?.title.trim()) { setError('请填写目标名称（G · 目标名称）。'); setPrepOpen(true); setManualOpen(true); focusField(goalTitleInputRef); return; }
+      if (!fields.outcome.trim()) { setError('请填写“想看到什么结果”。'); setPrepOpen(true); setManualOpen(true); focusField(goalOutcomeRef); return; }
+      if (!fields.strategies?.[0]?.trim()) { setError('请填写具体策略（S · 这次先怎么推进）。'); setPrepOpen(true); setManualOpen(true); focusField(goalStrategyRef); return; }
+      if (fields.measurement.kind === 'deliverable' && !fields.measurement.criterion.trim()) { setError('请填写可核成果。'); setPrepOpen(true); setManualOpen(true); focusField(goalCriterionRef); return; }
+      if (!fields.responsible.trim()) { setError('请填写责任角色／承担人。'); setPrepOpen(true); setManualOpen(true); focusField(goalResponsibleRef); return; }
+    } else if (!selected?.strategy && !state.createAttempt) {
+      setError('请选择准确目标版本及该版具体策略。'); setPrepOpen(true); focusField(selectedStrategyRef); return;
+    }
     busyRef.current = true; setCreating(true); setError(''); setNotice('');
     try {
-      let selected = state.selectedGoal;
       if (!selected && !state.createAttempt) {
-        const fields = state.goalAttempt ?? state.goalDraft;
-        if (!fields || !fields.title.trim() || !fields.outcome.trim() || !fields.responsible.trim() || !fields.strategies?.[0]?.trim() || fields.measurement.kind === 'deliverable' && !fields.measurement.criterion.trim() || !fields.scope.id.trim() || !fields.scope.name.trim()) throw Error('请填写目标、具体策略、可核成果、责任角色，并明确已有企业或个人归属。');
-        if (fields.scope.kind !== 'personal' && !enterprises.some(e => e.id === fields.scope.id) && !fields.roleSuggestion) throw Error('请选择实际可读的已有企业，或明确个人归属。');
-        const attempt = state.goalAttempt ?? { ...fields, title: fields.title.trim(), strategies: fields.strategies.map(s => s.trim()).filter(Boolean), operationId: crypto.randomUUID() };
+        const fields = (state.goalAttempt ?? state.goalDraft)!;
+        const attempt = state.goalAttempt ?? { ...fields, title: fields.title.trim(), strategies: (fields.strategies ?? []).map(s => s.trim()).filter(Boolean), operationId: crypto.randomUUID() };
         session.update({ goalAttempt: attempt }); notify(); if (!await session.flush()) return;
         let candidate: GoalVersion | undefined;
         // Reusing the exact request and operation follows CaseGoalPicker's original Goal API recovery path.
@@ -266,7 +292,6 @@ export function CasePreparation({ onOpenCase, onCreateCase, onOpenAllProjects, o
         setGoals(old => [...old.filter(g => keyOf(g) !== keyOf(candidate!)), candidate!]); notify(); if (!await session.flush()) return;
         state = session.getSnapshot().payload as Payload;
       }
-      if (!selected?.strategy && !state.createAttempt) throw Error('请选择准确目标版本及该版具体策略。');
       const exact = goals.find(g => selected && keyOf(g) === keyOf(selected)) ?? state.candidateGoal;
       const attempt: ThreeBranchCreateInput = state.createAttempt ?? { draftId, title: state.title.trim(), description: state.description, rawInput: state.rawInput, goal: { ...selected!, alreadyAdopted: Boolean(state.adoptionReceipt) || exact?.status === 'adopted' }, adoptOperationId: state.adoptOperationId, createOperationId: state.createOperationId, ...(state.creationSource ? { creationSource: state.creationSource } : {}), ...(state.goalIntent ? { goalIntent: state.goalIntent } : {}) };
       session.update({ createAttempt: attempt }); notify(); if (!await session.flush()) return;
@@ -285,13 +310,22 @@ export function CasePreparation({ onOpenCase, onCreateCase, onOpenAllProjects, o
         if (originalIssues) setMatches([{ caseId: response.existingCase.id, title: response.existingCase.title, status: response.existingCase.status, updatedAt: response.existingCase.updatedAt, goalBinding: { goalId: attempt.goal.goalId, version: attempt.goal.version, strategy: attempt.goal.strategy }, issues: originalIssues.issues.map(i => ({ issueId: i.id, title: i.title })), totalIssues: originalIssues.issues.length, issuesTruncated: false, nextIssueOffset: null }]);
       } else if (response.branch === 'partial') setNotice('目标采纳结果与原操作已保留；Case 创建未完成。继续会核对原操作，不重复采纳。');
       else {
+        onCaseChanged?.();
         setNotice(`Case「${response.createdCase.title}」已创建${response.replayedFromOperation ? '，已核对原操作回执' : ''}；正在核对第一件事项。`);
         try { if (await finishFirstIssue(session, response.createdCase.id, attempt)) setNotice(`Case「${response.createdCase.title}」与第一件事项已建立；完整准备原文作为待带入片段保留。`); }
         catch (failure) { setError(`Case 已创建；第一件事项或原文片段尚未确认。原操作与输入保留，请继续核对。${caseError(failure)}`); }
       }
     } catch (failure) {
-      if (failure instanceof goalsApi.CaseRequestError && failure.status < 500 && failure.code !== 'operation_conflict' && !session.getSnapshot().payload.createAttempt) { session.update({ goalAttempt: null }); await session.flush(); }
-      setError(`操作未确认完成，原输入和原请求保留。请使用“核对原操作并继续”。${caseError(failure)}`);
+      const current = session.getSnapshot().payload as Payload;
+      const definiteClientReject = failure instanceof goalsApi.CaseRequestError && failure.status < 500 && failure.code !== 'operation_conflict';
+      if (definiteClientReject && !current.createAttempt) { session.update({ goalAttempt: null }); await session.flush(); }
+      const after = session.getSnapshot().payload as Payload;
+      const stillPending = Boolean(after.goalAttempt || (after.createAttempt && after.creationState !== 'completed'));
+      setError(stillPending
+        ? `操作未确认完成，原输入和原请求保留。请使用“核对原操作并继续”。${caseError(failure)}`
+        : definiteClientReject
+          ? `未能提交保存，请按提示检查输入后重试。${caseError(failure)}`
+          : `操作未确认完成，当前输入已保留，请核对后重试。${caseError(failure)}`);
     } finally { busyRef.current = false; setCreating(false); notify(); }
   };
   const preserveConflictingCopy = async () => {
@@ -333,29 +367,29 @@ export function CasePreparation({ onOpenCase, onCreateCase, onOpenAllProjects, o
     {!expanded && <div className="case-intake-foot"><span>新想法、已有工作的进展，都可以先写在这里。</span><button type="button" className="text-button" disabled={!ready || creating} onClick={() => { setAgentOpen(v => !v); setPrepOpen(true); }}>{agentOpen ? '收起整理 Agent' : '请 Agent 整理与推荐（可选）'}</button>{onOpenAllProjects && <button type="button" className="text-button" onClick={() => { void navigate(onOpenAllProjects); }}>全部项目</button>}</div>}
     {payload.creationState === 'completed' && <button type="button" className="secondary-button" onClick={() => { void newPreparation(); }}>准备另一件 Case</button>}
     {snapshot?.conflict && <div className="case-message" role="alert"><p>准备草稿已在另一窗口修改。当前输入与远端输入均保留，未覆盖。</p><button type="button" className="secondary-button" onClick={() => { void preserveConflictingCopy(); }}>将当前输入另存为独立准备</button></div>}
-    {notice && <p className="case-notice" role="status">{notice}</p>}{error && <div className="case-error" role="alert"><p>{error}</p><button type="button" className="text-button" disabled={!ready || creating} onClick={() => { void flush().then(ok => { if (ok) setNotice('准备内容已保存。'); }); }}>重试保存</button></div>}
+    {notice && <p className="case-notice" role="status">{notice}</p>}{error && <div className="case-error" role="alert"><p>{error}</p>{snapshot?.dirty && <button type="button" className="text-button" disabled={!ready || creating} onClick={() => { void flush().then(ok => { if (ok) setNotice('准备内容已保存。'); }); }}>保存当前草稿</button>}</div>}
     {prepOpen && <div className="home-daily-prepare-box" role="region" aria-label="三分支 Case 准备">
       <div className="case-prepare-mode"><span>{lockedGoal ? 'G/S 及原保存结果已保留' : chosen ? '沿用已采纳目标版本' : '人工填写 · 无模型依赖'}</span><button type="button" className="text-button" disabled={!ready || creating} onClick={() => { setAgentOpen(v => !v); setManualOpen(true); }}>{agentOpen ? '收起整理 Agent' : '请 Agent 协助整理'}</button></div>
       <label className="case-prepare-existing">或使用已有 G/S<select value={chosen ? keyOf(chosen) : ''} disabled={!ready || creating || lockedGoal || payload.creationState === 'completed'} onChange={e => { const goal = goals.find(g => keyOf(g) === e.target.value); update({ selectedGoal: goal ? { goalId: goal.goalId, version: goal.version, strategy: '' } : null }); }}><option value="">选择已采纳目标版本，或在下方手填</option>{goals.filter(g => g.status === 'adopted').map(g => <option key={keyOf(g)} value={keyOf(g)}>{g.title} · v{g.version} · {g.scope.name}</option>)}</select></label>
-      {activeGoal && <label>该版具体策略<select value={chosen?.strategy ?? ''} disabled={creating || lockedGoal} onChange={e => update({ selectedGoal: { goalId: activeGoal.goalId, version: activeGoal.version, strategy: e.target.value } })}><option value="">请选择具体策略</option>{activeGoal.strategies?.map((s, i) => <option key={i} value={s}>{s}</option>)}</select></label>}
-      <label>这件事的名字<input maxLength={80} value={payload.title} disabled={!ready || creating || payload.creationState === 'completed'} onChange={e => update({ title: e.target.value })} /></label>
+      {activeGoal && <label>该版具体策略<select ref={selectedStrategyRef} value={chosen?.strategy ?? ''} disabled={creating || lockedGoal} onChange={e => update({ selectedGoal: { goalId: activeGoal.goalId, version: activeGoal.version, strategy: e.target.value } })}><option value="">请选择具体策略</option>{activeGoal.strategies?.map((s, i) => <option key={i} value={s}>{s}</option>)}</select></label>}
+      <label>这件事的名字<input ref={titleInputRef} maxLength={80} value={payload.title} disabled={!ready || creating || payload.creationState === 'completed'} onChange={e => update({ title: e.target.value })} /></label>
       <details className="case-prepare-background"><summary>补充问题背景</summary><label>问题背景<textarea rows={2} value={payload.description} disabled={!ready || creating || payload.creationState === 'completed'} onChange={e => update({ description: e.target.value })} /></label></details>
 
       {!chosen && !expanded && <button type="button" className="text-button" disabled={!ready || creating} onClick={() => setManualOpen(v => !v)}>{manualOpen ? '收起目标编辑' : '手动填写或修改 G/S（无需模型）'}</button>}
       {!chosen && <>
         {manualOpen && <fieldset className="case-prepare-goal-fields" disabled={creating || lockedGoal}><legend className="sr-only">准备目标与策略</legend>
-          <label>G · 目标名称<input maxLength={200} value={goalDraft.title} onChange={e => patchGoal({ title: e.target.value })} /></label>
-          <label>想看到什么结果<textarea rows={2} maxLength={4000} value={goalDraft.outcome} onChange={e => patchGoal({ outcome: e.target.value })} /></label>
-          <label>S · 这次先怎么推进<textarea rows={2} maxLength={2000} value={goalDraft.strategies?.[0] ?? ''} onChange={e => patchGoal({ strategies: [e.target.value, ...(goalDraft.strategies?.slice(1) ?? [])] })} /></label>
-          {goalDraft.measurement.kind === 'deliverable' ? <label>可核成果<input maxLength={4000} value={goalDraft.measurement.criterion} onChange={e => patchGoal({ measurement: { kind: 'deliverable', criterion: e.target.value } })} /></label> : <p className="case-help">沿候选保留 SAP 指标 {goalDraft.measurement.sapMetric.id} v{goalDraft.measurement.sapMetric.version}。</p>}
-          <label>责任角色／承担人<input maxLength={300} value={goalDraft.responsible} onChange={e => patchGoal({ responsible: e.target.value })} /></label>
+          <label>G · 目标名称<input ref={goalTitleInputRef} maxLength={200} value={goalDraft.title} onChange={e => patchGoal({ title: e.target.value })} /></label>
+          <label>想看到什么结果<textarea ref={goalOutcomeRef} rows={2} maxLength={4000} value={goalDraft.outcome} onChange={e => patchGoal({ outcome: e.target.value })} /></label>
+          <label>S · 这次先怎么推进<textarea ref={goalStrategyRef} rows={2} maxLength={2000} value={goalDraft.strategies?.[0] ?? ''} onChange={e => patchGoal({ strategies: [e.target.value, ...(goalDraft.strategies?.slice(1) ?? [])] })} /></label>
+          {goalDraft.measurement.kind === 'deliverable' ? <label>可核成果<input ref={goalCriterionRef} maxLength={4000} value={goalDraft.measurement.criterion} onChange={e => patchGoal({ measurement: { kind: 'deliverable', criterion: e.target.value } })} /></label> : <p className="case-help">沿候选保留 SAP 指标 {goalDraft.measurement.sapMetric.id} v{goalDraft.measurement.sapMetric.version}。</p>}
+          <label>责任角色／承担人<input ref={goalResponsibleRef} maxLength={300} value={goalDraft.responsible} onChange={e => patchGoal({ responsible: e.target.value })} /></label>
           {scope && scope.kind !== 'personal' && <label>目标视角<select value={goalDraft.perspective} onChange={e => patchGoal({ perspective: e.target.value as 'profit' | 'nonprofit' })}><option value="profit">营利组织</option><option value="nonprofit">非营利组织</option></select></label>}
           {goalDraft.roleSuggestion && <p className="case-help">已保留原 Agent 建议引用；保存时由原目标服务核对来源与归属。</p>}
         </fieldset>}
       </>}
       {(!chosen && (manualOpen || agentOpen)) && <fieldset disabled={creating || lockedGoal} className="case-reference-picker"><legend>明确目标归属</legend>
-        <label>已有企业或个人<select value={scope?.kind === 'personal' ? 'personal' : scope?.id ?? ''} onChange={e => { const enterprise = enterprises.find(x => x.id === e.target.value); chooseScope(e.target.value === 'personal' ? { kind: 'personal', id: '', name: '' } : enterprise ? { kind: 'enterprise', id: enterprise.id, name: enterprise.name } : null); }}><option value="">请选择已有企业或个人</option>{enterprises.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}<option value="personal">个人目标</option></select></label>
-        {scope?.kind === 'personal' && <label>个人归属名称<input maxLength={200} value={scope.name} onChange={e => chooseScope({ kind: 'personal', id: `personal:${e.target.value.trim()}`, name: e.target.value })} /></label>}
+        <label>已有企业或个人<select ref={scopeSelectRef} value={scope?.kind === 'personal' ? 'personal' : scope?.id ?? ''} onChange={e => { const enterprise = enterprises.find(x => x.id === e.target.value); chooseScope(e.target.value === 'personal' ? { kind: 'personal', id: '', name: '' } : enterprise ? { kind: 'enterprise', id: enterprise.id, name: enterprise.name } : null); }}><option value="">请选择已有企业或个人</option>{enterprises.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}<option value="personal">个人目标</option></select></label>
+        {scope?.kind === 'personal' && <label>个人归属名称<input ref={personalNameInputRef} maxLength={200} value={scope.name} onChange={e => chooseScope({ kind: 'personal', id: `personal:${e.target.value.trim()}`, name: e.target.value })} /></label>}
         {scope && !scope.id && <p className="case-help">请明确个人归属名称后使用整理 Agent。</p>}
 
       </fieldset>}

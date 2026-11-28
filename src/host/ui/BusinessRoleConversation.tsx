@@ -169,19 +169,68 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,open
     return ()=>{alive.current=false;controller.abort();};
   },[load]);
   const id=view?.discussion?.id;
+  const streamEndedRef=useRef(false);
+  const [streamSeq,setStreamSeq]=useState(0);
+  const inFlight=Boolean(view?.busy||busy||pending);
+  useEffect(()=>{
+    if(id&&inFlight&&streamEndedRef.current){streamEndedRef.current=false;setStreamSeq(n=>n+1);}
+  },[id,inFlight]);
   useEffect(()=>{
     if(!id)return;
     const controller=new AbortController();
-    void watchStrategyDiscussion(id,event=>{
-      if(controller.signal.aborted)return;
-      if(event.type==='text.delta')setStream(old=>projectDiscussionStreaming(old,event));
-      if(event.type==='run.settled'||event.type==='snapshot'&&event.snapshot.status==='idle'){
+    const backoff=[500,1500,3000];
+    const wait=(ms:number)=>new Promise<void>(resolve=>{
+      if(controller.signal.aborted){resolve();return;}
+      const done=()=>{clearTimeout(timer);controller.signal.removeEventListener('abort',done);resolve();};
+      const timer=setTimeout(done,ms);
+      controller.signal.addEventListener('abort',done,{once:true});
+    });
+    const isUnresolved=(next:RoleView|undefined)=>{
+      if(!next||!next.discussion)return false;
+      if(next.busy)return true;
+      const req=pendingRef.current;
+      if(!req)return false;
+      const terminal=next.discussion.lastRun;
+      if(terminal?.id===req.requestId&&['failed','cancelled'].includes(terminal.status))return false;
+      return !canSettleDiscussionMessage(next,req);
+    };
+    void (async()=>{
+      for(let attempt=0;attempt<=backoff.length&&!controller.signal.aborted;attempt++){
+        streamEndedRef.current=false;
+        let streamError:unknown;
+        try{
+          await watchStrategyDiscussion(id,event=>{
+            if(controller.signal.aborted)return;
+            if(event.type==='text.delta')setStream(old=>projectDiscussionStreaming(old,event));
+            if(event.type==='run.settled'||event.type==='snapshot'&&event.snapshot.status==='idle'){
+              setStream('');
+              void load(controller.signal).catch(f=>{if(!controller.signal.aborted)onError(f);});
+            }
+          },controller.signal,base+'&action=events',{idleTimeoutMs:45000});
+        }catch(f){
+          if(controller.signal.aborted)return;
+          streamError=f;
+        }
+        if(controller.signal.aborted)return;
+        streamEndedRef.current=true;
         setStream('');
-        void load(controller.signal).catch(f=>{if(!controller.signal.aborted)onError(f);});
+        let next:RoleView|undefined,loadError:unknown;
+        try{next=await load(controller.signal);}catch(f){if(controller.signal.aborted)return;loadError=f;}
+        if(controller.signal.aborted)return;
+        const activeRun=!loadError&&isUnresolved(next);
+        if(!loadError&&!activeRun){
+          if(!streamError||!next?.busy){if(alive.current&&!streamError)setError('');return;}
+        }
+        if(attempt===backoff.length){
+          onError(loadError??streamError??new Error('实时观察暂未恢复，原操作状态未确认；未重发消息，可点击「核对原操作」重新读取。'));
+          return;
+        }
+        if(!activeRun&&!loadError)return;
+        await wait(backoff[attempt]!);
       }
-    },controller.signal,base+'&action=events').catch(f=>{if(!controller.signal.aborted)onError(f);});
+    })();
     return ()=>controller.abort();
-  },[id,base,load]);
+  },[id,base,load,streamSeq]);
   // Runtime settlement may precede the business owner's persisted receipt.
   // Re-read that exact external request for a bounded window; never replay it.
   const receiptReads=useRef({requestId:'',attempts:0});

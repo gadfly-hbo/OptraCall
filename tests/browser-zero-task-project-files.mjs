@@ -139,7 +139,7 @@ try {
   await assertDrawer(desktop, true);
   await checkSamples();
   await desktop.getByLabel(`项目操作 ${firstName}`, { exact: true }).click();
-  await desktop.getByRole('button', { name: '归档项目', exact: true }).click();
+  await desktop.getByRole('button', { name: `归档项目 ${firstName}`, exact: true }).click();
   await files(desktop).getByText('项目已归档，可查看和下载文件；恢复后可继续上传和编辑。', { exact: true }).waitFor();
   assert.equal(await files(desktop).getByLabel('选择上传文件', { exact: true }).count(), 0);
   await checkSamples();

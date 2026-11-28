@@ -19,7 +19,7 @@ import { useCaseActionDraft } from './useCaseActionDraft.ts';
 import { CaseActionDraftRecovery } from './CaseActionDraftRecovery.tsx';
 
 type IssueRef = { caseId: string; issueId: string };
-type Props = { entrySeq?: number; managementFooter?: ReactNode; onTeachReview?(owner:TeachReviewOwner):void; initialIssueId?: string; selectedIssueId?: string; onSelectIssue?: (issueId: string, intent?: 'explicit' | 'restore') => void; initialRequest?: {requestId:string;revision:number;issueId?:string}; record: CaseRecord; projects: ClientProject[]; onChange(): void; onBoard?(target?: import('./FeedbackContextPanel.tsx').FeedbackReviewStart): void; onOpenProject?(project: ClientProject, issue: IssueRef): void; onCreate(project: ClientProject, intent: TaskCreateIntent): void };
+type Props = { entrySeq?: number; managementFooter?: ReactNode; onTeachReview?(owner:TeachReviewOwner):void; initialIssueId?: string; selectedIssueId?: string; onSelectIssue?: (issueId: string, intent?: 'explicit' | 'restore') => void; initialRequest?: {requestId:string;revision:number;issueId?:string}; record: CaseRecord; projects: ClientProject[]; onChange(): void; onBoard?(target?: import('./FeedbackContextPanel.tsx').FeedbackReviewStart): void; onOpenProject?(project: ClientProject, issue: IssueRef): void; onLinkProject?: () => void; onCreate(project: ClientProject, intent: TaskCreateIntent): void };
 const openedRequestEntries = new Set<string>();
 const choiceName: Record<CaseStrategyChoiceValue, string> = { trial: '试行', adjust: '调整', continue: '继续', defer: '暂缓', no_action: '本次不行动', gather_evidence: '补证', reject: '不采用', stop_considering: '停止考虑' };
 
@@ -182,7 +182,7 @@ function RoundReview({ round, replies, disabled, inspect, submit }: {
   </details>;
 }
 
-function IssueWork({ entrySeq, actionFocusIds, actionFocus, openRequests = [], initialRequest: requestEntry, initialIssueId, record, projects, onChange, onBoard, onOpenProject, onCreate, onTeachReview, issueId }: Props & { issueId: string; openRequests?: CaseDecisionRequestView[]; actionFocusIds?: {choice:string;feedback:string}; actionFocus?: {kind:'choice'|'feedback'|'history';seq:number} }) {
+function IssueWork({ entrySeq, actionFocusIds, actionFocus, openRequests = [], initialRequest: requestEntry, initialIssueId, record, projects, onChange, onBoard, onOpenProject, onLinkProject, onCreate, onTeachReview, issueId }: Props & { issueId: string; openRequests?: CaseDecisionRequestView[]; actionFocusIds?: {choice:string;feedback:string}; actionFocus?: {kind:'choice'|'feedback'|'history';seq:number} }) {
   const requestIssueId = requestEntry?.issueId ?? initialIssueId ?? openRequests.find(request => request.requestId === requestEntry?.requestId && request.revision === requestEntry?.revision)?.issueId;
   const initialRequest = requestIssueId === issueId ? requestEntry : undefined;
   const [refresh,setRefresh] = useState(0);
@@ -207,7 +207,7 @@ function IssueWork({ entrySeq, actionFocusIds, actionFocus, openRequests = [], i
   const [historicalConfirmed,setHistoricalConfirmed] = useState(false);
   const planSelectionTouched = useRef(false);
   const [error,setError] = useState(''), [busy,setBusy] = useState(false), [writing,setWriting] = useState(false), lock = useRef(false), operation = useOperationId();
-  const feedbackSection = useRef<HTMLDetailsElement>(null), mounted = useRef(true);
+  const feedbackSection = useRef<HTMLDetailsElement>(null), planHandoffSection = useRef<HTMLDetailsElement>(null), mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
     if (!actionFocus) return;
@@ -379,11 +379,32 @@ function IssueWork({ entrySeq, actionFocusIds, actionFocus, openRequests = [], i
     <label>关联项目<select value={project?.id ?? ''} onChange={e => setProjectId(e.target.value)}><option value="">请选择项目</option>{projects.filter(p => !p.archivedAt).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
     {!!feedbacks.length && <label>原看板观察<select value={selectedFeedback} onChange={e=>setFeedback(e.target.value)}><option value="">本轮当前可读观察</option>{feedbacks.map(f=><option key={f.revisionId} value={f.revisionId}>{f.outcome} · {f.revisionId.slice(0,8)}</option>)}</select></label>}
     <div className="case-inline-actions">{onOpenProject && project && <button onClick={() => onOpenProject(project, { caseId: record.id, issueId })}>回关联项目协作</button>}<button disabled={disabled || !project} onClick={() => task('plan')}>准备 Plan Task</button><button disabled={disabled || !project || !current} onClick={() => task('teach')}>准备 Teach Task</button></div>
-    <details><summary>交接与依据</summary><label>准确 Task 原回复<select value={sourceId} onChange={e => { setSourceId(e.target.value); setPreview(''); }}><option value="">选择原条目</option>{sources?.replies.filter(r => r.type === 'plan').map(r => <option key={exactKey(r.source)} value={exactKey(r.source)}>{r.name} · {r.source.messageId}</option>)}</select></label>{!!sources?.limitations.length && <p>部分原条目暂不可读取。</p>}
+    <details ref={planHandoffSection}><summary>交接与依据</summary><label>准确 Task 原回复<select value={sourceId} onChange={e => { setSourceId(e.target.value); setPreview(''); }}><option value="">选择原条目</option>{sources?.replies.filter(r => r.type === 'plan').map(r => <option key={exactKey(r.source)} value={exactKey(r.source)}>{r.name} · {r.source.messageId}</option>)}</select></label>{!!sources?.limitations.length && <p>部分原条目暂不可读取。</p>}
       <button disabled={!reply} onClick={() => reply && void showSource(reply.source)}>核对原回复</button><button disabled={disabled || reply?.type !== 'plan'} onClick={() => reply && void write('plans',{ source: reply.source })}>将 Plan 候选交回事项</button></details>
     <button type="button" className="text-button" disabled={record.status==='closed'} onClick={() => setChoiceOpen(true)}>记录本次取舍</button>
     {choiceOpen && <CaseDialog title="记录本轮取舍" returnFocusId={actionFocusIds?.choice} subtitle={`${timeline?.issue.title ?? '当前事项'} · ${projectCaseIssueProgress(timeline, openRequests).roundLabel}`} className="case-round-choice-dialog" busy={writing} onClose={() => { void closeChoice(); }}>
-      <div className="case-round-choice"><p className="case-help">保存取舍后才更新本轮记录；本次保存不新增行动授权。</p><label>准确方案<select disabled={choiceDisabled} value={planId} onChange={event => selectPlan(event.target.value)}><option value="">选择方案版本</option>{availablePlans.map(p => <option key={planKey(p)} value={planKey(p)}>{p.payload.title} v{p.revision}{requestPlan && planKey(p) === planKey(requestPlan.revision) && p.revision !== requestPlan.current.revision ? `（原请求历史版本，当前活动 v${requestPlan.current.revision}）` : ''}</option>)}</select></label>
+      <div className="case-round-choice"><p className="case-help">保存取舍后才更新本轮记录；本次保存不新增行动授权。</p><label>准确方案<select disabled={choiceDisabled || !availablePlans.length} value={planId} onChange={event => selectPlan(event.target.value)}><option value="">{availablePlans.length ? '选择方案版本' : '当前事项尚无可选方案版本'}</option>{availablePlans.map(p => <option key={planKey(p)} value={planKey(p)}>{p.payload.title} v{p.revision}{requestPlan && planKey(p) === planKey(requestPlan.revision) && p.revision !== requestPlan.current.revision ? `（原请求历史版本，当前活动 v${requestPlan.current.revision}）` : ''}</option>)}</select></label>
+      {!availablePlans.length && <div className="case-message" role="status">
+        <p>当前事项尚无可供取舍的准确方案版本（Case 主目标 G/S 策略不直接作为本事项方案）；已填写的理由与下一步草稿已保留。</p>
+        <div className="case-inline-actions">
+          {project ? <>
+            <button type="button" className="secondary-button" disabled={writing || record.status === 'closed'} onClick={() => { void (async () => { if (choiceDraft.dirty && !await choiceDraft.flush()) return; setChoiceOpen(false); task('plan'); })(); }}>去准备 Plan Task</button>
+            <button type="button" className="text-button" disabled={writing} onClick={() => {
+              void (async () => {
+                if (choiceDraft.dirty && !await choiceDraft.flush()) return;
+                setChoiceOpen(false);
+                requestAnimationFrame(() => {
+                  const section = planHandoffSection.current;
+                  if (section) { section.open = true; section.scrollIntoView({ block: 'start', behavior: 'smooth' }); section.querySelector('summary')?.focus({ preventScroll: true }); }
+                });
+              })();
+            }}>{sources?.replies.some(r => r.type === 'plan') ? `去交回已有 Plan 原回复（${sources.replies.filter(r => r.type === 'plan').length}）` : '查看交接与依据（交回 Plan 原回复）'}</button>
+          </> : <>
+            <span>当前 Case 尚未关联可用项目，请先关联或新建项目，再准备 Plan Task。</span>
+            {onLinkProject && <button type="button" className="secondary-button" disabled={writing || record.status === 'closed'} onClick={() => { void (async () => { if (choiceDraft.dirty && !await choiceDraft.flush()) return; setChoiceOpen(false); onLinkProject(); })(); }}>去关联或新建项目</button>}
+          </>}
+        </div>
+      </div>}
       {historical && requestPlan && <label><input type="checkbox" checked={historicalConfirmed} disabled={disabled} onChange={event => setHistoricalConfirmed(event.target.checked)} />我确认按原请求的历史方案 v{plan?.revision} 记录本次取舍（当前活动 v{requestPlan.current.revision}）。</label>}
       <label>这次怎么选<select disabled={choiceDisabled} value={choice} onChange={e => setChoice(e.target.value as CaseStrategyChoiceValue)}>{Object.entries(choiceName).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label><label>为什么这样选（依据与理由）<textarea disabled={choiceDisabled} value={reason} onChange={e => setReason(e.target.value)} /></label><label>接下来（可选）<input disabled={choiceDisabled} maxLength={200} value={nextStep} placeholder="与这件事项有关的下一步或等待条件" onChange={event => choiceDraft.change(previous => ({ ...previous, nextStep: event.target.value }))}/></label>
       {(() => {
