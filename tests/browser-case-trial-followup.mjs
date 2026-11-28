@@ -80,6 +80,70 @@ try {
     return res.json();
   };
 
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+    window.__cf02StopFault = false;
+    window.__cf02Attempts = 0;
+    window.__fr01Stats = { streams: 0, heartbeats: 0 };
+    window.fetch = async (input, init) => {
+      const url = new URL(typeof input === 'string' ? input : input.url, location.href);
+      if (!window.__cf02StopFault && window.name.startsWith('CF02_FAULT:')) {
+        const [, pId, tId] = window.name.split(':');
+        if (url.pathname === `/api/projects/${pId}/tasks/${tId}/events`) {
+          const attempt = window.__cf02Attempts++;
+          const encoder = new TextEncoder();
+          if (attempt === 0) {
+            let timer;
+            const body = new ReadableStream({
+              start(controller) {
+                controller.enqueue(encoder.encode(': task connection\n\n'));
+                timer = setInterval(() => {
+                  try { controller.enqueue(encoder.encode(': heartbeat\n\n')); } catch { clearInterval(timer); }
+                }, 200);
+                init?.signal?.addEventListener('abort', () => { clearInterval(timer); try { controller.close(); } catch {} }, { once: true });
+              },
+              cancel() { clearInterval(timer); },
+            });
+            return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-store' } });
+          }
+          const errPayload = JSON.stringify({ type: 'stream.error', code: 'sse_snapshot_read_failed', category: 'snapshot_read', projectId: pId, taskId: tId });
+          return new Response(new ReadableStream({
+            start(controller) {
+              controller.enqueue(encoder.encode(`data: ${errPayload}\n\n`));
+              controller.close();
+            },
+          }), { status: 200, headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-store' } });
+        }
+      }
+      if (window.name.startsWith('FR01_HB_DROP:')) {
+        if (url.pathname === '/api/business-role' && url.searchParams.get('action') === 'events') {
+          window.__fr01Stats.streams++;
+          const readUrl = new URL(url);
+          readUrl.searchParams.delete('action');
+          const response = await originalFetch(readUrl, init);
+          const value = await response.json();
+          const encoder = new TextEncoder();
+          let timer;
+          const body = new ReadableStream({
+            start(controller) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'snapshot', snapshot: value.snapshot })}\n\n`));
+              timer = setInterval(() => {
+                window.__fr01Stats.heartbeats++;
+                try { controller.enqueue(encoder.encode(': heartbeat\n\n')); } catch { clearInterval(timer); }
+              }, 200);
+              const close = () => { clearInterval(timer); try { controller.close(); } catch {} };
+              init?.signal?.addEventListener('abort', close, { once: true });
+              window.__fr01CloseFault = close;
+            },
+            cancel() { clearInterval(timer); },
+          });
+          return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-store' } });
+        }
+      }
+      return originalFetch(input, init);
+    };
+  });
+
   await page.goto(baseUrl);
   await page.emulateMedia({ colorScheme: 'light' });
   const appRoot = page.locator('.app');
@@ -221,29 +285,53 @@ try {
   await page.locator('.message.assistant .message-content').filter({ hasText: '两家试点门店试行两周' }).first().waitFor();
   await page.waitForFunction(() => !document.querySelector('.stop-button'));
 
-  // Test CF02 abnormal path: heartbeat-only /events stream without initial snapshot must exit connecting and keep draft!
+  // Test CF02 abnormal -> exhausted -> explicit reconnect -> positive send recovery with preserved draft!
   const projectsBeforeCf02 = (await get('/api/projects')).projects;
   const planProj = projectsBeforeCf02.find(p => p.name === 'CF03关联实验项目');
   assert.ok(planProj, 'linked project must exist');
   const hbTaskRes = await host.request(`/api/projects/${planProj.id}/tasks`, 'POST', { name: 'CF02 心跳超时任务' });
   assert.equal(hbTaskRes.status, 201);
   const { task: hbTask } = await hbTaskRes.json();
-  await page.route(`**/api/projects/${planProj.id}/tasks/${hbTask.id}/events*`, async route => {
-    await route.fulfill({
-      status: 200,
-      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-store' },
-      body: ': task connection\n\n: heartbeat\n\n',
-    });
-  });
+  await page.evaluate(({ projectId, taskId }) => {
+    window.name = `CF02_FAULT:${projectId}:${taskId}`;
+  }, { projectId: planProj.id, taskId: hbTask.id });
   await page.reload();
   await page.getByRole('button', { name: 'CF02 心跳超时任务', exact: true }).click();
-  await page.locator('#message-input').fill('CF02 断流前输入草稿保留');
-  await page.getByText(/收到首帧前已断开|等待任务首帧状态超时|实时观察暂未恢复/).first().waitFor({ timeout: 15000 });
-  assert.equal(await page.locator('#message-input').inputValue(), 'CF02 断流前输入草稿保留');
-  checks.push({ id: 'CF02', detail: 'Plan Task completes cleanly via real Pi 1.4.0 and missing-snapshot SSE surfaces safe recovery without losing draft' });
-  await page.unroute(`**/api/projects/${planProj.id}/tasks/${hbTask.id}/events*`);
+  const hbInput = page.locator('#message-input');
+  const hbSendBtn = page.getByRole('button', { name: '发送消息', exact: true });
+  await hbInput.fill('CF02 断流前输入草稿保留');
+  // Attempt 0 runs 15s heartbeat-only firstFrameTimeoutMs, attempts 1..3 emit stream.error and exhaust into disconnected
+  await page.getByText(/等待任务首帧(?:状态)?超时/).first().waitFor({ timeout: 22000 });
+  await page.getByText(/实时观察暂未恢复，请显式重新连接/).first().waitFor({ timeout: 15000 });
+  assert.equal(await hbInput.inputValue(), 'CF02 断流前输入草稿保留');
+  assert.equal(await hbSendBtn.isDisabled(), true, 'CF02: GET idle during disconnected state must never unlock send gate');
 
-  // Hand Plan reply back to Case #1 -> save Choice -> authorize -> feedback regression
+  // Stop fault, verify zero automatic open/messages/stop before reconnect, then click explicit 重新连接任务
+  const writesBeforeReconnect = apiWrites.filter(w => w.path.includes(hbTask.id) && (w.path.endsWith('/open') || w.path.endsWith('/messages') || w.path.endsWith('/stop'))).length;
+  assert.equal(writesBeforeReconnect, 0, 'CF02: failure/exhaustion must never auto-open, send, or stop');
+  provider.setResponder(() => ({ text: 'CF02 显式重连后首发完成。' }));
+  await page.evaluate(() => {
+    window.name = '';
+    window.__cf02StopFault = true;
+  });
+  await page.getByRole('button', { name: '重新连接任务', exact: true }).click();
+  await page.getByText('任务和历史已保存在本机', { exact: true }).first().waitFor({ timeout: 10000 });
+  assert.equal(await hbInput.inputValue(), 'CF02 断流前输入草稿保留', 'CF02: explicit reconnect must preserve unsent draft');
+  assert.equal(
+    apiWrites.filter(w => w.path.includes(hbTask.id) && (w.path.endsWith('/open') || w.path.endsWith('/messages') || w.path.endsWith('/stop'))).length,
+    0,
+    'CF02: explicit reconnect must only read status without auto-open/messages/stop',
+  );
+  await page.waitForFunction(() => {
+    const btn = document.querySelector('button[aria-label="发送消息"]');
+    return btn && !btn.hasAttribute('disabled');
+  });
+  await hbSendBtn.click();
+  await page.locator('.message.assistant .message-content').filter({ hasText: 'CF02 显式重连后首发完成。' }).first().waitFor({ timeout: 15000 });
+  await page.waitForFunction(() => !document.querySelector('.stop-button'));
+  checks.push({ id: 'CF02', detail: 'Plan Task completes cleanly via real Pi 1.4.0; sustained heartbeat first-frame timeout exhausts to disconnected keeping send disabled & draft, and explicit reconnect restores send without auto open/messages/stop' });
+
+  // Hand Plan reply back to Case #1 -> save Choice -> authorize -> feedback -> history & original board entry regression
   await page.locator('nav.primary-nav').getByRole('button', { name: 'Decision Case', exact: true }).click();
   await page.getByRole('button', { name: 'CF05 验证准备件', exact: true }).first().click();
   await detailRegion.getByRole('heading', { level: 1, name: 'CF05 验证准备件', exact: true }).waitFor();
@@ -274,7 +362,55 @@ try {
   await choiceDialog.getByRole('button', { name: '保存取舍', exact: true }).click();
   await choiceDialog.waitFor({ state: 'hidden' });
   await detailRegion.getByText('试行').first().waitFor();
-  checks.push({ id: 'CF03', detail: 'Empty choice modal guided to Plan Task & handoff, retained draft, and saved real strategy choice cleanly' });
+
+  // Authorize action under the saved choice
+  const authDetails = detailRegion.locator('details').filter({ hasText: '授权本次行动' }).first();
+  if (!await authDetails.evaluate(d => d.open)) await authDetails.locator(':scope > summary').click();
+  await authDetails.getByLabel('看板行动', { exact: true }).fill('试点门店核对行动');
+  await authDetails.getByLabel('授权范围', { exact: true }).fill('仅限两家试点门店两周内复核');
+  const authResp = page.waitForResponse(res => res.url().includes('/authorize') && res.request().method() === 'POST');
+  await authDetails.getByRole('button', { name: '确认授权并进入看板', exact: true }).click();
+  assert.ok((await authResp).ok(), 'CF03: authorize must succeed');
+
+  // Open 回录反馈 -> submit actual observation -> return to Case
+  await detailRegion.getByRole('button', { name: '回录反馈', exact: true }).click();
+  const feedbackDialog = page.getByRole('dialog', { name: '回录实际反馈', exact: true });
+  await feedbackDialog.waitFor();
+  await feedbackDialog.locator('#feedback-outcome').fill('两家试点门店均完成对照，转化率提升4%');
+  const feedbackResp = page.waitForResponse(res => res.url().includes('/feedback') && res.request().method() === 'POST');
+  await feedbackDialog.getByRole('button', { name: '保存反馈', exact: true }).click();
+  assert.ok((await feedbackResp).ok(), 'CF03: saveFeedback POST must succeed');
+  await feedbackDialog.waitFor({ state: 'hidden' });
+  await page.getByRole('dialog', { name: '反馈已保存', exact: true }).waitFor({ state: 'hidden' });
+
+  // Verify round history displays choice, action, authorization scope, feedback, exact reply inspection, and original board link
+  await detailRegion.getByRole('button', { name: '查看本轮原记录', exact: true }).click();
+  const historyDetails = detailRegion.locator('details.case-round-history').first();
+  await page.waitForFunction(() => {
+    const els = [...document.querySelectorAll('details.case-round-history')];
+    return els.some(el => el.hasAttribute('open') && el.getBoundingClientRect().height > 0);
+  });
+  await historyDetails.getByText('试点门店核对行动').first().waitFor();
+  await historyDetails.getByText(/仅限两家试点门店两周内复核/).first().waitFor();
+  await historyDetails.getByText(/两家试点门店均完成对照，转化率提升4%/).first().waitFor();
+  await historyDetails.getByRole('button', { name: '查看准确方案原回复', exact: true }).click();
+  await detailRegion.getByText(/两家试点门店试行两周/).first().waitFor();
+  await historyDetails.getByRole('button', { name: '查看原看板反馈', exact: true }).click();
+  await page.getByRole('heading', { level: 1, name: '决策看板', exact: true }).waitFor();
+  await page.locator('.board-page').getByText('试点门店核对行动').first().waitFor();
+  const boardHistoryDialog = page.getByRole('dialog', { name: '已保存反馈历史', exact: true });
+  await boardHistoryDialog.waitFor();
+  await boardHistoryDialog.getByText(/两家试点门店均完成对照，转化率提升4%/).first().waitFor();
+  await page.keyboard.press('Escape');
+  await boardHistoryDialog.waitFor({ state: 'hidden' });
+  await page.locator('nav.primary-nav').getByRole('button', { name: 'Decision Case', exact: true }).click();
+  const detailHeading = detailRegion.getByRole('heading', { level: 1, name: 'CF05 验证准备件', exact: true });
+  if (!await detailHeading.isVisible().catch(() => false)) {
+    await page.getByRole('button', { name: 'CF05 验证准备件', exact: true }).first().click();
+  }
+  await detailHeading.waitFor();
+
+  checks.push({ id: 'CF03', detail: 'Empty choice modal guided to Plan Task & handoff, retained draft, saved choice, authorized board action, recorded feedback, and verified round history & original board entry' });
 
   // CF01 + CF04: Real Case BusinessRoleConversation with injected clean EOF on SSE + Pi 1.4.0 invalid-then-valid caseDeclarationsTool calls
   let sseInterceptCount = 0;
@@ -396,6 +532,43 @@ try {
   assert.ok(reqList.requests.some(r => r.text === '请负责人核对试点两周方案的正式取舍'), 'CF04: corrected request must be saved cleanly');
   checks.push({ id: 'CF01+CF04', detail: 'Case Agent recovered automatically after clean SSE EOF and Pi 1.4.0 corrected invalid declaration request via field diagnostics' });
   await page.unroute('**/api/business-role?*action=events*');
+
+  // FR01: Sustained 200ms comment heartbeats + dropped terminal event + 3s delayed provider -> must recover automatically WITHOUT closing SSE
+  provider.setResponder(async () => {
+    await new Promise(r => setTimeout(r, 3000));
+    return { text: 'FR01 持续心跳漏终态已自动读回完成。' };
+  });
+  await page.evaluate(cid => { window.name = `FR01_HB_DROP:${cid}`; }, case1.id);
+  await page.reload();
+  await page.locator('nav.primary-nav').getByRole('button', { name: 'Decision Case', exact: true }).click();
+  await page.getByRole('button', { name: 'CF05 验证准备件', exact: true }).first().click();
+  await caseAgent.waitFor();
+  await caseAgent.getByText(/会话模型/).waitFor({ timeout: 10000 });
+  const beforeFr01Msgs = apiWrites.filter(w => w.path.includes('action=messages')).length;
+  const beforeFr01Stops = apiWrites.filter(w => w.path.includes('action=stop')).length;
+  await caseAgent.getByRole('textbox').fill('请验证持续心跳但漏终态时的自动恢复');
+  await caseAgent.getByRole('button', { name: '发送', exact: true }).click();
+  await caseAgent.getByText('正在回复…', { exact: true }).waitFor({ timeout: 10000 });
+  // Wait for backend to finish (3s delay + execution)
+  const fr01Issue = (await get(`/api/cases/${case1.id}/decisions/issues`)).issues[0];
+  const ownerQuery = new URLSearchParams({ owner: JSON.stringify({ role: 'case', caseId: case1.id, itemId: fr01Issue.id }) });
+  for (let i = 0; i < 40; i++) {
+    const roleState = await get(`/api/business-role?${ownerQuery}`);
+    if (!roleState.busy && roleState.discussion?.lastRun?.status === 'completed') break;
+    await new Promise(r => setTimeout(r, 250));
+  }
+  // Must recover full reply automatically within 10s WITHOUT closing the heartbeat-only SSE stream
+  await caseAgent.getByText('FR01 持续心跳漏终态已自动读回完成。').first().waitFor({ timeout: 10000 });
+  assert.equal(await caseAgent.getByText('正在回复…').count(), 0, 'FR01: must clear 正在回复… even while SSE keeps sending heartbeats without terminal event');
+  const fr01Stats = await page.evaluate(() => window.__fr01Stats);
+  assert.equal(fr01Stats.streams, 1, 'FR01: heartbeat SSE stream stayed open across recovery');
+  assert.ok(fr01Stats.heartbeats >= 10, `FR01: sustained heartbeats must be observed (${JSON.stringify(fr01Stats)})`);
+  assert.equal(apiWrites.filter(w => w.path.includes('action=messages')).length, beforeFr01Msgs + 1, 'FR01: must never replay POST messages');
+  assert.equal(apiWrites.filter(w => w.path.includes('action=stop')).length, beforeFr01Stops, 'FR01: must never auto-stop');
+  await page.screenshot({ path: path.join(outDir, '05b-fr01-heartbeat-recovered-1440.png'), fullPage: true });
+  await page.evaluate(() => { window.name = ''; window.__fr01CloseFault?.(); });
+  checks.push({ id: 'FR01', detail: `Case Agent recovered full reply automatically (${fr01Stats.heartbeats} heartbeats on open stream without terminal event, zero replay/stop)` });
+
 
   // Responsive & theme screenshots of Case detail (desktop dark, 1024x768, 390x844 mobile)
   await page.getByRole('button', { name: '切换为深色' }).click();

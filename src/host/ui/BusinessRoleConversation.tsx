@@ -4,7 +4,7 @@ import type {StrategyDiscussionDetail,StrategyDiscussionMessage} from '../strate
 import type {GoalDraftInput,GoalRoleSuggestionRef} from '../strategy-goals-types.ts';
 import {ConversationDrawer} from './ConversationDrawer.tsx';
 import {StrategyDiscussionTranscript} from './StrategyDiscussionReply.tsx';
-import {canSettleDiscussionMessage, watchStrategyDiscussion} from './strategy-discussion-client.ts';
+import {canSettleDiscussionMessage, StrategyDiscussionRequestError, watchStrategyDiscussion} from './strategy-discussion-client.ts';
 import {projectDiscussionStreaming} from './strategy-discussion-projection.ts';
 import {readConfigurations} from './runtime-client.ts';
 import {messageText, type NativeMessage, type PublicModelConfiguration} from './project-types.ts';
@@ -15,6 +15,14 @@ import type { IssueDraftPayload } from '../workspace-draft-store.ts';
 import { registerWorkspaceInputGuard } from './workspace-input-guards.ts';
 
 type RoleView = StrategyDiscussionDetail | {discussion:null;busy:false;snapshot?:undefined;configurationId?:string};
+function isRoleRunUnresolved(next: RoleView | undefined, req: StrategyDiscussionMessage | undefined): boolean {
+  if (!next || !next.discussion) return false;
+  if (next.busy) return true;
+  if (!req) return false;
+  const terminal = next.discussion.lastRun;
+  if (terminal?.id === req.requestId && ['failed', 'cancelled'].includes(terminal.status)) return false;
+  return !canSettleDiscussionMessage(next, req);
+}
 const roleQuestions = {
   goal: '想梳理哪一个目标或策略？',
   case: '想讨论当前事项的哪项取舍？',
@@ -142,6 +150,7 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,open
     const request=pendingRef.current;
     const next:RoleView=await call('','GET',undefined,signal,request?.requestId);
     if(!alive.current||ticket!==seq.current)return;
+    if(!next.busy)setStream('');
     setView(next);if(next.discussion)setModel(next.discussion.configurationId);
     setChecked(request?.requestId);
     const external=request&&sessionStorage.getItem(storage+'.keep.'+request.requestId)==='1';
@@ -170,8 +179,25 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,open
   },[load]);
   const id=view?.discussion?.id;
   const streamEndedRef=useRef(false);
+  const eventEpochRef=useRef(0);
+  const inFlightRef=useRef(false);
   const [streamSeq,setStreamSeq]=useState(0);
-  const inFlight=Boolean(view?.busy||busy||pending);
+  const pendingTerminal=Boolean(
+    pending&&view?.discussion?.lastRun?.id===pending.requestId&&
+    !view?.busy&&['failed','cancelled'].includes(view.discussion.lastRun.status)
+  );
+  const pendingCheckedAbsent=Boolean(
+    pending&&checked===pending.requestId&&view&&!view.busy&&
+    view.discussion?.lastRun?.id!==pending.requestId&&
+    view.discussion?.pendingInput?.requestId!==pending.requestId
+  );
+  const pendingCheckedUnknown=Boolean(
+    pending&&checked===pending.requestId&&view&&!view.busy&&
+    view.discussion?.lastRun?.id===pending.requestId&&
+    view.discussion.lastRun.status==='unknown'
+  );
+  const inFlight=Boolean(view?.busy||busy||(pending&&!pendingTerminal&&!pendingCheckedAbsent&&!pendingCheckedUnknown));
+  inFlightRef.current=inFlight;
   useEffect(()=>{
     if(id&&inFlight&&streamEndedRef.current){streamEndedRef.current=false;setStreamSeq(n=>n+1);}
   },[id,inFlight]);
@@ -185,15 +211,6 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,open
       const timer=setTimeout(done,ms);
       controller.signal.addEventListener('abort',done,{once:true});
     });
-    const isUnresolved=(next:RoleView|undefined)=>{
-      if(!next||!next.discussion)return false;
-      if(next.busy)return true;
-      const req=pendingRef.current;
-      if(!req)return false;
-      const terminal=next.discussion.lastRun;
-      if(terminal?.id===req.requestId&&['failed','cancelled'].includes(terminal.status))return false;
-      return !canSettleDiscussionMessage(next,req);
-    };
     void (async()=>{
       for(let attempt=0;attempt<=backoff.length&&!controller.signal.aborted;attempt++){
         streamEndedRef.current=false;
@@ -201,12 +218,13 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,open
         try{
           await watchStrategyDiscussion(id,event=>{
             if(controller.signal.aborted)return;
+            eventEpochRef.current+=1;
             if(event.type==='text.delta')setStream(old=>projectDiscussionStreaming(old,event));
             if(event.type==='run.settled'||event.type==='snapshot'&&event.snapshot.status==='idle'){
               setStream('');
               void load(controller.signal).catch(f=>{if(!controller.signal.aborted)onError(f);});
             }
-          },controller.signal,base+'&action=events',{idleTimeoutMs:45000});
+          },controller.signal,base+'&action=events',{idleTimeoutMs:45000,eventIdleTimeoutMs:45000,shouldExpectEvents:()=>inFlightRef.current});
         }catch(f){
           if(controller.signal.aborted)return;
           streamError=f;
@@ -217,11 +235,19 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,open
         let next:RoleView|undefined,loadError:unknown;
         try{next=await load(controller.signal);}catch(f){if(controller.signal.aborted)return;loadError=f;}
         if(controller.signal.aborted)return;
-        const activeRun=!loadError&&isUnresolved(next);
+        const activeRun=!loadError&&isRoleRunUnresolved(next,pendingRef.current);
         if(!loadError&&!activeRun){
-          if(!streamError||!next?.busy){if(alive.current&&!streamError)setError('');return;}
+          if(alive.current&&(!streamError||!next?.busy))setError('');
+          return;
+        }
+        if(!loadError&&activeRun&&next?.busy&&streamError instanceof StrategyDiscussionRequestError&&streamError.code==='strategy_discussion_events_timeout'){
+          if(alive.current)setError('');
+          attempt=-1;
+          await wait(500);
+          continue;
         }
         if(attempt===backoff.length){
+          if(!loadError&&next?.busy)return;
           onError(loadError??streamError??new Error('实时观察暂未恢复，原操作状态未确认；未重发消息，可点击「核对原操作」重新读取。'));
           return;
         }
@@ -231,6 +257,58 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,open
     })();
     return ()=>controller.abort();
   },[id,base,load,streamSeq]);
+  // Reconcile read-only Host authority when a run is in flight and SSE delivers heartbeats
+  // or omits terminal events, with bounded backoff for GET errors/idle uncertainty.
+  useEffect(()=>{
+    if(!id||!inFlight)return;
+    const controller=new AbortController();
+    const backoff=[500,1500,3000];
+    const quietReconcileMs=3500;
+    const wait=(ms:number)=>new Promise<void>(resolve=>{
+      if(controller.signal.aborted){resolve();return;}
+      const done=()=>{clearTimeout(timer);controller.signal.removeEventListener('abort',done);resolve();};
+      const timer=setTimeout(done,ms);
+      controller.signal.addEventListener('abort',done,{once:true});
+    });
+    void (async()=>{
+      let consecutiveErrors=0;
+      let idleUnresolved=0;
+      while(!controller.signal.aborted){
+        const epochBeforeWait=eventEpochRef.current;
+        const delay=consecutiveErrors>0?backoff[consecutiveErrors-1]!:idleUnresolved>0?backoff[idleUnresolved-1]!:quietReconcileMs;
+        await wait(delay);
+        if(controller.signal.aborted)return;
+        if(consecutiveErrors===0&&idleUnresolved===0&&eventEpochRef.current!==epochBeforeWait)continue;
+        let next:RoleView|undefined,loadError:unknown;
+        try{next=await load(controller.signal);}catch(f){if(controller.signal.aborted)return;loadError=f;}
+        if(controller.signal.aborted)return;
+        if(loadError){
+          consecutiveErrors+=1;
+          if(consecutiveErrors>backoff.length){
+            onError(loadError);
+            return;
+          }
+          continue;
+        }
+        consecutiveErrors=0;
+        if(!isRoleRunUnresolved(next,pendingRef.current)){
+          if(alive.current)setError('');
+          return;
+        }
+        if(next?.busy){
+          idleUnresolved=0;
+          if(alive.current)setError('');
+          continue;
+        }
+        idleUnresolved+=1;
+        if(idleUnresolved>backoff.length){
+          onError(new Error('实时观察暂未恢复，原操作状态未确认；未重发消息，可点击「核对原操作」重新读取。'));
+          return;
+        }
+      }
+    })();
+    return ()=>controller.abort();
+  },[id,inFlight,load]);
   // Runtime settlement may precede the business owner's persisted receipt.
   // Re-read that exact external request for a bounded window; never replay it.
   const receiptReads=useRef({requestId:'',attempts:0});
@@ -263,6 +341,7 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,open
     await dispatch(input);
   }
   async function dispatch(input:StrategyDiscussionMessage){
+    eventEpochRef.current+=1;
     setBusy(true);setError('');setChecked(undefined);
     try{
       await call('messages','POST',input);

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { runInNewContext } from 'node:vm';
 import { observeTask, type TaskObservationState } from '../src/host/ui/runtime-client.ts';
+import { watchStrategyDiscussion, StrategyDiscussionRequestError } from '../src/host/ui/strategy-discussion-client.ts';
 import { caseDeclarationsTool, explainCaseDeclarationError } from '../src/agent/strategy-discussion.ts';
 import { CaseStore } from '../src/host/case-store.ts';
 import { createCaseIssueService } from '../src/host/case-issues.ts';
@@ -491,6 +492,60 @@ test('CF02: observeTask enforces first-frame deadline past heartbeats, exposes s
     assert.ok(!states.some(s => s.state === 'connected'), 'stream.error must never mark connected');
     assert.equal(states.at(-1)?.state, 'disconnected');
   }
+
+  // Case 3: FR02 — after stream failures exhaust into disconnected, explicit reconnect receives legitimate snapshot, marks connected, preserves draft, and issues zero open/messages/stop POSTs
+  {
+    let allowSnapshot = false;
+    const writes: string[] = [];
+    const readbacks: string[] = [];
+    t.mock.method(globalThis, 'fetch', async (url: string | URL | Request, init?: RequestInit) => {
+      const urlStr = String(url);
+      const method = init?.method ?? 'GET';
+      if (method !== 'GET') writes.push(`${method} ${urlStr}`);
+      if (urlStr.endsWith('/events')) {
+        if (!allowSnapshot) {
+          return new Response(new ReadableStream<Uint8Array>({
+            start(s) {
+              s.enqueue(new TextEncoder().encode(': heartbeat\n\n'));
+              s.close();
+            },
+          }), { headers: { 'content-type': 'text/event-stream' } });
+        }
+        return new Response(new ReadableStream<Uint8Array>({
+          start(s) {
+            s.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ type: 'snapshot', snapshot: { sessionId: 's-reconn', sdkVersion: '1.4.0', status: 'idle', messages: [], tools: [] } })}\n\n`));
+            init?.signal?.addEventListener('abort', () => { try { s.close(); } catch {} }, { once: true });
+          },
+        }), { headers: { 'content-type': 'text/event-stream' } });
+      }
+      return Response.json({
+        project: { schemaVersion: 2, id: 'p1', name: 'P', configuration: { id: 'm', revision: 1, name: 'M', api: 'openai-completions', provider: 'custom', baseUrl: 'https://example.invalid', model: 'm' }, rootPath: '/tmp', createdAt: '', updatedAt: '', archivedAt: null, tasks: [] },
+        task: { id: 't1', name: 'T', draft: '显式重连草稿保留', configuration: { id: 'm', revision: 1, name: 'M', api: 'openai-completions', provider: 'custom', baseUrl: 'https://example.invalid', model: 'm' }, createdAt: '', updatedAt: '', sessionStorage: 'task' },
+        snapshot: { sessionId: '', sdkVersion: '', status: 'idle', messages: [], tools: [] },
+      });
+    });
+
+    const firstController = new AbortController();
+    const firstStates: TaskObservationState[] = [];
+    const firstRun = observeTask('p1', 't1', () => {}, firstController.signal, { onConnection: v => firstStates.push(v) });
+    for (const ms of [0, 500, 1500, 3000]) { t.mock.timers.tick(ms); await new Promise(r => setImmediate(r)); }
+    await firstRun;
+    assert.equal(firstStates.at(-1)?.state, 'disconnected');
+    assert.ok(!firstStates.some(s => s.state === 'connected'), 'GET idle during exhaustion must never unlock connected');
+
+    allowSnapshot = true;
+    const secondController = new AbortController();
+    const secondStates: TaskObservationState[] = [];
+    const secondRun = observeTask('p1', 't1', () => {}, secondController.signal, {
+      onConnection: v => secondStates.push(v),
+      onReadback: v => readbacks.push(v.task.draft ?? ''),
+    });
+    await new Promise(r => setImmediate(r));
+    assert.ok(secondStates.some(s => s.state === 'connected'), 'explicit reconnect must restore connected on valid snapshot');
+    assert.deepEqual(writes, [], 'reconnect must never auto-open/send/stop');
+    secondController.abort();
+    await secondRun;
+  }
 });
 
 test('CF03: empty choice modal guides to Link Project or Plan Task / handoff without copying goal strategy, keeping draft', async () => {
@@ -796,4 +851,139 @@ test('CF07: ProjectNavigation archive/restore/rename buttons include distinguish
   assert.ok(archiveBtn?.props['aria-label']?.includes('同名项目'), 'archive button aria-label must include project name');
   assert.ok(renameBtn?.props['aria-label']?.includes('同名项目'), 'rename button aria-label must include project name');
   assert.ok(restoreBtn?.props['aria-label']?.includes('归档项目B'), 'restore button aria-label must include project name');
+});
+
+test('FR01: watchStrategyDiscussion eventIdleTimeoutMs ignores comment heartbeats and BusinessRoleConversation recovers missing terminal events via bounded read-only GET', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+
+  // 1. Direct watchStrategyDiscussion eventIdleTimeoutMs test past sustained heartbeats
+  {
+    let hbController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    let aborted = false;
+    t.mock.method(globalThis, 'fetch', async (_input: string | URL | Request, init?: RequestInit) => {
+      return new Response(new ReadableStream<Uint8Array>({
+        start(s) {
+          hbController = s;
+          s.enqueue(new TextEncoder().encode(': role connection\n\n'));
+          init?.signal?.addEventListener('abort', () => { aborted = true; try { s.close(); } catch {} }, { once: true });
+        },
+      }), { headers: { 'content-type': 'text/event-stream' } });
+    });
+    const ac = new AbortController();
+    const errPromise = assert.rejects(
+      () => watchStrategyDiscussion('disc-hb', () => {}, ac.signal, '/api/strategy/discussions/disc-hb/events', {
+        idleTimeoutMs: 500,
+        eventIdleTimeoutMs: 50,
+      }),
+      (err: unknown) => err instanceof StrategyDiscussionRequestError && err.code === 'strategy_discussion_events_timeout',
+    );
+    await new Promise(r => setImmediate(r));
+    for (let i = 0; i < 6 && !aborted; i++) {
+      t.mock.timers.tick(15);
+      if (!aborted && hbController) { try { hbController.enqueue(new TextEncoder().encode(': heartbeat\n\n')); } catch {} }
+      await new Promise(r => setImmediate(r));
+    }
+    await errPromise;
+    assert.ok(aborted, 'heartbeat-only stream without data events must trip eventIdleTimeoutMs');
+    t.mock.restoreAll();
+    t.mock.timers.reset();
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+  }
+
+  // 2. Sustained open heartbeat stream with missing terminal event: slow busy run stays running, then recovers when backend completes, without closing SSE; bounded GET errors stop and keep 核对原操作
+  const ownerCase = { role: 'case', caseId: 'case-hb', itemId: 'issue-hb' };
+  const discussionId = 'disc-hb-reconcile';
+  let backendStatus: 'idle' | 'running' | 'completed' = 'idle';
+  let failGetReads = false;
+  let sentRequestId = '';
+  let sseReads = 0;
+  let getCountAfterSend = 0;
+  const writes: string[] = [];
+
+  const fetcher: typeof fetch = async (input, init) => {
+    const url = new URL(String(input), 'http://localhost');
+    const method = init?.method ?? 'GET';
+    if (url.pathname === '/api/configurations') return Response.json({ configurations: [{ id: 'cfg-1', revision: 1, name: 'Synth', model: 'synth', hasApiKey: true }], selectedId: 'cfg-1' });
+    if (url.pathname.startsWith('/api/workspace/drafts/')) {
+      if (method === 'GET') return Response.json({ code: 'not_found' }, { status: 404 });
+      return Response.json({ draft: { kind: 'issue-draft', id: url.pathname.split('/').pop(), revision: 1, payload: JSON.parse(String(init?.body)).payload } });
+    }
+    if (url.pathname === '/api/business-role') {
+      const action = url.searchParams.get('action');
+      if (method !== 'GET') writes.push(`${action}`);
+      if (action === 'events') {
+        sseReads++;
+        const initialSnap = { sessionId: 'sess-hb', sdkVersion: '1.4.0', status: 'idle', messages: [], tools: [] };
+        return new Response(new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ type: 'snapshot', snapshot: initialSnap })}\n\n`));
+            init?.signal?.addEventListener('abort', () => { try { controller.close(); } catch {} }, { once: true });
+          },
+        }), { headers: { 'content-type': 'text/event-stream' } });
+      }
+      if (action === 'messages' && method === 'POST') {
+        const body = JSON.parse(String(init?.body));
+        sentRequestId = body.requestId;
+        backendStatus = 'running';
+        return Response.json({ discussion: { id: discussionId, revision: 1, configurationId: 'cfg-1', configurationRevision: 1 }, requestId: sentRequestId }, { status: 202 });
+      }
+      if (action === 'stop') throw new Error('must never auto-stop');
+      if (sentRequestId) getCountAfterSend++;
+      if (failGetReads) return Response.json({ message: '角色读取暂不可用' }, { status: 503 });
+      const busy = backendStatus === 'running';
+      const messages = backendStatus === 'completed' ? [{ role: 'user', content: '心跳漏终态复核' }, { role: 'assistant', content: '心跳转回读恢复全文' }] : [];
+      return Response.json({
+        discussion: {
+          id: discussionId, revision: 1, configurationId: 'cfg-1', configurationRevision: 1,
+          lastRun: sentRequestId ? { id: sentRequestId, status: backendStatus === 'completed' ? 'completed' : 'accepted' } : undefined,
+        },
+        busy,
+        snapshot: { sessionId: 'sess-hb', sdkVersion: '1.4.0', status: busy ? 'running' : 'idle', messages, tools: [] },
+        requestReceipt: sentRequestId ? { requestId: sentRequestId, originalUserText: '心跳漏终态复核', nativeEntryId: 'entry-hb-1', sessionId: 'sess-hb' } : undefined,
+      });
+    }
+    return Response.json({});
+  };
+
+  const ui = await mountBusinessRole(fetcher, ownerCase);
+  try {
+    const textarea = ui.nodes().find(n => n.type === 'textarea')!;
+    textarea.props.onChange({ target: { value: '心跳漏终态复核' } });
+    await ui.settle();
+    const form = ui.nodes().find(n => n.type === 'form')!;
+    form.props.onSubmit({ preventDefault() {} });
+    await ui.settle();
+    assert.match(ui.text(), /正在回复/);
+
+    // Backend stays genuinely running across 2 reconciliation checks (7s): UI must NOT falsely fail or stop
+    for (const ms of [3500, 3500]) { t.mock.timers.tick(ms); await ui.settle(6); }
+    assert.match(ui.text(), /正在回复/, 'slow running backend must stay 正在回复… without premature failure');
+    assert.doesNotMatch(ui.text(), /暂未恢复|暂不可用/);
+    assert.equal(sseReads, 1, 'SSE stream stayed open without churn while slow Agent is running');
+
+    // Now backend finishes while SSE remains open without emitting terminal event
+    backendStatus = 'completed';
+    t.mock.timers.tick(3500);
+    await ui.settle(8);
+    assert.doesNotMatch(ui.text(), /正在回复/, 'UI must settle immediately after read-only reconciliation discovers completion');
+    assert.match(ui.text(), /心跳转回读恢复全文/, 'UI must render recovered full reply');
+    assert.deepEqual(writes, ['messages'], 'must never auto-stop or replay messages');
+
+    // Now test bounded GET failure during a subsequent in-flight run: 4 consecutive GET 503s must stop polling & show safe prompt + 核对原操作
+    sentRequestId = '';
+    getCountAfterSend = 0;
+    const textarea2 = ui.nodes().find(n => n.type === 'textarea')!;
+    textarea2.props.onChange({ target: { value: '核对GET有界失败' } });
+    await ui.settle();
+    ui.nodes().find(n => n.type === 'form')!.props.onSubmit({ preventDefault() {} });
+    await ui.settle();
+    failGetReads = true;
+    const getsBeforeFail = getCountAfterSend;
+    for (const ms of [3500, 500, 1500, 3000, 3500, 3500]) { t.mock.timers.tick(ms); await ui.settle(6); }
+    const getsDuringFail = getCountAfterSend - getsBeforeFail;
+    assert.equal(getsDuringFail, 4, `bounded GET failures must stop after 4 attempts (1 + 3 backoff retries), got ${getsDuringFail}`);
+    assert.match(ui.text(), /角色读取暂不可用/);
+    assert.ok(ui.nodes().some(n => n.type === 'button' && textOf(n) === '核对原操作'), 'must retain 核对原操作 button after bounded GET failure');
+    assert.deepEqual(writes, ['messages', 'messages'], 'failed GET reconciliation must never replay messages or stop');
+  } finally { ui.close(); }
 });

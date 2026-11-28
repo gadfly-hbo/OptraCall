@@ -3,7 +3,7 @@
 - **Issue**：[#154：Decision Case 试用修正](https://github.com/gadfly-hbo/OptraCall/issues/154)
 - **任务分支**：`work/antigravity/issue-154-decision-case-trial-followup`
 - **基线提交**：`main` `74030911ade7a9e06ad1a0213d1fcb93ecbba6dd` + 规格合并 `a4720eb2f5ce71d9d034de087264d996e17873c2`（`openspec/changes/decision-case-trial-followup/{spec.md,tasks.md,result.md}`）
-- **领取与阶段回执**：[领取回执](https://github.com/gadfly-hbo/OptraCall/issues/154#issuecomment-7235350681) · [T01 阅读与盘点回执](https://github.com/gadfly-hbo/OptraCall/issues/154#issuecomment-7235447476)
+- **领取与阶段回执**：[领取回执](https://github.com/gadfly-hbo/OptraCall/issues/154#issuecomment-7235350681) · [T01 阅读与盘点回执](https://github.com/gadfly-hbo/OptraCall/issues/154#issuecomment-7235447476) · [PM 首审退回（d674dea）](https://github.com/gadfly-hbo/OptraCall/issues/154#issuecomment-7237996090) · [单次返工重领](https://github.com/gadfly-hbo/OptraCall/issues/154#issuecomment-7238036165)
 - **依据规范**：`docs/engineering-workflow.md` v1.17、`docs/agent-session-integration.md` Interface v3、官方 `@earendil-works/pi-coding-agent` `1.4.0`（未修改源码/锁文件）、冻结 Demo `openspec/changes/decision-case-daily-workspace/demo.html`（SHA-256 `adff576ba604b35b95806ab6a5c0f7bf93de5f0124c1ce0540e14577572bf911`）
 
 ---
@@ -59,12 +59,44 @@
 | 全量 `tests/*.test.ts`（524 文件） | 按排序分 10 批（`--test-concurrency=2/3`）运行全部 524 个测试文件 + 单跑并发超时用例 | **PASS（524 文件全覆盖，3502 pass / 0 fail）** | 因 2 vCPU 机器 600s 命令时限，按文件排序分 10 批完整实跑：<br>• `0..44`: 382 pass, 0 fail, 53 skip<br>• `45..94`: 346 pass, 0 fail, 4 skip<br>• `95..169`: 438 pass, 0 fail, 43 skip<br>• `170..214`: 343 pass, 0 fail, 12 skip<br>• `215..259`: 344 pass, 0 fail, 2 skip<br>• `260..309`（`--test-concurrency=3`）: 319 pass, 0 fail, 27 skip, 1 cancelled（`tests/protected-file-process.test.ts` 20s 并发超时）；随后独立重跑 `node --test tests/protected-file-process.test.ts` **7/7 PASS**（21.8s）<br>• `310..364`: 422 pass, 0 fail, 26 skip<br>• `365..417`: 237 pass, 0 fail, 0 skip<br>• `418..470`: 328 pass, 0 fail, 19 skip<br>• `471..523`: 336 pass, 0 fail, 11 skip<br>Linux 环境原件保护 / 外部工具 `# SKIP` / `NOT_RUN`（195 项）原样保留不跳过掩盖。 |
 | Issue #154 端到端浏览器验证 + 视觉对照 | `node tests/browser-case-trial-followup.mjs`（真实 Host + Pi 1.4.0 + Chromium） | **PASS** | `CF05`, `CF06`, `CF02`, `CF03`, `CF01+CF04`, `CF07` 全部通过（`providerRequests: 5`，`pageErrors: []`）；11 张实际产品截图与冻结 Demo 对照完成（1440/1024/390 明暗主题，无裁切重叠）。 |
 | 既有历史浏览器回归脚本实跑与停顿点（诚实保留） | `browser-decision-case-daily.mjs`、`browser-v13-role-recovery.mjs`、`browser-zero-task-project-files.mjs`、`browser-project-tasks.js` | **FAIL（基线已存在文本/状态漂移）** | 1. `browser-decision-case-daily.mjs` 等候旧文 `待处理事项（1）` 超时（PR #152 `HomeDailyQuickPanel.tsx:44` 已改为带独立 `<span>` 的 `待处理事项 1`）。<br>2. `browser-v13-role-recovery.mjs` 找不到旧入口 `与目标管理 Agent 讨论`。<br>3. `browser-project-tasks.js` 找不到旧侧栏按钮 `模型设置`（PR #152 已改为 `设置`）。<br>4. `browser-zero-task-project-files.mjs:89` 在 `assertDrawer(desktop, false)` 处断言 `'收起项目文件' !== '展开项目文件'`；与本单改动（仅线 142 按钮 AX 名称）无直接调用冲突，保留事实不弱化断言。 |
-| 独立非作者复核（T09） | 只读 `research` 子代理（会话 `5b9c9b174527f5a87eb984ab793296e7`）独立核对三项冻结基准、`git diff`、四原则、IN01–IN07 及 11 张实跑截图 | **CONDITIONAL_PASS → 工程收尾条件已补齐** | 复核结论：**0 项阻塞缺陷**；确认 `demo.html` SHA-256 与 `package.json`/`package-lock.json`（Pi 1.4.0）原样未改，13 处产品源码改动均在 §4 允许范围，CF01–CF07 逐项 traceability、四原则、IN01–IN07 及只读检查（`check:agent-sessions`、`tsc --noEmit`、49/49 目标与会话测试）全通过；非阻塞观察：`HomeDailyQuickPanel.tsx:38` 内联 `CasePreparation` 未透传 `onCaseChanged`（不影响进入 `CaseBoard` 自动刷新）、`browser-case-trial-followup.mjs` 在 Chromium 测试 `sse_eof_before_snapshot` 并与单测心跳无首帧互补。原唯一待补项为全量 524 文件分批结果入档（本表已补齐）及开 PR 前用户截图确认（保留至 T10）。 |
+| 独立非作者复核（首轮历史证据，原样保留） | 只读 `research` 子代理（会话 `5b9c9b174527f5a87eb984ab793296e7`）对首版候选 `d674dea` 给出 `CONDITIONAL_PASS` | **已被 PM 首审 FAIL 推翻（历史保留，不沿用）** | 首轮 PM 复核（`codex/issue154-first-review` `a85ae9b`，[Issue #154 退回意见](https://github.com/gadfly-hbo/OptraCall/issues/154#issuecomment-7237996090)）实测复现出 **P1 缺陷（FR01）** 与 **P2 覆盖不足（FR02）**，首版 `CONDITIONAL_PASS` 结论明确失效，完整保留失败证据，不追溯改写为通过。 |
 
 ---
 
-## 5. 兼容与回退边界
+## 5. 首审退回与单次返工记录（FR01–FR02，二次重领 `#issuecomment-7238036165`）
 
-- 无任何数据库 schema 升级或存储路径迁移；CF01–CF07 完全沿原持久化表结构、事件协议与 `CaseStore`/`WorkspaceDraftStore` 契约工作，可直接回退至基线 `7403091` 而不损失已有项目、任务或 Case 数据。
-- `node_modules/` 与 `.local/issue-154/` 均属隔离本地验证产物（且 `node_modules/playwright` 临时全局软链已在提交前清理），未写入 `package.json` 或 `package-lock.json`。
-- 遵循工程规范：本阶段仅推送任务分支并交回 PM 审核；在 PM 向用户展示新候选真实产品截图并取得明确确认前，**不创建 PR（含 draft），不合并 `main`**。
+> 依据 [PM 首审退回意见](https://github.com/gadfly-hbo/OptraCall/issues/154#issuecomment-7237996090)（基准提交 `d674deaa6c80e254bf97e2c4e022d3642f486eb1`，PM 复核提交 `a85ae9b74bd985e93af00f51dccfeab27d1e4b06`）执行唯一一次允许返工：
+
+1. **FR01（P1）持续心跳但遗漏终态时 `Case Agent` 卡在 `正在回复…`**：
+   - **根因**：`strategy-discussion-client.ts` 的 `idleTimeoutMs` 对任意原始字节块（含 `: heartbeat\n\n` 注释）重置，且 `while` 读循环自然结束时未校验 `timedOut && !signal.aborted`；同时 `BusinessRoleConversation.tsx` 仅在收到 `run.settled`/空闲 `snapshot` 或 SSE 退出时才执行 `load()`，当 SSE 持续发送心跳注释但遗漏 `run.settled`/空闲 `snapshot` 时，`inFlight` 长期停留在 `true`。
+   - **修复实现**：
+     - `src/host/ui/strategy-discussion-client.ts`：新增 `eventIdleTimeoutMs?: number` 与 `shouldExpectEvents?: () => boolean`；仅在收到非空 `data:` 事件块时刷新 `touchEvents()`，`: heartbeat\n\n` 注释不重置事件超时；超期且 `shouldExpectEvents()` 为真时抛出 `strategy_discussion_events_timeout`；读循环退出后补充检查 `if (timedOut && !signal.aborted)`。
+     - `src/host/ui/BusinessRoleConversation.tsx`：新增 `isRoleRunUnresolved`、`eventEpochRef` 与 `inFlightRef`；`load()` 观察到 `!next.busy` 时通过 `setStream('')` 清空残余流式文本缓冲同时保持 SSE 长连接不频繁重连；流订阅传入 `{ idleTimeoutMs: 45000, eventIdleTimeoutMs: 45000, shouldExpectEvents: () => inFlightRef.current }`，当 `strategy_discussion_events_timeout` 发生且 Host `GET` 确认 `next?.busy === true` 时重置 `attempt = -1` 继续观察运行中任务；另设 `[id, inFlight, load]` 有界只读 `GET` 对账 `useEffect`（首次静默窗 `3500ms`，GET 失败或未明状态按 `[500, 1500, 3000]ms` 退避，确认 `next.busy === true` 时重置连续 GET 失败计数不误报停止，并在切换 owner/卸载时中止定时器与请求；绝不自动 `stop`/`open`/`messages`、不借用别轮终态、不自建第二完成权威）。
+   - **永久回归**：`tests/case-trial-followup-fixes.test.ts` 新增 `FR01` 单测（心跳不重置 `eventIdleTimeoutMs`、慢响应连续 2 轮 `3500ms` 保持运行中不误取消、遗漏终态自动从 GET 完成并关闭流、连续 4 次 503 GET 有界失败回落）；`tests/browser-case-trial-followup.mjs` 新增 `FR01` 真实 Host + Pi 1.4.0 + Chromium 端到端场景（真实复现 3 秒延迟完成后，开流持续发送 200ms 心跳 19 次且丢弃终态事件，界面自动恢复 `'FR01 持续心跳漏终态已自动读回完成。'`，`正在回复…` 归零，零 replay/stop，截图保存至 `.local/issue-154/product-verify/05b-fr01-heartbeat-recovered-1440.png`）。
+2. **FR02（P2）回归覆盖补齐**：
+   - **CF02 显式重连正向全路径**：`tests/case-trial-followup-fixes.test.ts` 补齐流退避耗尽进入 `disconnected` 后保持禁用发送 → 点击显式重连收到合法 `snapshot` 恢复发送且保留原草稿、零写调用；`tests/browser-case-trial-followup.mjs` 将 `CF02` 升级为真实 app/Host/Chromium 全链路（持续 200ms 心跳触发 `firstFrameTimeoutMs` → `等待任务首帧超时` → 耗尽进 `disconnected` 禁用发送且保留草稿、0 次 `open`/`messages`/`stop` → 点击 `重新连接任务` → 恢复 `任务和历史已保存在本机` 且草稿保留 → 通过 Pi 1.4.0 成功发送 `CF02 显式重连后首发完成。`）。
+   - **CF03 Plan 交回 → 取舍 → 原授权/反馈/历史入口回归**：`tests/browser-case-trial-followup.mjs` 在 `CF03` 保存取舍后实操串联 `授权本次行动`（`确认授权并进入看板`）→ `回录反馈`（`保存反馈`）→ `查看本轮原记录` → `查看准确方案原回复` → `查看原看板反馈` → `已保存反馈历史` 弹窗与 `Escape` 关闭并返回原 Case 详情。
+
+### 返工后完整验证结果（当前新候选）
+
+> 全部校验均在清除 `node_modules/playwright` 临时软链、保留官方 Pi `1.4.0` 与冻结 `demo.html` 不变条件下执行。
+
+| 验证项 | 命令与覆盖范围 | 结果 | 说明与保留边界 |
+| --- | --- | --- | --- |
+| Agent 会话边界与 SDK 完整检查 | `npm run check:agent-sessions` | **PASS** | Interface v3 边界通过；官方归档离线校验按脚本原样单列。 |
+| TypeScript + 前端构建 + Build Stamp | `npm run build` | **PASS** | `Trial build: 0.1.0-mvp.4 d674dea+local-changes`（提交前构建产物标记，提交后核对 SHA）。 |
+| 依赖安全审计 | `npm audit --audit-level=high` | **PASS** | exit 0；仅 2 项 moderate（`minimatch` via `@earendil-works/pi-coding-agent <=1.4.0`），零 high/critical。 |
+| FR01–FR02 + CF01–CF07 定向单测 | `npm run typecheck && node --test tests/case-trial-followup-fixes.test.ts` | **PASS** | **8/8 PASS**（含新增 `FR01` 心跳漏终态恢复/有界 GET 退避与 `CF02` 耗尽显式重连）。 |
+| 全量 `tests/*.test.ts`（清洁去重 524 文件） | 按文件排序 `--test-concurrency=2` 实跑全部 10 批（`runs = 10` 批，`deduped files = 524`，`0` 重跑特例） | **PASS（524 文件全覆盖，3694 tests：3497 pass / 0 fail / 0 cancelled / 197 skip）** | 各批逐一实跑记录：<br>• `0..44`（45 文件）：435 tests，382 pass，0 fail，0 cancelled，53 skip（350.99s）<br>• `45..94`（50 文件）：351 tests，347 pass，0 fail，0 cancelled，4 skip（258.96s）<br>• `95..169`（75 文件）：481 tests，438 pass，0 fail，0 cancelled，43 skip（329.32s）<br>• `170..214`（45 文件）：355 tests，343 pass，0 fail，0 cancelled，12 skip（387.70s）<br>• `215..259`（45 文件）：346 tests，344 pass，0 fail，0 cancelled，2 skip（410.99s）<br>• `260..309`（50 文件）：347 tests，320 pass，0 fail，0 cancelled，27 skip（337.41s）<br>• `310..364`（55 文件）：448 tests，422 pass，0 fail，0 cancelled，26 skip（246.89s）<br>• `365..417`（53 文件）：237 tests，237 pass，0 fail，0 cancelled，0 skip（419.19s）<br>• `418..470`（53 文件）：347 tests，328 pass，0 fail，0 cancelled，19 skip（206.58s）<br>• `471..523`（53 文件）：347 tests，336 pass，0 fail，0 cancelled，11 skip（462.60s）<br>Linux 原件保护/外部工具 `# SKIP` / `NOT_RUN`（197 项）原样保留。 |
+| Issue #154 端到端浏览器验证 + 新版截图 | `node tests/browser-case-trial-followup.mjs`（真实 Host + Pi 1.4.0 + Chromium） | **PASS** | `CF05`, `CF06`, `CF02`（含首帧超时耗尽 + 显式重连恢复发送）, `CF03`（含授权/反馈/原记录/原看板反馈/反馈历史）, `CF01+CF04`, `FR01`（19 次心跳开流自动恢复完成）, `CF07` 全部 7 项通过（`providerRequests: 7`，`pageErrors: []`）；新增截图 `05b-fr01-heartbeat-recovered-1440.png` 及全套 12 张实际截图人工逐张核验无裁切重叠。 |
+| 既有历史浏览器回归脚本（保留） | `browser-decision-case-daily.mjs`、`browser-v13-role-recovery.mjs`、`browser-zero-task-project-files.mjs`、`browser-project-tasks.js` | **FAIL（基线已有漂移，未修改）** | 与首轮一致，保留四项基线文本/状态漂移事实，未弱化断言。 |
+| 第二轮全新独立非作者复核（T09） | 全新只读 `research` 子代理（会话 `1c9c303711cf8d2eb3193c3e1d12a38c`，未沿用首轮结论）逐项核对三基线、`git diff`、四原则、IN01–IN07 及 12 张截图，详见 [second-review.md](verification/second-review.md) | **PASS（工程与试用候选二审通过；0 项阻塞缺陷）** | 独立实跑 `check:agent-sessions`、`typecheck` 与 50/50 核心单测均通过；FR01/FR02/CF01–CF07 完整三基线可追溯矩阵均 PASS；交付仍保留 **T10 开 PR 前截图确认门禁** 与 **Mac 实机/真实 GLM 模型未验证边界**。 |
+
+---
+
+## 6. 兼容与回退边界
+
+- 无任何数据库 schema 升级或存储路径迁移；CF01–CF07 及 FR01–FR02 返工完全沿原持久化表结构、事件协议与 `CaseStore`/`WorkspaceDraftStore` 契约工作，可直接回退至基线 `7403091` 而不损失已有项目、任务或 Case 数据。
+- 本次测试仍在 Ubuntu 24.04 Linux + 本地合成 Provider + 合成数据完成；**Mac mini / MacBook 实机体验环境及真实 GLM 模型实跑未在本机验证**，继续保留该未核边界。
+- `node_modules/` 与 `.local/issue-154/` 均属隔离本地验证产物（且 `node_modules/playwright` 临时全局软链已在构建/检查前清理），未写入 `package.json` 或 `package-lock.json`。
+- 遵循工程规范：本阶段仅推送新候选至任务分支并交回 PM 二审；在 PM 二审通过、向用户展示新候选真实产品截图并取得明确确认前，**不创建 PR（含 draft），不合并 `main`**。
