@@ -197,13 +197,3 @@ export function assessProgressEvidenceDetails(
 
   return { comparability, issues };
 }
-
-export function assessProgressEvidence(
-  basis: ProgressEvidenceBasis | undefined,
-  expected: { metric: string; unit: string; scope: string; period: DecompositionTimePeriod; observationDate: string; planned: boolean },
-  cutoff: string,
-  actual: number | null,
-  assessment: ProgressComparability,
-): ProgressComparability {
-  return assessProgressEvidenceDetails(basis, expected, cutoff, actual, assessment).comparability;
-}

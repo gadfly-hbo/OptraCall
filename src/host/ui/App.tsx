@@ -1,6 +1,5 @@
 import { DecisionCaseTabs } from './DecisionCaseTabs.tsx';
 import { CasePreparation } from './CasePreparation.tsx';
-import { CaseDialog } from './CaseDialogs.tsx';
 import { flushWorkspaceInputs } from './workspace-input-guards.ts';
 import type { HomePendingItem } from '../home-pending.ts';
 import { ConversationDrawer } from "./ConversationDrawer.tsx";

@@ -10,7 +10,6 @@ import { initialCaseBoardView, reconcileCaseBoardIssues, selectCaseBoardIssue, c
 import type { CaseDecisionIssue } from '../case-decision-types.ts';
 import type { TaskCreateIntent } from '../task-assignment.ts';
 import { CaseGoalsPanel } from './CaseGoalsPanel.tsx';
-import type { GoalRef } from '../strategy-goals-types.ts';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { CaseArtifactView, CaseContextSelection, CaseDetail, CaseList, CaseRecord, CaseStatus, CaseStorageStatus, OperationReceipt } from '../case-types.ts';
 import type { ClientProject, ClientTask, PublicModelConfiguration } from './project-types.ts';

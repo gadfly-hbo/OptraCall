@@ -1,5 +1,5 @@
 import { CaseGoalPicker } from './CaseGoalPicker.tsx';
-import type { CaseGoalBindingInput, GoalRef } from './case-client.ts';
+import type { CaseGoalBindingInput } from './case-client.ts';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
 import type { ArtifactInput, CaseArtifactView, CaseRecord, CaseStatus, ProjectWorkInput, ProjectWorkRecord, ProjectWorkStatus, WorkEvent } from '../case-types.ts';

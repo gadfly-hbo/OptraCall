@@ -15,10 +15,6 @@ export const latestBatch = (batches: VerificationBatch[], candidate: Pick<Candid
 export const passedBatchFor = (batches: VerificationBatch[], candidate: CandidateVersion) => candidate.lock ? batches.find(batch => batch.candidateId === candidate.candidateId && batch.no === candidate.no && batch.state === 'passed' && batch.contentSha256 === candidate.lock!.fingerprint && batch.lockOperationId === candidate.lock!.operationId && batch.gates.every(gate => gate.status === 'completed' && gate.verdict === 'pass')) : undefined;
 export const publicationFor = (publications: InitiativePublication[], candidate: Pick<CandidateVersion, 'candidateId' | 'no'>) => publications.filter(item => item.candidateId === candidate.candidateId && item.no === candidate.no).at(-1);
 
-export function reportBadge(version: KickoffReportVersion, anchor?: { reportNo: number }): { label: string; tone: BadgeTone } {
-  if (anchor?.reportNo === version.no) return { label: '已应用为方案输入', tone: 'positive' };
-  return version.lock ? { label: '已锁定', tone: 'accent' } : { label: '草稿', tone: 'neutral' };
-}
 export function candidateStatus(candidate: CandidateVersion, options: { busy?: boolean; batch?: VerificationBatch; publication?: InitiativePublication } = {}): { label: string; tone: BadgeTone } {
   const { busy, batch, publication } = options;
   if (publication?.state === 'active') return { label: '当前发布', tone: 'positive' };

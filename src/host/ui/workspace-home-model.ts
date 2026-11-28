@@ -21,15 +21,6 @@ export type HomeCaseAccessState = 'loading' | 'ready' | 'empty' | 'forbidden' | 
 
 export type HomeActionReadState = 'ready' | 'loading' | 'forbidden' | 'unavailable' | 'partial-forbidden' | 'partial-unavailable';
 
-export const actionReadNotice: Record<HomeActionReadState, string> = {
-  ready: '',
-  loading: '正在读取看板行动。',
-  forbidden: '看板行动暂无读取权限。',
-  unavailable: '看板行动暂不可读。',
-  'partial-forbidden': '部分 Case 的行动关联无读取权限。',
-  'partial-unavailable': '部分 Case 的行动关联暂不可读。',
-};
-
 export type HomeFoundationId = 'strategy' | 'goals' | 'semantic' | 'analysis';
 
 export interface HomeFoundationSnapshot {
