@@ -27,7 +27,7 @@
 - [x] P-read 冻结 Demo 浏览器阅读 + DOM/CSS 骨架 + 生产映射 + Issue 回执
 - [x] D01 最小接口/持久迁移与回退设计 → [design.md](design.md)；后端接缝实测 [seam-report](evidence/implementation/seam-report.md)
 - [~] E01 内部/外派选择与授权、身份/持久记录；内部/取消零外部动作 —— S1 切片完成（store＋grant＋internal/external choice＋owner-bound port）；Host 接线（server.ts/工作方式卡）待后续切片
-- [ ] E02 GitHub 独立发布/修订/回执 + 通用认证领取、原子单 claim/UNKNOWN 幂等
+- [~] E02 GitHub 独立发布/修订/回执 + 通用认证领取、原子单 claim/UNKNOWN 幂等 —— S2 切片完成（Host-only 发布编排＋UNKNOWN 只读核对＋只读收件适配＋manager Host-only 派发接缝）；原子单 claim 在 S1 store 已完成本轮复用；发布/收件的真实 GitHub 出站与 server.ts 接线属 E07/后续切片
 - [ ] E03 受保护资产/工作 MCP、OAuth/精确交集/只读/错误与分片边界
 - [ ] E04 字节保全/ExternalDeliveryRef、原 owner 指纹/providedContext/非用户原话、busy/重启/暂停/取消/迟到、Agent 核验/原工具保存
 - [ ] E05 WorkBuddy 可选适配工程合同（默认未验证禁用）
@@ -64,7 +64,32 @@
 - S1 未验证（明确不在本轮范围）：真实 GitHub/WorkBuddy 出站动作（E02/E05）、远端 MCP 与真实资产资格接线（E03，`qualifyAssets` 本轮为合成回调）、交付字节保全与续接/停止/取消外部请求（E04）、UI（E06）、真实公网部署（E08）。store 层未做跨进程文件锁的破坏性压测（沿用与 ServiceConnectionStore 相同的 inode 校验模式，其既有覆盖不重复）。
 - 兼容回退：ledger 为新增可选业务记录；旧项目/会话/native/草稿不迁移不改写；缺 `external-work/` 目录按空台账读取（AB15 legacy 读取已测）；损坏台账拒绝服务不静默重建；新增记录含 UNKNOWN/撤销事实，回退不重放外部动作。
 
+### S2（E02，2026-11-28）：Host-only GitHub 发布 + UNKNOWN 只读核对 + 只读收件适配
+
+**本轮交付**（自包含，不接 server.ts/UI；真实 GitHub 出站、grant→binding 的 Host 装配与续接属 E07/后续切片）：
+
+- `src/host/external-publish.ts`：发布编排 `ExternalPublisher`。`publish(workId, revision, action, body)`：先持久预留 (workId, revision, action) 唯一 `PublicationAttempt`（确切出站正文 sha256）；同身份重复请求（同进程新 turn/重启后新 publisher）回原 attempt 不重派；异正文同身份为 `external_publication_conflict`。已预约身份先短路再走锚点守卫：每 work 仅一张 Issue（已有 succeeded create 时再 create 为 `external_issue_already_created`）；comment 必须有 succeeded create 锚点（缺失 `external_publication_anchor_missing`，不产生死行）；修订（revision 2）经 `add_issue_comment` 在同一 Issue 追加，原说明与旧交付不动。prepared→submitted 先于出站调用；transport 结构化 rejected（提交前已核实拒绝）/unknown/抛错均如实落账；succeeded 无准确 repositoryId 降级 unknown。`reconcile(operationId, author)` 仅经注入只读 probe 核对准确仓库/作者/正文版本：唯一准确匹配才关联（succeeded 带 issueId / 显式 rejected 收据），多匹配抛 `external_publication_conflict`，查不到保持 unknown；terminal/prepared attempt 不查不写，全程零出站调用。
+- `src/host/service-connection-manager.ts`：最小新增 Host-only 派发入口 `dispatchHostOperation(binding, request)`（前台 `port()`/`#call` 逐字节未动）。service 日志身份 `hostPublicationOperationId(workId, revision, action)` 由 work-revision 派生（非前台 toolCall），requestId/toolCallId 均为显式 `host:` 前缀的派生值，不伪造 sessionId/toolCallId 借用前台 port；复用 prepared→submitted→unknown 日志、`RemoteServiceBackend.invoke`（内含 `enforceGithubRepository` 纵深防御）与既有序列化。入口前置拒绝（不改服务/非 GitHub 动作/越仓库/bodyHash≠sha256(body)/缺 title/issueNumber/凭据材料出站扫描 `service_outbound_secret_rejected`/host context 失效 fail-closed）一律不落日志不发起调用；同一身份并发至多一次 invoke（落败方回 unknown-in-flight，不二次调用不误标对方）；提交后丢回执→unknown（已知未提交效果 `ServiceRemoteError.unknownOutcome===false`→rejected），不盲重发。hostContext（signal/assertCurrent/registerCleanup）由 Host 为外派操作构造。对 store 锁获取类瞬态错误（`unsafe_service_storage`/`service_store_busy`，见范围外发现）在本入口内做有界重试（3 次、递增短延迟），完整性类错误原样失败。
+- `src/host/external-inbox.ts`：Host-only 只读收件适配 `ExternalInbox`。仅读构造时注入的获准订阅（仓库/Issue 精确身份）；轮询默认 60s（可注入 pollIntervalMs/schedule/时钟），成功尊重供应商 Retry-After、失败指数有界退避；事件逐条经 store `recordInboxEvent` 持久化去重，整窗保存后才推进游标（保存失败游标原地、原窗口重读）；`stop()` 后拒绝再拉、`revoke()` 精确失权单一订阅；重启由新实例按 Host 重建的已授权精确订阅恢复读取，靠台账去重而非重放；transport 类型只读，无前台 tool context、无外部写重放、无模型循环（续接判定属 E04）。
+- `src/host/external-dispatch.ts`：增 owner-bound `publish(projectId, taskId, input)` 衔接——须注入 Host 构造的 `ExternalPublisher`（未注入 `external_publisher_unconfigured`），校验 work 归属与 profile 门禁后委托；`ExternalWorkStore` 本轮零改动（修订晋升的宿主流程属后续切片，测试经公开 `mutate` CAS 安排 revision 2 数据）。
+
+**TDD 证据（先真实 RED 后最小 GREEN）**：
+
+- RED（桩阶段，行为缺失导致哨兵错误，非导入/环境错误）：`evidence/implementation/red/s2-combined-red.log`（exit=1，27 测试 26 失败，全部 `external_publish_unimplemented`/`external_inbox_unimplemented`/`service_host_dispatch_unimplemented`；前台回归 1 例按预期已绿，证明桩纯增量）。
+- GREEN：`node --test tests/external-publish.test.ts tests/external-inbox.test.ts tests/service-connection-host-dispatch.test.ts` → 27/27 PASS 连跑 4 次（`green/s2-combined-green.log`）。
+- 共享接缝回归（隔离复跑全过）：`tests/service-connection-manager.test.ts` 29/29（`green/s2-regression-manager-green.log`；首跑一例 28/29 后三次连跑全过，失败现场如实保留于 `green/s2-regression-manager-flake-28of29.log`，为 waitFor 期间 `service_store_corrupt` 读抖动，隔离复跑与本切片新增路径无交集）、`tests/service-connection-host.test.ts` 1/1、`tests/service-connection-oauth.test.ts` 11/11（各自 green 日志）；三文件合并 41/41。另跑 service-connection 家族其余 9 文件＋S1 external 两文件共 145/145 PASS。
+- 检查：`npm run check:agent-sessions` PASS（`green/s2-check-agent-sessions-green.log`）；`npm run build` PASS（`green/s2-build-green.log`）。
+- 全量 `npm test`（最终代码）：见 `green/s2-full-suite.log` 与下方记录；全量运行中途曾因代码迭代（并发测试修正）中止一次，最终证据一律取自定稿代码的复跑（上列各日志）。
+
+**关键负例覆盖（对应交接清单）**：同 work revision 跨 turn/重启重复 publish 仅一次出站调用并回原 attempt，异正文冲突；提交后丢回执→unknown 不盲重发，reconcile 唯一匹配才核定、错作者不计、多匹配冲突、零匹配保持 unknown、terminal/prepared 不查不写；修订 r2 同 Issue 追加且原说明/旧交付/标题不动、无锚点 comment 拒绝且零死行、已建 Issue 再 create 拒绝；出站 bodyHash 固定且逐字交付；取消外派零出站；收件重复事件去重、保存失败游标不推进原窗重读、stop 后拒绝再拉、revoke 单订阅持久失权、重启恢复精确订阅且只读不重放（claims/publications/deliveries 逐项不变）、默认 60s/Retry-After/失败退避逐项可注入验证；Host-only 入口无前台 sessionId/toolCallId（`host:` 派生值且前台/宿主身份公式互异）、越仓库/换绑/断连/伪造 hash/夹带凭据/stale context 全部拒绝且零日志行零调用，前台 port 读/写与 requestId+toolCallId 派生身份回归不变。
+
+**失败/跳过/未验证项**：
+
+- S2 未验证（明确不在本轮范围）：真实 GitHub 出站（E07 模拟供应商/实号）、grant→binding 的 server.ts Host 装配（后续切片）、外派续接（E04）、WorkBuddy 触发（E05）、UI（E06）；`ExternalPublisher` 的 hostContext 注入与 reconcile probe 为接缝，真实账户身份核对在装配时生效。修订晋升（supplement→revision+1）的宿主入口未在本切片交付。
+- 兼容回退：`ExternalWorkStore`/既有前台 port 行为零改动；新增记录沿用 S1 ledger（含 UNKNOWN/拒绝事实），回退不重放外部动作；inbox 游标为内存态，重启由台账去重兜底，无新增持久结构。
+
 ## 范围外发现（记录并继续原任务）
 
 - `conclusion-review-handoff` CNR-A4 在干净基线 `7decc3b`（未含本变更）即失败（隔离 9/10），判定为既有问题，与 Issue #155 无关。按工程规范第3节范围管理记录于此，不在本单修复；建议另开返工项核实。`service-connection-manager` 一例隔离复跑 29/29，属全量负载抖动。两者均保留原结论，不改写为通过。
+- `ServiceConnectionStore.#locked`（`service-connection-store.ts`）在锁 EEXIST→`#regular(this.lockPath)` 检查窗口未允许锁恰被释放（未传 allowMissing），并发争用时以 `unsafe_service_storage` 瞬态失败——与 S1 已在 `external-work-store.ts` 修复的同一竞态模式。S2 并发派发测试实际复现（60 轮扫描定位，A/B 双方均可能误判 rejected/unknown）。该文件不在本单允许修改路径内，本切片仅在外派派发侧加有界瞬态重试容错，未改 store；前台 `#call` 在高并发下理论上同样可触发。建议另开返工项对齐 S1 的锁窗口语义后再移除派发侧重试。
 

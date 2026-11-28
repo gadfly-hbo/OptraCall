@@ -1,0 +1,35 @@
+✔ the adapter saves and dedupes real events and advances the cursor only after they are persisted (224.681291ms)
+✔ a failed save keeps the cursor in place so the same window is re-read instead of skipped (79.223875ms)
+✔ stopped sync refuses further polls and never pulls again (119.905292ms)
+✔ revoking a subscription stops pulling it while authorized ones continue (145.703125ms)
+✔ restart resumes authorized exact repository/issue reads; saved events dedupe and no writes are replayed (196.65325ms)
+✔ the loop honors the default 60s interval, provider Retry-After, failure backoff and stop (105.9285ms)
+✔ the adapter reads exactly the authorized subscriptions it was constructed with (136.282833ms)
+✔ AB04: the same work revision across turns and restarts publishes exactly once and returns the original attempt (232.390166ms)
+✔ AB04/AB05: a different body under the same publication identity is a conflict, never a second dispatch (193.789167ms)
+✔ AB04: a lost response stays UNKNOWN, is never blindly re-sent, and a unique exact read-only match reconciles it (176.346333ms)
+✔ AB04: multiple exact matches are a conflict and no match stays UNKNOWN; both keep the durable attempt (214.600666ms)
+✔ AB04: reconciliation never touches terminal or unsubmitted attempts and never writes (205.634167ms)
+✔ spec §5: revision 2 appends a versioned comment to the same issue and preserves the original issue and old comments (181.218708ms)
+✔ spec §5: a comment cannot be published without a succeeded issue anchor, and creation is refused once the issue exists (193.649542ms)
+✔ AB05: the outbound body hash is fixed at reservation time and shipped verbatim to the transport (100.650083ms)
+✔ AB02: publishing a cancelled work is refused with zero outbound calls (81.221583ms)
+✔ the publish facade stays owner-bound, requires an injected publisher and honors the profile gate (74.32775ms)
+✔ host-only dispatch journals a stable work-derived operation without any foreground session identity (260.607292ms)
+✔ a repeated host dispatch for the same work revision returns the original operation without a second call (171.672125ms)
+✔ host dispatch refuses other services, unsupported actions, outside repositories and forged hashes before journaling (73.12375ms)
+✔ a lost response stays UNKNOWN in the service journal and is never blindly re-invoked (175.570833ms)
+✔ a known pre-effect rejection after the submit mark settles as rejected and is never re-invoked (158.143083ms)
+✔ a disconnected or changed account refuses host dispatch (73.49875ms)
+✔ outbound bodies carrying credential material are refused before journaling or dispatch (52.380667ms)
+✔ the host context gate fails closed: a stale assertCurrent or aborted signal refuses the dispatch (55.963375ms)
+✔ the host context receives the dispatch cleanup, and concurrent dispatches of one identity invoke exactly once (133.578834ms)
+✔ foreground port behavior is unchanged: reads work and the write operation identity still derives from requestId/toolCallId (108.8525ms)
+ℹ tests 27
+ℹ suites 0
+ℹ pass 27
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2238.681292

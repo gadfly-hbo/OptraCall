@@ -1,0 +1,362 @@
+✖ the adapter saves and dedupes real events and advances the cursor only after they are persisted (175.192583ms)
+✖ a failed save keeps the cursor in place so the same window is re-read instead of skipped (111.116417ms)
+✖ stopped sync refuses further polls and never pulls again (130.167333ms)
+✖ revoking a subscription stops pulling it while authorized ones continue (130.462042ms)
+✖ restart resumes authorized exact repository/issue reads; saved events dedupe and no writes are replayed (143.417333ms)
+✖ the loop honors the default 60s interval, provider Retry-After, failure backoff and stop (104.263625ms)
+✖ the adapter reads exactly the authorized subscriptions it was constructed with (82.947916ms)
+✖ AB04: the same work revision across turns and restarts publishes exactly once and returns the original attempt (164.870166ms)
+✖ AB04/AB05: a different body under the same publication identity is a conflict, never a second dispatch (128.315875ms)
+✖ AB04: a lost response stays UNKNOWN, is never blindly re-sent, and a unique exact read-only match reconciles it (117.886166ms)
+✖ AB04: multiple exact matches are a conflict and no match stays UNKNOWN; both keep the durable attempt (141.778875ms)
+✖ AB04: reconciliation never touches terminal or unsubmitted attempts and never writes (139.69675ms)
+✖ spec §5: revision 2 appends a versioned comment to the same issue and preserves the original issue and old comments (111.316917ms)
+✖ spec §5: a comment cannot be published without a succeeded issue anchor, and creation is refused once the issue exists (95.535ms)
+✖ AB05: the outbound body hash is fixed at reservation time and shipped verbatim to the transport (109.256ms)
+✖ AB02: publishing a cancelled work is refused with zero outbound calls (121.104459ms)
+✖ the publish facade stays owner-bound, requires an injected publisher and honors the profile gate (118.57225ms)
+✖ host-only dispatch journals a stable work-derived operation without any foreground session identity (175.423458ms)
+✖ a repeated host dispatch for the same work revision returns the original operation without a second call (174.085667ms)
+✖ host dispatch refuses other services, unsupported actions, outside repositories and forged hashes before journaling (109.235667ms)
+✖ a lost response stays UNKNOWN in the service journal and is never blindly re-invoked (144.336208ms)
+✖ a known pre-effect rejection after the submit mark settles as rejected and is never re-invoked (104.34575ms)
+✖ a disconnected or changed account refuses host dispatch (220.785ms)
+✖ outbound bodies carrying credential material are refused before journaling or dispatch (80.983292ms)
+✖ the host context gate fails closed: a stale assertCurrent or aborted signal refuses the dispatch (102.256875ms)
+✖ the host context receives the dispatch cleanup, and concurrent dispatches of one identity invoke exactly once (117.055333ms)
+✔ foreground port behavior is unchanged: reads work and the write operation identity still derives from requestId/toolCallId (199.156375ms)
+ℹ tests 27
+ℹ suites 0
+ℹ pass 1
+ℹ fail 26
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2266.408333
+
+✖ failing tests:
+
+test at tests/external-inbox.test.ts:86:1
+✖ the adapter saves and dedupes real events and advances the cursor only after they are persisted (175.192583ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalInbox.pollOnce (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-inbox.ts:35:11)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-inbox.test.ts:91:29)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    code: 'external_inbox_unimplemented',
+    status: 503
+  }
+
+test at tests/external-inbox.test.ts:109:1
+✖ a failed save keeps the cursor in place so the same window is re-read instead of skipped (111.116417ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'external_inbox_unimplemented'
+  - 'external_record_invalid'
+              ^
+  
+      at Object.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-inbox.test.ts:21:10)
+      at expectedException (node:assert:553:17)
+      at expectsError (node:assert:678:21)
+      at strict.rejects (node:assert:744:3)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-inbox.test.ts:114:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'external_inbox_unimplemented',
+    expected: 'external_record_invalid',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-inbox.test.ts:124:1
+✖ stopped sync refuses further polls and never pulls again (130.167333ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalInbox.pollOnce (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-inbox.ts:35:11)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-inbox.test.ts:128:15)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_inbox_unimplemented',
+    status: 503
+  }
+
+test at tests/external-inbox.test.ts:136:1
+✖ revoking a subscription stops pulling it while authorized ones continue (130.462042ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalInbox.pollOnce (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-inbox.ts:35:11)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-inbox.test.ts:140:15)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_inbox_unimplemented',
+    status: 503
+  }
+
+test at tests/external-inbox.test.ts:154:1
+✖ restart resumes authorized exact repository/issue reads; saved events dedupe and no writes are replayed (143.417333ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalInbox.pollOnce (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-inbox.ts:35:11)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-inbox.test.ts:159:15)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_inbox_unimplemented',
+    status: 503
+  }
+
+test at tests/external-inbox.test.ts:180:1
+✖ the loop honors the default 60s interval, provider Retry-After, failure backoff and stop (104.263625ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalInbox.start (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-inbox.ts:26:11)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-inbox.test.ts:190:9)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_inbox_unimplemented',
+    status: 503
+  }
+
+test at tests/external-inbox.test.ts:222:1
+✖ the adapter reads exactly the authorized subscriptions it was constructed with (82.947916ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalInbox.pollOnce (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-inbox.ts:35:11)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-inbox.test.ts:226:15)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_inbox_unimplemented',
+    status: 503
+  }
+
+test at tests/external-publish.test.ts:108:1
+✖ AB04: the same work revision across turns and restarts publishes exactly once and returns the original attempt (164.870166ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalPublisher.publish (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-publish.ts:38:11)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-publish.test.ts:113:35)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    code: 'external_publish_unimplemented',
+    status: 503
+  }
+
+test at tests/external-publish.test.ts:138:1
+✖ AB04/AB05: a different body under the same publication identity is a conflict, never a second dispatch (128.315875ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalPublisher.publish (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-publish.ts:38:11)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-publish.test.ts:142:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_publish_unimplemented',
+    status: 503
+  }
+
+test at tests/external-publish.test.ts:150:1
+✖ AB04: a lost response stays UNKNOWN, is never blindly re-sent, and a unique exact read-only match reconciles it (117.886166ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalPublisher.publish (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-publish.ts:38:11)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-publish.test.ts:156:35)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_publish_unimplemented',
+    status: 503
+  }
+
+test at tests/external-publish.test.ts:182:1
+✖ AB04: multiple exact matches are a conflict and no match stays UNKNOWN; both keep the durable attempt (141.778875ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalPublisher.publish (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-publish.ts:38:11)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-publish.test.ts:187:35)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_publish_unimplemented',
+    status: 503
+  }
+
+test at tests/external-publish.test.ts:207:1
+✖ AB04: reconciliation never touches terminal or unsubmitted attempts and never writes (139.69675ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalPublisher.publish (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-publish.ts:38:11)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-publish.test.ts:211:32)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_publish_unimplemented',
+    status: 503
+  }
+
+test at tests/external-publish.test.ts:227:1
+✖ spec §5: revision 2 appends a versioned comment to the same issue and preserves the original issue and old comments (111.316917ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalPublisher.publish (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-publish.ts:38:11)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-publish.test.ts:232:35)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_publish_unimplemented',
+    status: 503
+  }
+
+test at tests/external-publish.test.ts:256:1
+✖ spec §5: a comment cannot be published without a succeeded issue anchor, and creation is refused once the issue exists (95.535ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'external_publish_unimplemented'
+  - 'external_publication_anchor_missing'
+                   ^
+  
+      at Object.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-publish.test.ts:25:10)
+      at expectedException (node:assert:553:17)
+      at expectsError (node:assert:678:21)
+      at strict.rejects (node:assert:744:3)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-publish.test.ts:261:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'external_publish_unimplemented',
+    expected: 'external_publication_anchor_missing',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-publish.test.ts:282:1
+✖ AB05: the outbound body hash is fixed at reservation time and shipped verbatim to the transport (109.256ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalPublisher.publish (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-publish.ts:38:11)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-publish.test.ts:286:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_publish_unimplemented',
+    status: 503
+  }
+
+test at tests/external-publish.test.ts:294:1
+✖ AB02: publishing a cancelled work is refused with zero outbound calls (121.104459ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'external_publish_unimplemented'
+  - 'external_work_cancelled'
+              ^
+  
+      at Object.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-publish.test.ts:25:10)
+      at expectedException (node:assert:553:17)
+      at expectsError (node:assert:678:21)
+      at strict.rejects (node:assert:744:3)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-publish.test.ts:299:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'external_publish_unimplemented',
+    expected: 'external_work_cancelled',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-publish.test.ts:303:1
+✖ the publish facade stays owner-bound, requires an injected publisher and honors the profile gate (118.57225ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalDispatch.publish (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-dispatch.ts:241:11)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-publish.test.ts:309:30)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_publish_unimplemented',
+    status: 503
+  }
+
+test at tests/service-connection-host-dispatch.test.ts:55:1
+✖ host-only dispatch journals a stable work-derived operation without any foreground session identity (175.423458ms)
+  Error [ServiceConnectionError]: 服务连接请求未能完成。
+      at ServiceConnectionManager.dispatchHostOperation (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/service-connection-manager.ts:395:11)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/service-connection-host-dispatch.test.ts:57:32)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    code: 'service_host_dispatch_unimplemented',
+    status: 503
+  }
+
+test at tests/service-connection-host-dispatch.test.ts:80:1
+✖ a repeated host dispatch for the same work revision returns the original operation without a second call (174.085667ms)
+  Error [ServiceConnectionError]: 服务连接请求未能完成。
+      at ServiceConnectionManager.dispatchHostOperation (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/service-connection-manager.ts:395:11)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/service-connection-host-dispatch.test.ts:82:31)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'service_host_dispatch_unimplemented',
+    status: 503
+  }
+
+test at tests/service-connection-host-dispatch.test.ts:90:1
+✖ host dispatch refuses other services, unsupported actions, outside repositories and forged hashes before journaling (109.235667ms)
+  Error [ServiceConnectionError]: 服务连接请求未能完成。
+      at ServiceConnectionManager.dispatchHostOperation (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/service-connection-manager.ts:395:11)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/service-connection-host-dispatch.test.ts:92:33)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'service_host_dispatch_unimplemented',
+    status: 503
+  }
+
+test at tests/service-connection-host-dispatch.test.ts:107:1
+✖ a lost response stays UNKNOWN in the service journal and is never blindly re-invoked (144.336208ms)
+  Error [ServiceConnectionError]: 服务连接请求未能完成。
+      at ServiceConnectionManager.dispatchHostOperation (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/service-connection-manager.ts:395:11)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/service-connection-host-dispatch.test.ts:110:31)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'service_host_dispatch_unimplemented',
+    status: 503
+  }
+
+test at tests/service-connection-host-dispatch.test.ts:121:1
+✖ a known pre-effect rejection after the submit mark settles as rejected and is never re-invoked (104.34575ms)
+  Error [ServiceConnectionError]: 服务连接请求未能完成。
+      at ServiceConnectionManager.dispatchHostOperation (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/service-connection-manager.ts:395:11)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/service-connection-host-dispatch.test.ts:124:33)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'service_host_dispatch_unimplemented',
+    status: 503
+  }
+
+test at tests/service-connection-host-dispatch.test.ts:136:1
+✖ a disconnected or changed account refuses host dispatch (220.785ms)
+  Error [ServiceConnectionError]: 服务连接请求未能完成。
+      at ServiceConnectionManager.dispatchHostOperation (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/service-connection-manager.ts:395:11)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/service-connection-host-dispatch.test.ts:139:33)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'service_host_dispatch_unimplemented',
+    status: 503
+  }
+
+test at tests/service-connection-host-dispatch.test.ts:146:1
+✖ outbound bodies carrying credential material are refused before journaling or dispatch (80.983292ms)
+  Error [ServiceConnectionError]: 服务连接请求未能完成。
+      at ServiceConnectionManager.dispatchHostOperation (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/service-connection-manager.ts:395:11)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/service-connection-host-dispatch.test.ts:148:32)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'service_host_dispatch_unimplemented',
+    status: 503
+  }
+
+test at tests/service-connection-host-dispatch.test.ts:158:1
+✖ the host context gate fails closed: a stale assertCurrent or aborted signal refuses the dispatch (102.256875ms)
+  Error [ServiceConnectionError]: 服务连接请求未能完成。
+      at ServiceConnectionManager.dispatchHostOperation (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/service-connection-manager.ts:395:11)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/service-connection-host-dispatch.test.ts:160:31)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'service_host_dispatch_unimplemented',
+    status: 503
+  }
+
+test at tests/service-connection-host-dispatch.test.ts:170:1
+✖ the host context receives the dispatch cleanup, and concurrent dispatches of one identity invoke exactly once (117.055333ms)
+  Error [ServiceConnectionError]: 服务连接请求未能完成。
+      at ServiceConnectionManager.dispatchHostOperation (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/service-connection-manager.ts:395:11)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/service-connection-host-dispatch.test.ts:174:32)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'service_host_dispatch_unimplemented',
+    status: 503
+  }

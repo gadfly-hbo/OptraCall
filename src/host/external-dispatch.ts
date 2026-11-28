@@ -8,6 +8,7 @@ import type {
   ExternalWork, ExternalWorkSummaryEntry, InternalChoice, WorkGrant,
 } from './external-work-types.ts';
 import type { ExternalWorkStore } from './external-work-store.ts';
+import type { ExternalPublisher, PublishAction, PublishResult } from './external-publish.ts';
 
 /** Host-supplied profile view; the derived server.ts admission rules stay the single source. */
 export type ExternalTaskProfile = { externalDispatchAllowed: boolean; reason?: string };
@@ -55,18 +56,21 @@ const HOUR_MS = 3_600_000;
  * Owner-bound dispatch facade. The Host constructs it with a narrow store and
  * injected qualification/profile seams; it never exposes the session domain,
  * credentials, arbitrary sessionFiles or workspaces. Authorization records
- * intent and facts only — publishing, triggering and asset access belong to
- * later slices and are not reachable from here.
+ * intent and facts only. GitHub publication is reachable only through an
+ * injected Host-built ExternalPublisher; triggering and asset access belong
+ * to later slices and stay unreachable from here.
  */
 export class ExternalDispatch {
   readonly #store: ExternalWorkStore;
   readonly #profiles: ExternalProfileLookup;
   readonly #qualifyAssets: ExternalAssetQualification;
+  readonly #publisher?: ExternalPublisher;
   readonly #now: () => number;
-  constructor(options: { store: ExternalWorkStore; profiles: ExternalProfileLookup; qualifyAssets: ExternalAssetQualification; now?: () => number }) {
+  constructor(options: { store: ExternalWorkStore; profiles: ExternalProfileLookup; qualifyAssets: ExternalAssetQualification; now?: () => number; publisher?: ExternalPublisher }) {
     this.#store = options.store;
     this.#profiles = options.profiles;
     this.#qualifyAssets = options.qualifyAssets;
+    this.#publisher = options.publisher;
     this.#now = options.now ?? (() => Date.now());
   }
 
@@ -230,5 +234,22 @@ export class ExternalDispatch {
   /** Host-side cancellation. Zero external action; facts and UNKNOWN stay recorded. */
   async cancelWork(workId: string, reason: string): Promise<ExternalWork> {
     return this.#store.cancelWork(externalText(workId, 100), externalText(reason, 500));
+  }
+
+  /**
+   * Owner-bound publish entry: the work must belong to the given owner and the
+   * profile must still allow external dispatch, then orchestration delegates
+   * to the injected Host-built publisher. Without one, zero outbound action
+   * is reachable from here.
+   */
+  async publish(projectId: string, taskId: string, input: { workId: string; revision: number; action: PublishAction; body: string }): Promise<PublishResult> {
+    if (!this.#publisher) throw new ExternalWorkError('external_publisher_unconfigured', 503);
+    const owner = this.#owner(projectId, taskId);
+    const profile = this.#profiles(owner.projectId, owner.taskId);
+    if (!profile || profile.externalDispatchAllowed !== true) throw new ExternalWorkError('external_profile_forbidden', 403);
+    const workId = externalText(input.workId, 100);
+    const work = await this.#store.getWork(workId);
+    if (!work || work.projectId !== owner.projectId || work.taskId !== owner.taskId) throw new ExternalWorkError('external_work_not_found', 404);
+    return this.#publisher.publish({ workId: work.workId, revision: input.revision, action: input.action, body: input.body });
   }
 }

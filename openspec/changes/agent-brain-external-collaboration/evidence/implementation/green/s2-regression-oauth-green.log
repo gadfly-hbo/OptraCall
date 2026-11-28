@@ -1,0 +1,19 @@
+✔ settings OAuth uses real loopback state+PKCE, persists only private native credential, and resolves without a model/task (34.972458ms)
+✔ cancelled/rejected authorization closes callback and preserves existing credentials (3.478792ms)
+✔ native Pi locked refresh rotates once for concurrent token users and a repeated stale 401 (2.848417ms)
+✔ Feishu public MCP OAuth discovers, dynamically registers, validates issuer and persists refresh context (5.689125ms)
+✔ untrusted Feishu discovery cannot send registration, credentials or browser URLs outside preset trust (2.479ms)
+✔ native callback preserves configured localhost and Google Desktop public-client token exchange (4.800708ms)
+✔ native GitHub registered-app flow uses fixed trusted metadata and native PKCE (2.005042ms)
+✔ native issuer validation rejects another authorization server before exchanging Google code (1.160958ms)
+✔ native Feishu RFC9207 rejects missing and mismatched issuers and accepts the discovered issuer (8.450666ms)
+✔ native Feishu protected-resource audience cannot be changed to another service (2.008916ms)
+✔ native exchange cancellation and post-refresh abort cannot persist late credentials (1.910083ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 493.153375

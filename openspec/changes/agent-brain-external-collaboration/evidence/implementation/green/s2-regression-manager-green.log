@@ -1,0 +1,37 @@
+✔ Tencent source-based reply and forward require an explicit task read grant before any adapter access (127.05375ms)
+✔ GG04/05 manager supplies narrowed immutable task grants and no public credentials (29.227417ms)
+✔ GG08 confirmation preview and operation digest hold original exact arguments (62.592459ms)
+✔ GG09 an unknown external write is durable and never replayed for the same original call (66.511958ms)
+✔ GG08/11 cancel or account disconnect during approval prevents dispatch (77.2245ms)
+✔ GG11 late accepted write preserves business receipt without delivering into cancelled context (62.58025ms)
+✔ a fresh call and new binding are blocked while settings verification awaits retirement (34.160125ms)
+✔ the Host port freezes its binding snapshot and cannot be redirected through a retained caller object (25.205417ms)
+✔ all service results receive final known-credential scrubbing before model or native projection (26.821667ms)
+✔ known pre-dispatch errors are rejected while ambiguous network loss stays UNKNOWN (64.775709ms)
+✔ verification retains UNKNOWN cleanup even when the backend throws before returning its result (43.820083ms)
+✔ UNKNOWN is not repeated when the same model request supplies a new tool call ID (64.144667ms)
+✔ an MCP error result after an external effect stays UNKNOWN and suppresses replay (110.194875ms)
+✔ reauthorization stages tokens privately, blocks all new dispatch and cancellation restores the exact old grant (58.059625ms)
+✔ fresh OAuth cancellation returns unverified without persisting an authorizing status (66.906584ms)
+✔ the verified new identity and staged tokens become active in one atomic adoption after the real probe (81.2845ms)
+✔ failed reauthorization preserves the old account while exposing a matching explicit failure outcome (79.936666ms)
+✔ another provider configuration cannot invalidate an unchanged account authorization (107.927166ms)
+✔ a same-policy target credential change still rejects a stale authorization adoption (104.69675ms)
+✔ a late old-token 401 cannot expire a newly authorized account with the same policy revision (83.096709ms)
+✔ target credential CAS prevents a late 401 from another Host from expiring a changed token (73.734292ms)
+✔ late OAuth credential completion cannot overwrite a concurrent explicit configuration change (80.833583ms)
+✔ shutdown aborts every settings probe and attempts every cleanup even after one fails (108.948ms)
+✔ known business success survives failed protocol retirement while its cleanup remains UNKNOWN (128.358584ms)
+✔ the final scrub includes both the original token and a token refreshed during the same call (78.798291ms)
+✔ Tencent confirmation and durable receipt identify the exact sender, recipient and subject without exposing its authorization code (176.492417ms)
+✔ Gmail reply freezes its actual inherited subject and explicit recipients before preview and executes the same send_message (193.755875ms)
+✔ declining or cancelling a Gmail source form cannot prepare, approve or submit its later mail action (183.598292ms)
+✔ a valid Gmail source with failed protocol cleanup cannot advance to mail confirmation or sending (65.903667ms)
+ℹ tests 29
+ℹ suites 0
+ℹ pass 29
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2932.590708

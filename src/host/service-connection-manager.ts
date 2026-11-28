@@ -7,7 +7,7 @@ import { RemoteServiceBackend, ServiceRemoteError } from './service-connection-m
 import { answerServiceForm } from './service-connection-approval.ts';
 import { prepareMailAction } from './service-connection-mail-preview.ts';
 import { callTencent, verifyTencent, type TencentMailConfig } from './service-connection-mail.ts';
-import { ServiceConnectionError, SERVICE_IDS, isServiceId, parseServiceJson, parseServiceConnectionConfig, parseServiceConnectionCredentials, parseServiceScopes, parseServiceRepositories, servicePolicyFingerprint, validateTaskServiceBindings, type JsonValue, type ServiceId, type ServiceScope, type ServiceConnection, type ServiceConnectionCredentials, type ServiceConnectionVerification, type TaskServiceBindings, type TaskServiceBinding, type ServiceOperationAttempt } from './service-connection-types.ts';
+import { ServiceConnectionError, SERVICE_IDS, isServiceId, parseServiceJson, parseServiceConnectionConfig, parseServiceConnectionCredentials, parseServiceScopes, parseServiceRepositories, servicePolicyFingerprint, serviceText, validateTaskServiceBindings, type JsonValue, type ServiceId, type ServiceScope, type ServiceConnection, type ServiceConnectionCredentials, type ServiceConnectionVerification, type TaskServiceBindings, type TaskServiceBinding, type ServiceOperationAttempt } from './service-connection-types.ts';
 
 type RemoteBackend = Pick<RemoteServiceBackend, 'verify' | 'invoke' | 'close'>;
 type Cleanup = (options: { retryFailed?: boolean }) => Promise<void>;
@@ -84,7 +84,72 @@ function operationTarget(binding: TaskServiceBinding, connection: ServiceConnect
   return target;
 }
 
+/**
+ * Stable service-journal identity for one external publication, derived from
+ * the work identity only — never from a foreground tool call — so turns,
+ * tool-call numbering and restarts converge on the same durable operation.
+ */
+export function hostPublicationOperationId(workId: string, revision: number, action: 'issue-create' | 'issue-comment'): string {
+  return createHash('sha256').update(JSON.stringify(['optracall-host-publish-v1', workId, revision, action])).digest('hex');
+}
+/** External issue receipt from a GitHub MCP result; nothing else counts as an issue identity. */
+function githubIssueNumber(value: unknown): number | undefined {
+  const visit = (item: unknown, depth: number): number | undefined => {
+    if (!item || typeof item !== 'object' || Array.isArray(item) || depth > 3) return undefined;
+    const record = item as Record<string, unknown>;
+    if (Number.isSafeInteger(record.number) && Number(record.number) >= 1) return Number(record.number);
+    if (typeof record.html_url === 'string') { const match = /\/issues\/(\d+)$/.exec(record.html_url); if (match) return Number(match[1]); }
+    for (const key of ['structuredContent', 'data', 'result']) { const found = visit(record[key], depth + 1); if (found !== undefined) return found; }
+    if (Array.isArray(record.content)) for (const part of record.content) { const found = visit(part, depth + 1); if (found !== undefined) return found; }
+    return undefined;
+  };
+  return visit(value, 0);
+}
+/**
+ * Transient store-lock contention (lock released inside the EEXIST check
+ * window surfaces as `unsafe_service_storage`, not as a mutation result) is
+ * retried with a bounded backoff; genuine integrity errors keep failing.
+ */
+const TRANSIENT_STORE_CODES = new Set(['unsafe_service_storage', 'service_store_busy']);
+async function withStoreRetry<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    try { return await operation(); }
+    catch (error) {
+      if (attempt < 3 && error instanceof ServiceConnectionError && TRANSIENT_STORE_CODES.has(error.code)) { await new Promise(resolve => setTimeout(resolve, 10 * (attempt + 1))); continue; }
+      throw error;
+    }
+  }
+}
+
 /** Host permission and side-effect boundary. No Agent loop or task lifecycle is created here. */
+export type HostDispatchRequest = {
+  projectId: string;
+  taskId: string;
+  workId: string;
+  revision: number;
+  action: 'issue-create' | 'issue-comment';
+  repositoryId: string;
+  title?: string;
+  issueNumber?: number;
+  body: string;
+  bodyHash: string;
+  /** Built by the Host for the external work; never a borrowed foreground session context. */
+  hostContext?: {
+    signal?: AbortSignal;
+    assertCurrent?(): void;
+    registerCleanup?(cleanup: (options: { retryFailed?: boolean }) => Promise<void>): void;
+  };
+};
+export type HostDispatchResult = {
+  outcome: 'succeeded' | 'rejected' | 'unknown';
+  operationId?: string;
+  operationStatus?: string;
+  repositoryId?: string;
+  issueNumber?: number;
+  resultId?: string;
+  code?: string;
+};
+
 export class ServiceConnectionManager {
   readonly store: ServiceConnectionStore;
   readonly #options: Options;
@@ -361,6 +426,115 @@ export class ServiceConnectionManager {
   port(projectId: string, taskId: string, bindings: TaskServiceBindings): ServiceConnectionsPort {
     const snapshot = validateTaskServiceBindings(structuredClone(bindings));
     return { call: (input, context) => this.#call(projectId, taskId, snapshot, input, context) };
+  }
+  /**
+   * Host-only external publication dispatch (Issue #155 S2). The journal
+   * identity derives from the work/revision/action, never from a foreground
+   * tool call; the caller supplies a Host-built context (assertCurrent /
+   * registerCleanup / signal) and no sessionId/toolCallId exists here. One
+   * identity invokes at most once; a lost response stays UNKNOWN and is never
+   * blindly re-invoked — settlement happens through explicit read-only
+   * reconciliation in the external publisher.
+   */
+  async dispatchHostOperation(binding: TaskServiceBinding, request: HostDispatchRequest): Promise<HostDispatchResult> {
+    const refused = (code: string, extra: Omit<HostDispatchResult, 'outcome' | 'code'> = {}): HostDispatchResult => ({ ...extra, outcome: 'rejected', code });
+    if (!binding || binding.service !== 'github') return refused('invalid_service');
+    const action = request.action;
+    if (action !== 'issue-create' && action !== 'issue-comment') return refused('invalid_service_operation');
+    if (!Number.isSafeInteger(request.revision) || request.revision < 1) return refused('invalid_service_operation');
+    if (typeof request.body !== 'string' || !request.body.length || request.body.length > 200000 || request.body.includes('\u0000')) return refused('invalid_service_operation');
+    if (typeof request.bodyHash !== 'string' || !/^[a-f0-9]{64}$/.test(request.bodyHash)) return refused('invalid_service_operation');
+    if (request.bodyHash !== createHash('sha256').update(request.body).digest('hex')) return refused('service_body_hash_mismatch');
+    let projectId: string, taskId: string, workId: string, repositoryId: string;
+    try {
+      projectId = serviceText(request.projectId, 100); taskId = serviceText(request.taskId, 100);
+      workId = serviceText(request.workId, 100); repositoryId = serviceText(request.repositoryId, 300).toLowerCase();
+    } catch { return refused('invalid_service_operation'); }
+    const owner = repositoryId.split('/')[0]!, repo = repositoryId.split('/')[1] ?? '';
+    const allowed = new Set(binding.repositories?.map(item => item.toLowerCase()) ?? []);
+    if (!/^[a-z0-9][a-z0-9_.-]*\/[a-z0-9_.-]+$/.test(repositoryId) || !allowed.size || !allowed.has(repositoryId)) return refused('service_repository_outside_scope');
+    const operationId = hostPublicationOperationId(workId, request.revision, action);
+    const toolName = action === 'issue-create' ? 'issue_write' : 'add_issue_comment';
+    const tool = binding.tools.find(item => item.name === toolName);
+    if (!tool || !binding.scopes.includes(tool.scope) || !tool.write) return refused('service_permission_missing', { operationId });
+    let title: string | undefined, issueNumber: number | undefined;
+    if (action === 'issue-create') {
+      try { title = serviceText(request.title, 400); } catch { return refused('invalid_service_operation', { operationId }); }
+    } else {
+      if (!Number.isSafeInteger(request.issueNumber) || Number(request.issueNumber) < 1) return refused('invalid_service_operation', { operationId });
+      issueNumber = Number(request.issueNumber);
+    }
+    let args: Record<string, JsonValue>;
+    if (action === 'issue-create') args = { owner, repo, title: title as string, body: request.body };
+    else args = { owner, repo, issueNumber: issueNumber as number, body: request.body };
+    try { validateServiceConnectionToolArguments(tool, args); } catch { return refused('service_connection_invalid_arguments', { operationId }); }
+
+    const epoch = this.#epochs.get('github') ?? 0;
+    const current = () => {
+      request.hostContext?.signal?.throwIfAborted();
+      request.hostContext?.assertCurrent?.();
+      this.#eligible('github');
+      if (epoch !== (this.#epochs.get('github') ?? 0)) throw new ServiceConnectionError('service_binding_changed', 409);
+    };
+    try { current(); } catch { return refused('service_dispatch_context_invalid', { operationId }); }
+
+    let credentials: ServiceConnectionCredentials;
+    try { credentials = this.#remember('github', (await this.store.privateConnectionSnapshot('github')).credentials); }
+    catch (error) {
+      if (error instanceof ServiceConnectionError) return refused(error.code, { operationId });
+      throw error;
+    }
+    // Exact outbound content is screened against every known credential value.
+    const secrets = [...this.#secrets.get('github') ?? []];
+    if (secrets.some(secret => secret && request.body.includes(secret)) || secrets.some(secret => secret && title !== undefined && title.includes(secret))) {
+      return refused('service_outbound_secret_rejected', { operationId });
+    }
+
+    const requestId = `host:${workId}:${request.revision}:${action}`;
+    const toolCallId = `host:${operationId.slice(0, 32)}`;
+    let connection: ServiceConnection, target: Record<string, JsonValue>;
+    try {
+      const check = await this.store.validateBinding(binding);
+      if (!check.available) return refused('service_binding_changed', { operationId });
+      connection = { ...check.connection, scopes: [...binding.scopes], tools: structuredClone([...binding.tools]), ...(binding.repositories ? { repositories: [...binding.repositories] } : {}) };
+      target = operationTarget(binding, connection, args);
+      const operation = await withStoreRetry(() => this.store.prepareOperation({ operationId, projectId, taskId, requestId, toolCallId, binding, toolName, target, arguments: args, requiresConfirmation: false }));
+      // A journal attempt that already left `prepared` was submitted before: never invoke again.
+      if (operation.status !== 'prepared') {
+        const outcome: 'succeeded' | 'rejected' | 'unknown' = operation.status === 'succeeded' ? 'succeeded' : operation.status === 'rejected' ? 'rejected' : 'unknown';
+        return { outcome, operationId, operationStatus: operation.status, repositoryId, ...(outcome !== 'succeeded' && outcome !== 'rejected' ? { code: 'service_dispatch_already_recorded' } : {}) };
+      }
+      await withStoreRetry(() => this.store.transitionOperation(operationId, 'submitted', { expectedStatus: 'prepared' }));
+    } catch (error) {
+      if (error instanceof ServiceConnectionError) {
+        const existing = await this.store.getOperation(operationId).catch(() => undefined);
+        if (existing && existing.status !== 'prepared') return { outcome: 'unknown' as const, operationId, operationStatus: existing.status, repositoryId, code: 'service_dispatch_in_flight' };
+        return refused(error.code, { operationId });
+      }
+      throw error;
+    }
+
+    const resources = verificationResource();
+    request.hostContext?.registerCleanup?.(resources.cleanup);
+    try {
+      const value = await this.#backend!.invoke({ connection, credentials, toolName, arguments: args, signal: request.hostContext?.signal, registerCleanup: resources.registerCleanup, isCurrent: () => { try { current(); return true; } catch { return false; } } });
+      this.#remember('github', credentials);
+      this.#remember('github', await this.store.getCredentials('github'));
+      const status = outcome(value);
+      const resultId = status === 'succeeded' ? this.#externalResultId('github', value) : undefined;
+      const issue = status === 'succeeded' ? githubIssueNumber(value) : undefined;
+      const attempt = await withStoreRetry(() => this.store.transitionOperation(operationId, status, { expectedStatus: 'submitted', ...(resultId ? { resultId } : {}) }));
+      return { outcome: status, operationId, operationStatus: attempt.status, repositoryId, ...(issue !== undefined ? { issueNumber: issue } : {}), ...(resultId ? { resultId } : {}) };
+    } catch (error) {
+      const knownNotSubmitted = error instanceof ServiceRemoteError && error.unknownOutcome === false;
+      const stored = await this.store.getOperation(operationId).catch(() => undefined);
+      if (stored && (stored.status === 'submitted' || stored.status === 'confirmed')) {
+        const attempt = await withStoreRetry(() => this.store.transitionOperation(operationId, knownNotSubmitted ? 'rejected' : 'unknown', { expectedStatus: stored.status })).catch(() => undefined);
+        return { outcome: knownNotSubmitted ? 'rejected' : 'unknown', operationId, operationStatus: attempt?.status ?? stored.status, repositoryId, code: knownNotSubmitted ? (error as ServiceConnectionError).code : 'service_request_failed' };
+      }
+      if (error instanceof ServiceConnectionError) return refused(error.code, { operationId });
+      throw error;
+    }
   }
   async #call(projectId: string, taskId: string, bindings: TaskServiceBindings, input: Parameters<ServiceConnectionsPort['call']>[0], context: ServiceConnectionCallContext): Promise<ServiceConnectionToolResult> {
     if (!input || !isServiceId(input.service)) throw new ServiceConnectionError('invalid_service');
