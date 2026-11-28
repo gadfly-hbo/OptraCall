@@ -1,0 +1,16 @@
+# npm audit report
+
+minimatch  7.0.0 - 11.0.0
+Severity: moderate
+minimatch has potential denial of service via globparts amplification - https://github.com/advisories/GHSA-g3hv-75wg-m249
+fix available via `npm audit fix --force`
+Will install @earendil-works/pi-coding-agent@1.7.0, which is outside the stated dependency range
+node_modules/minimatch
+  @earendil-works/pi-coding-agent  <=1.4.0
+  Depends on vulnerable versions of minimatch
+  node_modules/@earendil-works/pi-coding-agent
+
+2 moderate severity vulnerabilities
+
+To address all issues, run:
+  npm audit fix --force

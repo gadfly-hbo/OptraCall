@@ -105,38 +105,96 @@ export async function downloadFile(id: string, file: FileNode, expectedSha256?: 
   }
   const url = URL.createObjectURL(await response.blob()); const anchor = document.createElement('a'); anchor.href = url; anchor.download = file.name; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-export type TaskWatchOptions = { idleTimeoutMs?: number; statusOnly?: boolean };
+export type TaskWatchOptions = { idleTimeoutMs?: number; firstFrameTimeoutMs?: number; statusOnly?: boolean };
+export type TaskObservationFailure = { code: string; category: string; message: string };
+const SAFE_STREAM_CATEGORIES: Readonly<Record<string, string>> = {
+  configuration: '模型配置待核',
+  snapshot_read: '首帧记录读取失败',
+  first_frame_timeout: '等待任务首帧超时',
+  http: '连接状态异常',
+  parse: '事件解析失败',
+  eof: '连接提前断开',
+  stream_init: '初始化未就绪',
+  request: '请求状态未就绪',
+};
+function safeDiagnosticMessage(code: string, category: string, fallback: string): string {
+  if (category === 'configuration') return '任务连接的模型配置暂不可用或已变化，请检查模型设置后重新连接。';
+  if (category === 'snapshot_read') return '任务首帧历史或原生记录读取未完成，请核对原任务记录后重新连接。';
+  if (category === 'first_frame_timeout') return '等待任务首帧状态超时（未收到有效快照），请核对配置或显式重新连接。';
+  if (category === 'parse') return '任务事件流格式异常，请显式重新连接。';
+  if (category === 'request') return '任务连接请求未就绪，请核对当前任务状态后重新连接。';
+  if (code === 'sse_eof_before_snapshot') return '任务事件连接在收到首帧前已断开；恢复连接只读取状态，不会重复发送消息。';
+  return fallback;
+}
 export async function watchTask(projectId: string, taskId: string, onEvent: (event: ProjectEvent) => void, signal: AbortSignal, options: TaskWatchOptions = {}): Promise<void> {
   if (signal.aborted) return;
   const observation = new AbortController(), observationSignal = AbortSignal.any([signal, observation.signal]);
-  let timer: ReturnType<typeof setTimeout> | undefined, reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined, firstFrameTimer: ReturnType<typeof setTimeout> | undefined;
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined, firstSnapshotSeen = false, timedOutReason: TaskObservationFailure | undefined;
   const clearWatchdog = () => { if (timer !== undefined) clearTimeout(timer); timer = undefined; };
+  const clearFirstFrame = () => { if (firstFrameTimer !== undefined) clearTimeout(firstFrameTimer); firstFrameTimer = undefined; };
   const touch = () => { clearWatchdog(); timer = setTimeout(() => observation.abort(), options.idleTimeoutMs ?? 45000); };
-  signal.addEventListener('abort', clearWatchdog, { once: true }); touch();
+  const firstFrameLimit = options.firstFrameTimeoutMs ?? 15000;
+  if (firstFrameLimit > 0) {
+    firstFrameTimer = setTimeout(() => {
+      if (!firstSnapshotSeen) {
+        timedOutReason = { code: 'sse_first_frame_timeout', category: 'first_frame_timeout', message: '等待任务首帧状态超时（仅收到心跳或空流），请核对配置或显式重新连接。' };
+        observation.abort();
+      }
+    }, firstFrameLimit);
+  }
+  const cleanupTimers = () => { clearWatchdog(); clearFirstFrame(); };
+  signal.addEventListener('abort', cleanupTimers, { once: true }); touch();
   try {
     const response = await fetch(`/api/${taskPath(projectId, taskId)}/events${options.statusOnly ? '?view=status' : ''}`, { credentials: 'same-origin', cache: 'no-store', headers: { 'x-optracall-client': '1' }, signal: observationSignal });
-    if (!response.ok || !response.body) throw new HostRequestError('任务事件连接未建立，请重新连接。');
+    if (!response.ok || !response.body) {
+      const status = response.status;
+      throw new HostRequestError(status ? `任务事件连接未建立（HTTP ${status}），请核对配置后重新连接。` : '任务事件连接未建立，请重新连接。', {}, status ? 'sse_http_error' : 'sse_no_body', undefined, undefined, status || undefined);
+    }
     reader = response.body.getReader(); const decoder = new TextDecoder(); let pending = '';
     while (!signal.aborted) {
       const item = await reader.read(); if (item.done) break;
-      touch(); // Any received bytes, including comment heartbeats, keep observation alive.
+      touch(); // Any received bytes, including comment heartbeats, keep idle watchdog alive, not first-frame deadline.
       pending += decoder.decode(item.value, { stream: true }); pending = pending.replace(/\r\n/g, '\n');
       let boundary;
       while ((boundary = pending.indexOf('\n\n')) >= 0) {
         const block = pending.slice(0, boundary); pending = pending.slice(boundary + 2);
         const data = block.split('\n').filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
         if (data && !signal.aborted) {
-          const event = JSON.parse(data) as ProjectEvent;
-          if ((!event.projectId || event.projectId === projectId) && (!event.taskId || event.taskId === taskId)) onEvent(event);
+          let parsed: unknown;
+          try { parsed = JSON.parse(data); } catch {
+            throw new HostRequestError('任务事件流数据解析失败，请显式重新连接。', {}, 'sse_parse_error');
+          }
+          const raw = parsed as ProjectEvent | { type: 'stream.error'; code?: unknown; category?: unknown; message?: unknown; projectId?: string; taskId?: string };
+          if (raw.type === 'stream.error') {
+            if ((!raw.projectId || raw.projectId === projectId) && (!raw.taskId || raw.taskId === taskId)) {
+              const code = typeof raw.code === 'string' && /^[a-z0-9_]{1,80}$/.test(raw.code) ? raw.code : 'sse_stream_error';
+              const category = typeof raw.category === 'string' && Object.hasOwn(SAFE_STREAM_CATEGORIES, raw.category) ? raw.category : 'stream_init';
+              throw new HostRequestError(safeDiagnosticMessage(code, category, '任务连接未就绪，请检查模型配置或重新连接。'), { category }, code);
+            }
+            continue;
+          }
+          const event = raw as ProjectEvent;
+          if ((!event.projectId || event.projectId === projectId) && (!event.taskId || event.taskId === taskId)) {
+            if (event.type === 'snapshot' && !firstSnapshotSeen) { firstSnapshotSeen = true; clearFirstFrame(); }
+            onEvent(event);
+          }
         }
       }
     }
-    if (!signal.aborted) throw new HostRequestError('任务事件连接已断开；恢复连接只读取状态，不会重复发送消息。');
-  } catch (error) { if (!signal.aborted) throw error; }
-  finally { clearWatchdog(); signal.removeEventListener('abort', clearWatchdog); observation.abort(); await reader?.cancel().catch(() => {}); }
+    if (!signal.aborted) {
+      if (timedOutReason) throw new HostRequestError(timedOutReason.message, { category: timedOutReason.category }, timedOutReason.code);
+      throw new HostRequestError(firstSnapshotSeen ? '任务事件连接已断开；恢复连接只读取状态，不会重复发送消息。' : '任务事件连接在收到首帧前已断开；恢复连接只读取状态，不会重复发送消息。', {}, firstSnapshotSeen ? 'sse_eof' : 'sse_eof_before_snapshot');
+    }
+  } catch (error) {
+    if (!signal.aborted) {
+      if (timedOutReason) throw new HostRequestError(timedOutReason.message, { category: timedOutReason.category }, timedOutReason.code);
+      throw error;
+    }
+  } finally { cleanupTimers(); signal.removeEventListener('abort', cleanupTimers); observation.abort(); await reader?.cancel().catch(() => {}); }
 }
 
-export type TaskObservationState = { state: 'connecting' | 'connected' | 'recovering' | 'disconnected'; message?: string; requestId?: string };
+export type TaskObservationState = { state: 'connecting' | 'connected' | 'recovering' | 'disconnected'; message?: string; requestId?: string; code?: string; category?: string };
 export type TaskObservationOptions = TaskWatchOptions & {
   onConnection?: (value: TaskObservationState) => void;
   onReadback?: (value: TaskState, requestId?: string) => void;
@@ -149,6 +207,13 @@ function waitForObservation(ms: number, signal: AbortSignal): Promise<void> {
     const finish = () => { clearTimeout(timer); signal.removeEventListener('abort', finish); resolve(); };
     const timer = setTimeout(finish, ms); signal.addEventListener('abort', finish, { once: true });
   });
+}
+function classifyObservationFailure(error: unknown): TaskObservationFailure {
+  if (error instanceof HostRequestError) {
+    const category = error.fields?.category ?? (error.code === 'sse_http_error' ? 'http' : error.code === 'sse_parse_error' ? 'parse' : error.code === 'sse_first_frame_timeout' ? 'first_frame_timeout' : error.code.startsWith('sse_eof') ? 'eof' : 'stream_init');
+    return { code: error.code, category, message: error.message };
+  }
+  return { code: 'sse_disconnected', category: 'eof', message: '观察连接已断开' };
 }
 function checkedReadback(value: TaskState, projectId: string, taskId: string, expectedRequestId?: string): { requestId?: string; message: string } {
   if (value.project.id !== projectId || value.task.id !== taskId) throw new HostRequestError('无法确认原任务状态：返回的任务归属不一致。');
@@ -167,7 +232,7 @@ export async function observeTask(projectId: string, taskId: string, onEvent: (e
   let observedRequestId: string | undefined;
   const report = (value: TaskObservationState) => { if (!signal.aborted) options.onConnection?.(value); };
   for (let attempt = 0; attempt <= observationBackoff.length && !signal.aborted; attempt++) {
-    let connected = false;
+    let connected = false, streamFailure: TaskObservationFailure | undefined;
     report({ state: attempt ? 'recovering' : 'connecting', message: attempt ? '正在恢复任务观察连接；不会重发消息。' : undefined });
     try {
       await watchTask(projectId, taskId, event => {
@@ -178,8 +243,18 @@ export async function observeTask(projectId: string, taskId: string, onEvent: (e
         onEvent(event);
       }, signal, options);
       if (signal.aborted) return;
-    } catch { if (signal.aborted) return; }
-    report({ state: 'recovering', message: '观察连接已断开，正在只读核对任务状态；不会重发消息。' });
+    } catch (error) {
+      if (signal.aborted) return;
+      streamFailure = classifyObservationFailure(error);
+    }
+    const reasonTag = streamFailure && streamFailure.category !== 'eof'
+      ? `（${SAFE_STREAM_CATEGORIES[streamFailure.category] ?? '连接未就绪'}）`
+      : '';
+    report({
+      state: 'recovering',
+      ...(streamFailure ? { code: streamFailure.code, category: streamFailure.category } : {}),
+      message: `${streamFailure?.category === 'first_frame_timeout' ? '等待任务首帧状态超时，' : '观察连接已断开，'}正在只读核对任务状态${reasonTag}；不会重发消息。`,
+    });
     let message = '任务状态仍未知；不会重发消息。', requestId = options.expectedRequestId?.() ?? observedRequestId;
     if (!options.statusOnly) try {
       const value = await readTask(projectId, taskId, AbortSignal.any([signal, AbortSignal.timeout(10000)]));
@@ -194,8 +269,12 @@ export async function observeTask(projectId: string, taskId: string, onEvent: (e
       if (error instanceof HostRequestError && error.message.startsWith('无法确认')) message = error.message;
     }
     if (signal.aborted) return;
-    if (attempt === observationBackoff.length) { report({ state: 'disconnected', requestId, message: `${message} 实时观察暂未恢复，请显式重新连接。` }); return; }
-    report({ state: 'recovering', requestId, message: `${message} 正在恢复实时观察。` });
+    const diagSuffix = streamFailure ? `（${SAFE_STREAM_CATEGORIES[streamFailure.category] ?? streamFailure.message}）` : '';
+    if (attempt === observationBackoff.length) {
+      report({ state: 'disconnected', requestId, ...(streamFailure ? { code: streamFailure.code, category: streamFailure.category } : {}), message: `${message}${diagSuffix} 实时观察暂未恢复，请显式重新连接。` });
+      return;
+    }
+    report({ state: 'recovering', requestId, ...(streamFailure ? { code: streamFailure.code, category: streamFailure.category } : {}), message: `${message}${diagSuffix} 正在恢复实时观察。` });
     await waitForObservation(observationBackoff[attempt]!, signal);
   }
 }

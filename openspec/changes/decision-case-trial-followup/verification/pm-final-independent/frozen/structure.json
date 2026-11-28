@@ -1,0 +1,286 @@
+{
+  "source": "/workspace/OptraCall-issue154-second-review/openspec/changes/decision-case-daily-workspace/demo.html",
+  "base": "http://127.0.0.1:34059",
+  "states": [
+    {
+      "name": "home-1440",
+      "url": "http://127.0.0.1:34059/",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "structure": {
+        "main": [
+          {
+            "tag": "H1",
+            "text": "改善华东会员复购",
+            "rect": "{\"x\":0,\"y\":0,\"width\":0,\"height\":0,\"top\":0,\"right\":0,\"bottom\":0,\"left\":0}"
+          },
+          {
+            "tag": "H1",
+            "text": "今天，先推进一件重要的事",
+            "rect": "{\"x\":218,\"y\":157.78125,\"width\":316.8125,\"height\":37.796875,\"top\":157.78125,\"right\":534.8125,\"bottom\":195.578125,\"left\":218}"
+          },
+          {
+            "tag": "H2",
+            "text": "有什么想推进的？",
+            "rect": "{\"x\":287,\"y\":245.53125,\"width\":140.8125,\"height\":26.09375,\"top\":245.53125,\"right\":427.8125,\"bottom\":271.625,\"left\":287}"
+          },
+          {
+            "tag": "H2",
+            "text": "待处理事项 2",
+            "rect": "{\"x\":218,\"y\":501.265625,\"width\":109.5625,\"height\":24.640625,\"top\":501.265625,\"right\":327.5625,\"bottom\":525.90625,\"left\":218}"
+          },
+          {
+            "tag": "H2",
+            "text": "继续工作",
+            "rect": "{\"x\":218,\"y\":855.125,\"width\":66.40625,\"height\":24.640625,\"top\":855.125,\"right\":284.40625,\"bottom\":879.765625,\"left\":218}"
+          },
+          {
+            "tag": "H2",
+            "text": "进展关注",
+            "rect": "{\"x\":957.765625,\"y\":501.265625,\"width\":66.40625,\"height\":24.640625,\"top\":501.265625,\"right\":1024.171875,\"bottom\":525.90625,\"left\":957.765625}"
+          },
+          {
+            "tag": "H2",
+            "text": "基础建设提醒",
+            "rect": "{\"x\":957.765625,\"y\":758.359375,\"width\":99.609375,\"height\":24.640625,\"top\":758.359375,\"right\":1057.375,\"bottom\":783,\"left\":957.765625}"
+          }
+        ],
+        "panels": [
+          {
+            "class": "sidebar",
+            "rect": "{\"x\":0,\"y\":0,\"width\":180,\"height\":900,\"top\":0,\"right\":180,\"bottom\":900,\"left\":0}",
+            "display": "flex",
+            "font": "14px",
+            "color": "rgb(166, 160, 180)",
+            "gap": "normal"
+          },
+          {
+            "class": "main-shell",
+            "rect": "{\"x\":180,\"y\":0,\"width\":1260,\"height\":900,\"top\":0,\"right\":1440,\"bottom\":900,\"left\":180}",
+            "display": "flex",
+            "font": "16px",
+            "color": "rgb(42, 39, 55)",
+            "gap": "normal"
+          },
+          {
+            "class": "workspace-nav",
+            "rect": "{\"x\":180,\"y\":58,\"width\":1260,\"height\":46.1875,\"top\":58,\"right\":1440,\"bottom\":104.1875,\"left\":180}",
+            "display": "flex",
+            "font": "16px",
+            "color": "rgb(42, 39, 55)",
+            "gap": "14px"
+          }
+        ]
+      }
+    },
+    {
+      "name": "overview-1440",
+      "url": "http://127.0.0.1:34059/",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "structure": {
+        "main": [
+          {
+            "tag": "H1",
+            "text": "改善华东会员复购",
+            "rect": "{\"x\":0,\"y\":0,\"width\":0,\"height\":0,\"top\":0,\"right\":0,\"bottom\":0,\"left\":0}"
+          },
+          {
+            "tag": "H1",
+            "text": "Case 总览",
+            "rect": "{\"x\":218,\"y\":186.09375,\"width\":378,\"height\":39.1875,\"top\":186.09375,\"right\":596,\"bottom\":225.28125,\"left\":218}"
+          },
+          {
+            "tag": "H2",
+            "text": "改善华东会员复购",
+            "rect": "{\"x\":242,\"y\":345.46875,\"width\":334.65625,\"height\":33.34375,\"top\":345.46875,\"right\":576.65625,\"bottom\":378.8125,\"left\":242}"
+          },
+          {
+            "tag": "H2",
+            "text": "探索下一步职业方向",
+            "rect": "{\"x\":642.65625,\"y\":345.46875,\"width\":334.671875,\"height\":33.34375,\"top\":345.46875,\"right\":977.328125,\"bottom\":378.8125,\"left\":642.65625}"
+          },
+          {
+            "tag": "H2",
+            "text": "改善华东会员复购 · 新建示例",
+            "rect": "{\"x\":1043.328125,\"y\":345.46875,\"width\":334.65625,\"height\":33.34375,\"top\":345.46875,\"right\":1377.984375,\"bottom\":378.8125,\"left\":1043.328125}"
+          }
+        ],
+        "panels": [
+          {
+            "class": "sidebar",
+            "rect": "{\"x\":0,\"y\":0,\"width\":180,\"height\":900,\"top\":0,\"right\":180,\"bottom\":900,\"left\":0}",
+            "display": "flex",
+            "font": "14px",
+            "color": "rgb(166, 160, 180)",
+            "gap": "normal"
+          },
+          {
+            "class": "main-shell",
+            "rect": "{\"x\":180,\"y\":0,\"width\":1260,\"height\":900,\"top\":0,\"right\":1440,\"bottom\":900,\"left\":180}",
+            "display": "flex",
+            "font": "16px",
+            "color": "rgb(42, 39, 55)",
+            "gap": "normal"
+          },
+          {
+            "class": "workspace-nav",
+            "rect": "{\"x\":180,\"y\":58,\"width\":1260,\"height\":68.5,\"top\":58,\"right\":1440,\"bottom\":126.5,\"left\":180}",
+            "display": "flex",
+            "font": "16px",
+            "color": "rgb(42, 39, 55)",
+            "gap": "14px"
+          }
+        ]
+      }
+    },
+    {
+      "name": "detail-1440",
+      "url": "http://127.0.0.1:34059/",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "structure": {
+        "main": [
+          {
+            "tag": "H1",
+            "text": "改善华东会员复购",
+            "rect": "{\"x\":212,\"y\":177.09375,\"width\":211.203125,\"height\":37.796875,\"top\":177.09375,\"right\":423.203125,\"bottom\":214.890625,\"left\":212}"
+          },
+          {
+            "tag": "H2",
+            "text": "扩大试点范围",
+            "rect": "{\"x\":453,\"y\":381.5,\"width\":135.609375,\"height\":33.34375,\"top\":381.5,\"right\":588.609375,\"bottom\":414.84375,\"left\":453}"
+          }
+        ],
+        "panels": [
+          {
+            "class": "sidebar",
+            "rect": "{\"x\":0,\"y\":0,\"width\":180,\"height\":900,\"top\":0,\"right\":180,\"bottom\":900,\"left\":0}",
+            "display": "flex",
+            "font": "14px",
+            "color": "rgb(166, 160, 180)",
+            "gap": "normal"
+          },
+          {
+            "class": "main-shell",
+            "rect": "{\"x\":180,\"y\":0,\"width\":1260,\"height\":900,\"top\":0,\"right\":1440,\"bottom\":900,\"left\":180}",
+            "display": "flex",
+            "font": "16px",
+            "color": "rgb(42, 39, 55)",
+            "gap": "normal"
+          },
+          {
+            "class": "workspace-nav",
+            "rect": "{\"x\":180,\"y\":58,\"width\":1260,\"height\":68.5,\"top\":58,\"right\":1440,\"bottom\":126.5,\"left\":180}",
+            "display": "flex",
+            "font": "16px",
+            "color": "rgb(42, 39, 55)",
+            "gap": "14px"
+          }
+        ]
+      }
+    },
+    {
+      "name": "choice-1440",
+      "url": "http://127.0.0.1:34059/",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "structure": {
+        "main": [
+          {
+            "tag": "H1",
+            "text": "改善华东会员复购",
+            "rect": "{\"x\":212,\"y\":177.09375,\"width\":211.203125,\"height\":37.796875,\"top\":177.09375,\"right\":423.203125,\"bottom\":214.890625,\"left\":212}"
+          },
+          {
+            "tag": "H2",
+            "text": "扩大试点范围",
+            "rect": "{\"x\":453,\"y\":381.5,\"width\":135.609375,\"height\":33.34375,\"top\":381.5,\"right\":588.609375,\"bottom\":414.84375,\"left\":453}"
+          }
+        ],
+        "panels": [
+          {
+            "class": "sidebar",
+            "rect": "{\"x\":0,\"y\":0,\"width\":180,\"height\":900,\"top\":0,\"right\":180,\"bottom\":900,\"left\":0}",
+            "display": "flex",
+            "font": "14px",
+            "color": "rgb(166, 160, 180)",
+            "gap": "normal"
+          },
+          {
+            "class": "main-shell",
+            "rect": "{\"x\":180,\"y\":0,\"width\":1260,\"height\":900,\"top\":0,\"right\":1440,\"bottom\":900,\"left\":180}",
+            "display": "flex",
+            "font": "16px",
+            "color": "rgb(42, 39, 55)",
+            "gap": "normal"
+          },
+          {
+            "class": "workspace-nav",
+            "rect": "{\"x\":180,\"y\":58,\"width\":1260,\"height\":68.5,\"top\":58,\"right\":1440,\"bottom\":126.5,\"left\":180}",
+            "display": "flex",
+            "font": "16px",
+            "color": "rgb(42, 39, 55)",
+            "gap": "14px"
+          }
+        ]
+      }
+    },
+    {
+      "name": "choice-390",
+      "url": "http://127.0.0.1:34059/",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "structure": {
+        "main": [
+          {
+            "tag": "H1",
+            "text": "改善华东会员复购",
+            "rect": "{\"x\":19,\"y\":140.390625,\"width\":179.203125,\"height\":32.1875,\"top\":140.390625,\"right\":198.203125,\"bottom\":172.578125,\"left\":19}"
+          },
+          {
+            "tag": "H2",
+            "text": "扩大试点范围",
+            "rect": "{\"x\":19,\"y\":441.953125,\"width\":129.609375,\"height\":31.890625,\"top\":441.953125,\"right\":148.609375,\"bottom\":473.84375,\"left\":19}"
+          }
+        ],
+        "panels": [
+          {
+            "class": "sidebar",
+            "rect": "{\"x\":0,\"y\":0,\"width\":0,\"height\":0,\"top\":0,\"right\":0,\"bottom\":0,\"left\":0}",
+            "display": "none",
+            "font": "14px",
+            "color": "rgb(166, 160, 180)",
+            "gap": "normal"
+          },
+          {
+            "class": "main-shell",
+            "rect": "{\"x\":0,\"y\":0,\"width\":390,\"height\":844,\"top\":0,\"right\":390,\"bottom\":844,\"left\":0}",
+            "display": "flex",
+            "font": "16px",
+            "color": "rgb(42, 39, 55)",
+            "gap": "normal"
+          },
+          {
+            "class": "workspace-nav",
+            "rect": "{\"x\":0,\"y\":48,\"width\":390,\"height\":55,\"top\":48,\"right\":390,\"bottom\":103,\"left\":0}",
+            "display": "flex",
+            "font": "16px",
+            "color": "rgb(42, 39, 55)",
+            "gap": "10px"
+          }
+        ]
+      }
+    }
+  ]
+}

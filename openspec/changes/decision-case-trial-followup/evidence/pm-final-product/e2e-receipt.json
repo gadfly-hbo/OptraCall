@@ -1,0 +1,56 @@
+{
+  "result": "PASS",
+  "runtime": {
+    "instanceId": "61e609cf-6867-40a9-920e-dd14996176bc",
+    "pid": 364066,
+    "codeRoot": "/workspace/OptraCall-issue154-second-review",
+    "version": "0.1.0-mvp.4",
+    "commit": "a643bf00e79cba01933cbaa49a1616ecb675cf12",
+    "tree": "d9ab4d03512adf10a46b7bcb83dc4f8345a63e35",
+    "builtAt": "2026-11-28T12:58:52.498Z",
+    "dirty": false
+  },
+  "boundary": "Isolated test Host + official Pi 1.4.0 + loopback synthetic Provider + Chromium (synthetic only)",
+  "checks": [
+    {
+      "id": "CF05",
+      "detail": "Empty personal scope name blocked locally with exact focus and zero write POSTs"
+    },
+    {
+      "id": "CF06",
+      "detail": "Creating 3rd Case and returning directly updates Case overview to all 3 Cases with 0 manual reloads"
+    },
+    {
+      "id": "CF02",
+      "detail": "Plan Task completes cleanly via real Pi 1.4.0; sustained heartbeat first-frame timeout exhausts to disconnected keeping send disabled & draft, and explicit reconnect restores send without auto open/messages/stop"
+    },
+    {
+      "id": "CF03",
+      "detail": "Empty choice modal guided to Plan Task & handoff, retained draft, saved choice, authorized board action, recorded feedback, and verified round history & original board entry"
+    },
+    {
+      "id": "CF01+CF04",
+      "detail": "Case Agent recovered automatically after clean SSE EOF and Pi 1.4.0 corrected invalid declaration request via field diagnostics"
+    },
+    {
+      "id": "FR01",
+      "detail": "Case Agent recovered full reply automatically (18 heartbeats on open stream without terminal event, zero replay/stop)"
+    },
+    {
+      "id": "CF07",
+      "detail": "Two same-named projects disambiguated via accessible label and only targeted project archived"
+    }
+  ],
+  "pageErrors": [],
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "providerRequests": 7
+}

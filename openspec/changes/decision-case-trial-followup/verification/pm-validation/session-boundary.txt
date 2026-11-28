@@ -1,0 +1,5 @@
+
+> optracall@0.1.0-mvp.4 check:agent-sessions
+> node scripts/check-agent-session-boundary.mjs
+
+Agent session integration boundary and pinned SDK materials: PASS (official archive check is separate)

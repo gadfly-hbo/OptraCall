@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "version": "0.1.0-mvp.4",
+  "commit": "a643bf00e79cba01933cbaa49a1616ecb675cf12",
+  "tree": "d9ab4d03512adf10a46b7bcb83dc4f8345a63e35",
+  "builtAt": "2026-11-28T12:58:52.498Z",
+  "dirty": false,
+  "files": [
+    {
+      "path": "assets/favicon-E4MYU2T6.svg",
+      "bytes": 278,
+      "sha256": "95a5a1b4a7f74b683e11655f73fece2a7920dfb0615859cad802513f9acf69c5"
+    },
+    {
+      "path": "assets/main-JZN53QUV.js",
+      "bytes": 3561606,
+      "sha256": "cc4461014d510183598ebc953cd9b5902667200e7b46bdab25453180421c44b7"
+    },
+    {
+      "path": "assets/main-M5CLYDYH.css",
+      "bytes": 404197,
+      "sha256": "00f2a3fda053647bf8b71ff56e690c4d62daad9b80313130caa7a1020f27d3c9"
+    },
+    {
+      "path": "index.html",
+      "bytes": 584,
+      "sha256": "3716d2e443bfd709eeeba763c7e6b06330100c4184ea9cc411f26027e5885ad2"
+    }
+  ]
+}
