@@ -25,7 +25,7 @@
 ## 执行清单（逐项更新）
 
 - [x] P-read 冻结 Demo 浏览器阅读 + DOM/CSS 骨架 + 生产映射 + Issue 回执
-- [ ] D01 最小接口/持久迁移与回退设计（owner-bound 外派 port、记录权威、MCP/OAuth 接缝、续接合同）
+- [x] D01 最小接口/持久迁移与回退设计 → [design.md](design.md)；后端接缝实测 [seam-report](evidence/implementation/seam-report.md)
 - [ ] E01 内部/外派选择与授权、身份/持久记录；内部/取消零外部动作
 - [ ] E02 GitHub 独立发布/修订/回执 + 通用认证领取、原子单 claim/UNKNOWN 幂等
 - [ ] E03 受保护资产/工作 MCP、OAuth/精确交集/只读/错误与分片边界
@@ -36,9 +36,9 @@
 - [ ] G01 真实产品同视口对照 + 开 PR 前截图用户确认（PM 门禁）
 - [ ] G02 实际 PR head CI + 授权合并 + main push CI + 结案回填
 
-## 设计（D01，待补）
+## 设计（D01，已完成）
 
-待后端接缝核对报告完成后补：记录权威与持久化、owner-bound port 形状、MCP/OAuth 复用、续接/停止合同、迁移与回退。
+见 [design.md](design.md)：记录权威与持久化（external-work-store，原子 JSON CAS）、owner-bound 外派 port、Host-only GitHub 发布入口、远端 MCP/OAuth 复用与净新边界、续接/停止/取消合同、WorkBuddy 可选适配、迁移与回退、S1–S7 切片与 TDD 负例。后端接缝实测见 [seam-report](evidence/implementation/seam-report.md)。
 
 ## 验证与限制
 
