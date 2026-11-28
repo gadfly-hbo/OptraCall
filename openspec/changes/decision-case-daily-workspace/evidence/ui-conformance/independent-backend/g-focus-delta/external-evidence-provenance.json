@@ -1,0 +1,84 @@
+{
+  "capturedAt": "2026-11-28T02:16:00.843723+00:00",
+  "copiedOriginalReceipts": [
+    {
+      "copy": "external-evidence/independent-f-feedback-focus-repro.json",
+      "originalPath": ".local/ui-conformance/independent-review/candidate-f/feedback-focus-repro.json",
+      "sha256": "4bc5f109d935ed5f5ca46f113c791b9f3af9c92638f075f31786680513a793a4",
+      "bytes": 1920
+    },
+    {
+      "copy": "external-evidence/independent-g-feedback-focus-repro.json",
+      "originalPath": ".local/ui-conformance/independent-review/candidate-g/feedback-focus-repro.json",
+      "sha256": "72d4657226da6a4cce4f71cd7f350dff809eb8faa44b5eb0622967f89001297f",
+      "bytes": 1082
+    },
+    {
+      "copy": "external-evidence/root-g-navigation-receipt.json",
+      "originalPath": ".local/ui-conformance/home-request-navigation/candidate-g/receipt.json",
+      "sha256": "112a594517be3410b12db251393ebebce22fa8930d5a1cd67815382e412483cd",
+      "bytes": 3560
+    },
+    {
+      "copy": "external-evidence/root-f-spa-locator-failure.json",
+      "originalPath": ".local/ui-conformance/home-request-navigation/candidate-f-spa-red/receipt.json",
+      "sha256": "6b1ae1eb3351d0150b03646c587c1c6826be446459dd7968988eb4d5a0975801",
+      "bytes": 4230
+    },
+    {
+      "copy": "external-evidence/independent-g-manifest-fixed-check.json",
+      "originalPath": ".local/ui-conformance/independent-review/candidate-g/manifest-fixed-check.json",
+      "sha256": "43826ca0bac1404335930c0c4e63205a3de83df856bd938be19384a0d4fefed0",
+      "bytes": 307
+    }
+  ],
+  "identityBinding": {
+    "sourceManifestPath": ".local/ui-conformance/independent-review/candidate-g/source-manifest.json",
+    "sourceManifestFileSha256": "989e6a551887b354d7fce943d9ec3c2d6412119a50d83b04b874e0606551e8d6",
+    "sourceManifestHash": "2f8ee75d4da2c5aca3240e9b26abc4ab7c6a5f798ae6ea650def9195db436f16",
+    "bundleIdentity": {
+      "schema": 1,
+      "version": "0.1.0-mvp.4",
+      "commit": "5dd59909227ab46f3d989ade8b2847e077636855",
+      "tree": "1078a6e2359a29e82631ab59f56a8d6dd9492d73",
+      "builtAt": "2026-11-28T02:05:43.009Z",
+      "dirty": true,
+      "files": [
+        {
+          "path": "main.js",
+          "bytes": 6313432,
+          "sha256": "d70e1b809648bc01effcd0d0663761ca0b84741436dd0bd0d0350af67214d6cb"
+        },
+        {
+          "path": "main.css",
+          "bytes": 491289,
+          "sha256": "a48bfa018bdb97c62da5f1e82e6868373a64374004f40aee6e12dcbfd1cc8c90"
+        },
+        {
+          "path": "favicon.svg",
+          "bytes": 278,
+          "sha256": "95a5a1b4a7f74b683e11655f73fece2a7920dfb0615859cad802513f9acf69c5"
+        },
+        {
+          "path": "index.html",
+          "bytes": 531,
+          "sha256": "8a35d26db18d0df5074dda0d17b75b5b7c6347c5e75ea77c6dc1431925f28486"
+        }
+      ]
+    },
+    "independentUiProductReceiptPath": ".local/ui-conformance/independent-review/candidate-g/product-home-modals.json",
+    "independentUiProductReceiptSha256": "85e2fa795ea05aa87c23f358f3fc5fd3db350684b0954a6c3ce6c17b99ae8e9a",
+    "runtime": {
+      "instanceId": "5b8dc9fa-1b23-45fe-9fdd-0e004b23832e",
+      "pid": 276337,
+      "codeRoot": "/workspace/OptraCall-issue149-ui-conformance",
+      "version": "0.1.0-mvp.4",
+      "commit": "5dd59909227ab46f3d989ade8b2847e077636855",
+      "tree": "1078a6e2359a29e82631ab59f56a8d6dd9492d73",
+      "builtAt": "2026-11-28T02:05:43.009Z",
+      "dirty": true
+    },
+    "rootNavigationAndIndependentUiAndOwnGetRuntimeEqual": true
+  },
+  "limits": "Focus repro JSON itself records time and focus rather than runtime. Binding uses same candidate-g directory source manifest/product receipt, root navigation receipt and own GET. Browser runs were executed by their named owners, not this reviewer. Images remain root/UI-owned."
+}

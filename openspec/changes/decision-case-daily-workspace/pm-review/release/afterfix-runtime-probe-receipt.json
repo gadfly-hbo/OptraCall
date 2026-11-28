@@ -1,0 +1,46 @@
+{
+  "candidate": "7fe8e9-plus-runtime-fixes",
+  "ordinary": {
+    "dataRoot": "/workspace/OptraCall-issue149-final/.local/pm-final/runtime-tmp/optracall-host-test-vimHXT/host",
+    "native": "/workspace/OptraCall-issue149-final/.local/pm-final/runtime-tmp/optracall-host-test-vimHXT/host/projects/01dfbb15-e4ae-4fb5-ab6e-8ab3c60e9171/tasks/e40cde8d-991b-47ff-b9e0-ed812a13bf6d/sessions/2026-11-27T15-57-53-355Z_01a21dba-394a-744a-b26e-0fb0039fb2d2.jsonl",
+    "tools": [
+      "read_case_sources",
+      "read_case_relations",
+      "save_case_relation",
+      "read_case_decisions",
+      "save_case_decision_draft",
+      "save_case_issue_edge",
+      "save_case_decision_request"
+    ],
+    "edgeCount": 1,
+    "requestCount": 1,
+    "toolResults": [
+      {
+        "tool": "save_case_issue_edge",
+        "isError": false,
+        "text": "{\"edgeId\":\"25b74cae-aa4e-4f60-955c-4364c66d01bd\",\"caseId\":\"5576258f-97c4-4a72-9f47-13f7ec70bb59\",\"fromIssueId\":\"d656133d-f809-4cb8-a4e0-33fae63ab9ae\",\"toIssueId\":\"8ad0f4fe-8be7-49d7-8ab7-7d658938cff5\",\"revision\":1,\"lifecycle\":\"active\",\"explanation\":\"用户明确声明承接\",\"source\":{\"kind\":\"user-declaration\",\"ref\":\"01a21dba-394a-744a-b26e-0fb0039fb2d2/40f57243-aa48-4fd5-ae97-6b9d1874216c/call_1_0\"},\"operationId\":\"64f94242-efd3-5482-3609-83a8c5ff949f\",\"createdAt\":\"2026-11-27T15:57:53.696Z\"}"
+      },
+      {
+        "tool": "save_case_decision_request",
+        "isError": false,
+        "text": "{\"requestId\":\"f156c75f-53ff-4001-87b8-06b9444b1534\",\"revision\":1,\"caseId\":\"5576258f-97c4-4a72-9f47-13f7ec70bb59\",\"issueId\":\"8ad0f4fe-8be7-49d7-8ab7-7d658938cff5\",\"kind\":\"choose\",\"text\":\"请负责人选择\",\"source\":{\"kind\":\"agent-tool\",\"ref\":\"01a21dba-394a-744a-b26e-0fb0039fb2d2/40f57243-aa48-4fd5-ae97-6b9d1874216c/call_1_1\"},\"assignee\":{\"label\":\"负责人\",\"source\":\"本轮声明\"},\"requestedAt\":\"2026-11-27T15:57:53.685Z\",\"target\":{\"kind\":\"choose\",\"strategyRef\":{\"type\":\"case-decision\",\"caseStoreId\":\"20004b73-1087-4d4f-b8d2-a39441753b5a\",\"caseId\":\"5576258f-97c4-4a72-9f47-13f7ec70bb59\",\"recordId\":\"1e0ee9ad-5500-43c9-9491-00298a28effa\",\"revision\":1},\"expectedPreviousChoiceId\":null},\"lifecycle\":\"open\",\"operationId\":\"f75caa07-3fd1-a891-2c77-7ea46abd7e72\",\"createdAt\":\"2026-11-27T15:57:53.685Z\"}"
+      }
+    ]
+  },
+  "directory": {
+    "caseLimit": 1,
+    "items": 1,
+    "issues": 5,
+    "payloadCharacters": 1436,
+    "truncated": true,
+    "hasIssueContinuation": false,
+    "native": "/workspace/OptraCall-issue149-final/.local/pm-final/runtime-tmp/optracall-host-test-vimHXT/host/business-role-discussions/64dcb829-a63d-7d30-7cce-0acb5c7f076c/native/2026-11-27T15-57-57-425Z_01a21dba-4930-73a3-a137-4e02d87ebbdc.jsonl",
+    "toolResults": [
+      {
+        "tool": "strategy_goals",
+        "isError": false,
+        "text": "{\"claim\":\"visible-case-directory\",\"storeState\":\"ready\",\"items\":[{\"caseId\":\"5576258f-97c4-4a72-9f47-13f7ec70bb59\",\"title\":\"独立普通工具Case\",\"status\":\"pending\",\"updatedAt\":\"2026-11-27T15:57:54.602Z\",\"goalBinding\":{\"goalId\":\"c334d460-ca70-4561-9ca9-cb3802d27044\",\"version\":1,\"strategy\":\"核对本次议题的原资料\"},\"issues\":[{\"issueId\":\"d656133d-f809-4cb8-a4e0-33fae63ab9ae\",\"title\":\"事项A\"},{\"issueId\":\"8ad0f4fe-8be7-49d7-8ab7-7d658938cff5\",\"title\":\"事项B\"},{\"issueId\":\"32b14690-6d43-4bb5-be6a-0ddf6ca3747d\",\"title\":\"长目录0甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲\"},{\"issueId\":\"399d45bf-609a-4f42-b560-d7dd6823d3df\",\"title\":\"长目录1甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲\"},{\"issueId\":\"f88c3abf-6d4d-49c9-823a-7fc9b2832fbd\",\"title\":\"长目录2甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲\"}],\"totalIssues\":132,\"issuesTruncated\":true,\"nextIssueOffset\":5}],\"truncated\":true,\"totalVisible\":1,\"nextOffset\":null}"
+      }
+    ]
+  }
+}

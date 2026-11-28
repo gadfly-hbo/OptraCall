@@ -178,3 +178,32 @@ test('M5-STORE-08: new human choices invalidate the Case directory cursor while 
   assert.throws(() => store.listDecisions(caseId, { pageSize: 2, continuation: page.continuation }), { code: 'case_decision_continuation_changed', statusCode: 409 });
   assert.equal(store.listDecisions(caseId, { pageSize: 2 }).choices[0]!.choiceId, choice.choiceId);
 });
+
+test('D13 frozen optional next step is immutable choice evidence, preserves old replay and never updates the whole Case plan', async t => {
+  const { store, dataRoot, caseId, caseStoreId, origin } = await fixture(t);
+  const issue = store.createDecisionIssue({ operationId: randomUUID(), caseId, expectedRevision: store.getCase(caseId).revision, title: '扩大试点范围' });
+  const plan = store.saveDecisionDraft({ operationId: randomUUID(), caseStoreId, caseId, expectedRevision: 0, kind: 'strategy', payload: { title: '先核对原记录', proposal: '补齐证据' } }, origin);
+  const strategyRef = { type: 'case-decision' as const, caseStoreId, caseId, recordId: plan.recordId, revision: plan.revision };
+  const originalInput = { operationId: randomUUID(), caseStoreId, caseId, issueId: issue.id, strategyRef, choice: 'gather_evidence' as const, reason: '先补证', expectedPreviousChoiceId: null };
+  const original = store.chooseStrategy(originalInput), originalEvent = JSON.stringify(store.getEvents('case', caseId).at(-1));
+  assert.equal(Object.hasOwn(original, 'nextStep'), false);
+  const caseNextStep = store.getCase(caseId).nextStep;
+  const input = { ...originalInput, operationId: randomUUID(), expectedPreviousChoiceId: original.choiceId, nextStep: '周五前核对三店原始记录，尚未授权经营动作。' };
+  const saved = store.chooseStrategy(input);
+  assert.equal(saved.nextStep, input.nextStep);
+  assert.equal(store.getCase(caseId).nextStep, caseNextStep);
+  assert.deepEqual(store.chooseStrategy(originalInput), original, 'legacy operation fingerprint is unchanged');
+  assert.deepEqual(store.chooseStrategy(input), saved, 'exact new request is idempotent');
+  assert.throws(() => store.chooseStrategy({ ...input, nextStep: '不得改写已保存取舍的下一步' }), /operation.*conflict|conflict.*operation/);
+  assert.equal(JSON.stringify(store.getEvents('case', caseId).find(event => event.id === original.choiceId)), originalEvent);
+  for (const nextStep of ['x'.repeat(201), { text: 'invalid structured field' }]) {
+    const before = store.getEvents('case', caseId).length;
+    assert.throws(() => store.chooseStrategy({ ...input, operationId: randomUUID(), expectedPreviousChoiceId: saved.choiceId, nextStep } as typeof input));
+    assert.equal(store.getEvents('case', caseId).length, before);
+  }
+  store.close();
+  const reopened = new CaseStore({ dataRoot }); t.after(async () => { reopened.close(); });
+  assert.equal((await reopened.init()).state, 'ready');
+  assert.equal(reopened.getStrategyChoices(caseId).find(choice => choice.choiceId === saved.choiceId)?.nextStep, input.nextStep);
+  assert.equal(Object.hasOwn(reopened.getStrategyChoices(caseId)[0]!, 'nextStep'), false);
+});

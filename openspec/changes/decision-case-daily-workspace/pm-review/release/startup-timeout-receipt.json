@@ -1,0 +1,39 @@
+{
+  "source": "6bc7be2849d280e5e6a6e598ee6b7a68dd5e48eb",
+  "node": "25.9.0",
+  "testConcurrency": 1,
+  "testNamePattern": "projectSkillCatalog preserves SDK selection order|A07/A09: one confirmation",
+  "physicalNodeModules": true,
+  "originalFullRun": {
+    "tests": 3602,
+    "pass": 3401,
+    "fail": 5,
+    "skipped": 196,
+    "duration_ms": 1870769.006335,
+    "log": ".local/pm-second/full-check-release.log",
+    "sha256": "8bc81e9594a7a78d7e0e2d76b5eda50444d831d8efea365e5c29633128547870"
+  },
+  "isolatedRun": {
+    "tests": 2,
+    "pass": 2,
+    "fail": 0,
+    "skipped": 0,
+    "duration_ms": 7487.971188,
+    "catalog_ms": 2330.873013,
+    "selectedMethods_ms": 3714.001347,
+    "log": ".local/pm-final/startup-timeout-isolated.log"
+  },
+  "selectedMethodsReceipt": {
+    "original": "/workspace/OptraCall-issue149-final/.local/overall-architecture-upgrade/development/selected-methods/actual-pi-B1hHF5/receipt.json",
+    "copy": ".local/pm-final/startup-timeout-selected-methods-receipt.json",
+    "sha256": "9baddf5b2f83db41bea0f717ecf459d01ba97dacd8152f63a9a21a6d40fe53fa"
+  },
+  "unchangedFileHashes": {
+    "tests/project-host.test.ts": "5a23fe4a309e6c63b3cc24567e177e5ce81e51a51ac2f170d7232d4fdb725a03",
+    "tests/project-selected-methods-v020.test.ts": "f6dc5475ddc910a1acb3eeea2cf0ef9df9de8d1760292003f0603bc10e0f9d56",
+    "tests/fixtures/host-process.ts": "13e3197ab810177dbc276d3e27d5b1e0f99d2b407ba90f235874963dd11981a7",
+    "package.json": "9b645f6a7f3ddc628d60d3ce777932c36a80669f0fac870bd53d81c059f394bf",
+    "package-lock.json": "bd1e93ef5210e74225b8af38afd11d439b0a35050750bb83080117b745df81b3"
+  },
+  "trackedDiff": []
+}

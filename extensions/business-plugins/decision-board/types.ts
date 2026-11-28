@@ -45,21 +45,32 @@ export type BoardTaskRecord = {
   createdAt: string; updatedAt: string;
 };
 export type FeedbackEffect = 'unknown' | 'positive' | 'negative' | 'none';
+/** User-declared business date; never substitutes for the immutable save time. */
+export function isFeedbackObservationDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || value.startsWith('0000')) return false;
+  const time = Date.parse(`${value}T00:00:00.000Z`);
+  return Number.isFinite(time) && new Date(time).toISOString().slice(0, 10) === value;
+}
 export type SaveFeedbackInput = {
   operationId: string; expectedLatestRevisionId: string | null;
-  adopted: boolean; outcome: string; metricDelta: string; review: string; score: number | null;
+  adopted: boolean | null; outcome: string; metricDelta: string; review: string; score: number | null;
+  observationDate?: string | null; sourceScope?: string | null;
   effect?: FeedbackEffect;
+  respondsToRequest?: FeedbackRequestResponseRef;
 };
 export type TaskFeedbackRecord = {
-  taskId: string; adopted: boolean; outcome: string; metricDelta: string; review: string; score: number | null;
+  taskId: string; adopted: boolean | null; outcome: string; metricDelta: string; review: string; score: number | null;
+  observationDate?: string | null; sourceScope?: string | null;
   effect: FeedbackEffect;
   createdAt: string; updatedAt: string;
 };
+export type FeedbackRequestResponseRef = { requestId: string; revision: number; authorizationId: string };
 export type TaskFeedbackRevision = TaskFeedbackRecord & {
   revisionId: string; revisionNumber: number; operationId: string | null; requestSha256: string | null;
   savedAt: string; origin: 'user-save' | 'legacy-current';
   legacyCreatedAt: string | null; legacyUpdatedAt: string | null;
   quoteProvenance?: UserQuoteProvenance;
+  respondsToRequest?: FeedbackRequestResponseRef;
 };
 export type BoardCaseAuthorizationSource = { caseStoreId: string; caseId: string; choiceId: string;
   strategyRef: { type: 'case-decision'; caseStoreId: string; caseId: string; recordId: string; revision: number } };

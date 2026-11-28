@@ -7,7 +7,7 @@ export type CaseMapViewState = {
   expandedProjectIds: string[]; focusId: string | null; returnNodeId: string | null; scrollTop: number;
   scale: number; x: number; y: number; manualViewport: boolean; nodeLimit: number;
 };
-export const initialCaseMapView = (): CaseMapViewState => ({ display: 'map', query: '', status: 'all', relation: 'all', expandedProjectIds: [], focusId: null, returnNodeId: null, scrollTop: 0, scale: 1, x: 0, y: 0, manualViewport: false, nodeLimit: 200 });
+export const initialCaseMapView = (): CaseMapViewState => ({ display: 'regular', query: '', status: 'all', relation: 'all', expandedProjectIds: [], focusId: null, returnNodeId: null, scrollTop: 0, scale: 1, x: 0, y: 0, manualViewport: false, nodeLimit: 200 });
 type Position = { id: string; name: string; x: number; y: number; width: number; height: number };
 export type CaseMapNode = Position & (
   | { kind: 'case'; caseId: string; record?: CaseRecord }

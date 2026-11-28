@@ -1,0 +1,27 @@
+import { chromium } from '/opt/codex/runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs';
+import fs from 'node:fs/promises';import path from 'node:path';
+const root=path.resolve('.local/ui-conformance'),ids=JSON.parse(await fs.readFile(path.join(root,'demo-aligned/fixture-ids.json'),'utf8'));
+const manifest=JSON.parse(await fs.readFile(path.join(root,'source-manifest.json'),'utf8')),name=process.argv[2],out=path.join(root,'captures',name);await fs.mkdir(out,{recursive:true});
+const browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
+const page=await browser.newPage({viewport:{width:1440,height:1000}});page.setDefaultTimeout(15000);
+const health=()=>fetch(ids.base+'/api/health',{headers:{'x-optracall-client':'1'}}).then(r=>r.json());
+const before=await health();if(before.runtime.builtAt!==manifest.identity.builtAt)throw Error('BUILD_MISMATCH');
+const receipt={runtime:before.runtime,sourceManifestHash:manifest.sourceManifestHash,fixture:ids.scope,shots:[],errors:[],boundary:'Actual Host/product UI; synthetic persisted data; no model calls or business creation/choice/feedback writes. Preparation and modal draft persistence uses original product paths.'};
+page.on('pageerror',e=>receipt.errors.push(e.message));
+async function shot(label){await page.screenshot({path:path.join(out,label+'.png'),fullPage:true});await fs.writeFile(path.join(out,label+'.txt'),await page.locator('body').innerText());receipt.shots.push({label,url:page.url(),viewport:page.viewportSize(),capturedAt:new Date().toISOString()});console.log('CAPTURE',label);}
+async function click(text,selector='button'){await page.locator(selector).filter({hasText:text}).filter({visible:true}).first().click();}
+async function openMain(){await click(/^Decision Case$/,'nav.primary-nav button');await click(/^改善华东会员复购$/);await page.waitForFunction(()=>document.querySelector('.case-current-topline')?.textContent.includes('第 2 轮')&&document.querySelector('.case-current-summary')?.textContent.includes('本轮明确请求'));}
+async function close(){await page.keyboard.press('Escape');await page.getByRole('dialog').waitFor({state:'hidden'});}
+try{
+ await page.goto(ids.base);await page.getByRole('heading',{name:/^待处理事项/}).waitFor();await openMain();
+ await click(/^记录取舍$/);await page.getByRole('dialog',{name:'记录本轮取舍'}).waitFor();await page.getByLabel('这次怎么选').waitFor({state:'visible'});await page.waitForFunction(()=>!document.querySelector('.case-round-choice select')?.disabled);await shot('12-choice-dialog-1440');
+ await page.setViewportSize({width:390,height:844});await shot('13-choice-dialog-390');await close();await page.setViewportSize({width:1440,height:1000});
+ await click(/^门店缺货原因/,'.case-issue-list button');await page.locator('.case-current-title').getByRole('heading',{name:'门店缺货原因',exact:true}).waitFor();await click(/^回录反馈$/);await page.getByLabel('实际观察到什么',{exact:true}).waitFor();await page.waitForFunction(()=>!document.querySelector('#feedback-outcome')?.disabled&&!document.querySelector('#feedback-request')?.disabled);await shot('14-feedback-dialog-1440');
+ await page.setViewportSize({width:390,height:844});await shot('15-feedback-dialog-390');await close();await page.setViewportSize({width:1440,height:1000});
+ await click(/^成果与依据$/);await page.getByLabel('成果页事项范围').selectOption(ids.issues.metric.id);await page.getByRole('heading',{name:'60天会员复购口径说明',exact:true}).waitFor();await shot('16-artifacts-metric-1440');await click(/^查看来源/);await page.getByText('首购会员、复购窗口、退款及跨店交易的统一处理规则。',{exact:true}).waitFor();await shot('17-source-original-1440');await close();
+ await click(/^当前工作$/);await click(/^复购口径校准/,'.case-issue-list button');await page.locator('.case-current-title').getByRole('heading',{name:'复购口径校准',exact:true}).waitFor();await page.waitForFunction(()=>document.querySelector('.case-current-topline')?.textContent.includes('已完成复盘'));await shot('18-reviewed-current-1440');
+ await page.setViewportSize({width:1024,height:900});await shot('19-reviewed-current-1024');await page.setViewportSize({width:1440,height:1000});
+ await page.getByRole('button',{name:'切换为深色',exact:true}).click();await shot('20-case-dark-1440');await click(/^项目与任务/);await page.getByRole('heading',{name:'项目与任务',exact:true}).waitFor();await shot('21-case-projects-dark-1440');
+ await click(/^工作台首页$/,'nav.primary-nav button');await page.getByRole('heading',{name:/^待处理事项/}).waitFor();await shot('22-home-dark-1440');await page.getByRole('button',{name:'切换为浅色',exact:true}).click();
+ await click(/^直接准备新 Case$/);await page.getByLabel('这件事的名字',{exact:true}).waitFor();await page.getByLabel('这件事的名字',{exact:true}).fill('探索下一步职业方向');await page.getByLabel('G · 目标名称',{exact:true}).fill('找到适合下一阶段的职业方向');await page.getByLabel(/^想看到什么结果/).fill('通过访谈和小规模尝试，形成有依据的职业选择。');await page.getByLabel(/^S · 这次先怎么推进/).fill('先整理访谈里在意的工作片段，再选择一个方向尝试。');await shot('23-case-prepare-1440');await page.setViewportSize({width:390,height:844});await shot('24-case-prepare-390');
+}catch(e){receipt.errors.push(e.stack);await shot('extra-failed-last-state').catch(()=>{});console.error(e.stack);}finally{if((await health()).runtime.builtAt!==before.runtime.builtAt)receipt.errors.push('CANDIDATE_CHANGED');await fs.writeFile(path.join(out,'extra-receipt.json'),JSON.stringify(receipt,null,2));await browser.close();}if(receipt.errors.length)process.exitCode=1;

@@ -1,0 +1,1451 @@
+{
+  "at": "2026-11-28T01:50:22.224Z",
+  "health": {
+    "instanceId": "74b5ea0f-30d9-4872-9f53-1a515107bd53",
+    "pid": 254230,
+    "codeRoot": "/workspace/OptraCall-issue149-ui-conformance",
+    "version": "0.1.0-mvp.4",
+    "commit": "5dd59909227ab46f3d989ade8b2847e077636855",
+    "tree": "1078a6e2359a29e82631ab59f56a8d6dd9492d73",
+    "builtAt": "2026-11-28T01:49:00.388Z",
+    "dirty": true
+  },
+  "after": {
+    "instanceId": "74b5ea0f-30d9-4872-9f53-1a515107bd53",
+    "pid": 254230,
+    "codeRoot": "/workspace/OptraCall-issue149-ui-conformance",
+    "version": "0.1.0-mvp.4",
+    "commit": "5dd59909227ab46f3d989ade8b2847e077636855",
+    "tree": "1078a6e2359a29e82631ab59f56a8d6dd9492d73",
+    "builtAt": "2026-11-28T01:49:00.388Z",
+    "dirty": true
+  },
+  "errors": [],
+  "records": [
+    {
+      "name": "home-1024",
+      "text": "跳到主内容\nOptraCall\n持续做出更好的决策\n当\n当前工作区\nCase 与项目工作空间\n新建项目\n主导航\n⌄\n\n日常工作\n\n工作台首页\nDecision Case\n基础建设总览\n›\n战略选择\n目标管理\n语义资产\n分析资产\n项目空间 (5)\n⌄\n⌄\n门店共用资料\n＋\n⋯\n尚无任务\n›\n季度资料整理\n＋\n⋯\n›\n职业访谈与小试\n＋\n⋯\n›\n会员数据口径校准\n＋\n⋯\n›\n华东会员增长实验\n＋\n⋯\n已归档项目 (1)\n›\n设置\n已保存本机配置\n中／EN\n工作台首页\n分析\n决策\n搜索工作区\n/\n帮助\n\nYOUR WORK · OPTRACALL\n\n今天，先推进一件重要的事\n\n当前工作区 / 3 个 Case 正在推进 · 1 项行动执行中\n\n刷新\n有什么想推进的？\n先说一句话，不必先填完整计划\n整理与查找\n直接准备新 Case\n输入会保留，切换页面不用重填放弃这段草稿\n新想法、已有工作的进展，都可以先写在这里。\n请 Agent 整理与推荐（可选）\n全部项目\n待处理事项 2\n有明确来源的回应请求\n作取舍 · 扩大试点范围\n改善华东会员复购 / 扩大试点范围 · 第 2 轮 · 策略 v1\n\n记录本轮扩围取舍\n\n原请求 · 2026-11-27 · 承担人 林予安\n去记录取舍\n补原始观察 · 访谈里反复出现的要求\n探索下一步职业方向 / 访谈里反复出现的要求 · 第 1 轮\n\n补记已有访谈的实际观察\n\n原请求 · 2026-11-25 · 承担人 林予安\n去回录观察\n继续工作\n全部 Case\n▱\n探索下一步职业方向\n\n1 件事项 · 打开 Case 选择继续\n\n▱\n改善华东会员复购\n\n3 件事项 · 打开 Case 选择继续\n\n▱\n梳理家庭年度安排\n\n尚无事项，可先继续项目工作\n\n▰\n季度资料整理\n\n独立项目 · 无关联 Case · 可以直接继续原任务\n\n进展关注\n外部等待\n华东会员增长实验\n\n等待三店核查资料，再讨论是否扩围\n\n改善华东会员复购 · 承担人 林予安\n原记录保存于 2026-11-28 00:42\n查看原项目记录\n基础建设提醒\n按需查看\n战略选择\n未开始\n\n年度规划 · 季度或月度回顾\n\n目标管理\n已采用\n\n年度设定 · 月度或周度跟进\n\n语义资产\n未开始\n\n按需建设业务口径\n\n分析资产\n未开始\n\n按需沉淀分析方法\n\n提醒供按需查看，继续工作无需先完成基础建设。\n\n待处理依据原请求的承担人与回应记录汇总。普通建议、未知承担人和外部等待，不自动成为“你的待办”。\n\n更多工作区记录与入口",
+      "viewport": {
+        "width": 1024,
+        "height": 1000
+      },
+      "overflow": false,
+      "elements": [
+        {
+          "tag": "ASIDE",
+          "id": "sidebar",
+          "class": "sidebar",
+          "x": 0,
+          "y": 0,
+          "w": 180,
+          "h": 1000,
+          "font": "13px",
+          "padding": "24px 13px 12px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "topbar",
+          "x": 180,
+          "y": 0,
+          "w": 844,
+          "h": 58,
+          "font": "13px",
+          "padding": "8px 30px",
+          "grid": "none",
+          "overflowY": "visible"
+        }
+      ]
+    },
+    {
+      "name": "home-390",
+      "text": "跳到主内容\n工作台首页\n帮助\n\nYOUR WORK · OPTRACALL\n\n今天，先推进一件重要的事\n\n当前工作区 / 3 个 Case 正在推进 · 1 项行动执行中\n\n刷新\n有什么想推进的？\n整理与查找\n直接准备新 Case\n输入会保留，切换页面不用重填放弃这段草稿\n新想法、已有工作的进展，都可以先写在这里。\n请 Agent 整理与推荐（可选）\n全部项目\n待处理事项 2\n有明确来源的回应请求\n作取舍 · 扩大试点范围\n改善华东会员复购 / 扩大试点范围 · 第 2 轮 · 策略 v1\n\n记录本轮扩围取舍\n\n原请求 · 2026-11-27 · 承担人 林予安\n去记录取舍\n补原始观察 · 访谈里反复出现的要求\n探索下一步职业方向 / 访谈里反复出现的要求 · 第 1 轮\n\n补记已有访谈的实际观察\n\n原请求 · 2026-11-25 · 承担人 林予安\n去回录观察\n继续工作\n全部 Case\n▱\n探索下一步职业方向\n\n1 件事项 · 打开 Case 选择继续\n\n▱\n改善华东会员复购\n\n3 件事项 · 打开 Case 选择继续\n\n▱\n梳理家庭年度安排\n\n尚无事项，可先继续项目工作\n\n▰\n季度资料整理\n\n独立项目 · 无关联 Case · 可以直接继续原任务\n\n进展关注\n外部等待\n华东会员增长实验\n\n等待三店核查资料，再讨论是否扩围\n\n改善华东会员复购 · 承担人 林予安\n原记录保存于 2026-11-28 00:42\n查看原项目记录\n基础建设提醒\n按需查看\n战略选择\n未开始\n\n年度规划 · 季度或月度回顾\n\n目标管理\n已采用\n\n年度设定 · 月度或周度跟进\n\n语义资产\n未开始\n\n按需建设业务口径\n\n分析资产\n未开始\n\n按需沉淀分析方法\n\n提醒供按需查看，继续工作无需先完成基础建设。\n\n待处理依据原请求的承担人与回应记录汇总。普通建议、未知承担人和外部等待，不自动成为“你的待办”。\n\n更多工作区记录与入口",
+      "viewport": {
+        "width": 390,
+        "height": 1000
+      },
+      "overflow": false,
+      "elements": [
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "topbar",
+          "x": 0,
+          "y": 0,
+          "w": 390,
+          "h": 54,
+          "font": "13px",
+          "padding": "8px 12px",
+          "grid": "minmax(0px, 1fr) auto",
+          "overflowY": "visible"
+        }
+      ]
+    },
+    {
+      "name": "overview-1024",
+      "text": "跳到主内容\nOptraCall\n持续做出更好的决策\n当\n当前工作区\nCase 与项目工作空间\n新建项目\n主导航\n⌄\n\n日常工作\n\n工作台首页\nDecision Case\n基础建设总览\n›\n战略选择\n目标管理\n语义资产\n分析资产\n项目空间 (5)\n⌄\n⌄\n门店共用资料\n＋\n⋯\n尚无任务\n›\n季度资料整理\n＋\n⋯\n›\n职业访谈与小试\n＋\n⋯\n›\n会员数据口径校准\n＋\n⋯\n›\n华东会员增长实验\n＋\n⋯\n已归档项目 (1)\n›\n设置\n已保存本机配置\n中／EN\nDecision Case · Case 总览\n分析\n决策\n搜索工作区\n/\n帮助\nCase 总览\n全部项目\n\nDECISION CASE WORKSPACE\n\nCase 总览\n\n从目标出发继续一件事，也可以切到全部项目寻找具体工作。\n\n＋ 新建 Case\n搜索 Case、项目或分析任务\nCase 状态筛选\n全部状态\n待处理\n分析中\n待确认\n待观察\n已结束\n刷新\n星图\nCase 卡片\n▦\n方块\n☰\n列表\n补充关系\n分析中\n▣\n探索下一步职业方向\nG\n形成下一阶段职业选择\nS\n先做访谈与小规模尝试\n1 件事项\n2 个关联项目\n当前事项\n\n访谈里反复出现的要求\n\n第 1 轮 · 行动已授权\n\n继续当前事项\n→\n分析中\n▣\n改善华东会员复购\nG\n60天会员复购率达到 23%\nS\n先验证缺货治理\n3 件事项\n3 个关联项目\n当前事项\n\n扩大试点范围\n\n第 2 轮 · 等待本轮取舍\n\n继续当前事项\n→\n分析中\n▣\n梳理家庭年度安排\nG\n形成全家共同认可的年度安排\nS\n先收集现有约束\n0 件事项\n0 个关联项目\n当前还没有事项\n\n可以先继续已有项目工作\n\n浏览不会自动创建事项\n\n查看这个 Case\n→\n\nCase 内的事项与轮次继续保留。关联项目引用同一个共享工作空间；独立项目可以直接工作。",
+      "viewport": {
+        "width": 1024,
+        "height": 1000
+      },
+      "overflow": false,
+      "elements": [
+        {
+          "tag": "ASIDE",
+          "id": "sidebar",
+          "class": "sidebar",
+          "x": 0,
+          "y": 0,
+          "w": 180,
+          "h": 1000,
+          "font": "13px",
+          "padding": "24px 13px 12px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "topbar",
+          "x": 180,
+          "y": 0,
+          "w": 844,
+          "h": 58,
+          "font": "13px",
+          "padding": "8px 30px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "NAV",
+          "id": "",
+          "class": "decision-case-tabs",
+          "x": 180,
+          "y": 58,
+          "w": 844,
+          "h": 68,
+          "font": "13px",
+          "padding": "12px 32px",
+          "grid": "none",
+          "overflowY": "visible"
+        }
+      ]
+    },
+    {
+      "name": "overview-390",
+      "text": "跳到主内容\nDecision Case · Case 总览\n帮助\nCase 总览\n全部项目\n\nDECISION CASE WORKSPACE\n\nCase 总览\n\n从目标出发继续一件事，也可以切到全部项目寻找具体工作。\n\n＋ 新建 Case\n搜索 Case、项目或分析任务\nCase 状态筛选\n全部状态\n待处理\n分析中\n待确认\n待观察\n已结束\n刷新\n星图\nCase 卡片\n▦\n方块\n☰\n列表\n补充关系\n分析中\n▣\n探索下一步职业方向\nG\n形成下一阶段职业选择\nS\n先做访谈与小规模尝试\n1 件事项\n2 个关联项目\n当前事项\n\n访谈里反复出现的要求\n\n第 1 轮 · 行动已授权\n\n继续当前事项\n→\n分析中\n▣\n改善华东会员复购\nG\n60天会员复购率达到 23%\nS\n先验证缺货治理\n3 件事项\n3 个关联项目\n当前事项\n\n扩大试点范围\n\n第 2 轮 · 等待本轮取舍\n\n继续当前事项\n→\n分析中\n▣\n梳理家庭年度安排\nG\n形成全家共同认可的年度安排\nS\n先收集现有约束\n0 件事项\n0 个关联项目\n当前还没有事项\n\n可以先继续已有项目工作\n\n浏览不会自动创建事项\n\n查看这个 Case\n→\n\nCase 内的事项与轮次继续保留。关联项目引用同一个共享工作空间；独立项目可以直接工作。",
+      "viewport": {
+        "width": 390,
+        "height": 1000
+      },
+      "overflow": false,
+      "elements": [
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "topbar",
+          "x": 0,
+          "y": 0,
+          "w": 390,
+          "h": 54,
+          "font": "13px",
+          "padding": "8px 12px",
+          "grid": "minmax(0px, 1fr) auto",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "NAV",
+          "id": "",
+          "class": "decision-case-tabs",
+          "x": 0,
+          "y": 54,
+          "w": 390,
+          "h": 57,
+          "font": "13px",
+          "padding": "8px 16px",
+          "grid": "none",
+          "overflowY": "visible"
+        }
+      ]
+    },
+    {
+      "name": "current-list-1024",
+      "text": "跳到主内容\nOptraCall\n持续做出更好的决策\n当\n当前工作区\nCase 与项目工作空间\n新建项目\n主导航\n⌄\n\n日常工作\n\n工作台首页\nDecision Case\n基础建设总览\n›\n战略选择\n目标管理\n语义资产\n分析资产\n项目空间 (5)\n⌄\n⌄\n门店共用资料\n＋\n⋯\n尚无任务\n›\n季度资料整理\n＋\n⋯\n›\n职业访谈与小试\n＋\n⋯\n›\n会员数据口径校准\n＋\n⋯\n›\n华东会员增长实验\n＋\n⋯\n已归档项目 (1)\n›\n设置\n已保存本机配置\n中／EN\nDecision Case · Case 详情\n分析\n决策\n搜索工作区\n/\n帮助\nCase 总览\n全部项目\n← 返回 Case 总览\n\n▣ DECISION CASE\n\n改善华东会员复购\n分析中\nG\n60天会员复购率达到 23%\nv1\nS\n先验证缺货治理\nv1\nCase 管理与状态\n当前工作\n项目与任务3\n成果与依据\n历史\nCase 内事项 3\n＋\n列表\n树状图\n扩大试点范围\n第 2 轮 · 等待本轮取舍\n本轮尚未作新选择\n门店缺货原因\n第 1 轮 · 行动已授权\n等待行动反馈\n复购口径校准\n第 1 轮 · 已完成复盘\n复盘已保存，目标结果另核\n管理事项关联\n待回应请求（1）\n新增事项\n当前事项\n／\n第 2 轮\n等待本轮取舍\n扩大试点范围\n回录反馈\n记录取舍\n\n记录本轮扩围取舍\n\n◇ 本轮概览\n按已保存记录呈现 · 可查看来源\n已明确\n上一轮已保存记录：已记录取舍：试行 · 先在现有三店核对，保持样本范围。；本轮复盘判断尚未记录或暂不可读取。\n正在推进\n本轮明确请求：记录本轮扩围取舍；尚未记录回应这条请求的新取舍。\n接下来\n由林予安回应原请求。\n事项进展与目标结果分别记录；行动完成不代表目标已达成。查看本轮原记录\nϟ\nCase Agent\n只围绕「扩大试点范围」继续\n收起协作\n放大对话\n想讨论当前事项的哪项取舍？\n会话模型 · UI 验收本地合成 Provider\n发送\n本轮记录与交接\n历次取舍与实际反馈\n关联项目\n请选择项目\n华东会员增长实验\n会员数据口径校准\n门店共用资料\n回关联项目协作\n准备 Plan Task\n准备 Teach Task\n交接与依据\n记录本次取舍\n授权本次行动\nCase 目标、项目工作与管理记录",
+      "viewport": {
+        "width": 1024,
+        "height": 1000
+      },
+      "overflow": false,
+      "elements": [
+        {
+          "tag": "ASIDE",
+          "id": "sidebar",
+          "class": "sidebar",
+          "x": 0,
+          "y": 0,
+          "w": 180,
+          "h": 1000,
+          "font": "13px",
+          "padding": "24px 13px 12px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "topbar",
+          "x": 180,
+          "y": 0,
+          "w": 844,
+          "h": 58,
+          "font": "13px",
+          "padding": "8px 30px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "NAV",
+          "id": "",
+          "class": "decision-case-tabs",
+          "x": 180,
+          "y": 58,
+          "w": 844,
+          "h": 68,
+          "font": "13px",
+          "padding": "12px 32px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "daily-case-header",
+          "x": 180,
+          "y": 126,
+          "w": 844,
+          "h": 149.875,
+          "font": "13px",
+          "padding": "26px 32px 12px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "case-current-layout",
+          "x": 180,
+          "y": 333.875,
+          "w": 844,
+          "h": 666.125,
+          "font": "13px",
+          "padding": "0px",
+          "grid": "215px 629px",
+          "overflowY": "hidden"
+        },
+        {
+          "tag": "ASIDE",
+          "id": "",
+          "class": "case-issue-sidebar",
+          "x": 192,
+          "y": 359.875,
+          "w": 190,
+          "h": 575.34375,
+          "font": "13px",
+          "padding": "0px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "case-current-main",
+          "x": 395,
+          "y": 333.875,
+          "w": 629,
+          "h": 666.125,
+          "font": "13px",
+          "padding": "28px",
+          "grid": "none",
+          "overflowY": "auto"
+        },
+        {
+          "tag": "SECTION",
+          "id": "",
+          "class": "case-current-summary",
+          "x": 423,
+          "y": 542.34375,
+          "w": 558,
+          "h": 304.28125,
+          "font": "13px",
+          "padding": "19px 25px 17px",
+          "grid": "none",
+          "overflowY": "visible"
+        }
+      ]
+    },
+    {
+      "name": "current-list-390",
+      "text": "跳到主内容\nDecision Case · Case 详情\n帮助\nCase 总览\n全部项目\n← 返回 Case 总览\n\n▣ DECISION CASE\n\n改善华东会员复购\n分析中\nG\n60天会员复购率达到 23%\nv1\nS\n先验证缺货治理\nv1\nCase 管理与状态\n当前工作\n项目与任务3\n成果与依据\n历史\n当前事项\n扩大试点范围\n门店缺货原因\n复购口径校准\n＋\n列表\n树状图\n扩大试点范围\n第 2 轮 · 等待本轮取舍\n本轮尚未作新选择\n门店缺货原因\n第 1 轮 · 行动已授权\n等待行动反馈\n复购口径校准\n第 1 轮 · 已完成复盘\n复盘已保存，目标结果另核\n管理事项关联\n待回应请求（1）\n当前事项\n／\n第 2 轮\n等待本轮取舍\n扩大试点范围\n回录反馈\n记录取舍\n\n记录本轮扩围取舍\n\n◇ 本轮概览\n按已保存记录呈现 · 可查看来源\n已明确\n上一轮已保存记录：已记录取舍：试行 · 先在现有三店核对，保持样本范围。；本轮复盘判断尚未记录或暂不可读取。\n正在推进\n本轮明确请求：记录本轮扩围取舍；尚未记录回应这条请求的新取舍。\n接下来\n由林予安回应原请求。\n事项进展与目标结果分别记录；行动完成不代表目标已达成。查看本轮原记录\nϟ\nCase Agent\n只围绕「扩大试点范围」继续\n收起协作\n放大对话\n想讨论当前事项的哪项取舍？\n会话模型 · UI 验收本地合成 Provider\n发送\n本轮记录与交接\n历次取舍与实际反馈\n关联项目\n请选择项目\n华东会员增长实验\n会员数据口径校准\n门店共用资料\n回关联项目协作\n准备 Plan Task\n准备 Teach Task\n交接与依据\n记录本次取舍\n授权本次行动\nCase 目标、项目工作与管理记录",
+      "viewport": {
+        "width": 390,
+        "height": 1000
+      },
+      "overflow": false,
+      "elements": [
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "topbar",
+          "x": 0,
+          "y": 0,
+          "w": 390,
+          "h": 54,
+          "font": "13px",
+          "padding": "8px 12px",
+          "grid": "minmax(0px, 1fr) auto",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "NAV",
+          "id": "",
+          "class": "decision-case-tabs",
+          "x": 0,
+          "y": 54,
+          "w": 390,
+          "h": 57,
+          "font": "13px",
+          "padding": "8px 16px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "daily-case-header",
+          "x": 0,
+          "y": 111,
+          "w": 390,
+          "h": 165.390625,
+          "font": "13px",
+          "padding": "26px 18px 5px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "case-current-layout",
+          "x": 0,
+          "y": 326.984375,
+          "w": 390,
+          "h": 673.015625,
+          "font": "13px",
+          "padding": "0px",
+          "grid": "215px minmax(0px, 1fr)",
+          "overflowY": "auto"
+        },
+        {
+          "tag": "ASIDE",
+          "id": "",
+          "class": "case-issue-sidebar",
+          "x": 18,
+          "y": 338.984375,
+          "w": 354,
+          "h": 506.34375,
+          "font": "13px",
+          "padding": "0px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "case-current-main",
+          "x": 0,
+          "y": 776.984375,
+          "w": 390,
+          "h": 1442.125,
+          "font": "13px",
+          "padding": "25px 20px 35px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "SECTION",
+          "id": "",
+          "class": "case-current-summary",
+          "x": 20,
+          "y": 973.90625,
+          "w": 350,
+          "h": 374.078125,
+          "font": "13px",
+          "padding": "15px 16px",
+          "grid": "none",
+          "overflowY": "visible"
+        }
+      ]
+    },
+    {
+      "name": "current-tree-1024",
+      "text": "跳到主内容\nOptraCall\n持续做出更好的决策\n当\n当前工作区\nCase 与项目工作空间\n新建项目\n主导航\n⌄\n\n日常工作\n\n工作台首页\nDecision Case\n基础建设总览\n›\n战略选择\n目标管理\n语义资产\n分析资产\n项目空间 (5)\n⌄\n⌄\n门店共用资料\n＋\n⋯\n尚无任务\n›\n季度资料整理\n＋\n⋯\n›\n职业访谈与小试\n＋\n⋯\n›\n会员数据口径校准\n＋\n⋯\n›\n华东会员增长实验\n＋\n⋯\n已归档项目 (1)\n›\n设置\n已保存本机配置\n中／EN\nDecision Case · Case 详情\n分析\n决策\n搜索工作区\n/\n帮助\nCase 总览\n全部项目\n← 返回 Case 总览\n\n▣ DECISION CASE\n\n改善华东会员复购\n分析中\nG\n60天会员复购率达到 23%\nv1\nS\n先验证缺货治理\nv1\nCase 管理与状态\n当前工作\n项目与任务3\n成果与依据\n历史\nCase 内事项 3\n＋\n列表\n树状图\n\n沿已标注关系看事项承接。\n\n门店缺货原因\n第 1 轮 · 行动已授权\n等待行动反馈\n缺货核查结果为本轮扩围取舍提供依据。\n复购口径校准\n第 1 轮 · 已完成复盘\n复盘已保存，目标结果另核\n先有可比较的复购口径，才能讨论是否扩围。\n扩大试点范围\n第 2 轮 · 等待本轮取舍\n本轮尚未作新选择\n复购口径校准 → 扩大试点范围：先有可比较的复购口径，才能讨论是否扩围。\n门店缺货原因 → 扩大试点范围：缺货核查结果为本轮扩围取舍提供依据。\n\n箭头表示已记录的承接方向，可并行推进。\n\n管理事项关联\n待回应请求（1）\n新增事项\n当前事项\n／\n第 2 轮\n等待本轮取舍\n扩大试点范围\n回录反馈\n记录取舍\n\n记录本轮扩围取舍\n\n◇ 本轮概览\n按已保存记录呈现 · 可查看来源\n已明确\n上一轮已保存记录：已记录取舍：试行 · 先在现有三店核对，保持样本范围。；本轮复盘判断尚未记录或暂不可读取。\n正在推进\n本轮明确请求：记录本轮扩围取舍；尚未记录回应这条请求的新取舍。\n接下来\n由林予安回应原请求。\n事项进展与目标结果分别记录；行动完成不代表目标已达成。查看本轮原记录\nϟ\nCase Agent\n只围绕「扩大试点范围」继续\n收起协作\n放大对话\n想讨论当前事项的哪项取舍？\n会话模型 · UI 验收本地合成 Provider\n发送\n本轮记录与交接\n历次取舍与实际反馈\n关联项目\n请选择项目\n华东会员增长实验\n会员数据口径校准\n门店共用资料\n回关联项目协作\n准备 Plan Task\n准备 Teach Task\n交接与依据\n记录本次取舍\n授权本次行动\nCase 目标、项目工作与管理记录",
+      "viewport": {
+        "width": 1024,
+        "height": 1000
+      },
+      "overflow": false,
+      "elements": [
+        {
+          "tag": "ASIDE",
+          "id": "sidebar",
+          "class": "sidebar",
+          "x": 0,
+          "y": 0,
+          "w": 180,
+          "h": 1000,
+          "font": "13px",
+          "padding": "24px 13px 12px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "topbar",
+          "x": 180,
+          "y": 0,
+          "w": 844,
+          "h": 58,
+          "font": "13px",
+          "padding": "8px 30px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "NAV",
+          "id": "",
+          "class": "decision-case-tabs",
+          "x": 180,
+          "y": 58,
+          "w": 844,
+          "h": 68,
+          "font": "13px",
+          "padding": "12px 32px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "daily-case-header",
+          "x": 180,
+          "y": 126,
+          "w": 844,
+          "h": 149.875,
+          "font": "13px",
+          "padding": "26px 32px 12px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "case-current-layout",
+          "x": 180,
+          "y": 333.875,
+          "w": 844,
+          "h": 666.125,
+          "font": "13px",
+          "padding": "0px",
+          "grid": "215px 629px",
+          "overflowY": "hidden"
+        },
+        {
+          "tag": "ASIDE",
+          "id": "",
+          "class": "case-issue-sidebar",
+          "x": 192,
+          "y": 359.875,
+          "w": 190,
+          "h": 723.953125,
+          "font": "13px",
+          "padding": "0px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "case-current-main",
+          "x": 395,
+          "y": 333.875,
+          "w": 629,
+          "h": 666.125,
+          "font": "13px",
+          "padding": "28px",
+          "grid": "none",
+          "overflowY": "auto"
+        },
+        {
+          "tag": "SECTION",
+          "id": "",
+          "class": "case-current-summary",
+          "x": 423,
+          "y": 542.34375,
+          "w": 558,
+          "h": 304.28125,
+          "font": "13px",
+          "padding": "19px 25px 17px",
+          "grid": "none",
+          "overflowY": "visible"
+        }
+      ]
+    },
+    {
+      "name": "current-tree-390",
+      "text": "跳到主内容\nDecision Case · Case 详情\n帮助\nCase 总览\n全部项目\n← 返回 Case 总览\n\n▣ DECISION CASE\n\n改善华东会员复购\n分析中\nG\n60天会员复购率达到 23%\nv1\nS\n先验证缺货治理\nv1\nCase 管理与状态\n当前工作\n项目与任务3\n成果与依据\n历史\n当前事项\n扩大试点范围\n门店缺货原因\n复购口径校准\n＋\n列表\n树状图\n\n沿已标注关系看事项承接。\n\n门店缺货原因\n第 1 轮 · 行动已授权\n等待行动反馈\n缺货核查结果为本轮扩围取舍提供依据。\n复购口径校准\n第 1 轮 · 已完成复盘\n复盘已保存，目标结果另核\n先有可比较的复购口径，才能讨论是否扩围。\n扩大试点范围\n第 2 轮 · 等待本轮取舍\n本轮尚未作新选择\n复购口径校准 → 扩大试点范围：先有可比较的复购口径，才能讨论是否扩围。\n门店缺货原因 → 扩大试点范围：缺货核查结果为本轮扩围取舍提供依据。\n\n箭头表示已记录的承接方向，可并行推进。\n\n管理事项关联\n待回应请求（1）\n当前事项\n／\n第 2 轮\n等待本轮取舍\n扩大试点范围\n回录反馈\n记录取舍\n\n记录本轮扩围取舍\n\n◇ 本轮概览\n按已保存记录呈现 · 可查看来源\n已明确\n上一轮已保存记录：已记录取舍：试行 · 先在现有三店核对，保持样本范围。；本轮复盘判断尚未记录或暂不可读取。\n正在推进\n本轮明确请求：记录本轮扩围取舍；尚未记录回应这条请求的新取舍。\n接下来\n由林予安回应原请求。\n事项进展与目标结果分别记录；行动完成不代表目标已达成。查看本轮原记录\nϟ\nCase Agent\n只围绕「扩大试点范围」继续\n收起协作\n放大对话\n想讨论当前事项的哪项取舍？\n会话模型 · UI 验收本地合成 Provider\n发送\n本轮记录与交接\n历次取舍与实际反馈\n关联项目\n请选择项目\n华东会员增长实验\n会员数据口径校准\n门店共用资料\n回关联项目协作\n准备 Plan Task\n准备 Teach Task\n交接与依据\n记录本次取舍\n授权本次行动\nCase 目标、项目工作与管理记录",
+      "viewport": {
+        "width": 390,
+        "height": 1000
+      },
+      "overflow": false,
+      "elements": [
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "topbar",
+          "x": 0,
+          "y": 0,
+          "w": 390,
+          "h": 54,
+          "font": "13px",
+          "padding": "8px 12px",
+          "grid": "minmax(0px, 1fr) auto",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "NAV",
+          "id": "",
+          "class": "decision-case-tabs",
+          "x": 0,
+          "y": 54,
+          "w": 390,
+          "h": 57,
+          "font": "13px",
+          "padding": "8px 16px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "daily-case-header",
+          "x": 0,
+          "y": 111,
+          "w": 390,
+          "h": 165.390625,
+          "font": "13px",
+          "padding": "26px 18px 5px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "case-current-layout",
+          "x": 0,
+          "y": 326.984375,
+          "w": 390,
+          "h": 673.015625,
+          "font": "13px",
+          "padding": "0px",
+          "grid": "215px minmax(0px, 1fr)",
+          "overflowY": "auto"
+        },
+        {
+          "tag": "ASIDE",
+          "id": "",
+          "class": "case-issue-sidebar",
+          "x": 18,
+          "y": 338.984375,
+          "w": 354,
+          "h": 610.78125,
+          "font": "13px",
+          "padding": "0px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "case-current-main",
+          "x": 0,
+          "y": 776.984375,
+          "w": 390,
+          "h": 1442.125,
+          "font": "13px",
+          "padding": "25px 20px 35px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "SECTION",
+          "id": "",
+          "class": "case-current-summary",
+          "x": 20,
+          "y": 973.90625,
+          "w": 350,
+          "h": 374.078125,
+          "font": "13px",
+          "padding": "15px 16px",
+          "grid": "none",
+          "overflowY": "visible"
+        }
+      ]
+    },
+    {
+      "name": "case-projects-1024",
+      "text": "跳到主内容\nOptraCall\n持续做出更好的决策\n当\n当前工作区\nCase 与项目工作空间\n新建项目\n主导航\n⌄\n\n日常工作\n\n工作台首页\nDecision Case\n基础建设总览\n›\n战略选择\n目标管理\n语义资产\n分析资产\n项目空间 (5)\n⌄\n⌄\n门店共用资料\n＋\n⋯\n尚无任务\n›\n季度资料整理\n＋\n⋯\n›\n职业访谈与小试\n＋\n⋯\n›\n会员数据口径校准\n＋\n⋯\n›\n华东会员增长实验\n＋\n⋯\n已归档项目 (1)\n›\n设置\n已保存本机配置\n中／EN\nDecision Case · Case 详情\n分析\n决策\n搜索工作区\n/\n帮助\nCase 总览\n全部项目\n← 返回 Case 总览\n\n▣ DECISION CASE\n\n改善华东会员复购\n分析中\nG\n60天会员复购率达到 23%\nv1\nS\n先验证缺货治理\nv1\nCase 管理与状态\n当前工作\n项目与任务3\n成果与依据\n历史\n项目与任务\n\n在共享项目里做具体工作，保留任务原来的会话与成果。\n\n改善华东会员复购\n项目范围\n全部当前 Case\n当前事项：扩大试点范围\n其他事项：门店缺货原因\n其他事项：复购口径校准\n所选范围内明确关联的项目与任务\n华东会员增长实验\n原项目 · 查看全局工作\n4 个任务\n原任务\t用途\t当前记录\t继续工作\n三店试点范围梳理\n原关联：改善华东会员复购 / 扩大试点范围\n\t需求 Requirement\t尚无运行记录\n更新于 11/28 08:42\n\t打开原任务\n\n华东三店试点观察\n原关联：改善华东会员复购 / 扩大试点范围\n\t分析 Analysis\t尚无运行记录\n更新于 11/28 08:42\n\t打开原任务\n\n是否扩大试点的备选方案\n原关联：改善华东会员复购 / 扩大试点范围\n\t计划 Plan\t尚无运行记录\n更新于 11/28 08:42\n\t打开原任务\n\n本轮扩围取舍\n原关联：改善华东会员复购 / 扩大试点范围\n\t决策 Decision\t尚无运行记录\n更新于 11/28 08:42\n\t打开原任务\n项目共用信息与管理\n六类任务分别用来做什么？按需要选用，可以重复，也可以缺少\n项目由多个事项共享。打开原任务只是查看已有内容；带着此 Case 继续协作需要明确选择。最近运行完成不等于目标已经达成。\n关联项目",
+      "viewport": {
+        "width": 1024,
+        "height": 1000
+      },
+      "overflow": false,
+      "elements": [
+        {
+          "tag": "ASIDE",
+          "id": "sidebar",
+          "class": "sidebar",
+          "x": 0,
+          "y": 0,
+          "w": 180,
+          "h": 1000,
+          "font": "13px",
+          "padding": "24px 13px 12px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "topbar",
+          "x": 180,
+          "y": 0,
+          "w": 844,
+          "h": 58,
+          "font": "13px",
+          "padding": "8px 30px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "NAV",
+          "id": "",
+          "class": "decision-case-tabs",
+          "x": 180,
+          "y": 58,
+          "w": 844,
+          "h": 68,
+          "font": "13px",
+          "padding": "12px 32px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "daily-case-header",
+          "x": 180,
+          "y": 126,
+          "w": 844,
+          "h": 149.875,
+          "font": "13px",
+          "padding": "26px 32px 12px",
+          "grid": "none",
+          "overflowY": "visible"
+        }
+      ]
+    },
+    {
+      "name": "case-projects-390",
+      "text": "跳到主内容\nDecision Case · Case 详情\n帮助\nCase 总览\n全部项目\n← 返回 Case 总览\n\n▣ DECISION CASE\n\n改善华东会员复购\n分析中\nG\n60天会员复购率达到 23%\nv1\nS\n先验证缺货治理\nv1\nCase 管理与状态\n当前工作\n项目与任务3\n成果与依据\n历史\n项目与任务\n\n在共享项目里做具体工作，保留任务原来的会话与成果。\n\n改善华东会员复购\n项目范围\n全部当前 Case\n当前事项：扩大试点范围\n其他事项：门店缺货原因\n其他事项：复购口径校准\n所选范围内明确关联的项目与任务\n华东会员增长实验\n原项目 · 查看全局工作\n4 个任务\n原任务\t用途\t当前记录\t继续工作\n三店试点范围梳理\n原关联：改善华东会员复购 / 扩大试点范围\n\t需求 Requirement\t尚无运行记录\n更新于 11/28 08:42\n\t打开原任务\n\n华东三店试点观察\n原关联：改善华东会员复购 / 扩大试点范围\n\t分析 Analysis\t尚无运行记录\n更新于 11/28 08:42\n\t打开原任务\n\n是否扩大试点的备选方案\n原关联：改善华东会员复购 / 扩大试点范围\n\t计划 Plan\t尚无运行记录\n更新于 11/28 08:42\n\t打开原任务\n\n本轮扩围取舍\n原关联：改善华东会员复购 / 扩大试点范围\n\t决策 Decision\t尚无运行记录\n更新于 11/28 08:42\n\t打开原任务\n项目共用信息与管理\n六类任务分别用来做什么？\n按需要选用，可以重复，也可以缺少\n项目由多个事项共享。打开原任务只是查看已有内容；带着此 Case 继续协作需要明确选择。最近运行完成不等于目标已经达成。\n关联项目",
+      "viewport": {
+        "width": 390,
+        "height": 1000
+      },
+      "overflow": false,
+      "elements": [
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "topbar",
+          "x": 0,
+          "y": 0,
+          "w": 390,
+          "h": 54,
+          "font": "13px",
+          "padding": "8px 12px",
+          "grid": "minmax(0px, 1fr) auto",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "NAV",
+          "id": "",
+          "class": "decision-case-tabs",
+          "x": 0,
+          "y": 54,
+          "w": 390,
+          "h": 57,
+          "font": "13px",
+          "padding": "8px 16px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "daily-case-header",
+          "x": 0,
+          "y": 111,
+          "w": 390,
+          "h": 165.390625,
+          "font": "13px",
+          "padding": "26px 18px 5px",
+          "grid": "none",
+          "overflowY": "visible"
+        }
+      ]
+    },
+    {
+      "name": "case-assets-1024",
+      "text": "跳到主内容\nOptraCall\n持续做出更好的决策\n当\n当前工作区\nCase 与项目工作空间\n新建项目\n主导航\n⌄\n\n日常工作\n\n工作台首页\nDecision Case\n基础建设总览\n›\n战略选择\n目标管理\n语义资产\n分析资产\n项目空间 (5)\n⌄\n⌄\n门店共用资料\n＋\n⋯\n尚无任务\n›\n季度资料整理\n＋\n⋯\n›\n职业访谈与小试\n＋\n⋯\n›\n会员数据口径校准\n＋\n⋯\n›\n华东会员增长实验\n＋\n⋯\n已归档项目 (1)\n›\n设置\n已保存本机配置\n中／EN\nDecision Case · Case 详情\n分析\n决策\n搜索工作区\n/\n帮助\nCase 总览\n全部项目\n← 返回 Case 总览\n\n▣ DECISION CASE\n\n改善华东会员复购\n分析中\nG\n60天会员复购率达到 23%\nv1\nS\n先验证缺货治理\nv1\nCase 管理与状态\n当前工作\n项目与任务3\n成果与依据\n历史\n成果与依据\n\n只展示明确关联当前 Case 的资料，可进一步查看当前事项的依据。\n\n资料范围\n全部当前 Case\n当前事项：扩大试点范围\n其他事项：门店缺货原因\n其他事项：复购口径校准\n1 条资料 · 共享项目中的其他资料不会自动关联\n查看事项：扩大试点范围\n＋ 关联产物\n分析报告\n华东三店试点观察\n\n来自原任务：华东三店试点观察\n\n关联 Case：改善华东会员复购\n关联事项：扩大试点范围\n来源项目：华东会员增长实验 · 原文件引用 · 11/28 08:42\n查看来源 ↗\n\n已有成果、行动完成情况与 G 是否达成分别记录，不由界面推定因果或 Case 净贡献；目标结果可从页首原目标记录核对。",
+      "viewport": {
+        "width": 1024,
+        "height": 1000
+      },
+      "overflow": false,
+      "elements": [
+        {
+          "tag": "ASIDE",
+          "id": "sidebar",
+          "class": "sidebar",
+          "x": 0,
+          "y": 0,
+          "w": 180,
+          "h": 1000,
+          "font": "13px",
+          "padding": "24px 13px 12px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "topbar",
+          "x": 180,
+          "y": 0,
+          "w": 844,
+          "h": 58,
+          "font": "13px",
+          "padding": "8px 30px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "NAV",
+          "id": "",
+          "class": "decision-case-tabs",
+          "x": 180,
+          "y": 58,
+          "w": 844,
+          "h": 68,
+          "font": "13px",
+          "padding": "12px 32px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "daily-case-header",
+          "x": 180,
+          "y": 126,
+          "w": 844,
+          "h": 149.875,
+          "font": "13px",
+          "padding": "26px 32px 12px",
+          "grid": "none",
+          "overflowY": "visible"
+        }
+      ]
+    },
+    {
+      "name": "case-assets-390",
+      "text": "跳到主内容\nDecision Case · Case 详情\n帮助\nCase 总览\n全部项目\n← 返回 Case 总览\n\n▣ DECISION CASE\n\n改善华东会员复购\n分析中\nG\n60天会员复购率达到 23%\nv1\nS\n先验证缺货治理\nv1\nCase 管理与状态\n当前工作\n项目与任务3\n成果与依据\n历史\n成果与依据\n\n只展示明确关联当前 Case 的资料，可进一步查看当前事项的依据。\n\n资料范围\n全部当前 Case\n当前事项：扩大试点范围\n其他事项：门店缺货原因\n其他事项：复购口径校准\n1 条资料 · 共享项目中的其他资料不会自动关联\n查看事项：扩大试点范围\n＋ 关联产物\n分析报告\n华东三店试点观察\n\n来自原任务：华东三店试点观察\n\n关联 Case：改善华东会员复购\n关联事项：扩大试点范围\n来源项目：华东会员增长实验 · 原文件引用 · 11/28 08:42\n查看来源 ↗\n\n已有成果、行动完成情况与 G 是否达成分别记录，不由界面推定因果或 Case 净贡献；目标结果可从页首原目标记录核对。",
+      "viewport": {
+        "width": 390,
+        "height": 1000
+      },
+      "overflow": false,
+      "elements": [
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "topbar",
+          "x": 0,
+          "y": 0,
+          "w": 390,
+          "h": 54,
+          "font": "13px",
+          "padding": "8px 12px",
+          "grid": "minmax(0px, 1fr) auto",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "NAV",
+          "id": "",
+          "class": "decision-case-tabs",
+          "x": 0,
+          "y": 54,
+          "w": 390,
+          "h": 57,
+          "font": "13px",
+          "padding": "8px 16px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "daily-case-header",
+          "x": 0,
+          "y": 111,
+          "w": 390,
+          "h": 165.390625,
+          "font": "13px",
+          "padding": "26px 18px 5px",
+          "grid": "none",
+          "overflowY": "visible"
+        }
+      ]
+    },
+    {
+      "name": "case-history-1024",
+      "text": "跳到主内容\nOptraCall\n持续做出更好的决策\n当\n当前工作区\nCase 与项目工作空间\n新建项目\n主导航\n⌄\n\n日常工作\n\n工作台首页\nDecision Case\n基础建设总览\n›\n战略选择\n目标管理\n语义资产\n分析资产\n项目空间 (5)\n⌄\n⌄\n门店共用资料\n＋\n⋯\n尚无任务\n›\n季度资料整理\n＋\n⋯\n›\n职业访谈与小试\n＋\n⋯\n›\n会员数据口径校准\n＋\n⋯\n›\n华东会员增长实验\n＋\n⋯\n已归档项目 (1)\n›\n设置\n已保存本机配置\n中／EN\nDecision Case · Case 详情\n分析\n决策\n搜索工作区\n/\n帮助\nCase 总览\n全部项目\n← 返回 Case 总览\n\n▣ DECISION CASE\n\n改善华东会员复购\n分析中\nG\n60天会员复购率达到 23%\nv1\nS\n先验证缺货治理\nv1\nCase 管理与状态\n当前工作\n项目与任务3\n成果与依据\n历史\n历史与轮次\n\n原取舍、行动、观察和复盘按轮次保留。\n\n事项\n扩大试点范围\n门店缺货原因\n复购口径校准\n\n当前查看「扩大试点范围」。历史轮次只读，可返回当前工作继续。\n\n第 2 轮 · 当前轮\n等待本轮取舍\n\n记录本轮扩围取舍\n\n回到当前轮继续 →\n第 1 轮 · 11/28 08:42 · 已保存\n取舍：试行\n\n先在现有三店核对，保持样本范围。\n\n查看当时保存内容 ↗查看该轮完整记录 →\n\n查看历史不覆盖当前轮；后续保存不会改写上一轮的原取舍。\n\n其他 Case 记录与管理历史",
+      "viewport": {
+        "width": 1024,
+        "height": 1000
+      },
+      "overflow": false,
+      "elements": [
+        {
+          "tag": "ASIDE",
+          "id": "sidebar",
+          "class": "sidebar",
+          "x": 0,
+          "y": 0,
+          "w": 180,
+          "h": 1000,
+          "font": "13px",
+          "padding": "24px 13px 12px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "topbar",
+          "x": 180,
+          "y": 0,
+          "w": 844,
+          "h": 58,
+          "font": "13px",
+          "padding": "8px 30px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "NAV",
+          "id": "",
+          "class": "decision-case-tabs",
+          "x": 180,
+          "y": 58,
+          "w": 844,
+          "h": 68,
+          "font": "13px",
+          "padding": "12px 32px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "daily-case-header",
+          "x": 180,
+          "y": 126,
+          "w": 844,
+          "h": 149.875,
+          "font": "13px",
+          "padding": "26px 32px 12px",
+          "grid": "none",
+          "overflowY": "visible"
+        }
+      ]
+    },
+    {
+      "name": "case-history-390",
+      "text": "跳到主内容\nDecision Case · Case 详情\n帮助\nCase 总览\n全部项目\n← 返回 Case 总览\n\n▣ DECISION CASE\n\n改善华东会员复购\n分析中\nG\n60天会员复购率达到 23%\nv1\nS\n先验证缺货治理\nv1\nCase 管理与状态\n当前工作\n项目与任务3\n成果与依据\n历史\n历史与轮次\n\n原取舍、行动、观察和复盘按轮次保留。\n\n事项\n扩大试点范围\n门店缺货原因\n复购口径校准\n\n当前查看「扩大试点范围」。历史轮次只读，可返回当前工作继续。\n\n第 2 轮 · 当前轮\n等待本轮取舍\n\n记录本轮扩围取舍\n\n回到当前轮继续 →\n第 1 轮 · 11/28 08:42 · 已保存\n取舍：试行\n\n先在现有三店核对，保持样本范围。\n\n查看当时保存内容 ↗查看该轮完整记录 →\n\n查看历史不覆盖当前轮；后续保存不会改写上一轮的原取舍。\n\n其他 Case 记录与管理历史",
+      "viewport": {
+        "width": 390,
+        "height": 1000
+      },
+      "overflow": false,
+      "elements": [
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "topbar",
+          "x": 0,
+          "y": 0,
+          "w": 390,
+          "h": 54,
+          "font": "13px",
+          "padding": "8px 12px",
+          "grid": "minmax(0px, 1fr) auto",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "NAV",
+          "id": "",
+          "class": "decision-case-tabs",
+          "x": 0,
+          "y": 54,
+          "w": 390,
+          "h": 57,
+          "font": "13px",
+          "padding": "8px 16px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "daily-case-header",
+          "x": 0,
+          "y": 111,
+          "w": 390,
+          "h": 165.390625,
+          "font": "13px",
+          "padding": "26px 18px 5px",
+          "grid": "none",
+          "overflowY": "visible"
+        }
+      ]
+    },
+    {
+      "name": "current-back-1024",
+      "text": "跳到主内容\nOptraCall\n持续做出更好的决策\n当\n当前工作区\nCase 与项目工作空间\n新建项目\n主导航\n⌄\n\n日常工作\n\n工作台首页\nDecision Case\n基础建设总览\n›\n战略选择\n目标管理\n语义资产\n分析资产\n项目空间 (5)\n⌄\n⌄\n门店共用资料\n＋\n⋯\n尚无任务\n›\n季度资料整理\n＋\n⋯\n›\n职业访谈与小试\n＋\n⋯\n›\n会员数据口径校准\n＋\n⋯\n›\n华东会员增长实验\n＋\n⋯\n已归档项目 (1)\n›\n设置\n已保存本机配置\n中／EN\nDecision Case · Case 详情\n分析\n决策\n搜索工作区\n/\n帮助\nCase 总览\n全部项目\n← 返回 Case 总览\n\n▣ DECISION CASE\n\n改善华东会员复购\n分析中\nG\n60天会员复购率达到 23%\nv1\nS\n先验证缺货治理\nv1\nCase 管理与状态\n当前工作\n项目与任务3\n成果与依据\n历史\nCase 内事项 3\n＋\n列表\n树状图\n\n沿已标注关系看事项承接。\n\n门店缺货原因\n第 1 轮 · 行动已授权\n等待行动反馈\n缺货核查结果为本轮扩围取舍提供依据。\n复购口径校准\n第 1 轮 · 已完成复盘\n复盘已保存，目标结果另核\n先有可比较的复购口径，才能讨论是否扩围。\n扩大试点范围\n第 2 轮 · 等待本轮取舍\n本轮尚未作新选择\n复购口径校准 → 扩大试点范围：先有可比较的复购口径，才能讨论是否扩围。\n门店缺货原因 → 扩大试点范围：缺货核查结果为本轮扩围取舍提供依据。\n\n箭头表示已记录的承接方向，可并行推进。\n\n管理事项关联\n待回应请求（1）\n新增事项\n当前事项\n／\n第 2 轮\n等待本轮取舍\n扩大试点范围\n回录反馈\n记录取舍\n\n记录本轮扩围取舍\n\n◇ 本轮概览\n按已保存记录呈现 · 可查看来源\n已明确\n上一轮已保存记录：已记录取舍：试行 · 先在现有三店核对，保持样本范围。；本轮复盘判断尚未记录或暂不可读取。\n正在推进\n本轮明确请求：记录本轮扩围取舍；尚未记录回应这条请求的新取舍。\n接下来\n由林予安回应原请求。\n事项进展与目标结果分别记录；行动完成不代表目标已达成。查看本轮原记录\nϟ\nCase Agent\n只围绕「扩大试点范围」继续\n收起协作\n放大对话\n想讨论当前事项的哪项取舍？\n会话模型 · UI 验收本地合成 Provider\n发送\n本轮记录与交接\n历次取舍与实际反馈\n关联项目\n请选择项目\n华东会员增长实验\n会员数据口径校准\n门店共用资料\n回关联项目协作\n准备 Plan Task\n准备 Teach Task\n交接与依据\n记录本次取舍\n授权本次行动\nCase 目标、项目工作与管理记录",
+      "viewport": {
+        "width": 1024,
+        "height": 1000
+      },
+      "overflow": false,
+      "elements": [
+        {
+          "tag": "ASIDE",
+          "id": "sidebar",
+          "class": "sidebar",
+          "x": 0,
+          "y": 0,
+          "w": 180,
+          "h": 1000,
+          "font": "13px",
+          "padding": "24px 13px 12px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "topbar",
+          "x": 180,
+          "y": 0,
+          "w": 844,
+          "h": 58,
+          "font": "13px",
+          "padding": "8px 30px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "NAV",
+          "id": "",
+          "class": "decision-case-tabs",
+          "x": 180,
+          "y": 58,
+          "w": 844,
+          "h": 68,
+          "font": "13px",
+          "padding": "12px 32px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "daily-case-header",
+          "x": 180,
+          "y": 126,
+          "w": 844,
+          "h": 149.875,
+          "font": "13px",
+          "padding": "26px 32px 12px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "case-current-layout",
+          "x": 180,
+          "y": 333.875,
+          "w": 844,
+          "h": 666.125,
+          "font": "13px",
+          "padding": "0px",
+          "grid": "215px 629px",
+          "overflowY": "hidden"
+        },
+        {
+          "tag": "ASIDE",
+          "id": "",
+          "class": "case-issue-sidebar",
+          "x": 192,
+          "y": 359.875,
+          "w": 190,
+          "h": 723.953125,
+          "font": "13px",
+          "padding": "0px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "case-current-main",
+          "x": 395,
+          "y": 333.875,
+          "w": 629,
+          "h": 666.125,
+          "font": "13px",
+          "padding": "28px",
+          "grid": "none",
+          "overflowY": "auto"
+        },
+        {
+          "tag": "SECTION",
+          "id": "",
+          "class": "case-current-summary",
+          "x": 423,
+          "y": 542.34375,
+          "w": 558,
+          "h": 304.28125,
+          "font": "13px",
+          "padding": "19px 25px 17px",
+          "grid": "none",
+          "overflowY": "visible"
+        }
+      ]
+    },
+    {
+      "name": "current-back-390",
+      "text": "跳到主内容\nDecision Case · Case 详情\n帮助\nCase 总览\n全部项目\n← 返回 Case 总览\n\n▣ DECISION CASE\n\n改善华东会员复购\n分析中\nG\n60天会员复购率达到 23%\nv1\nS\n先验证缺货治理\nv1\nCase 管理与状态\n当前工作\n项目与任务3\n成果与依据\n历史\n当前事项\n扩大试点范围\n门店缺货原因\n复购口径校准\n＋\n列表\n树状图\n\n沿已标注关系看事项承接。\n\n门店缺货原因\n第 1 轮 · 行动已授权\n等待行动反馈\n缺货核查结果为本轮扩围取舍提供依据。\n复购口径校准\n第 1 轮 · 已完成复盘\n复盘已保存，目标结果另核\n先有可比较的复购口径，才能讨论是否扩围。\n扩大试点范围\n第 2 轮 · 等待本轮取舍\n本轮尚未作新选择\n复购口径校准 → 扩大试点范围：先有可比较的复购口径，才能讨论是否扩围。\n门店缺货原因 → 扩大试点范围：缺货核查结果为本轮扩围取舍提供依据。\n\n箭头表示已记录的承接方向，可并行推进。\n\n管理事项关联\n待回应请求（1）\n当前事项\n／\n第 2 轮\n等待本轮取舍\n扩大试点范围\n回录反馈\n记录取舍\n\n记录本轮扩围取舍\n\n◇ 本轮概览\n按已保存记录呈现 · 可查看来源\n已明确\n上一轮已保存记录：已记录取舍：试行 · 先在现有三店核对，保持样本范围。；本轮复盘判断尚未记录或暂不可读取。\n正在推进\n本轮明确请求：记录本轮扩围取舍；尚未记录回应这条请求的新取舍。\n接下来\n由林予安回应原请求。\n事项进展与目标结果分别记录；行动完成不代表目标已达成。查看本轮原记录\nϟ\nCase Agent\n只围绕「扩大试点范围」继续\n收起协作\n放大对话\n想讨论当前事项的哪项取舍？\n会话模型 · UI 验收本地合成 Provider\n发送\n本轮记录与交接\n历次取舍与实际反馈\n关联项目\n请选择项目\n华东会员增长实验\n会员数据口径校准\n门店共用资料\n回关联项目协作\n准备 Plan Task\n准备 Teach Task\n交接与依据\n记录本次取舍\n授权本次行动\nCase 目标、项目工作与管理记录",
+      "viewport": {
+        "width": 390,
+        "height": 1000
+      },
+      "overflow": false,
+      "elements": [
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "topbar",
+          "x": 0,
+          "y": 0,
+          "w": 390,
+          "h": 54,
+          "font": "13px",
+          "padding": "8px 12px",
+          "grid": "minmax(0px, 1fr) auto",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "NAV",
+          "id": "",
+          "class": "decision-case-tabs",
+          "x": 0,
+          "y": 54,
+          "w": 390,
+          "h": 57,
+          "font": "13px",
+          "padding": "8px 16px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "daily-case-header",
+          "x": 0,
+          "y": 111,
+          "w": 390,
+          "h": 165.390625,
+          "font": "13px",
+          "padding": "26px 18px 5px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "case-current-layout",
+          "x": 0,
+          "y": 326.984375,
+          "w": 390,
+          "h": 673.015625,
+          "font": "13px",
+          "padding": "0px",
+          "grid": "215px minmax(0px, 1fr)",
+          "overflowY": "auto"
+        },
+        {
+          "tag": "ASIDE",
+          "id": "",
+          "class": "case-issue-sidebar",
+          "x": 18,
+          "y": 338.984375,
+          "w": 354,
+          "h": 610.78125,
+          "font": "13px",
+          "padding": "0px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "case-current-main",
+          "x": 0,
+          "y": 776.984375,
+          "w": 390,
+          "h": 1442.125,
+          "font": "13px",
+          "padding": "25px 20px 35px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "SECTION",
+          "id": "",
+          "class": "case-current-summary",
+          "x": 20,
+          "y": 973.90625,
+          "w": 350,
+          "h": 374.078125,
+          "font": "13px",
+          "padding": "15px 16px",
+          "grid": "none",
+          "overflowY": "visible"
+        }
+      ]
+    },
+    {
+      "name": "global-projects-1024",
+      "text": "跳到主内容\nOptraCall\n持续做出更好的决策\n当\n当前工作区\nCase 与项目工作空间\n新建项目\n主导航\n⌄\n\n日常工作\n\n工作台首页\nDecision Case\n基础建设总览\n›\n战略选择\n目标管理\n语义资产\n分析资产\n项目空间 (5)\n⌄\n⌄\n门店共用资料\n＋\n⋯\n尚无任务\n›\n季度资料整理\n＋\n⋯\n›\n职业访谈与小试\n＋\n⋯\n›\n会员数据口径校准\n＋\n⋯\n›\n华东会员增长实验\n＋\n⋯\n已归档项目 (1)\n›\n设置\n已保存本机配置\n中／EN\nDecision Case · 全部项目\n分析\n决策\n搜索工作区\n/\n帮助\nCase 总览\n全部项目\n\nPROJECTS · ALL WORKSPACES\n\n全部项目\n\n同一项目只出现一次。跨 Case 共用、独立工作和归档资料，都从这里找回。\n\n全局项目集合 · 不随当前 Case 改变\n＋ 新建项目\n全部\n6\n独立\n2\n共享\n1\n归档\n1\n⌕\n刷新\n项目与关联 Case\n当前状态\n承接人与下一步\n任务\n华东会员增长实验\n改善华东会员复购\n→\n待反馈\n林予安\n等待三店核查资料，再讨论是否扩围\n5\n→\n会员数据口径校准\n改善华东会员复购\n→\n已完成\n周明\n确认完整60天观察窗口\n2\n→\n职业访谈与小试\n探索下一步职业方向\n→\n进行中\n林予安\n补充两次访谈中的实际片段\n1\n→\n季度资料整理\n独立项目 · 无关联 Case\n进行中\n许知微\n整理原始资料与索引\n1\n→\n门店共用资料\n改善华东会员复购\n→\n探索下一步职业方向\n→\n未开始\n周明\n统一维护门店数据与资料约定\n0\n→\n去年第四季度回顾\n独立项目 · 无关联 Case\n已归档\n许知微\n资料只读留存，恢复后可继续工作\n1\n→\n\n显示 6 / 6 个项目 · “全部”包含归档；“独立”表示未关联 Case",
+      "viewport": {
+        "width": 1024,
+        "height": 1000
+      },
+      "overflow": false,
+      "elements": [
+        {
+          "tag": "ASIDE",
+          "id": "sidebar",
+          "class": "sidebar",
+          "x": 0,
+          "y": 0,
+          "w": 180,
+          "h": 1000,
+          "font": "13px",
+          "padding": "24px 13px 12px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "topbar",
+          "x": 180,
+          "y": 0,
+          "w": 844,
+          "h": 58,
+          "font": "13px",
+          "padding": "8px 30px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "NAV",
+          "id": "",
+          "class": "decision-case-tabs",
+          "x": 180,
+          "y": 58,
+          "w": 844,
+          "h": 68,
+          "font": "13px",
+          "padding": "12px 32px",
+          "grid": "none",
+          "overflowY": "visible"
+        }
+      ]
+    },
+    {
+      "name": "global-projects-390",
+      "text": "跳到主内容\nDecision Case · 全部项目\n帮助\nCase 总览\n全部项目\n\nPROJECTS · ALL WORKSPACES\n\n全部项目\n\n同一项目只出现一次。跨 Case 共用、独立工作和归档资料，都从这里找回。\n\n＋ 新建项目\n全部\n6\n独立\n2\n共享\n1\n归档\n1\n⌕\n刷新\n华东会员增长实验\n改善华东会员复购\n→\n待反馈\n林予安\n等待三店核查资料，再讨论是否扩围\n5\n会员数据口径校准\n改善华东会员复购\n→\n已完成\n周明\n确认完整60天观察窗口\n2\n职业访谈与小试\n探索下一步职业方向\n→\n进行中\n林予安\n补充两次访谈中的实际片段\n1\n季度资料整理\n独立项目 · 无关联 Case\n进行中\n许知微\n整理原始资料与索引\n1\n门店共用资料\n改善华东会员复购\n→\n探索下一步职业方向\n→\n未开始\n周明\n统一维护门店数据与资料约定\n0\n去年第四季度回顾\n独立项目 · 无关联 Case\n已归档\n许知微\n资料只读留存，恢复后可继续工作\n1\n\n显示 6 / 6 个项目 · “全部”包含归档；“独立”表示未关联 Case",
+      "viewport": {
+        "width": 390,
+        "height": 1000
+      },
+      "overflow": false,
+      "elements": [
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "topbar",
+          "x": 0,
+          "y": 0,
+          "w": 390,
+          "h": 54,
+          "font": "13px",
+          "padding": "8px 12px",
+          "grid": "minmax(0px, 1fr) auto",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "NAV",
+          "id": "",
+          "class": "decision-case-tabs",
+          "x": 0,
+          "y": 54,
+          "w": 390,
+          "h": 57,
+          "font": "13px",
+          "padding": "8px 16px",
+          "grid": "none",
+          "overflowY": "visible"
+        }
+      ]
+    },
+    {
+      "name": "project-detail-1024",
+      "text": "跳到主内容\nOptraCall\n持续做出更好的决策\n当\n当前工作区\nCase 与项目工作空间\n新建项目\n主导航\n⌄\n\n日常工作\n\n工作台首页\nDecision Case\n基础建设总览\n›\n战略选择\n目标管理\n语义资产\n分析资产\n项目空间 (5)\n⌄\n⌄\n门店共用资料\n＋\n⋯\n尚无任务\n›\n季度资料整理\n＋\n⋯\n›\n职业访谈与小试\n＋\n⋯\n›\n会员数据口径校准\n＋\n⋯\n›\n华东会员增长实验\n＋\n⋯\n已归档项目 (1)\n›\n设置\n已保存本机配置\n中／EN\nDecision Case · 全部项目\n分析\n决策\n搜索工作区\n/\n帮助\nCase 总览\n全部项目\n←\n返回全部项目 · 保留搜索与筛选\n\nPROJECT · SHARED WORKSPACE\n\n华东会员增长实验\n待反馈\n\n林予安 · 5 个原任务 · 1 个关联 Case\n\n归档项目\n项目共用工作信息\n\n华东会员增长实验的合成验收资料与原任务工作空间\n\n项目内共享同一份资料与约定；Case 只引用明确关联的原任务与成果。\n\n已确认项目约定 v1 · 11/28 08:42\n打开项目空间，查看资料与约定 ↗\n编辑工作信息\n当前承接与下一步\n\n林予安\n\n等待三店核查资料，再讨论是否扩围\n\n项目工作范围独立于任何一次 Case 浏览。\n关联 Case\n改善华东会员复购\n→\n项目内任务\n\n六类用途按需要使用；未出现的类型无需补齐。查看原任务不会自动带入任何 Case 或事项。\n\n＋ 新建任务\n全部 5\n需求 Requirement 1\n分析 Analysis 1\n计划 Plan 1\n决策 Decision 1\n执行 Do 1\n反馈 Teach 0\n原任务\t用途\t已保存状态\t查看\n三店试点范围梳理\n原关联：改善华东会员复购 · 具体事项见原任务\n\t需求 Requirement\t尚无运行记录\t打开原任务 ↗\n华东三店试点观察\n原关联：改善华东会员复购 · 具体事项见原任务\n\t分析 Analysis\t尚无运行记录\t打开原任务 ↗\n是否扩大试点的备选方案\n原关联：改善华东会员复购 · 具体事项见原任务\n\t计划 Plan\t尚无运行记录\t打开原任务 ↗\n本轮扩围取舍\n原关联：改善华东会员复购 · 具体事项见原任务\n\t决策 Decision\t尚无运行记录\t打开原任务 ↗\n三店缺货核查行动记录\n原关联：改善华东会员复购 · 具体事项见原任务\n\t执行 Do\t尚无运行记录\t打开原任务 ↗\n六类任务的用途说明\n项目协作、管理与其他业务入口\n项目工作记录\n\n共用项目保持同一个身份，进入关联 Case 只改变查看位置。项目资料需要明确关联后才会进入对应 Case 的成果与依据。\n更新于 11/28 08:42",
+      "viewport": {
+        "width": 1024,
+        "height": 1000
+      },
+      "overflow": false,
+      "elements": [
+        {
+          "tag": "ASIDE",
+          "id": "sidebar",
+          "class": "sidebar",
+          "x": 0,
+          "y": 0,
+          "w": 180,
+          "h": 1000,
+          "font": "13px",
+          "padding": "24px 13px 12px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "topbar",
+          "x": 180,
+          "y": 0,
+          "w": 844,
+          "h": 58,
+          "font": "13px",
+          "padding": "8px 30px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "NAV",
+          "id": "",
+          "class": "decision-case-tabs",
+          "x": 180,
+          "y": 58,
+          "w": 844,
+          "h": 68,
+          "font": "13px",
+          "padding": "12px 32px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "daily-project-detail",
+          "x": 207,
+          "y": 155,
+          "w": 790,
+          "h": 1250.171875,
+          "font": "13px",
+          "padding": "0px",
+          "grid": "none",
+          "overflowY": "visible"
+        }
+      ]
+    },
+    {
+      "name": "project-detail-390",
+      "text": "跳到主内容\nDecision Case · 全部项目\n帮助\nCase 总览\n全部项目\n←\n返回全部项目 · 保留搜索与筛选\n\nPROJECT · SHARED WORKSPACE\n\n华东会员增长实验\n待反馈\n\n林予安 · 5 个原任务 · 1 个关联 Case\n\n归档项目\n项目共用工作信息\n\n华东会员增长实验的合成验收资料与原任务工作空间\n\n项目内共享同一份资料与约定；Case 只引用明确关联的原任务与成果。\n\n已确认项目约定 v1 · 11/28 08:42\n打开项目空间，查看资料与约定 ↗\n编辑工作信息\n当前承接与下一步\n\n林予安\n\n等待三店核查资料，再讨论是否扩围\n\n项目工作范围独立于任何一次 Case 浏览。\n关联 Case\n改善华东会员复购\n→\n项目内任务\n\n六类用途按需要使用；未出现的类型无需补齐。查看原任务不会自动带入任何 Case 或事项。\n\n＋ 新建任务\n全部 5\n需求 Requirement 1\n分析 Analysis 1\n计划 Plan 1\n决策 Decision 1\n执行 Do 1\n反馈 Teach 0\n原任务\t用途\t已保存状态\t查看\n三店试点范围梳理\n原关联：改善华东会员复购 · 具体事项见原任务\n\t需求 Requirement\t尚无运行记录\t打开原任务 ↗\n华东三店试点观察\n原关联：改善华东会员复购 · 具体事项见原任务\n\t分析 Analysis\t尚无运行记录\t打开原任务 ↗\n是否扩大试点的备选方案\n原关联：改善华东会员复购 · 具体事项见原任务\n\t计划 Plan\t尚无运行记录\t打开原任务 ↗\n本轮扩围取舍\n原关联：改善华东会员复购 · 具体事项见原任务\n\t决策 Decision\t尚无运行记录\t打开原任务 ↗\n三店缺货核查行动记录\n原关联：改善华东会员复购 · 具体事项见原任务\n\t执行 Do\t尚无运行记录\t打开原任务 ↗\n六类任务的用途说明\n项目协作、管理与其他业务入口\n项目工作记录\n\n共用项目保持同一个身份，进入关联 Case 只改变查看位置。项目资料需要明确关联后才会进入对应 Case 的成果与依据。\n更新于 11/28 08:42",
+      "viewport": {
+        "width": 390,
+        "height": 1000
+      },
+      "overflow": false,
+      "elements": [
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "topbar",
+          "x": 0,
+          "y": 0,
+          "w": 390,
+          "h": 54,
+          "font": "13px",
+          "padding": "8px 12px",
+          "grid": "minmax(0px, 1fr) auto",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "NAV",
+          "id": "",
+          "class": "decision-case-tabs",
+          "x": 0,
+          "y": 54,
+          "w": 390,
+          "h": 57,
+          "font": "13px",
+          "padding": "8px 16px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "daily-project-detail",
+          "x": 20,
+          "y": 136,
+          "w": 350,
+          "h": 1573.53125,
+          "font": "13px",
+          "padding": "0px",
+          "grid": "none",
+          "overflowY": "visible"
+        }
+      ]
+    },
+    {
+      "name": "prepare-1024",
+      "text": "跳到主内容\nOptraCall\n持续做出更好的决策\n当\n当前工作区\nCase 与项目工作空间\n新建项目\n主导航\n⌄\n\n日常工作\n\n工作台首页\nDecision Case\n基础建设总览\n›\n战略选择\n目标管理\n语义资产\n分析资产\n项目空间 (5)\n⌄\n⌄\n门店共用资料\n＋\n⋯\n尚无任务\n›\n季度资料整理\n＋\n⋯\n›\n职业访谈与小试\n＋\n⋯\n›\n会员数据口径校准\n＋\n⋯\n›\n华东会员增长实验\n＋\n⋯\n已归档项目 (1)\n›\n设置\n已保存本机配置\n中／EN\n工作台首页\n分析\n决策\n搜索工作区\n/\n帮助\n← 返回工作台 · 保留草稿\nCase 准备草稿 · 关闭与返回都会保留\n先把这件事说清楚\n\n从一句话出发，先准备可编辑的 G/S。明确采纳并创建后，才会成为新的 Case。\n\n保留的输入\n这段输入尚未发送到任何已有对话；新建后将作为待带入片段保留。\n人工填写 · 无模型依赖\n请 Agent 协助整理\n或使用已有 G/S\n选择已采纳目标版本，或在下方手填\n60天会员复购率达到 23% · v1 · 林予安（合成验收）\n形成下一阶段职业选择 · v1 · 林予安（合成验收）\n形成全家共同认可的年度安排 · v1 · 林予安（合成验收）\n这件事的名字\n补充问题背景\n准备目标与策略\nG · 目标名称\n想看到什么结果\nS · 这次先怎么推进\n可核成果\n责任角色／承担人\n明确目标归属\n已有企业或个人\n请选择已有企业或个人\n个人目标\n保存候选、明确采纳 G/S 并创建 Case\n\n创建会建立 Case 与第一件事项，完整名称、背景和原输入保留为待带入片段，仍需明确追加与发送；不创建项目任务、不授权行动或宣布目标达成。\n\n查找已有 Case\n明确放弃这份准备草稿\n查看全部项目",
+      "viewport": {
+        "width": 1024,
+        "height": 1000
+      },
+      "overflow": false,
+      "elements": [
+        {
+          "tag": "ASIDE",
+          "id": "sidebar",
+          "class": "sidebar",
+          "x": 0,
+          "y": 0,
+          "w": 180,
+          "h": 1000,
+          "font": "13px",
+          "padding": "24px 13px 12px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "topbar",
+          "x": 180,
+          "y": 0,
+          "w": 844,
+          "h": 58,
+          "font": "13px",
+          "padding": "8px 30px",
+          "grid": "none",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "SECTION",
+          "id": "",
+          "class": "daily-case-preparation-shell",
+          "x": 180,
+          "y": 58,
+          "w": 844,
+          "h": 942,
+          "font": "13px",
+          "padding": "26px 38px 40px",
+          "grid": "none",
+          "overflowY": "auto"
+        }
+      ]
+    },
+    {
+      "name": "prepare-390",
+      "text": "跳到主内容\n工作台首页\n帮助\n← 返回工作台 · 保留草稿\nCase 准备草稿 · 关闭与返回都会保留\n先把这件事说清楚\n\n从一句话出发，先准备可编辑的 G/S。明确采纳并创建后，才会成为新的 Case。\n\n保留的输入\n这段输入尚未发送到任何已有对话；新建后将作为待带入片段保留。\n人工填写 · 无模型依赖\n请 Agent 协助整理\n或使用已有 G/S\n选择已采纳目标版本，或在下方手填\n60天会员复购率达到 23% · v1 · 林予安（合成验收）\n形成下一阶段职业选择 · v1 · 林予安（合成验收）\n形成全家共同认可的年度安排 · v1 · 林予安（合成验收）\n这件事的名字\n补充问题背景\n准备目标与策略\nG · 目标名称\n想看到什么结果\nS · 这次先怎么推进\n可核成果\n责任角色／承担人\n明确目标归属\n已有企业或个人\n请选择已有企业或个人\n个人目标\n保存候选、明确采纳 G/S 并创建 Case\n\n创建会建立 Case 与第一件事项，完整名称、背景和原输入保留为待带入片段，仍需明确追加与发送；不创建项目任务、不授权行动或宣布目标达成。\n\n查找已有 Case\n明确放弃这份准备草稿\n查看全部项目",
+      "viewport": {
+        "width": 390,
+        "height": 1000
+      },
+      "overflow": false,
+      "elements": [
+        {
+          "tag": "HEADER",
+          "id": "",
+          "class": "topbar",
+          "x": 0,
+          "y": 0,
+          "w": 390,
+          "h": 54,
+          "font": "13px",
+          "padding": "8px 12px",
+          "grid": "minmax(0px, 1fr) auto",
+          "overflowY": "visible"
+        },
+        {
+          "tag": "SECTION",
+          "id": "",
+          "class": "daily-case-preparation-shell",
+          "x": 0,
+          "y": 54,
+          "w": 390,
+          "h": 946,
+          "font": "13px",
+          "padding": "20px 18px",
+          "grid": "none",
+          "overflowY": "auto"
+        }
+      ]
+    }
+  ]
+}

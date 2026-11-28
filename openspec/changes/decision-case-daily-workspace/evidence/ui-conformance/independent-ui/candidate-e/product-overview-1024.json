@@ -1,0 +1,49 @@
+{
+  "text": "跳到主内容\nOptraCall\n持续做出更好的决策\n当\n当前工作区\nCase 与项目工作空间\n新建项目\n主导航\n⌄\n\n日常工作\n\n工作台首页\nDecision Case\n基础建设总览\n›\n战略选择\n目标管理\n语义资产\n分析资产\n项目空间 (5)\n⌄\n⌄\n门店共用资料\n＋\n⋯\n尚无任务\n›\n季度资料整理\n＋\n⋯\n›\n职业访谈与小试\n＋\n⋯\n›\n会员数据口径校准\n＋\n⋯\n›\n华东会员增长实验\n＋\n⋯\n已归档项目 (1)\n›\n设置\n已保存本机配置\n中／EN\nDecision Case · Case 总览\n分析\n决策\n搜索工作区\n/\n帮助\nCase 总览\n全部项目\n\nDECISION CASE WORKSPACE\n\nCase 总览\n\n从目标出发继续一件事，也可以切到全部项目寻找具体工作。\n\n＋ 新建 Case\n搜索 Case、项目或分析任务\nCase 状态筛选\n全部状态\n待处理\n分析中\n待确认\n待观察\n已结束\n刷新\n星图\nCase 卡片\n▦\n方块\n☰\n列表\n补充关系\n分析中\n▣\n探索下一步职业方向\nG\n形成下一阶段职业选择\nS\n先做访谈与小规模尝试\n1 件事项\n2 个关联项目\n当前事项\n\n访谈里反复出现的要求\n\n第 1 轮 · 行动已授权\n\n继续当前事项\n→\n分析中\n▣\n改善华东会员复购\nG\n60天会员复购率达到 23%\nS\n先验证缺货治理\n3 件事项\n3 个关联项目\n当前事项\n\n扩大试点范围\n\n第 2 轮 · 等待本轮取舍\n\n继续当前事项\n→\n分析中\n▣\n梳理家庭年度安排\nG\n形成全家共同认可的年度安排\nS\n先收集现有约束\n0 件事项\n0 个关联项目\n当前还没有事项\n\n可以先继续已有项目工作\n\n浏览不会自动创建事项\n\n查看这个 Case\n→\n\nCase 内的事项与轮次继续保留。关联项目引用同一个共享工作空间；独立项目可以直接工作。",
+  "viewport": {
+    "width": 1024,
+    "height": 1000
+  },
+  "overflow": false,
+  "elements": [
+    {
+      "tag": "ASIDE",
+      "id": "sidebar",
+      "class": "sidebar",
+      "x": 0,
+      "y": 0,
+      "w": 180,
+      "h": 1000,
+      "font": "13px",
+      "padding": "24px 13px 12px",
+      "grid": "none",
+      "overflowY": "visible"
+    },
+    {
+      "tag": "HEADER",
+      "id": "",
+      "class": "topbar",
+      "x": 180,
+      "y": 0,
+      "w": 844,
+      "h": 58,
+      "font": "13px",
+      "padding": "8px 30px",
+      "grid": "none",
+      "overflowY": "visible"
+    },
+    {
+      "tag": "NAV",
+      "id": "",
+      "class": "decision-case-tabs",
+      "x": 180,
+      "y": 58,
+      "w": 844,
+      "h": 68,
+      "font": "13px",
+      "padding": "12px 32px",
+      "grid": "none",
+      "overflowY": "visible"
+    }
+  ]
+}

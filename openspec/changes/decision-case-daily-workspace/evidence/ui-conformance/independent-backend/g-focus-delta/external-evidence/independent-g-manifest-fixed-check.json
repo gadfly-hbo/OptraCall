@@ -1,0 +1,8 @@
+{
+  "at": "2026-11-28T02:10:58.801717+00:00",
+  "manifestFileSHA256": "d38d54e580de9d59e64021599b3ab4ebb2cc65701bb829737b267d764883f386",
+  "manifestSha256": null,
+  "fileCount": 2601,
+  "drift": [],
+  "cause": "Root fixed disclosed test selector only; production/build unchanged from g initial identity."
+}

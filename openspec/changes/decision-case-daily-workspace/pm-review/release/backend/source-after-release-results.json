@@ -1,0 +1,103 @@
+{
+  "candidate": "6bc7be2849d280e5e6a6e598ee6b7a68dd5e48eb",
+  "root": "/workspace/OptraCall-issue149-final/.local/pm-final/backend/plan-source-bipXQ5",
+  "outputs": [
+    {
+      "name": "initial-real-plan-source-qualified",
+      "initialCheckPlan": "passed",
+      "nativeReplyCount": 1,
+      "source": {
+        "type": "native-reply",
+        "projectId": "5c9fcde1-66b8-4a5f-ab5e-489020536999",
+        "taskId": "7cee8a58-ca75-44b2-899f-bc93def3b4b5",
+        "sessionId": "01a21dd8-41a2-7194-875a-2a0b528444f4",
+        "messageId": "693882e8",
+        "expectedTextSha256": "5c78e94c1a354ac35a6b43c2066df0c48acfcd26726b32260b013602bb6cd3c1"
+      },
+      "strategyId": "f4cd0198-4f94-4f2a-b00a-49f38f2a91c3",
+      "requestId": "40a07d2a-9496-4b18-86d3-3cf5689cd629"
+    },
+    {
+      "name": "source-project-archived",
+      "originalChooseCode": "project_archived",
+      "newRequestCode": "project_archived",
+      "newRequestAccepted": false,
+      "originalReplayPreserved": true,
+      "declarationsStatus": "unverifiable",
+      "statuses": [
+        {
+          "requestId": "38a35154-3be5-4b5f-a5b7-5f844604341b",
+          "status": "answered"
+        },
+        {
+          "requestId": "40a07d2a-9496-4b18-86d3-3cf5689cd629",
+          "status": "unverifiable"
+        }
+      ],
+      "pending": []
+    },
+    {
+      "name": "source-plan-task-archived",
+      "originalChooseCode": "case_issue_source_scope_mismatch",
+      "newRequestCode": "case_issue_source_scope_mismatch",
+      "newRequestAccepted": false,
+      "originalReplayPreserved": true,
+      "declarationsStatus": "unverifiable",
+      "statuses": [
+        {
+          "requestId": "38a35154-3be5-4b5f-a5b7-5f844604341b",
+          "status": "answered"
+        },
+        {
+          "requestId": "40a07d2a-9496-4b18-86d3-3cf5689cd629",
+          "status": "unverifiable"
+        }
+      ],
+      "pending": []
+    },
+    {
+      "name": "source-native-temporarily-unavailable",
+      "originalChooseCode": "case_issue_reply_unavailable",
+      "newRequestCode": "case_issue_reply_unavailable",
+      "newRequestAccepted": false,
+      "originalReplayPreserved": true,
+      "declarationsStatus": "unverifiable",
+      "statuses": [
+        {
+          "requestId": "38a35154-3be5-4b5f-a5b7-5f844604341b",
+          "status": "answered"
+        },
+        {
+          "requestId": "40a07d2a-9496-4b18-86d3-3cf5689cd629",
+          "status": "unverifiable"
+        }
+      ],
+      "pending": []
+    },
+    {
+      "name": "source-recipient-qualification-revoked",
+      "originalChooseCode": "case_issue_recipient_unavailable",
+      "newRequestCode": "case_issue_recipient_unavailable",
+      "newRequestAccepted": false,
+      "originalReplayPreserved": true,
+      "declarationsStatus": "unverifiable",
+      "statuses": [
+        {
+          "requestId": "38a35154-3be5-4b5f-a5b7-5f844604341b",
+          "status": "answered"
+        },
+        {
+          "requestId": "40a07d2a-9496-4b18-86d3-3cf5689cd629",
+          "status": "unverifiable"
+        }
+      ],
+      "pending": []
+    },
+    {
+      "name": "original-plan-source-restored",
+      "originalChooseSucceeded": true,
+      "exactRequestStatus": "answered",
+      "originalNativeBytesEqual": true
+    }
+  ]
+}

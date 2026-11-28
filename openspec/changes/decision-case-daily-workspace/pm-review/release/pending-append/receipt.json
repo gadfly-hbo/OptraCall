@@ -1,0 +1,53 @@
+{
+  "head": "6bc7be2849d280e5e6a6e598ee6b7a68dd5e48eb",
+  "scratch": "/tmp/issue149-independent-ui-dxYUos",
+  "dropAck": false,
+  "steps": [
+    {
+      "name": "VISITED_EMPTY_CASE_OVERVIEW_WITHOUT_INITIALIZING"
+    },
+    {
+      "name": "FRESH_GETS_AND_PREPARATION_DO_NOT_INITIALIZE_CASE_STORAGE"
+    },
+    {
+      "name": "EXPLICIT_FIRST_CREATE_INITIALIZES_AND_SAVES_ONE_CASE_ONE_ISSUE",
+      "caseId": "d5c73bb0-0bee-4720-b5ae-036da2694299",
+      "issueId": "7f30cc80-d339-4833-a04f-18fa619f1f5a"
+    },
+    {
+      "name": "FRESH_FIRST_ISSUE_FRAGMENT_AND_REAL_COMPOSER_REOPEN_NO_SEND"
+    },
+    {
+      "name": "ORIGINAL_COMPOSER_TEXT_SENT_AND_PROVIDER_REPLY_HELD",
+      "sentText": "准备名称：干净首用第一Case\n\n问题背景：干净首用完整背景\n\n原输入：干净首用原输入 <img src=x onerror=\"window.__freshXss=1\">\n首用编辑恢复"
+    },
+    {
+      "name": "SAME_MOUNTED_ISSUE_NEW_FRAGMENT_VISIBLE_WITHOUT_CASE_REVISION_OR_OVERWRITE"
+    },
+    {
+      "name": "SAME_FRAGMENT_REPEAT_ACKNOWLEDGED_WITHOUT_DUPLICATION_OR_STUCK_NOTICE"
+    },
+    {
+      "name": "AFTER_SUCCESS_PENDING_APPEND_DRAFT",
+      "draft": "原输入：同已挂载事项的新输入，保留现有草稿",
+      "previousSentTextStillPresent": false,
+      "newFragmentPresent": true
+    },
+    {
+      "name": "NO_EXTRA_IMPLICIT_SEND_AND_PRIOR_SENT_TEXT_NOT_REINTRODUCED"
+    }
+  ],
+  "networkMessages": [
+    {
+      "url": "http://127.0.0.1:35355/api/business-role?owner=%7B%22role%22%3A%22case%22%2C%22caseId%22%3A%22d5c73bb0-0bee-4720-b5ae-036da2694299%22%2C%22itemId%22%3A%227f30cc80-d339-4833-a04f-18fa619f1f5a%22%7D&action=messages",
+      "body": "{\"requestId\":\"648c84e8-9f2d-4621-bb1d-c493ba88ac63\",\"text\":\"准备名称：干净首用第一Case\\n\\n问题背景：干净首用完整背景\\n\\n原输入：干净首用原输入 <img src=x onerror=\\\"window.__freshXss=1\\\">\\n首用编辑恢复\",\"expectedRevision\":0}"
+    }
+  ],
+  "createRequests": [
+    "{\"draftId\":\"prepare-bc11be0b-2c93-4ac8-887f-b6782d50d834\",\"title\":\"干净首用第一Case\",\"description\":\"干净首用完整背景\",\"rawInput\":\"干净首用原输入 <img src=x onerror=\\\"window.__freshXss=1\\\">\",\"goal\":{\"goalId\":\"dd98de24-d88a-4da0-b5a3-79c225913a60\",\"version\":1,\"strategy\":\"首用明确具体S\",\"alreadyAdopted\":false},\"adoptOperationId\":\"5302d132-c42d-4303-837b-b63c848fee5b\",\"createOperationId\":\"950f090b-46a7-44d5-9e23-7656335ada71\"}"
+  ],
+  "base": "http://127.0.0.1:35355",
+  "caseId": "d5c73bb0-0bee-4720-b5ae-036da2694299",
+  "issueId": "7f30cc80-d339-4833-a04f-18fa619f1f5a",
+  "result": "PASS_NO_SENT_TEXT_REINTRODUCED"
+}

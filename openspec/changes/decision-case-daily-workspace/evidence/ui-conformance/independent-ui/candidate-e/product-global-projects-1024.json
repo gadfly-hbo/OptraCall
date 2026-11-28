@@ -1,0 +1,49 @@
+{
+  "text": "跳到主内容\nOptraCall\n持续做出更好的决策\n当\n当前工作区\nCase 与项目工作空间\n新建项目\n主导航\n⌄\n\n日常工作\n\n工作台首页\nDecision Case\n基础建设总览\n›\n战略选择\n目标管理\n语义资产\n分析资产\n项目空间 (5)\n⌄\n⌄\n门店共用资料\n＋\n⋯\n尚无任务\n›\n季度资料整理\n＋\n⋯\n›\n职业访谈与小试\n＋\n⋯\n›\n会员数据口径校准\n＋\n⋯\n›\n华东会员增长实验\n＋\n⋯\n已归档项目 (1)\n›\n设置\n已保存本机配置\n中／EN\nDecision Case · 全部项目\n分析\n决策\n搜索工作区\n/\n帮助\nCase 总览\n全部项目\n\nPROJECTS · ALL WORKSPACES\n\n全部项目\n\n同一项目只出现一次。跨 Case 共用、独立工作和归档资料，都从这里找回。\n\n全局项目集合 · 不随当前 Case 改变\n＋ 新建项目\n全部\n6\n独立\n2\n共享\n1\n归档\n1\n⌕\n刷新\n项目与关联 Case\n当前状态\n承接人与下一步\n任务\n华东会员增长实验\n改善华东会员复购\n→\n待反馈\n林予安\n等待三店核查资料，再讨论是否扩围\n5\n→\n会员数据口径校准\n改善华东会员复购\n→\n已完成\n周明\n确认完整60天观察窗口\n2\n→\n职业访谈与小试\n探索下一步职业方向\n→\n进行中\n林予安\n补充两次访谈中的实际片段\n1\n→\n季度资料整理\n独立项目 · 无关联 Case\n进行中\n许知微\n整理原始资料与索引\n1\n→\n门店共用资料\n改善华东会员复购\n→\n探索下一步职业方向\n→\n未开始\n周明\n统一维护门店数据与资料约定\n0\n→\n去年第四季度回顾\n独立项目 · 无关联 Case\n已归档\n许知微\n资料只读留存，恢复后可继续工作\n1\n→\n\n显示 6 / 6 个项目 · “全部”包含归档；“独立”表示未关联 Case",
+  "viewport": {
+    "width": 1024,
+    "height": 1000
+  },
+  "overflow": false,
+  "elements": [
+    {
+      "tag": "ASIDE",
+      "id": "sidebar",
+      "class": "sidebar",
+      "x": 0,
+      "y": 0,
+      "w": 180,
+      "h": 1000,
+      "font": "13px",
+      "padding": "24px 13px 12px",
+      "grid": "none",
+      "overflowY": "visible"
+    },
+    {
+      "tag": "HEADER",
+      "id": "",
+      "class": "topbar",
+      "x": 180,
+      "y": 0,
+      "w": 844,
+      "h": 58,
+      "font": "13px",
+      "padding": "8px 30px",
+      "grid": "none",
+      "overflowY": "visible"
+    },
+    {
+      "tag": "NAV",
+      "id": "",
+      "class": "decision-case-tabs",
+      "x": 180,
+      "y": 58,
+      "w": 844,
+      "h": 68,
+      "font": "13px",
+      "padding": "12px 32px",
+      "grid": "none",
+      "overflowY": "visible"
+    }
+  ]
+}

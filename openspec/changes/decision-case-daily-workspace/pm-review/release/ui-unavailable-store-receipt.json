@@ -1,0 +1,14 @@
+{
+  "head": "6bc7be2849d280e5e6a6e598ee6b7a68dd5e48eb",
+  "root": "/tmp/independent-case-unavailable-hVGn72",
+  "status": 503,
+  "code": "case_store_unavailable",
+  "originalSha256": "e7213734a575f04fbe611e1e67495f7f241476235092d081c24ecad2a870d9f0",
+  "currentSha256": "e7213734a575f04fbe611e1e67495f7f241476235092d081c24ecad2a870d9f0",
+  "checks": [
+    "unavailable store stays unavailable across reads and create",
+    "explicit create returns503 without initializing marker",
+    "original database bytes unchanged"
+  ],
+  "result": "PASS"
+}

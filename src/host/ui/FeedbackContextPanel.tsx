@@ -11,7 +11,7 @@ import * as caseClient from './case-client.ts';
 import { readEnterpriseContextHistory, type EnterpriseContextHistoryItem } from './enterprise-materials-client.ts';
 import './feedback.css';
 
-export type FeedbackReviewStart = { openOriginal?: true; boardTaskId: string; feedbackRevisionId: string | null; selectedFile?: string; draftKey: string };
+export type FeedbackReviewStart = { openOriginal?: true; openFeedback?: true; requestContext?: { caseId: string; issueId: string; requestId: string; revision: number; target: Extract<import('../case-decision-types.ts').CaseDecisionRequestTarget, { kind: 'observe' }> }; boardTaskId: string; feedbackRevisionId: string | null; selectedFile?: string; draftKey: string };
 export type FeedbackNextSource = { kind: 'reply'; message: NativeMessage } | { kind: 'file'; relativePath: string };
 const flatten = (nodes: FileNode[]): FileNode[] => nodes.flatMap(node => node.kind === 'file' ? [node] : flatten(node.children ?? []));
 const errorText = (error: unknown) => error instanceof Error ? error.message : '请求未完成，当前选择仍保留。';

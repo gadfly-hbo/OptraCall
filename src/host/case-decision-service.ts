@@ -260,7 +260,7 @@ export function createCaseDecisionService(deps: CaseDecisionServiceDependencies)
     });
   }
   async function choose(caseId: string, recordId: string, input: unknown) {
-    caseDecisionFields(input, ['operationId', 'caseStoreId', 'strategyRef', 'choice', 'reason', 'expectedPreviousChoiceId', 'allowHistorical', 'issueId'], ['operationId', 'caseStoreId', 'strategyRef', 'choice', 'expectedPreviousChoiceId']);
+    caseDecisionFields(input, ['operationId', 'caseStoreId', 'strategyRef', 'choice', 'reason', 'nextStep', 'expectedPreviousChoiceId', 'allowHistorical', 'issueId', 'respondsToRequest'], ['operationId', 'caseStoreId', 'strategyRef', 'choice', 'expectedPreviousChoiceId']);
     const target = parseCaseDecisionRef(input.strategyRef);
     if (target.caseId !== caseId || target.recordId !== recordId) throw new CaseStoreError('case_decision_scope_mismatch', 409);
     // This global Case endpoint does not write a Project. An unrelated archived

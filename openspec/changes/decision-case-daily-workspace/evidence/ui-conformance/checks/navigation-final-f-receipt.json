@@ -1,0 +1,120 @@
+{
+  "boundary": "Bounded synthetic HTTP; real components and production CSS, not real Host product-UI acceptance",
+  "checks": [
+    {
+      "name": "summary uses exact current issue review and original identity",
+      "ok": true
+    },
+    {
+      "name": "inline Case page uses sidebar selection, keyboard focus and reachable original composer",
+      "ok": true
+    },
+    {
+      "name": "a failed draft save blocks tab navigation and preserves input until recovery",
+      "ok": true
+    },
+    {
+      "name": "four current workspace tabs retain the pinned G/S region",
+      "ok": true
+    },
+    {
+      "name": "all current Case excludes foreign and unbound project tasks with exact row origins",
+      "ok": true
+    },
+    {
+      "name": "zero-task and independent project work stay explicitly reachable",
+      "ok": true
+    },
+    {
+      "name": "scoped task sources and original project entry fit 390px",
+      "ok": true
+    },
+    {
+      "name": "explicitly choosing a different issue resets both auxiliary views",
+      "ok": true
+    },
+    {
+      "name": "ordinary tab redraw preserves manual range",
+      "ok": true
+    },
+    {
+      "name": "empty Case stays all with no inherited tasks and an original project entry",
+      "ok": true
+    },
+    {
+      "name": "empty Case original project entry opens independent global work",
+      "ok": true
+    },
+    {
+      "name": "Case return restores saved column and manual scope",
+      "ok": true
+    },
+    {
+      "name": "503 labels retained detail as an old snapshot",
+      "ok": true
+    },
+    {
+      "name": "403 removes old detail, source and action entry points",
+      "ok": true
+    },
+    {
+      "name": "global original project retains every foreign and independent task",
+      "ok": true
+    },
+    {
+      "name": "global project return restores selection, filters and task type",
+      "ok": true
+    },
+    {
+      "name": "switching issues uses different exact summaries",
+      "ok": true
+    },
+    {
+      "name": "503 on original timeline marks the retained issue snapshot",
+      "ok": true
+    },
+    {
+      "name": "403 on original timeline removes old issue content and source entries",
+      "ok": true
+    },
+    {
+      "name": "current work readable at 1440px",
+      "ok": true
+    },
+    {
+      "name": "current work readable at 1024px",
+      "ok": true
+    },
+    {
+      "name": "current work readable at 390px",
+      "ok": true
+    },
+    {
+      "name": "Case overview new entry uses shared preparation",
+      "ok": true
+    },
+    {
+      "name": "goal and creation source survive shared preparation handoff",
+      "ok": true
+    },
+    {
+      "name": "navigation and protected drafts never send to Agent",
+      "ok": true
+    }
+  ],
+  "errors": [],
+  "sourceReads": [
+    {
+      "pathname": "/api/cases/A/decisions/issues/a/reply",
+      "source": {
+        "type": "native-reply",
+        "projectId": "P",
+        "taskId": "task-a",
+        "sessionId": "native",
+        "messageId": "reply-a",
+        "expectedTextSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ],
+  "modelWrites": []
+}

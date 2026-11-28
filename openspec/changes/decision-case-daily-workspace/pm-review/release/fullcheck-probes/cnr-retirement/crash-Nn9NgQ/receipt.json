@@ -1,0 +1,1518 @@
+{
+  "scope": "SYNTHETIC_REAL_HOST_PROCESS_CRASH_ONLY",
+  "name": "CNR-A4: crashed old manual request stays unproved and read-only across default restart without replay or invented cleanup",
+  "root": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ",
+  "reads": [
+    {
+      "route": "/api/configuration",
+      "method": "PUT",
+      "status": 200,
+      "value": {
+        "configuration": {
+          "id": "425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+          "name": "崩溃交接合成模型",
+          "provider": "custom-425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+          "api": "openai-completions",
+          "baseUrl": "http://127.0.0.1:33841/v1",
+          "model": "synthetic-crash",
+          "revision": 1,
+          "hasApiKey": true
+        }
+      }
+    },
+    {
+      "route": "/api/projects",
+      "method": "POST",
+      "status": 201,
+      "value": {
+        "project": {
+          "schemaVersion": 2,
+          "id": "0ca5512e-ecfa-461c-b62e-715f60010825",
+          "name": "旧未知资源项目",
+          "configuration": {
+            "id": "425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "name": "崩溃交接合成模型",
+            "provider": "custom-425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "model": "synthetic-crash",
+            "baseUrl": "http://127.0.0.1:33841/v1",
+            "revision": 1,
+            "api": "openai-completions"
+          },
+          "uploads": [],
+          "archivedAt": null,
+          "tasks": [],
+          "createdAt": "2026-11-27T16:43:23.246Z",
+          "updatedAt": "2026-11-27T16:43:23.246Z",
+          "rootPath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/projects/0ca5512e-ecfa-461c-b62e-715f60010825",
+          "memberPackScoped": false,
+          "work": null,
+          "workUnavailable": true
+        }
+      }
+    },
+    {
+      "route": "/api/projects/0ca5512e-ecfa-461c-b62e-715f60010825/tasks",
+      "method": "POST",
+      "status": 201,
+      "value": {
+        "task": {
+          "id": "256d4d3a-999b-4d95-8f98-e8c7c25eb1da",
+          "name": "保留未知",
+          "createdAt": "2026-11-27T16:43:23.344Z",
+          "updatedAt": "2026-11-27T16:43:23.344Z",
+          "configuration": {
+            "id": "425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "name": "崩溃交接合成模型",
+            "provider": "custom-425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "model": "synthetic-crash",
+            "baseUrl": "http://127.0.0.1:33841/v1",
+            "revision": 1,
+            "api": "openai-completions"
+          },
+          "draft": "",
+          "sessionStorage": "task",
+          "sessionDirectory": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/projects/0ca5512e-ecfa-461c-b62e-715f60010825/tasks/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/sessions"
+        }
+      }
+    },
+    {
+      "route": "/api/projects/0ca5512e-ecfa-461c-b62e-715f60010825/files/upload",
+      "method": "POST",
+      "status": 201,
+      "value": {
+        "file": {
+          "id": "a70923c1-991d-4900-a39a-3fe93e63b82c",
+          "originalName": "source.csv",
+          "path": "020_clean/source.csv",
+          "bytes": 23,
+          "sha256": "220ed442ee5c80570b036835788e1ec45e68b262563e041be6e2b890eba66769",
+          "uploadedAt": "2026-11-27T16:43:23.376Z",
+          "source": {
+            "kind": "upload"
+          }
+        }
+      }
+    },
+    {
+      "route": "/api/projects/0ca5512e-ecfa-461c-b62e-715f60010825/files/save-report",
+      "method": "POST",
+      "status": 201,
+      "value": {
+        "file": {
+          "id": "38432094-62ab-4353-b346-999fb664e207",
+          "originalName": "report.md",
+          "path": "060_reports/report.md",
+          "bytes": 71,
+          "sha256": "963e8cc051f7cfa08f0f11dd5927be9e521302e3d818ae89e4021c8ef344c1b4",
+          "uploadedAt": "2026-11-27T16:43:23.422Z",
+          "source": {
+            "kind": "user-save-report"
+          }
+        }
+      }
+    },
+    {
+      "route": "/api/projects/0ca5512e-ecfa-461c-b62e-715f60010825/tasks/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/automatic-verification/settings",
+      "method": "PUT",
+      "status": 200,
+      "value": {
+        "settings": {
+          "enabled": false,
+          "dataFiles": [],
+          "processFiles": [],
+          "maxAuthorTurns": 2,
+          "projectId": "0ca5512e-ecfa-461c-b62e-715f60010825",
+          "taskId": "256d4d3a-999b-4d95-8f98-e8c7c25eb1da",
+          "formatVersion": 1,
+          "revision": 1,
+          "updatedAt": "2026-11-27T16:43:23.445Z"
+        }
+      }
+    },
+    {
+      "route": "/api/projects/0ca5512e-ecfa-461c-b62e-715f60010825/tasks/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/verifications",
+      "method": "POST",
+      "status": 202,
+      "value": {
+        "verification": {
+          "formatVersion": 1,
+          "projectId": "0ca5512e-ecfa-461c-b62e-715f60010825",
+          "taskId": "256d4d3a-999b-4d95-8f98-e8c7c25eb1da",
+          "verificationId": "6ba1575b-acb0-4822-879d-270deae97898",
+          "question": "核对固定资料。",
+          "selection": {
+            "verificationId": "6ba1575b-acb0-4822-879d-270deae97898",
+            "question": "核对固定资料。",
+            "dataFiles": [
+              "020_clean/source.csv"
+            ],
+            "authorFiles": [
+              "060_reports/report.md"
+            ]
+          },
+          "configuration": {
+            "id": "425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "revision": 1,
+            "provider": "custom-425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "model": "synthetic-crash",
+            "name": "崩溃交接合成模型"
+          },
+          "requestFingerprint": "9c1fc8444da8f0748cf77391a2918e1618427d7597741dd581b8da478e227bfc",
+          "state": "ready",
+          "phase": "cold",
+          "createdAt": "2026-11-27T16:43:23.484Z",
+          "updatedAt": "2026-11-27T16:43:23.537Z",
+          "workspace": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/verification-workspaces/6ba1575b-acb0-4822-879d-270deae97898",
+          "sessionDirectory": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/native",
+          "semantics": {
+            "text": "以下为用户本次明确选择的核算依据；缺少原分析采用回执时，不代表完整复原历史输入。指标定义不是强制分析步骤，未确认及冲突含义保留待确认。",
+            "sha256": "15e5cf19b48c0613310d72c829cc2b1d4db71f688e71bebb5511e266eb76e334",
+            "sources": []
+          },
+          "dataFiles": [
+            {
+              "relativePath": "020_clean/source.csv",
+              "bytes": 23,
+              "sha256": "220ed442ee5c80570b036835788e1ec45e68b262563e041be6e2b890eba66769",
+              "snapshotPath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/data/020_clean/source.csv",
+              "sourcePath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/projects/0ca5512e-ecfa-461c-b62e-715f60010825/020_clean/source.csv",
+              "observedAt": "2026-11-27T16:43:23.484Z"
+            }
+          ],
+          "authorFiles": [
+            {
+              "relativePath": "060_reports/report.md",
+              "bytes": 71,
+              "sha256": "963e8cc051f7cfa08f0f11dd5927be9e521302e3d818ae89e4021c8ef344c1b4",
+              "snapshotPath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/author/060_reports/report.md",
+              "sourcePath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/projects/0ca5512e-ecfa-461c-b62e-715f60010825/060_reports/report.md",
+              "observedAt": "2026-11-27T16:43:23.484Z"
+            }
+          ],
+          "independence": {
+            "status": "unknown"
+          },
+          "preparedAt": "2026-11-27T16:43:23.537Z",
+          "id": "6ba1575b-acb0-4822-879d-270deae97898",
+          "status": "ready",
+          "model": {
+            "id": "425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "revision": 1,
+            "provider": "custom-425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "model": "synthetic-crash",
+            "name": "崩溃交接合成模型"
+          },
+          "uiRequests": [],
+          "authorReports": [],
+          "contextEvidence": {
+            "provided": {
+              "status": "unrecorded",
+              "fragments": [],
+              "note": "未取得可确认的实际片段范围；旧请求不按当前常数或当前文件重建。"
+            },
+            "reads": {
+              "status": "unrecorded",
+              "items": [],
+              "note": "仅展示可与本记录请求及固定文件对应的read线索；未捕获不表示未读，bash等访问不能据此认定未读。"
+            },
+            "revisionAssociation": {
+              "status": "none",
+              "note": "尚无本记录新稿。"
+            }
+          }
+        }
+      }
+    },
+    {
+      "route": "/api/projects/0ca5512e-ecfa-461c-b62e-715f60010825/tasks/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/verifications/6ba1575b-acb0-4822-879d-270deae97898",
+      "method": "GET",
+      "status": 200,
+      "value": {
+        "verification": {
+          "formatVersion": 1,
+          "projectId": "0ca5512e-ecfa-461c-b62e-715f60010825",
+          "taskId": "256d4d3a-999b-4d95-8f98-e8c7c25eb1da",
+          "verificationId": "6ba1575b-acb0-4822-879d-270deae97898",
+          "question": "核对固定资料。",
+          "selection": {
+            "verificationId": "6ba1575b-acb0-4822-879d-270deae97898",
+            "question": "核对固定资料。",
+            "dataFiles": [
+              "020_clean/source.csv"
+            ],
+            "authorFiles": [
+              "060_reports/report.md"
+            ]
+          },
+          "configuration": {
+            "id": "425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "revision": 1,
+            "provider": "custom-425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "model": "synthetic-crash",
+            "name": "崩溃交接合成模型"
+          },
+          "requestFingerprint": "9c1fc8444da8f0748cf77391a2918e1618427d7597741dd581b8da478e227bfc",
+          "state": "running",
+          "phase": "cold",
+          "createdAt": "2026-11-27T16:43:23.484Z",
+          "updatedAt": "2026-11-27T16:43:23.569Z",
+          "workspace": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/verification-workspaces/6ba1575b-acb0-4822-879d-270deae97898",
+          "sessionDirectory": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/native",
+          "semantics": {
+            "text": "以下为用户本次明确选择的核算依据；缺少原分析采用回执时，不代表完整复原历史输入。指标定义不是强制分析步骤，未确认及冲突含义保留待确认。",
+            "sha256": "15e5cf19b48c0613310d72c829cc2b1d4db71f688e71bebb5511e266eb76e334",
+            "sources": []
+          },
+          "dataFiles": [
+            {
+              "relativePath": "020_clean/source.csv",
+              "bytes": 23,
+              "sha256": "220ed442ee5c80570b036835788e1ec45e68b262563e041be6e2b890eba66769",
+              "snapshotPath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/data/020_clean/source.csv",
+              "sourcePath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/projects/0ca5512e-ecfa-461c-b62e-715f60010825/020_clean/source.csv",
+              "observedAt": "2026-11-27T16:43:23.484Z"
+            }
+          ],
+          "authorFiles": [
+            {
+              "relativePath": "060_reports/report.md",
+              "bytes": 71,
+              "sha256": "963e8cc051f7cfa08f0f11dd5927be9e521302e3d818ae89e4021c8ef344c1b4",
+              "snapshotPath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/author/060_reports/report.md",
+              "sourcePath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/projects/0ca5512e-ecfa-461c-b62e-715f60010825/060_reports/report.md",
+              "observedAt": "2026-11-27T16:43:23.484Z"
+            }
+          ],
+          "independence": {
+            "status": "unknown"
+          },
+          "preparedAt": "2026-11-27T16:43:23.537Z",
+          "id": "6ba1575b-acb0-4822-879d-270deae97898",
+          "status": "running",
+          "model": {
+            "id": "425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "revision": 1,
+            "provider": "custom-425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "model": "synthetic-crash",
+            "name": "崩溃交接合成模型"
+          },
+          "uiRequests": [],
+          "authorReports": [],
+          "contextEvidence": {
+            "provided": {
+              "status": "unrecorded",
+              "fragments": [],
+              "note": "未取得可确认的实际片段范围；旧请求不按当前常数或当前文件重建。"
+            },
+            "reads": {
+              "status": "unrecorded",
+              "items": [],
+              "note": "仅展示可与本记录请求及固定文件对应的read线索；未捕获不表示未读，bash等访问不能据此认定未读。"
+            },
+            "revisionAssociation": {
+              "status": "none",
+              "note": "尚无本记录新稿。"
+            }
+          }
+        }
+      }
+    },
+    {
+      "route": "/api/projects/0ca5512e-ecfa-461c-b62e-715f60010825/tasks/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/verifications/6ba1575b-acb0-4822-879d-270deae97898",
+      "method": "GET",
+      "status": 200,
+      "value": {
+        "verification": {
+          "formatVersion": 1,
+          "projectId": "0ca5512e-ecfa-461c-b62e-715f60010825",
+          "taskId": "256d4d3a-999b-4d95-8f98-e8c7c25eb1da",
+          "verificationId": "6ba1575b-acb0-4822-879d-270deae97898",
+          "question": "核对固定资料。",
+          "selection": {
+            "verificationId": "6ba1575b-acb0-4822-879d-270deae97898",
+            "question": "核对固定资料。",
+            "dataFiles": [
+              "020_clean/source.csv"
+            ],
+            "authorFiles": [
+              "060_reports/report.md"
+            ]
+          },
+          "configuration": {
+            "id": "425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "revision": 1,
+            "provider": "custom-425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "model": "synthetic-crash",
+            "name": "崩溃交接合成模型"
+          },
+          "requestFingerprint": "9c1fc8444da8f0748cf77391a2918e1618427d7597741dd581b8da478e227bfc",
+          "state": "interrupted",
+          "phase": "cold",
+          "createdAt": "2026-11-27T16:43:23.484Z",
+          "updatedAt": "2026-11-27T16:43:32.463Z",
+          "workspace": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/verification-workspaces/6ba1575b-acb0-4822-879d-270deae97898",
+          "sessionDirectory": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/native",
+          "semantics": {
+            "text": "以下为用户本次明确选择的核算依据；缺少原分析采用回执时，不代表完整复原历史输入。指标定义不是强制分析步骤，未确认及冲突含义保留待确认。",
+            "sha256": "15e5cf19b48c0613310d72c829cc2b1d4db71f688e71bebb5511e266eb76e334",
+            "sources": []
+          },
+          "dataFiles": [
+            {
+              "relativePath": "020_clean/source.csv",
+              "bytes": 23,
+              "sha256": "220ed442ee5c80570b036835788e1ec45e68b262563e041be6e2b890eba66769",
+              "snapshotPath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/data/020_clean/source.csv",
+              "sourcePath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/projects/0ca5512e-ecfa-461c-b62e-715f60010825/020_clean/source.csv",
+              "observedAt": "2026-11-27T16:43:23.484Z"
+            }
+          ],
+          "authorFiles": [
+            {
+              "relativePath": "060_reports/report.md",
+              "bytes": 71,
+              "sha256": "963e8cc051f7cfa08f0f11dd5927be9e521302e3d818ae89e4021c8ef344c1b4",
+              "snapshotPath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/author/060_reports/report.md",
+              "sourcePath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/projects/0ca5512e-ecfa-461c-b62e-715f60010825/060_reports/report.md",
+              "observedAt": "2026-11-27T16:43:23.484Z"
+            }
+          ],
+          "independence": {
+            "status": "unknown"
+          },
+          "preparedAt": "2026-11-27T16:43:23.537Z",
+          "error": "host_restarted_before_confirmed_completion",
+          "id": "6ba1575b-acb0-4822-879d-270deae97898",
+          "status": "interrupted",
+          "model": {
+            "id": "425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "revision": 1,
+            "provider": "custom-425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "model": "synthetic-crash",
+            "name": "崩溃交接合成模型"
+          },
+          "uiRequests": [],
+          "authorReports": [],
+          "contextEvidence": {
+            "provided": {
+              "status": "unrecorded",
+              "fragments": [],
+              "note": "未取得可确认的实际片段范围；旧请求不按当前常数或当前文件重建。"
+            },
+            "reads": {
+              "status": "unrecorded",
+              "items": [],
+              "note": "仅展示可与本记录请求及固定文件对应的read线索；未捕获不表示未读，bash等访问不能据此认定未读。"
+            },
+            "revisionAssociation": {
+              "status": "none",
+              "note": "尚无本记录新稿。"
+            }
+          }
+        }
+      }
+    },
+    {
+      "route": "/api/projects/0ca5512e-ecfa-461c-b62e-715f60010825/tasks/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/conclusion-reviews/transition",
+      "method": "GET",
+      "status": 200,
+      "value": {
+        "state": "waiting",
+        "reason": "legacy_cleanup_unknown",
+        "legacySettings": {
+          "enabled": false,
+          "dataFiles": [],
+          "processFiles": [],
+          "maxAuthorTurns": 2,
+          "projectId": "0ca5512e-ecfa-461c-b62e-715f60010825",
+          "taskId": "256d4d3a-999b-4d95-8f98-e8c7c25eb1da",
+          "formatVersion": 1,
+          "revision": 1,
+          "updatedAt": "2026-11-27T16:43:23.445Z"
+        }
+      }
+    },
+    {
+      "route": "/api/projects/0ca5512e-ecfa-461c-b62e-715f60010825/tasks/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/verifications/6ba1575b-acb0-4822-879d-270deae97898",
+      "method": "GET",
+      "status": 200,
+      "value": {
+        "verification": {
+          "formatVersion": 1,
+          "projectId": "0ca5512e-ecfa-461c-b62e-715f60010825",
+          "taskId": "256d4d3a-999b-4d95-8f98-e8c7c25eb1da",
+          "verificationId": "6ba1575b-acb0-4822-879d-270deae97898",
+          "question": "核对固定资料。",
+          "selection": {
+            "verificationId": "6ba1575b-acb0-4822-879d-270deae97898",
+            "question": "核对固定资料。",
+            "dataFiles": [
+              "020_clean/source.csv"
+            ],
+            "authorFiles": [
+              "060_reports/report.md"
+            ]
+          },
+          "configuration": {
+            "id": "425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "revision": 1,
+            "provider": "custom-425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "model": "synthetic-crash",
+            "name": "崩溃交接合成模型"
+          },
+          "requestFingerprint": "9c1fc8444da8f0748cf77391a2918e1618427d7597741dd581b8da478e227bfc",
+          "state": "interrupted",
+          "phase": "cold",
+          "createdAt": "2026-11-27T16:43:23.484Z",
+          "updatedAt": "2026-11-27T16:43:32.463Z",
+          "workspace": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/verification-workspaces/6ba1575b-acb0-4822-879d-270deae97898",
+          "sessionDirectory": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/native",
+          "semantics": {
+            "text": "以下为用户本次明确选择的核算依据；缺少原分析采用回执时，不代表完整复原历史输入。指标定义不是强制分析步骤，未确认及冲突含义保留待确认。",
+            "sha256": "15e5cf19b48c0613310d72c829cc2b1d4db71f688e71bebb5511e266eb76e334",
+            "sources": []
+          },
+          "dataFiles": [
+            {
+              "relativePath": "020_clean/source.csv",
+              "bytes": 23,
+              "sha256": "220ed442ee5c80570b036835788e1ec45e68b262563e041be6e2b890eba66769",
+              "snapshotPath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/data/020_clean/source.csv",
+              "sourcePath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/projects/0ca5512e-ecfa-461c-b62e-715f60010825/020_clean/source.csv",
+              "observedAt": "2026-11-27T16:43:23.484Z"
+            }
+          ],
+          "authorFiles": [
+            {
+              "relativePath": "060_reports/report.md",
+              "bytes": 71,
+              "sha256": "963e8cc051f7cfa08f0f11dd5927be9e521302e3d818ae89e4021c8ef344c1b4",
+              "snapshotPath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/author/060_reports/report.md",
+              "sourcePath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/projects/0ca5512e-ecfa-461c-b62e-715f60010825/060_reports/report.md",
+              "observedAt": "2026-11-27T16:43:23.484Z"
+            }
+          ],
+          "independence": {
+            "status": "unknown"
+          },
+          "preparedAt": "2026-11-27T16:43:23.537Z",
+          "error": "host_restarted_before_confirmed_completion",
+          "id": "6ba1575b-acb0-4822-879d-270deae97898",
+          "status": "interrupted",
+          "model": {
+            "id": "425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "revision": 1,
+            "provider": "custom-425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "model": "synthetic-crash",
+            "name": "崩溃交接合成模型"
+          },
+          "uiRequests": [],
+          "authorReports": [],
+          "contextEvidence": {
+            "provided": {
+              "status": "unrecorded",
+              "fragments": [],
+              "note": "未取得可确认的实际片段范围；旧请求不按当前常数或当前文件重建。"
+            },
+            "reads": {
+              "status": "unrecorded",
+              "items": [],
+              "note": "仅展示可与本记录请求及固定文件对应的read线索；未捕获不表示未读，bash等访问不能据此认定未读。"
+            },
+            "revisionAssociation": {
+              "status": "none",
+              "note": "尚无本记录新稿。"
+            }
+          }
+        }
+      }
+    },
+    {
+      "route": "/api/projects/0ca5512e-ecfa-461c-b62e-715f60010825/tasks/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/verifications",
+      "method": "GET",
+      "status": 200,
+      "value": {
+        "verifications": [
+          {
+            "formatVersion": 1,
+            "projectId": "0ca5512e-ecfa-461c-b62e-715f60010825",
+            "taskId": "256d4d3a-999b-4d95-8f98-e8c7c25eb1da",
+            "verificationId": "6ba1575b-acb0-4822-879d-270deae97898",
+            "question": "核对固定资料。",
+            "selection": {
+              "verificationId": "6ba1575b-acb0-4822-879d-270deae97898",
+              "question": "核对固定资料。",
+              "dataFiles": [
+                "020_clean/source.csv"
+              ],
+              "authorFiles": [
+                "060_reports/report.md"
+              ]
+            },
+            "configuration": {
+              "id": "425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+              "revision": 1,
+              "provider": "custom-425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+              "model": "synthetic-crash",
+              "name": "崩溃交接合成模型"
+            },
+            "requestFingerprint": "9c1fc8444da8f0748cf77391a2918e1618427d7597741dd581b8da478e227bfc",
+            "state": "interrupted",
+            "phase": "cold",
+            "createdAt": "2026-11-27T16:43:23.484Z",
+            "updatedAt": "2026-11-27T16:43:32.463Z",
+            "workspace": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/verification-workspaces/6ba1575b-acb0-4822-879d-270deae97898",
+            "sessionDirectory": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/native",
+            "semantics": {
+              "text": "以下为用户本次明确选择的核算依据；缺少原分析采用回执时，不代表完整复原历史输入。指标定义不是强制分析步骤，未确认及冲突含义保留待确认。",
+              "sha256": "15e5cf19b48c0613310d72c829cc2b1d4db71f688e71bebb5511e266eb76e334",
+              "sources": []
+            },
+            "dataFiles": [
+              {
+                "relativePath": "020_clean/source.csv",
+                "bytes": 23,
+                "sha256": "220ed442ee5c80570b036835788e1ec45e68b262563e041be6e2b890eba66769",
+                "snapshotPath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/data/020_clean/source.csv",
+                "sourcePath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/projects/0ca5512e-ecfa-461c-b62e-715f60010825/020_clean/source.csv",
+                "observedAt": "2026-11-27T16:43:23.484Z"
+              }
+            ],
+            "authorFiles": [
+              {
+                "relativePath": "060_reports/report.md",
+                "bytes": 71,
+                "sha256": "963e8cc051f7cfa08f0f11dd5927be9e521302e3d818ae89e4021c8ef344c1b4",
+                "snapshotPath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/author/060_reports/report.md",
+                "sourcePath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/projects/0ca5512e-ecfa-461c-b62e-715f60010825/060_reports/report.md",
+                "observedAt": "2026-11-27T16:43:23.484Z"
+              }
+            ],
+            "independence": {
+              "status": "unknown"
+            },
+            "preparedAt": "2026-11-27T16:43:23.537Z",
+            "error": "host_restarted_before_confirmed_completion",
+            "id": "6ba1575b-acb0-4822-879d-270deae97898",
+            "status": "interrupted",
+            "model": {
+              "id": "425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+              "revision": 1,
+              "provider": "custom-425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+              "model": "synthetic-crash",
+              "name": "崩溃交接合成模型"
+            },
+            "uiRequests": [],
+            "authorReports": [],
+            "contextEvidence": {
+              "provided": {
+                "status": "unrecorded",
+                "fragments": [],
+                "note": "未取得可确认的实际片段范围；旧请求不按当前常数或当前文件重建。"
+              },
+              "reads": {
+                "status": "unrecorded",
+                "items": [],
+                "note": "仅展示可与本记录请求及固定文件对应的read线索；未捕获不表示未读，bash等访问不能据此认定未读。"
+              },
+              "revisionAssociation": {
+                "status": "none",
+                "note": "尚无本记录新稿。"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "route": "/api/projects/0ca5512e-ecfa-461c-b62e-715f60010825/tasks/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/conclusion-reviews",
+      "method": "GET",
+      "status": 200,
+      "value": {
+        "reviews": []
+      }
+    },
+    {
+      "route": "/api/projects/0ca5512e-ecfa-461c-b62e-715f60010825/tasks/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/conclusion-reviews/preview",
+      "method": "POST",
+      "status": 409,
+      "value": {
+        "code": "review_transition_pending",
+        "message": "旧核算仍在收尾或状态待核对；原记录保留，尚未开始新的审查。"
+      }
+    },
+    {
+      "route": "/api/projects/0ca5512e-ecfa-461c-b62e-715f60010825/tasks/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/conclusion-reviews/transition",
+      "method": "GET",
+      "status": 200,
+      "value": {
+        "state": "waiting",
+        "reason": "legacy_cleanup_unknown",
+        "legacySettings": {
+          "enabled": false,
+          "dataFiles": [],
+          "processFiles": [],
+          "maxAuthorTurns": 2,
+          "projectId": "0ca5512e-ecfa-461c-b62e-715f60010825",
+          "taskId": "256d4d3a-999b-4d95-8f98-e8c7c25eb1da",
+          "formatVersion": 1,
+          "revision": 1,
+          "updatedAt": "2026-11-27T16:43:23.445Z"
+        }
+      }
+    },
+    {
+      "route": "/api/projects/0ca5512e-ecfa-461c-b62e-715f60010825/tasks/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/verifications/6ba1575b-acb0-4822-879d-270deae97898",
+      "method": "GET",
+      "status": 200,
+      "value": {
+        "verification": {
+          "formatVersion": 1,
+          "projectId": "0ca5512e-ecfa-461c-b62e-715f60010825",
+          "taskId": "256d4d3a-999b-4d95-8f98-e8c7c25eb1da",
+          "verificationId": "6ba1575b-acb0-4822-879d-270deae97898",
+          "question": "核对固定资料。",
+          "selection": {
+            "verificationId": "6ba1575b-acb0-4822-879d-270deae97898",
+            "question": "核对固定资料。",
+            "dataFiles": [
+              "020_clean/source.csv"
+            ],
+            "authorFiles": [
+              "060_reports/report.md"
+            ]
+          },
+          "configuration": {
+            "id": "425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "revision": 1,
+            "provider": "custom-425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "model": "synthetic-crash",
+            "name": "崩溃交接合成模型"
+          },
+          "requestFingerprint": "9c1fc8444da8f0748cf77391a2918e1618427d7597741dd581b8da478e227bfc",
+          "state": "interrupted",
+          "phase": "cold",
+          "createdAt": "2026-11-27T16:43:23.484Z",
+          "updatedAt": "2026-11-27T16:43:32.463Z",
+          "workspace": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/verification-workspaces/6ba1575b-acb0-4822-879d-270deae97898",
+          "sessionDirectory": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/native",
+          "semantics": {
+            "text": "以下为用户本次明确选择的核算依据；缺少原分析采用回执时，不代表完整复原历史输入。指标定义不是强制分析步骤，未确认及冲突含义保留待确认。",
+            "sha256": "15e5cf19b48c0613310d72c829cc2b1d4db71f688e71bebb5511e266eb76e334",
+            "sources": []
+          },
+          "dataFiles": [
+            {
+              "relativePath": "020_clean/source.csv",
+              "bytes": 23,
+              "sha256": "220ed442ee5c80570b036835788e1ec45e68b262563e041be6e2b890eba66769",
+              "snapshotPath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/data/020_clean/source.csv",
+              "sourcePath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/projects/0ca5512e-ecfa-461c-b62e-715f60010825/020_clean/source.csv",
+              "observedAt": "2026-11-27T16:43:23.484Z"
+            }
+          ],
+          "authorFiles": [
+            {
+              "relativePath": "060_reports/report.md",
+              "bytes": 71,
+              "sha256": "963e8cc051f7cfa08f0f11dd5927be9e521302e3d818ae89e4021c8ef344c1b4",
+              "snapshotPath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/author/060_reports/report.md",
+              "sourcePath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/projects/0ca5512e-ecfa-461c-b62e-715f60010825/060_reports/report.md",
+              "observedAt": "2026-11-27T16:43:23.484Z"
+            }
+          ],
+          "independence": {
+            "status": "unknown"
+          },
+          "preparedAt": "2026-11-27T16:43:23.537Z",
+          "error": "host_restarted_before_confirmed_completion",
+          "id": "6ba1575b-acb0-4822-879d-270deae97898",
+          "status": "interrupted",
+          "model": {
+            "id": "425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "revision": 1,
+            "provider": "custom-425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "model": "synthetic-crash",
+            "name": "崩溃交接合成模型"
+          },
+          "uiRequests": [],
+          "authorReports": [],
+          "contextEvidence": {
+            "provided": {
+              "status": "unrecorded",
+              "fragments": [],
+              "note": "未取得可确认的实际片段范围；旧请求不按当前常数或当前文件重建。"
+            },
+            "reads": {
+              "status": "unrecorded",
+              "items": [],
+              "note": "仅展示可与本记录请求及固定文件对应的read线索；未捕获不表示未读，bash等访问不能据此认定未读。"
+            },
+            "revisionAssociation": {
+              "status": "none",
+              "note": "尚无本记录新稿。"
+            }
+          }
+        }
+      }
+    },
+    {
+      "route": "/api/projects/0ca5512e-ecfa-461c-b62e-715f60010825/tasks/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/verifications",
+      "method": "GET",
+      "status": 200,
+      "value": {
+        "verifications": [
+          {
+            "formatVersion": 1,
+            "projectId": "0ca5512e-ecfa-461c-b62e-715f60010825",
+            "taskId": "256d4d3a-999b-4d95-8f98-e8c7c25eb1da",
+            "verificationId": "6ba1575b-acb0-4822-879d-270deae97898",
+            "question": "核对固定资料。",
+            "selection": {
+              "verificationId": "6ba1575b-acb0-4822-879d-270deae97898",
+              "question": "核对固定资料。",
+              "dataFiles": [
+                "020_clean/source.csv"
+              ],
+              "authorFiles": [
+                "060_reports/report.md"
+              ]
+            },
+            "configuration": {
+              "id": "425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+              "revision": 1,
+              "provider": "custom-425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+              "model": "synthetic-crash",
+              "name": "崩溃交接合成模型"
+            },
+            "requestFingerprint": "9c1fc8444da8f0748cf77391a2918e1618427d7597741dd581b8da478e227bfc",
+            "state": "interrupted",
+            "phase": "cold",
+            "createdAt": "2026-11-27T16:43:23.484Z",
+            "updatedAt": "2026-11-27T16:43:32.463Z",
+            "workspace": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/verification-workspaces/6ba1575b-acb0-4822-879d-270deae97898",
+            "sessionDirectory": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/native",
+            "semantics": {
+              "text": "以下为用户本次明确选择的核算依据；缺少原分析采用回执时，不代表完整复原历史输入。指标定义不是强制分析步骤，未确认及冲突含义保留待确认。",
+              "sha256": "15e5cf19b48c0613310d72c829cc2b1d4db71f688e71bebb5511e266eb76e334",
+              "sources": []
+            },
+            "dataFiles": [
+              {
+                "relativePath": "020_clean/source.csv",
+                "bytes": 23,
+                "sha256": "220ed442ee5c80570b036835788e1ec45e68b262563e041be6e2b890eba66769",
+                "snapshotPath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/data/020_clean/source.csv",
+                "sourcePath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/projects/0ca5512e-ecfa-461c-b62e-715f60010825/020_clean/source.csv",
+                "observedAt": "2026-11-27T16:43:23.484Z"
+              }
+            ],
+            "authorFiles": [
+              {
+                "relativePath": "060_reports/report.md",
+                "bytes": 71,
+                "sha256": "963e8cc051f7cfa08f0f11dd5927be9e521302e3d818ae89e4021c8ef344c1b4",
+                "snapshotPath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/author/060_reports/report.md",
+                "sourcePath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/projects/0ca5512e-ecfa-461c-b62e-715f60010825/060_reports/report.md",
+                "observedAt": "2026-11-27T16:43:23.484Z"
+              }
+            ],
+            "independence": {
+              "status": "unknown"
+            },
+            "preparedAt": "2026-11-27T16:43:23.537Z",
+            "error": "host_restarted_before_confirmed_completion",
+            "id": "6ba1575b-acb0-4822-879d-270deae97898",
+            "status": "interrupted",
+            "model": {
+              "id": "425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+              "revision": 1,
+              "provider": "custom-425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+              "model": "synthetic-crash",
+              "name": "崩溃交接合成模型"
+            },
+            "uiRequests": [],
+            "authorReports": [],
+            "contextEvidence": {
+              "provided": {
+                "status": "unrecorded",
+                "fragments": [],
+                "note": "未取得可确认的实际片段范围；旧请求不按当前常数或当前文件重建。"
+              },
+              "reads": {
+                "status": "unrecorded",
+                "items": [],
+                "note": "仅展示可与本记录请求及固定文件对应的read线索；未捕获不表示未读，bash等访问不能据此认定未读。"
+              },
+              "revisionAssociation": {
+                "status": "none",
+                "note": "尚无本记录新稿。"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "route": "/api/projects/0ca5512e-ecfa-461c-b62e-715f60010825/tasks/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/conclusion-reviews",
+      "method": "GET",
+      "status": 200,
+      "value": {
+        "reviews": []
+      }
+    },
+    {
+      "route": "/api/projects/0ca5512e-ecfa-461c-b62e-715f60010825/tasks/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/conclusion-reviews/preview",
+      "method": "POST",
+      "status": 409,
+      "value": {
+        "code": "review_transition_pending",
+        "message": "旧核算仍在收尾或状态待核对；原记录保留，尚未开始新的审查。"
+      }
+    },
+    {
+      "route": "/api/projects/0ca5512e-ecfa-461c-b62e-715f60010825/tasks/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/conclusion-reviews/transition",
+      "method": "GET",
+      "status": 200,
+      "value": {
+        "state": "waiting",
+        "reason": "legacy_cleanup_unknown",
+        "legacySettings": {
+          "enabled": false,
+          "dataFiles": [],
+          "processFiles": [],
+          "maxAuthorTurns": 2,
+          "projectId": "0ca5512e-ecfa-461c-b62e-715f60010825",
+          "taskId": "256d4d3a-999b-4d95-8f98-e8c7c25eb1da",
+          "formatVersion": 1,
+          "revision": 1,
+          "updatedAt": "2026-11-27T16:43:23.445Z"
+        }
+      }
+    },
+    {
+      "route": "/api/projects/0ca5512e-ecfa-461c-b62e-715f60010825/tasks/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/verifications/6ba1575b-acb0-4822-879d-270deae97898",
+      "method": "GET",
+      "status": 200,
+      "value": {
+        "verification": {
+          "formatVersion": 1,
+          "projectId": "0ca5512e-ecfa-461c-b62e-715f60010825",
+          "taskId": "256d4d3a-999b-4d95-8f98-e8c7c25eb1da",
+          "verificationId": "6ba1575b-acb0-4822-879d-270deae97898",
+          "question": "核对固定资料。",
+          "selection": {
+            "verificationId": "6ba1575b-acb0-4822-879d-270deae97898",
+            "question": "核对固定资料。",
+            "dataFiles": [
+              "020_clean/source.csv"
+            ],
+            "authorFiles": [
+              "060_reports/report.md"
+            ]
+          },
+          "configuration": {
+            "id": "425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "revision": 1,
+            "provider": "custom-425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "model": "synthetic-crash",
+            "name": "崩溃交接合成模型"
+          },
+          "requestFingerprint": "9c1fc8444da8f0748cf77391a2918e1618427d7597741dd581b8da478e227bfc",
+          "state": "interrupted",
+          "phase": "cold",
+          "createdAt": "2026-11-27T16:43:23.484Z",
+          "updatedAt": "2026-11-27T16:43:32.463Z",
+          "workspace": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/verification-workspaces/6ba1575b-acb0-4822-879d-270deae97898",
+          "sessionDirectory": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/native",
+          "semantics": {
+            "text": "以下为用户本次明确选择的核算依据；缺少原分析采用回执时，不代表完整复原历史输入。指标定义不是强制分析步骤，未确认及冲突含义保留待确认。",
+            "sha256": "15e5cf19b48c0613310d72c829cc2b1d4db71f688e71bebb5511e266eb76e334",
+            "sources": []
+          },
+          "dataFiles": [
+            {
+              "relativePath": "020_clean/source.csv",
+              "bytes": 23,
+              "sha256": "220ed442ee5c80570b036835788e1ec45e68b262563e041be6e2b890eba66769",
+              "snapshotPath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/data/020_clean/source.csv",
+              "sourcePath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/projects/0ca5512e-ecfa-461c-b62e-715f60010825/020_clean/source.csv",
+              "observedAt": "2026-11-27T16:43:23.484Z"
+            }
+          ],
+          "authorFiles": [
+            {
+              "relativePath": "060_reports/report.md",
+              "bytes": 71,
+              "sha256": "963e8cc051f7cfa08f0f11dd5927be9e521302e3d818ae89e4021c8ef344c1b4",
+              "snapshotPath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/author/060_reports/report.md",
+              "sourcePath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/projects/0ca5512e-ecfa-461c-b62e-715f60010825/060_reports/report.md",
+              "observedAt": "2026-11-27T16:43:23.484Z"
+            }
+          ],
+          "independence": {
+            "status": "unknown"
+          },
+          "preparedAt": "2026-11-27T16:43:23.537Z",
+          "error": "host_restarted_before_confirmed_completion",
+          "id": "6ba1575b-acb0-4822-879d-270deae97898",
+          "status": "interrupted",
+          "model": {
+            "id": "425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "revision": 1,
+            "provider": "custom-425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "model": "synthetic-crash",
+            "name": "崩溃交接合成模型"
+          },
+          "uiRequests": [],
+          "authorReports": [],
+          "contextEvidence": {
+            "provided": {
+              "status": "unrecorded",
+              "fragments": [],
+              "note": "未取得可确认的实际片段范围；旧请求不按当前常数或当前文件重建。"
+            },
+            "reads": {
+              "status": "unrecorded",
+              "items": [],
+              "note": "仅展示可与本记录请求及固定文件对应的read线索；未捕获不表示未读，bash等访问不能据此认定未读。"
+            },
+            "revisionAssociation": {
+              "status": "none",
+              "note": "尚无本记录新稿。"
+            }
+          }
+        }
+      }
+    },
+    {
+      "route": "/api/projects/0ca5512e-ecfa-461c-b62e-715f60010825/tasks/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/verifications",
+      "method": "GET",
+      "status": 200,
+      "value": {
+        "verifications": [
+          {
+            "formatVersion": 1,
+            "projectId": "0ca5512e-ecfa-461c-b62e-715f60010825",
+            "taskId": "256d4d3a-999b-4d95-8f98-e8c7c25eb1da",
+            "verificationId": "6ba1575b-acb0-4822-879d-270deae97898",
+            "question": "核对固定资料。",
+            "selection": {
+              "verificationId": "6ba1575b-acb0-4822-879d-270deae97898",
+              "question": "核对固定资料。",
+              "dataFiles": [
+                "020_clean/source.csv"
+              ],
+              "authorFiles": [
+                "060_reports/report.md"
+              ]
+            },
+            "configuration": {
+              "id": "425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+              "revision": 1,
+              "provider": "custom-425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+              "model": "synthetic-crash",
+              "name": "崩溃交接合成模型"
+            },
+            "requestFingerprint": "9c1fc8444da8f0748cf77391a2918e1618427d7597741dd581b8da478e227bfc",
+            "state": "interrupted",
+            "phase": "cold",
+            "createdAt": "2026-11-27T16:43:23.484Z",
+            "updatedAt": "2026-11-27T16:43:32.463Z",
+            "workspace": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/verification-workspaces/6ba1575b-acb0-4822-879d-270deae97898",
+            "sessionDirectory": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/native",
+            "semantics": {
+              "text": "以下为用户本次明确选择的核算依据；缺少原分析采用回执时，不代表完整复原历史输入。指标定义不是强制分析步骤，未确认及冲突含义保留待确认。",
+              "sha256": "15e5cf19b48c0613310d72c829cc2b1d4db71f688e71bebb5511e266eb76e334",
+              "sources": []
+            },
+            "dataFiles": [
+              {
+                "relativePath": "020_clean/source.csv",
+                "bytes": 23,
+                "sha256": "220ed442ee5c80570b036835788e1ec45e68b262563e041be6e2b890eba66769",
+                "snapshotPath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/data/020_clean/source.csv",
+                "sourcePath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/projects/0ca5512e-ecfa-461c-b62e-715f60010825/020_clean/source.csv",
+                "observedAt": "2026-11-27T16:43:23.484Z"
+              }
+            ],
+            "authorFiles": [
+              {
+                "relativePath": "060_reports/report.md",
+                "bytes": 71,
+                "sha256": "963e8cc051f7cfa08f0f11dd5927be9e521302e3d818ae89e4021c8ef344c1b4",
+                "snapshotPath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/author/060_reports/report.md",
+                "sourcePath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/projects/0ca5512e-ecfa-461c-b62e-715f60010825/060_reports/report.md",
+                "observedAt": "2026-11-27T16:43:23.484Z"
+              }
+            ],
+            "independence": {
+              "status": "unknown"
+            },
+            "preparedAt": "2026-11-27T16:43:23.537Z",
+            "error": "host_restarted_before_confirmed_completion",
+            "id": "6ba1575b-acb0-4822-879d-270deae97898",
+            "status": "interrupted",
+            "model": {
+              "id": "425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+              "revision": 1,
+              "provider": "custom-425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+              "model": "synthetic-crash",
+              "name": "崩溃交接合成模型"
+            },
+            "uiRequests": [],
+            "authorReports": [],
+            "contextEvidence": {
+              "provided": {
+                "status": "unrecorded",
+                "fragments": [],
+                "note": "未取得可确认的实际片段范围；旧请求不按当前常数或当前文件重建。"
+              },
+              "reads": {
+                "status": "unrecorded",
+                "items": [],
+                "note": "仅展示可与本记录请求及固定文件对应的read线索；未捕获不表示未读，bash等访问不能据此认定未读。"
+              },
+              "revisionAssociation": {
+                "status": "none",
+                "note": "尚无本记录新稿。"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "route": "/api/projects/0ca5512e-ecfa-461c-b62e-715f60010825/tasks/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/conclusion-reviews",
+      "method": "GET",
+      "status": 200,
+      "value": {
+        "reviews": []
+      }
+    },
+    {
+      "route": "/api/projects/0ca5512e-ecfa-461c-b62e-715f60010825/tasks/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/conclusion-reviews/preview",
+      "method": "POST",
+      "status": 409,
+      "value": {
+        "code": "review_transition_pending",
+        "message": "旧核算仍在收尾或状态待核对；原记录保留，尚未开始新的审查。"
+      }
+    },
+    {
+      "route": "/api/projects/0ca5512e-ecfa-461c-b62e-715f60010825/tasks/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/verifications/6ba1575b-acb0-4822-879d-270deae97898/stop",
+      "method": "POST",
+      "status": 200,
+      "value": {
+        "verification": {
+          "formatVersion": 1,
+          "projectId": "0ca5512e-ecfa-461c-b62e-715f60010825",
+          "taskId": "256d4d3a-999b-4d95-8f98-e8c7c25eb1da",
+          "verificationId": "6ba1575b-acb0-4822-879d-270deae97898",
+          "question": "核对固定资料。",
+          "selection": {
+            "verificationId": "6ba1575b-acb0-4822-879d-270deae97898",
+            "question": "核对固定资料。",
+            "dataFiles": [
+              "020_clean/source.csv"
+            ],
+            "authorFiles": [
+              "060_reports/report.md"
+            ]
+          },
+          "configuration": {
+            "id": "425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "revision": 1,
+            "provider": "custom-425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "model": "synthetic-crash",
+            "name": "崩溃交接合成模型"
+          },
+          "requestFingerprint": "9c1fc8444da8f0748cf77391a2918e1618427d7597741dd581b8da478e227bfc",
+          "state": "interrupted",
+          "phase": "cold",
+          "createdAt": "2026-11-27T16:43:23.484Z",
+          "updatedAt": "2026-11-27T16:43:32.463Z",
+          "workspace": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/verification-workspaces/6ba1575b-acb0-4822-879d-270deae97898",
+          "sessionDirectory": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/native",
+          "semantics": {
+            "text": "以下为用户本次明确选择的核算依据；缺少原分析采用回执时，不代表完整复原历史输入。指标定义不是强制分析步骤，未确认及冲突含义保留待确认。",
+            "sha256": "15e5cf19b48c0613310d72c829cc2b1d4db71f688e71bebb5511e266eb76e334",
+            "sources": []
+          },
+          "dataFiles": [
+            {
+              "relativePath": "020_clean/source.csv",
+              "bytes": 23,
+              "sha256": "220ed442ee5c80570b036835788e1ec45e68b262563e041be6e2b890eba66769",
+              "snapshotPath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/data/020_clean/source.csv",
+              "sourcePath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/projects/0ca5512e-ecfa-461c-b62e-715f60010825/020_clean/source.csv",
+              "observedAt": "2026-11-27T16:43:23.484Z"
+            }
+          ],
+          "authorFiles": [
+            {
+              "relativePath": "060_reports/report.md",
+              "bytes": 71,
+              "sha256": "963e8cc051f7cfa08f0f11dd5927be9e521302e3d818ae89e4021c8ef344c1b4",
+              "snapshotPath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/analysis-verifications/0ca5512e-ecfa-461c-b62e-715f60010825/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/6ba1575b-acb0-4822-879d-270deae97898/author/060_reports/report.md",
+              "sourcePath": "/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/projects/0ca5512e-ecfa-461c-b62e-715f60010825/060_reports/report.md",
+              "observedAt": "2026-11-27T16:43:23.484Z"
+            }
+          ],
+          "independence": {
+            "status": "unknown"
+          },
+          "preparedAt": "2026-11-27T16:43:23.537Z",
+          "error": "host_restarted_before_confirmed_completion",
+          "id": "6ba1575b-acb0-4822-879d-270deae97898",
+          "status": "interrupted",
+          "model": {
+            "id": "425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "revision": 1,
+            "provider": "custom-425ac6e6-213a-4db8-9d1c-fb2a296d6e45",
+            "model": "synthetic-crash",
+            "name": "崩溃交接合成模型"
+          },
+          "uiRequests": [],
+          "authorReports": [],
+          "contextEvidence": {
+            "provided": {
+              "status": "unrecorded",
+              "fragments": [],
+              "note": "未取得可确认的实际片段范围；旧请求不按当前常数或当前文件重建。"
+            },
+            "reads": {
+              "status": "unrecorded",
+              "items": [],
+              "note": "仅展示可与本记录请求及固定文件对应的read线索；未捕获不表示未读，bash等访问不能据此认定未读。"
+            },
+            "revisionAssociation": {
+              "status": "none",
+              "note": "尚无本记录新稿。"
+            }
+          }
+        }
+      }
+    },
+    {
+      "route": "/api/projects/0ca5512e-ecfa-461c-b62e-715f60010825/tasks/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/conclusion-reviews/transition",
+      "method": "GET",
+      "status": 200,
+      "value": {
+        "state": "waiting",
+        "reason": "legacy_cleanup_unknown",
+        "legacySettings": {
+          "enabled": false,
+          "dataFiles": [],
+          "processFiles": [],
+          "maxAuthorTurns": 2,
+          "projectId": "0ca5512e-ecfa-461c-b62e-715f60010825",
+          "taskId": "256d4d3a-999b-4d95-8f98-e8c7c25eb1da",
+          "formatVersion": 1,
+          "revision": 1,
+          "updatedAt": "2026-11-27T16:43:23.445Z"
+        }
+      }
+    },
+    {
+      "route": "/api/projects/0ca5512e-ecfa-461c-b62e-715f60010825/tasks/256d4d3a-999b-4d95-8f98-e8c7c25eb1da/conclusion-reviews",
+      "method": "POST",
+      "status": 409,
+      "value": {
+        "code": "review_transition_pending",
+        "message": "旧核算仍在收尾或状态待核对；原记录保留，尚未开始新的审查。"
+      }
+    }
+  ],
+  "requests": [
+    {
+      "path": "/v1/chat/completions",
+      "body": {
+        "model": "synthetic-crash",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an expert coding assistant operating inside pi, a coding agent harness. You help users by reading files, executing commands, editing code, and writing new files.\n\n<tools>\n- read: Read file contents\n- bash: Execute bash commands (ls, grep, find, etc.)\n- edit: Make precise file edits with exact text replacement, including multiple disjoint edits in one call\n- write: Create or overwrite files\n- grep: Search file contents for patterns (respects .gitignore)\n- find: Find files by glob pattern (respects .gitignore)\n- ls: List directory contents\n- codemode: Run JavaScript that calls other tools\n- tool_search: Search for tools that are not loaded yet and load the matches\n\nIn addition to the tools above, you may have access to other custom tools depending on the project.\n</tools>\n\n<rules>\n- Use read to examine files instead of cat or sed.\n- You can inspect PI_* environment variables for current model and session details.\n- Use edit for precise changes (edits[].oldText must match exactly)\n- When changing multiple separate locations in one file, use one edit call with multiple entries in edits[] instead of multiple edit calls\n- Each edits[].oldText is matched against the original file, not after earlier edits are applied. Do not emit overlapping or nested edits. Merge nearby changes into one edit.\n- Keep edits[].oldText as small as possible while still being unique in the file. Do not pad with large unchanged regions.\n- Use write only for new files or complete rewrites.\n- Use codemode to batch independent tool calls (Promise.allSettled), chain them, or filter large output, instead of many separate calls.\n- Be concise in your responses\n- Show file paths clearly when working with files\n</rules>\n\n<docs>\nPi documentation (read only when the user asks about pi itself, its SDK, extensions, themes, skills, or TUI):\n- Main documentation: /workspace/OptraCall-issue149-final/node_modules/@earendil-works/pi-coding-agent/README.md\n- Additional docs: /workspace/OptraCall-issue149-final/node_modules/@earendil-works/pi-coding-agent/docs\n- Examples: /workspace/OptraCall-issue149-final/node_modules/@earendil-works/pi-coding-agent/examples (extensions, custom tools, SDK)\n- When reading pi docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory\n- When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), pi packages (docs/packages.md), environment variables (docs/environment-variables.md), MCP servers (docs/mcp.md), codemode scripts and non-LLM models such as classifiers and image models (docs/codemode.md)\n- When working on pi topics, read the docs and examples, and follow .md cross-references before implementing\n- Always read pi .md files completely and follow links to related docs (e.g., tui.md for TUI API details)\n</docs>\n\n<addendum>\nYou are an independent verification analyst in OptraCall. Choose methods yourself and actually execute code when needed. Use only the copied inputs and provided business facts. Keep assumptions, unconfirmed meanings and differences visible. Do not infer causality from a numerical match.\n\nWork and write only inside this verification workspace. inputs/ contains fixed copies: do not edit these files; save transformations to new files. Do not search parent directories, other projects, native session history, Host metadata or the original author files. This is a soft instruction, not a sandbox. Shared tools and resources do not grant additional data or business-action authority.\n\nIn the independent first turn do not seek the author answer. Later the Host may explicitly provide fixed author files for comparison. A repeated author script is reproducibility evidence, not an independent calculation. Do not publish assets, change source files or execute business actions.\n\nOutput evidence (use when relevant): Support new or revised totals, rankings, denominators, scope and \"all/largest/doubled\" claims that could change a recommendation with actual sources or results that can be read back. Keep final wording consistent with the compared values, units, definitions and covered population; an earlier correct table or successful run does not prove a later claim.\n\nChoose tools, methods and presentation yourself: queries, scripts, tables, cross-checks, result-based writing or another suitable approach. Skip inapplicable guidance; no fixed steps, check count or mandatory skill. Where support is insufficient, narrow or remove the claim, or state what remains unknown. Distinguish calculation from inference and unconfirmed business premises.\n\nApply the same evidence standard to your own new claims; finding an author error does not prove your additions correct. State which author values were checked, which claims are your own new calculation or inference, and which business judgments remain unknown.\n</addendum>\n\n<project_context>\nProject-specific instructions and guidelines:\n\n<project_instructions path=\"/workspace/OptraCall-issue149-final/AGENTS.md\">\n# OptraCall 工程入口\n\n开始任务、修改规范或准备交付时，先读 [工程规范](docs/engineering-workflow.md)；涉及产品方向、运行时或插件责任边界时，再读 [产品讨论稿 v0.4](docs/OptraCall_产品讨论稿_v0.4.md)。工程规范是开发流程的唯一详细来源，工具专属入口应引用它。\n\n开发前，按[任务目标执行清单与范围管理](docs/engineering-workflow.md#任务目标执行清单与范围管理)列出目标和阶段任务，执行中逐项更新并据此处理新发现的问题。\n\n新产品、新功能和试用修正以云端开发为主，均通过 GitHub Issue 发单、领取、交接和结案。按[两类开发流程](docs/engineering-workflow.md#github-issues-问题收件与结案)找到入口，再按[GitHub 开发任务外发与交付](docs/engineering-workflow.md#github-开发任务外发与交付)执行。PM Agent 通常由 Codex 担任，也可由其他 Agent 担任或代理。具备任务分支推送权限的 Agent（包括 Codex）均可领取。\n\n为 MacBook 上的 Qoder 编写或维护反馈项目规则时，先读取仓库文件 `docs/engineering-workflow.md` 的「MacBook 端 Qoder 整理与提交」小节；反馈会话工作区与产品源码目录分开，按该节的绝对路径读取约定接入同一规范。\n\n编写或修改 OptraCall 分析类 Skill 本体时（含 `SKILL.md`、随包参考资料、脚本和模板），先读取项目根目录下的 [分析类 Skill 编写规范](docs/分析类Skill编写规范.md)，按规范编写并自检，按工程规范交付。\n\n本项目遵循四点产品原则：**Host 管环境、Agent 自主执行、优先复用 Pi 已有能力、减少人的操作**。准备或修改 spec／UI、开发及验收时，必须按[工程规范第2节](docs/engineering-workflow.md#四点产品原则)与[前置检查](docs/engineering-workflow.md#3-连续-sdd-与-tdd)核对实际职责、复用依据和最少用户操作路径，完成[专项最终检查](docs/engineering-workflow.md#host-与-agent-职责边界及复用检查)；完整规则仅在工程规范维护。\n\n涉及 SDK、依赖或适配层的设计、实现与验收前，必须读取[官方 Pi SDK 来源与版本约束](docs/engineering-workflow.md#官方-pi-sdk-来源与版本约束)和[升级流程](docs/engineering-workflow.md#pi-sdk-升级流程)：统一使用未经修改的官方发布包，SDK 目标版本由用户明确指定，兼容适配在 OptraCall 自身完成。源码补丁、私有 fork、安装目录改写或绕过公开契约的运行时改写均不能作为修复手段；公开扩展机制按同一规范使用。当前[规则核对](openspec/changes/pi-sdk-governance/result.md)列有未处理风险，不能从规则已建立推断既有实现全部合规。\n\n[模型包消费端](openspec/changes/model-pack-consumer/result.md#合并交付与原位归档)已完成工程交付并原位归档。维护时先读规格、结果及[后续采用记录](openspec/changes/model-pack-consumer/live-validation.md)：MPS训练／导出，OptraCall消费v1纯计算包；任务显式开启、受管／封闭资源排除，快照不可变、损坏不静默修复。用户后续授权运行采用及设备更新，实际状态按后续收据核定；当前真实业务模型与LLM验收已由用户决定跳过。旧备份包有限检查、取消、原失败及历史前置TDD证明NOT_PROVED保留。\n\n维护[deep-research skill](openspec/changes/deep-research-skill/result.md#合并交付与原位归档)时，先读其归档记录。修改 Skill 测评信息展示时，按[统一展示规范](docs/skill-evaluation-display.md)处理。历史回执绑定被测版本，原工程修正的覆盖范围按归档中的用户裁定核对。\n\n维护[data-analysis skill](openspec/changes/data-analysis-skill/result.md#合并交付与原位归档)时，先读其规格、结果与独立复核。原失败、暂定结论、成本与验收边界保留，工程合并和运行采用分别核定。\n\n[商圈数据 MCP 连接器](openspec/changes/trade-area-mcp/result.md#合并交付与原位归档)与[天气连接器](openspec/changes/weather-mcp/result.md#合并交付与原位归档)已分别经非作者复核、实际head CI及获授权squash入main，OpenSpec原位归档；后续维护先读对应结果和[商圈IN06](openspec/changes/trade-area-mcp/spec.md#codex-接管补充2026-11-03)的SDK薄层复用边界。Qoder整体移交后只读，接缝及后续维护由Codex承接，原清单、移交包及失败保留。[后续真实模型记录](openspec/changes/weather-mcp/live-validation.md)为两轮工具／保存闭环完成、报告内容FAIL，不能当专业或用户产品验收；已授权MacBook main及同一正式快照采用，实际运行与保全按最终回执核定。Mac mini原运行服务保持，经营数据与凭据留在获准本机根，未来来源版本导入仍单独授权。\n\n当前用户已明确授权[PPT Host 接线修复](openspec/changes/ppt-host-wiring-repair/spec.md)：修复已核实的项目／配置归属、完整操作占用、保护、导出／差异及UI接缝，保留原FAIL、版本、会话与文件；适用检查、独立复核及Git／CI后合并main，不切换服务、不操作MacBook或新增真实模型实验。原检查“不通过”与本次修复结果分别记录。\n\n涉及 Semantica 接入、依赖、适配或升级时，必须读取[官方组件规则](docs/engineering-workflow.md#semantica-官方组件来源与版本约束)与[资产兼容及回退流程](docs/engineering-workflow.md#semantica-升级验证与回退)。Semantica 与 Pi 均采用官方原包，精确升级目标由用户指定；长期规则只在工程规范维护，规范本身不构成依赖升级或运行采用授权。\n\n涉及Agent交互、SDK接入、会话启停/恢复、模型配置或插件接入的变更，开始前必须读取工程规范的IN01–IN07及[统一会话接入说明](docs/agent-session-integration.md)，在本变更规格记录Interface版本、owner/profile和验收范围。Codex、Qoder共用这些规则；工具入口只引用同一来源。\n\n当前为[固定版本与MacBook试用交付](openspec/changes/current-version-trial-delivery/spec.md)：用户授权固定现有A/B/C、自动核算及托管优化候选，更新main并完成检查、非作者复核和CI后合并，再更新MacBook供用户体验。暂停新的模型全链路实验；保留专业FAIL、项目、会话和文件，不切换Mac mini运行服务。试用范围见[说明](docs/current-version-trial.md)，实际交付按[记录](openspec/changes/current-version-trial-delivery/result.md)分别核对。\n\n此前[B/C分析可靠性与核算范围](openspec/changes/analysis-verification-reliability/spec.md)的实施及检查见[实施记录](openspec/changes/analysis-verification-reliability/implementation.md)，真实模型结果见[专业验证](openspec/changes/analysis-verification-reliability/professional-evaluation.md)。Host只负责材料交付、权限和记录，Agent自主选择方法、工具及内部迭代。实验参考未通过专业标准，不推广到产品默认。后续可靠性工作先读该规格和评估协议，保留首次结果、取消、FAIL/UNKNOWN；使用未见结果修订候选时重新准备未见变体。以下历史授权不自动扩大当前范围。\n\n历史变更[业务语义增强与独立核算 Agent 一期](openspec/changes/business-semantics-verification/spec.md)：用户已确认方案v0.1 SV01–SV12，授权必要增强、合成资料真实模型对照、兼容及联合回归、非作者复核和Git/CI后合并main，合并前更新main。复用原RAP/SAP/Case、统一Pi和会话入口；新核算只核固定输入、先独立计算后对照，不重建IR或固定方法库。接入与使用见[核算说明](docs/verification-agent-integration.md)，实际结果见[记录](openspec/changes/business-semantics-verification/result.md)。保留项目/会话/文件，不自动切换服务或操作MacBook。\n\n**历史修订权限收尾：** 用户已确认并实施[修订权限收尾方案](docs/verification-revision-preservation-followup.md)：只读固定材料、输出新稿，由Host另存；采用同一公共生命周期的附属出稿资源，不改原任务指针/历史或普通分析工具，不加载执行扩展。旧原件破坏FAIL/UNKNOWN保留，不恢复或重放；新根有限复验与专业评分分开，新稿错误及复查漏报不可隐去，不宣称完整产品验收。最终工程/兼容/非作者复核和实际head CI约束Git交付，详情见实施记录；运行采用仍另授权。\n\n上一增量[工程可靠性收尾](openspec/changes/engineering-reliability/result.md)证据保留。原[Extension正确性建议](docs/extension-correctness-proposal.md)作为历史讨论，由用户已确认的SV01–SV12替代，不按旧EC清单开发。\n\n[统一会话接入一期](openspec/changes/unified-session-management-phase1/result.md)已交付，共用接口与少量实现、owner状态和业务策略分开。本次继续遵守同源接入规范。\n\n上一轮[requirements-flexibility](openspec/changes/requirements-flexibility/result.md)允许未确认框架草稿，取消澄清/假设凑数，支持描述性分析不引用假设，并补同会话一次有限格式修正；保留其正式发布、送入和兼容回退边界。\n\n上一轮[requirements-reliability](openspec/changes/requirements-reliability/result.md)已修复目标项目／发布版本选择、真实回答编辑、模型切换和会话隔离；涉及会话关闭或请求重试时，继续核对其归属与legacy回执兼容边界。\n\n[需求梳理初始实现](openspec/changes/requirements-elaboration/spec.md)为4-Stage软门禁、独立插件会话走统一Runtime、RAP 0.2及显式送入。A路线泛化由Qoder实施；原[交付证据](openspec/changes/requirements-elaboration/result.md)保留，本轮受影响接缝检查另记于可靠性结果。\n\n上一变更为 [Case一期](openspec/changes/decision-case/spec.md)（已合并 PR #4）及其后的 [macbook-trial-delivery](openspec/changes/macbook-trial-delivery/spec.md) 单向试用交付；各自的结果与授权范围保留在对应记录中。\n\n[项目多任务变更](openspec/changes/project-tasks-and-archive/result.md)已完成用户验收、PR #1合并及核定测试数据清理。模型过程偏离保留观察，不额外增加Host拦截。原 [first-chat-mvp](openspec/changes/first-chat-mvp/result.md)证据保留；旧四项完成前的Git／CI暂缓期已结束。后续执行核对实际分支、WIP和固定输入，Git／CI、安装和用户验收分别报告，不覆盖证据或自动重放中断任务。\n\n第4项允许持久保存五模型配置／凭据、定向读取本机Pi和SSH读取MacBook Pi指定MiMo凭据，经前端同一保存／导入入口配置；允许真实项目、上传、原生SDK多轮及完整macOS工具／bash／Python、用户安装原生扩展／skills／MCP的接入能力。只用合成数据验收，不代装数据分析skill。Host管环境，Agent管分析，不自建推理循环或Host补计算。\n\n项目是共享工作空间，任务只能在项目内创建；任务独立会话／草稿／运行状态，三目录由项目共享。产品界面支持项目重命名、归档／恢复，不提供删除入口；本次工程测试数据清理不改变该产品规则。归档只读且不自动停止运行，先满足已确认的空闲准入。schema2迁移保留旧原生JSONL路径／字节及父会话引用；具体字段和恢复规则以当前结构方案为准。\n\n真实默认目录严格为 `010_draw`、`020_clean`、`060_reports`。用户已撤下强制原件禁读沙箱／工具拦截，改为系统提示词软约束“分析不读取010中的数据”，使用用户020资料，过程输出默认020、最终报告060；前端提示不提供敏感数据隔离，勿放敏感数据。Host不猜测最终报告。第3项内存／空工具约束只代表历史阶段，不覆盖后续已确认范围。\n\nCodex 和 Qoder 均遵守工程规范；每次执行以已授权范围和实际证据为准。历史 v0.1 及 JuanerAI 参考资料不覆盖本项目最新确认，也不授予旧任务权限。\n\n<!-- codebase-memory-mcp:start -->\n# Codebase Knowledge Graph (codebase-memory-mcp)\n\nThis project uses codebase-memory-mcp to maintain a knowledge graph of the codebase.\nALWAYS prefer MCP graph tools over grep/glob/file-search for code discovery.\nRun `index_repository` first when code exists and the project is not indexed.\n\n## Priority Order\n1. `search_graph` — find functions, classes, routes, variables by pattern\n2. `trace_path` — trace who calls a function or what it calls\n3. `get_code_snippet` — read specific function/class source code\n4. `query_graph` — run Cypher queries for complex patterns\n5. `get_architecture` — high-level project summary\n\n## When to fall back to grep/glob\n- Searching for string literals, error messages, config values\n- Searching non-code files (Dockerfiles, shell scripts, configs)\n- When MCP tools return insufficient results\n\n## Examples\n- Find a handler: `search_graph(name_pattern=\".*OrderHandler.*\")`\n- Who calls it: `trace_path(function_name=\"OrderHandler\", direction=\"inbound\")`\n- Read source: `get_code_snippet(qualified_name=\"pkg/orders.OrderHandler\")`\n<!-- codebase-memory-mcp:end -->\n\n</project_instructions>\n</project_context>\n\n<skills>\nThe following skills provide specialized instructions for specific tasks.\nUse the read tool to load a skill's file when the task matches its description.\nWhen a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.\n\n<available_skills>\n  <skill>\n    <name>coupon-forecast</name>\n    <description>优惠券测算——满减券要不要发、门槛面额怎么定、需要多大转化提升才回本。四子模型（命中核销/凑单流失/转化响应/统一账本）对候选方案（含无券基线）做期望贡献测算、约束过滤、四类结论与敏感性检验。用于&quot;满300减50 划不划算、发券会不会亏、券对哪些假设敏感&quot;类决策测算；输出为可复算的确定性结果。凡做优惠券盈亏测算的环节一律先用本 skill 的脚本算数，不心算。</description>\n    <location>/workspace/OptraCall-issue149-final/extensions/analysis-assets/coupon-forecast/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>data-analysis</name>\n    <description>运营数据分析——对业务数据做描述统计、可比期间对比、异常定位、指标拆解和数据体检，交付有计算依据的直答、专业报告或聊天摘要。适用于分析数据、看趋势、找异常、核对量化线索及用合成示例试用；区分诊断建议与正式行动计划。目标测算、发券/投放测算、公开资料研究分别沿 target-forecast、coupon-forecast、roi-forecast、deep-research；术语翻译等非分析任务直接处理。本 skill 只约束实际使用的运营数据分析部分，不代替项目整体方法及其他已选能力。</description>\n    <location>/workspace/OptraCall-issue149-final/extensions/analysis-assets/data-analysis/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>deep-research</name>\n    <description>深度研究与研究报告生成——多源检索引用规范、章节化研究方法、独立审稿与最终报告组装，可委派 researcher/reviewer 子角色并行或链式工作。用于&quot;深度调研、行业研究、竞品分析、市场调研、技术综述、文献综述、帮我出一份研究报告&quot;类任务；支持完整/快速/单章三种模式。凡做公开信息研究与研究报告写作的环节一律遵循本 skill 的引用与审稿规则。</description>\n    <location>/workspace/OptraCall-issue149-final/extensions/analysis-assets/deep-research/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>ppt-report</name>\n    <description>PPT 报告生成与逐页精修规范——内容红线 + 版式系统 + python-pptx 代码指南 + 核对脚本。用于把 OptraCall 正式 md 报告生成候选版 PPTX，或对既有 PPTX 做逐页修改（对话驱动、XML 级编辑或单页重生成拼回）。凡为 PPT 生成内容或写渲染代码的环节一律遵循。</description>\n    <location>/workspace/OptraCall-issue149-final/extensions/analysis-assets/ppt-report/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>roi-forecast</name>\n    <description>投放 ROI 测算——多投放计划的盈亏链路核算（点击=消耗÷CPC→订单→GMV→净贡献）、保本转化率、情景敏感度与计划排名。用于&quot;这笔投放会不会亏、保本转化率多少、几个计划怎么排、结论对 CVR/客单假设有多敏感&quot;类问题；输出为可复算的确定性结果。凡做投放盈亏测算的环节一律先用本 skill 的脚本算数，不心算。</description>\n    <location>/workspace/OptraCall-issue149-final/extensions/analysis-assets/roi-forecast/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>target-forecast</name>\n    <description>经营目标测算——人/货/场三视角对线上零售 GMV 做目标测算与拆解（人=新老客×客单、场=UV×转化×客单、货=品类梯队），每平台独立核算+全渠道汇总、多情景一次计算、交叉校验。用于&quot;明年目标定多少、拆到月/平台、靠新客还是老客、要多少流量&quot;类目标制定与拆解测算；输出为可复算的确定性结果。凡做 GMV 目标测算的环节一律先用本 skill 的脚本算数，不心算。</description>\n    <location>/workspace/OptraCall-issue149-final/extensions/analysis-assets/target-forecast/SKILL.md</location>\n  </skill>\n</available_skills>\n</skills>\n\n<cwd>\n/workspace/OptraCall-issue149-final/.local/pm-final/fullcheck-probes/cnr-retirement/crash-Nn9NgQ/host/verification-workspaces/6ba1575b-acb0-4822-879d-270deae97898\n</cwd>\nThe optional application-private calculation libraries are unavailable (analysis_python_missing). Do not claim to have used them or install/download packages. Existing permitted methods remain available; choose them explicitly or report the limitation."
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "独立核算任务：核对固定资料。\n\n本轮提供 inputs/ 中的获准数据和 inputs/business-context.md，尚未提供作者答案。请自主决定计算、查证和呈现方式；条件不足、无法计算或保留未知也可以作为本轮回复。工具调用、自主迭代和自修复由你安排，不要求固定步骤、方法、工具或检查数量。"
+              }
+            ]
+          }
+        ],
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "store": false,
+        "max_completion_tokens": 4096,
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "read",
+              "description": "Read the contents of a file. Supports text files and images (jpg, png, gif, webp, bmp). Images are sent as attachments. For text files, output is truncated to 2000 lines or 50KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.\n\nCodemode: `tools.read(args)` resolves to `string | { data: string; mimeType: string; note: string; type: \"image\"; }`.",
+              "parameters": {
+                "type": "object",
+                "required": [
+                  "path"
+                ],
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "Path to the file to read (relative or absolute)"
+                  },
+                  "offset": {
+                    "type": "number",
+                    "description": "Line number to start reading from (1-indexed)"
+                  },
+                  "limit": {
+                    "type": "number",
+                    "description": "Maximum number of lines to read"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "bash",
+              "description": "Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last 2000 lines or 50KB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds.\n\nCodemode: `tools.bash(args)` resolves to `{ output, truncated, full_output_path?, exit_code, wall_time_seconds }`.",
+              "parameters": {
+                "type": "object",
+                "required": [
+                  "command"
+                ],
+                "properties": {
+                  "command": {
+                    "type": "string",
+                    "description": "Shell command to execute"
+                  },
+                  "timeout": {
+                    "type": "number",
+                    "description": "Timeout in seconds (optional, no default timeout)"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "edit",
+              "description": "Edit a single file using exact text replacement. Every edits[].oldText must match a unique, non-overlapping region of the original file. If two changes affect the same block or nearby lines, merge them into one edit instead of emitting overlapping edits. Do not include large unchanged regions just to connect distant changes.\n\nCodemode: `tools.edit(args)` resolves to a string.",
+              "parameters": {
+                "type": "object",
+                "required": [
+                  "path",
+                  "edits"
+                ],
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "Path to the file to edit (relative or absolute)"
+                  },
+                  "edits": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "oldText",
+                        "newText"
+                      ],
+                      "properties": {
+                        "oldText": {
+                          "type": "string",
+                          "description": "Exact text for one targeted replacement. It must be unique in the original file and must not overlap with any other edits[].oldText in the same call."
+                        },
+                        "newText": {
+                          "type": "string",
+                          "description": "Replacement text for this targeted edit."
+                        }
+                      }
+                    },
+                    "description": "One or more targeted replacements. Each edit is matched against the original file, not incrementally. Do not include overlapping or nested edits. If two changes touch the same block or nearby lines, merge them into one edit instead."
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "write",
+              "description": "Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories.\n\nCodemode: `tools.write(args)` resolves to a string.",
+              "parameters": {
+                "type": "object",
+                "required": [
+                  "path",
+                  "content"
+                ],
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "Path to the file to write (relative or absolute)"
+                  },
+                  "content": {
+                    "type": "string",
+                    "description": "Content to write to the file"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "grep",
+              "description": "Search file contents for a pattern. Returns matching lines with file paths and line numbers. Respects .gitignore. Output is truncated to 100 matches or 50KB (whichever is hit first). Long lines are truncated to 500 chars.\n\nCodemode: `tools.grep(args)` resolves to a string.",
+              "parameters": {
+                "type": "object",
+                "required": [
+                  "pattern"
+                ],
+                "properties": {
+                  "pattern": {
+                    "type": "string",
+                    "description": "Search pattern (regex or literal string)"
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "Directory or file to search (default: current directory)"
+                  },
+                  "glob": {
+                    "type": "string",
+                    "description": "Filter files by glob pattern, e.g. '*.ts' or '**/*.spec.ts'"
+                  },
+                  "ignoreCase": {
+                    "type": "boolean",
+                    "description": "Case-insensitive search (default: false)"
+                  },
+                  "literal": {
+                    "type": "boolean",
+                    "description": "Treat pattern as literal string instead of regex (default: false)"
+                  },
+                  "context": {
+                    "type": "number",
+                    "description": "Number of lines to show before and after each match (default: 0)"
+                  },
+                  "limit": {
+                    "type": "number",
+                    "description": "Maximum number of matches to return (default: 100)"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "find",
+              "description": "Search for files by glob pattern. Returns matching file paths relative to the search directory. Respects .gitignore. Output is truncated to 1000 results or 50KB (whichever is hit first).\n\nCodemode: `tools.find(args)` resolves to a string.",
+              "parameters": {
+                "type": "object",
+                "required": [
+                  "pattern"
+                ],
+                "properties": {
+                  "pattern": {
+                    "type": "string",
+                    "description": "Glob pattern to match files, e.g. '*.ts', '**/*.json', or 'src/**/*.spec.ts'"
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "Directory to search in (default: current directory)"
+                  },
+                  "limit": {
+                    "type": "number",
+                    "description": "Maximum number of results (default: 1000)"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "ls",
+              "description": "List directory contents. Returns entries sorted alphabetically, with '/' suffix for directories. Includes dotfiles. Output is truncated to 500 entries or 50KB (whichever is hit first).\n\nCodemode: `tools.ls(args)` resolves to a string.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "Directory to list (default: current directory)"
+                  },
+                  "limit": {
+                    "type": "number",
+                    "description": "Maximum number of entries to return (default: 500)"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "codemode",
+              "description": "Run JavaScript that calls other tools. The input is raw JavaScript (not JSON, no code fence), run as an async function body in a QuickJS sandbox: top-level `await` and `return` work. No Node, file system, network, or timers.\n- `await tools.<name>({ ...args })` resolves to a string, or an object if the tool's declaration says so, and rejects with an Error on failure. A tool whose declaration returns an object resolves on failure too when it returned that object; check its fields. Calls still running when the script ends are cancelled.\n- Optional first line: `// @options: {\"max_output_tokens\": 10000, \"timeout_ms\": 60000}`\n\nGlobals:\n- `text(value)`, `image(dataUrlOrImageBlock)`, `console.log(...)`, and top-level `return` add output; `exit()` ends the script. With several text items, each starts with a `==> text N/M <==` line, and `console` lines follow the other output in one `<console_output>` block. `image()` also saves the image to a temp file and the result names its path.\n- `store(key, value)` and `load(key)` keep JSON values across codemode calls.\n- `ALL_TOOLS`, `await searchTools(query, { limit?, namespace? })`, `await describeTool(name)`, `await describeNamespace(name)`: find unlisted tools, such as MCP tools.\n- `models`: classifiers and image generation. Read /workspace/OptraCall-issue149-final/node_modules/@earendil-works/pi-coding-agent/docs/codemode.md first.",
+              "parameters": {
+                "type": "object",
+                "required": [
+                  "code"
+                ],
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "description": "Raw JavaScript source."
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "tool_search",
+              "description": "# Tool discovery\n\nSearches over deferred tool metadata with BM25 and exposes matching tools for the next model call.\n\nSome of the tools, such as tools of MCP servers, may not have been provided to you upfront, and you should use this tool (`tool_search`) to search for the required tools. For MCP tool discovery, always use `tool_search`.",
+              "parameters": {
+                "type": "object",
+                "required": [
+                  "query"
+                ],
+                "properties": {
+                  "query": {
+                    "type": "string",
+                    "description": "Search query for deferred tools."
+                  },
+                  "limit": {
+                    "type": "number",
+                    "description": "Maximum number of tools to return. Defaults to 8."
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "closedEarly": true
+    }
+  ],
+  "originalOutput": {
+    "stdout": "{\"kind\":\"host-ready\",\"port\":46837,\"sdkVersion\":\"1.4.0\",\"transportVersion\":\"8.12.2\"}\n",
+    "stderr": ""
+  },
+  "reopenedOutput": {
+    "stdout": "{\"kind\":\"host-ready\",\"port\":33677,\"sdkVersion\":\"1.4.0\",\"transportVersion\":\"8.12.2\"}\n",
+    "stderr": "{\"kind\":\"host-shutdown-start\",\"at\":\"2026-11-27T16:43:32.790Z\",\"pid\":130260,\"signal\":\"SIGTERM\"}\n{\"kind\":\"host-shutdown-complete\",\"at\":\"2026-11-27T16:43:32.820Z\",\"pid\":130260,\"signal\":\"SIGTERM\",\"exitCode\":0}\n{\"kind\":\"host-process-exit\",\"at\":\"2026-11-27T16:43:32.820Z\",\"pid\":130260,\"exitCode\":0,\"reason\":\"signal_sigterm\"}\n"
+  },
+  "shutdown": [
+    "fulfilled",
+    "fulfilled"
+  ]
+}

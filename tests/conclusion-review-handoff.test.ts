@@ -240,15 +240,39 @@ test('CNR-A4: crashed old manual request stays unproved and read-only across def
   const driverPids = execFileSync('/bin/ps', ['-axo', 'pid=,ppid=,command='], { encoding: 'utf8' }).split('\n').map(line => /^\s*(\d+)\s+(\d+)\s+(.+)$/.exec(line))
     .filter(match => match && Number(match[2]) === first.pid && match[3].includes(path.join(process.cwd(), 'scripts/project-entry.mjs'))).map(match => Number(match![1]));
   assert.equal(driverPids.length, 1, 'the held manual operation has one actual child SDK driver');
+  const linuxProcess = async (pid: number) => {
+    if (process.platform !== 'linux') return undefined;
+    const stat = await readFile(`/proc/${pid}/stat`, 'utf8');
+    const fields = stat.slice(stat.lastIndexOf(')') + 2).trim().split(/\s+/);
+    return { pid, state: fields[0], startTicks: fields[19] };
+  };
+  const driverIdentities = await Promise.all(driverPids.map(linuxProcess));
+  const driverRetirement = new Map<number, object>();
   // Only the child process created by this exact fixture is terminated. Its
   // persisted in-flight record is reconciled by the real default Host startup.
   process.kill(first.pid, 'SIGKILL'); crashed = true;
   await until(async () => { try { process.kill(first.pid, 0); return false; } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ESRCH') return true; throw error; } }, Boolean, 'owned Host process exited', 5000);
-  await until(async () => driverPids.every(pid => { try { process.kill(pid, 0); return false; } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ESRCH') return true; throw error; } }), Boolean, 'owned SDK driver exited after IPC disconnect', 5000);
+  await until(async () => (await Promise.all(driverPids.map(async (pid, index) => {
+    try { process.kill(pid, 0); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+      driverRetirement.set(pid, { pid, state: 'ESRCH' }); return true;
+    }
+    // A container PID 1 may retain the exact exited writer as a zombie.
+    // Same PID + start time + Z proves writer exit, never descendant cleanup.
+    try {
+      const observed = await linuxProcess(pid);
+      if (observed) driverRetirement.set(pid, observed);
+      return Boolean(observed?.state === 'Z' && observed.startTicks && observed.startTicks === driverIdentities[index]?.startTicks);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+      throw error;
+    }
+  }))).every(Boolean), Boolean, 'owned SDK driver exited after IPC disconnect', 5000);
   // IPC shutdown can legitimately append an aborted native turn. Freeze the
   // exact bytes only after the real writer has exited; startup cannot add any.
   const nativeBefore = await snapshotDirectory(path.join(directory, 'native'));
-  await writeFile(path.join(root, 'retired-driver.json'), JSON.stringify({ driverPids, native: Object.entries(nativeBefore).map(([file, bytes]) => ({ file, bytes: bytes.length, sha256: sha(bytes) })), proof: 'driver exit only; unrelated tool cleanup remains unproved' }, null, 2));
+  await writeFile(path.join(root, 'retired-driver.json'), JSON.stringify({ driverPids, driverIdentities, driverRetirement: [...driverRetirement.values()], native: Object.entries(nativeBefore).map(([file, bytes]) => ({ file, bytes: bytes.length, sha256: sha(bytes) })), proof: 'driver exit only; unrelated tool cleanup remains unproved' }, null, 2));
   reopened = await startTestHost({ dataRoot: first.dataRoot, projectsRoot: first.projectsRoot });
   const historical = (await request(reopened, oldRoute)).verification;
   assert.equal(historical.status, 'interrupted'); assert.equal(historical.error, 'host_restarted_before_confirmed_completion'); assert.equal(historical.comparisonResult, undefined);

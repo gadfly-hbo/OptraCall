@@ -1,0 +1,22 @@
+{
+  "sourceCommit": "2eb30a51e31333a4252d4b6564bb0ad3a66326b8",
+  "hostBackendSource": "6bc7be2849d280e5e6a6e598ee6b7a68dd5e48eb",
+  "uiBuildIdentity": {
+    "baseline": "6bc7be2849d280e5e6a6e598ee6b7a68dd5e48eb",
+    "overlayFile": "src/host/ui/CaseIssuePanel.tsx",
+    "sha256": "d331165f038a5ac09042bf1cea0e72395ead14eefd9e2554943629c9591c8799",
+    "committedAtBuild": false
+  },
+  "productDelta": [
+    "src/host/ui/CaseIssuePanel.tsx"
+  ],
+  "backendDelta": [],
+  "productFileAtSourceCommitSha256": "d331165f038a5ac09042bf1cea0e72395ead14eefd9e2554943629c9591c8799",
+  "overlayFileAfterRunSha256": "d331165f038a5ac09042bf1cea0e72395ead14eefd9e2554943629c9591c8799",
+  "regressionTestAtSourceCommitSha256": "668ce0ba804ade4a43c20ca4f62e047777f135fa49a1802ec46d8d41ad7a40cb",
+  "actualBrowserResult": "PASS",
+  "steps": 7,
+  "businessRolePosts": 0,
+  "choicePosts": 2,
+  "bindingResult": "PASS: exact production source equivalence; no claim Host ran sourceCommit checkout"
+}

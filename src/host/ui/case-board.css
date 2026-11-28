@@ -242,3 +242,43 @@
   .case-decision-board .case-detail-dialog { border-radius: 0; border-inline: 0; }
   .case-decision-board .case-card { min-height: 0; }
 }
+
+.decision-case-tabs { display: flex; gap: 6px; padding: 8px 16px 0; flex-wrap: wrap; }
+.decision-case-tabs button { border: 1px solid var(--border, #d0d5dd); background: transparent; color: inherit; border-radius: 999px; padding: 4px 14px; cursor: pointer; font: inherit; }
+.decision-case-tabs button[aria-pressed="true"] { background: var(--accent, #2f5bea); border-color: var(--accent, #2f5bea); color: #fff; }
+.decision-case-tabs button:focus-visible { outline: 2px solid var(--accent, #2f5bea); outline-offset: 2px; }
+
+.case-issue-sidebar { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border, #d0d5dd); border-radius: 10px; }
+.case-issue-sidebar-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.case-issue-list, .case-issue-tree-root, .case-issue-tree-children { list-style: none; padding-left: 0; margin: 6px 0; display: flex; flex-direction: column; gap: 6px; }
+.case-issue-tree-children { padding-left: 18px; border-left: 2px solid var(--border, #d0d5dd); margin-left: 8px; }
+.case-issue-tree-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.case-issue-node { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 10px; border: 1px solid var(--border, #d0d5dd); border-radius: 8px; background: transparent; color: inherit; cursor: pointer; text-align: left; }
+.case-issue-node.selected { border-color: var(--accent, #2f5bea); font-weight: 600; }
+.case-issue-badge { font-size: 12px; padding: 1px 6px; border-radius: 999px; background: rgba(47, 91, 234, 0.12); }
+.case-issue-badge-req { background: rgba(217, 119, 6, 0.16); }
+.case-issue-edge-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; padding: 8px; border: 1px dashed var(--border, #d0d5dd); border-radius: 8px; margin-bottom: 8px; }
+.case-scope-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; margin-bottom: 10px; border: 1px solid var(--border, #d0d5dd); border-radius: 8px; }
+.case-scope-bar button[aria-pressed="true"] { background: var(--accent, #2f5bea); color: #fff; border-color: var(--accent, #2f5bea); }
+.case-carry-over-banner { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--accent, #2f5bea); border-radius: 10px; }
+.case-carry-over-item { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border, #d0d5dd); }
+.home-daily-panel { display: flex; flex-direction: column; gap: 12px; margin-bottom: 18px; }
+.home-daily-quick-input, .home-daily-card { padding: 12px 14px; border: 1px solid var(--border, #d0d5dd); border-radius: 12px; display: flex; flex-direction: column; gap: 8px; }
+.home-daily-quick-input textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 8px; border-radius: 8px; border: 1px solid var(--border, #d0d5dd); background: transparent; color: inherit; }
+.home-daily-row, .home-daily-match-row, .home-daily-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.home-daily-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.home-daily-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.home-daily-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+@media (max-width: 640px) {
+  .home-daily-grid { grid-template-columns: 1fr; }
+  .decision-case-tabs { padding: 6px 10px 0; }
+}
+
+.case-gs-pinned { padding: 8px 12px; margin-bottom: 8px; border: 1px solid var(--border, #d0d5dd); border-radius: 8px; font-size: 13px; }
+.case-round-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; padding: 10px 12px; margin-bottom: 10px; border: 1px solid var(--border, #d0d5dd); border-radius: 10px; }
+.home-daily-prepare-box, .home-daily-agent-box { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px dashed var(--border, #d0d5dd); border-radius: 8px; }
+
+.case-round-summary > header, .case-round-summary > footer { grid-column: 1 / -1; min-width: 0; }
+.case-round-summary h3 { margin: 0; font-size: 15px; }
+.case-round-summary p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.case-round-summary > footer p { margin: 0; }

@@ -28,6 +28,7 @@ export function createGoalDecompositionAccess(options: {
     const plan = store.listGsaPlans(draft.goalId).find(version => version.planId === draft.gsaPlanId && version.planVersion === draft.gsaPlanVersion && version.contentSha256 === draft.gsaPlanSha256);
     if (!plan) throw new GoalDecompositionError('gsa_plan_changed', 409);
     const parent = store.read(plan.goal);
+    await options.validateGoal?.(parent);
     for (const row of draft.rows) {
       if (row.commitAsGoal) await options.validateGoal?.(decompositionChildGoal(parent, plan, row, 0));
       await options.validateScope?.(row.scope);
@@ -65,6 +66,10 @@ export function createGoalDecompositionAccess(options: {
     if (ws.draft) {
       try { await validateDraftRows(ws.draft); }
       catch { ws.draft = null; ws.validation = null; ws.draftUnavailable = true; }
+    }
+    if (ws.priorDraft) {
+      try { await validateDraftRows(ws.priorDraft); }
+      catch { ws.priorDraft = null; ws.draftUnavailable = true; }
     }
     if (!unreadable.size) return;
     ws.unavailablePublicationVersions = [...unreadable];

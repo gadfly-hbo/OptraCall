@@ -1,0 +1,53 @@
+{
+  "at": "2026-11-28T01:57:20.333Z",
+  "sourceSave": "../candidate-e/raw-after-readonly.json",
+  "scope": "e actual UI original save + f new process original receipt and real UI readback; no replay",
+  "checks": [
+    {
+      "name": "exact-e-save-preserved-on-new-f-process",
+      "ok": true,
+      "saved": {
+        "revisionId": "8cec4b31-0bca-4cdb-a400-1b6e104f42ee",
+        "taskId": "c07ac8c8-24c1-45e3-b75e-1ed11f72fb5d",
+        "revisionNumber": 1,
+        "operationId": "93e1ca67-cd52-4ad6-92ab-d2f93aba52ba",
+        "requestSha256": "347fe2ebb763b4a7809ee4b7a7dd76501c524e2c58c1683dfd14676651110963",
+        "adopted": null,
+        "outcome": "独立原观察：两份合成回执中有一份记录缺货。<script>window.__rawAudit=1</script> 仅为字面合成材料；未确认行动是否执行。",
+        "metricDelta": "",
+        "review": "",
+        "score": null,
+        "effect": "unknown",
+        "savedAt": "2026-11-28T01:51:12.858Z",
+        "origin": "user-save",
+        "legacyCreatedAt": null,
+        "legacyUpdatedAt": null,
+        "createdAt": "2026-11-28T01:51:12.858Z",
+        "updatedAt": "2026-11-28T01:51:12.858Z",
+        "observationDate": "2026-11-26",
+        "sourceScope": "仅本隔离合成资料与原请求；样本两份，其他门店未知。",
+        "respondsToRequest": {
+          "requestId": "1b7b4d10-60b6-4998-b828-ae5a3d5f5468",
+          "revision": 1,
+          "authorizationId": "a8963940-c1fa-4f58-ae3f-44bfd385ee1d"
+        }
+      },
+      "taskStatus": "doing",
+      "caseStatus": "pending"
+    },
+    {
+      "name": "dated-source-safe-and-focus",
+      "focus": {
+        "tag": "BUTTON",
+        "text": "查看反馈原记录 ↗"
+      },
+      "ok": true
+    },
+    {
+      "name": "readback-without-business-replay",
+      "writes": []
+    }
+  ],
+  "errors": [],
+  "writes": []
+}

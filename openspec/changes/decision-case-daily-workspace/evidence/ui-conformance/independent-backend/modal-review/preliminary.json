@@ -1,0 +1,26 @@
+{
+  "recordedAt": "2026-11-28T01:13:25.447661+00:00",
+  "stage": "Source-only preliminary review; author still writing; no final tests or PASS",
+  "findings": [
+    {
+      "id": "MODAL-P1",
+      "status": "Reported to author; repair in progress",
+      "requirement": "DW09/DW13 exact clicked request and persistent input preservation",
+      "description": "Shared feedback:task draft restores previous saved form.requestContext over current clicked request initial context; A draft then clicked B can restore A. Author intends distinct request/revision draft IDs preserving prior body."
+    },
+    {
+      "id": "MODAL-P2",
+      "status": "Reported to author; repair in progress",
+      "requirement": "DW16 unavailable read and cancel accessibility",
+      "description": "Empty not-ready modal initial draft503 prevents cancel because close calls flush which reloads and returns false; feedback !ready also transmitted as busy disables X/Esc. Author intends dirty=false safe close plus separate write readiness."
+    },
+    {
+      "id": "MODAL-P3",
+      "status": "Potential issue reported; final behavior to inspect",
+      "requirement": "DW13 conflict recovery and DW16 restricted source cleanup",
+      "description": "Current controller retains value/ready after403 and lacks CAS conflict recovery path; helper reviewing and author assigned correction."
+    }
+  ],
+  "writes": "Only this isolated preliminary report; no source/tests/spec/Git/Issue changes",
+  "context": "Previous B1/round PASS does not cover these new files or edits"
+}

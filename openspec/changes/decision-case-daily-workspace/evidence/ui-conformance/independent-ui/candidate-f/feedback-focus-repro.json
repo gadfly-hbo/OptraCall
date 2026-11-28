@@ -1,0 +1,55 @@
+{
+  "at": "2026-11-28T02:00:55.416Z",
+  "r": [
+    {
+      "attempt": 1,
+      "immediate": {
+        "tag": "BUTTON",
+        "id": "_r_4_-feedback",
+        "text": "回录反馈",
+        "buttons": []
+      },
+      "settled": true,
+      "after": {
+        "tag": "BUTTON",
+        "id": "_r_4_-feedback",
+        "text": "回录反馈",
+        "buttons": []
+      }
+    },
+    {
+      "attempt": 2,
+      "immediate": {
+        "tag": "BODY",
+        "id": "",
+        "text": "\n    跳到主内容OptraCall持续做出更好的决策当当前工作区Case 与项目工作空间新建项目主导航⌄日常工作工作台首页Decision Case基础建设总览›战略选择目标管理语义资产分析资产项",
+        "buttons": []
+      },
+      "settled": false,
+      "after": {
+        "tag": "BODY",
+        "id": "",
+        "text": "\n    跳到主内容OptraCall持续做出更好的决策当当前工作区Case 与项目工作空间新建项目主导航⌄日常工作工作台首页Decision Case基础建设总览›战略选择目标管理语义资产分析资产项",
+        "buttons": []
+      }
+    },
+    {
+      "attempt": 3,
+      "immediate": {
+        "tag": "BODY",
+        "id": "",
+        "text": "\n    跳到主内容OptraCall持续做出更好的决策当当前工作区Case 与项目工作空间新建项目主导航⌄日常工作工作台首页Decision Case基础建设总览›战略选择目标管理语义资产分析资产项",
+        "buttons": []
+      },
+      "settled": false,
+      "after": {
+        "tag": "BODY",
+        "id": "",
+        "text": "\n    跳到主内容OptraCall持续做出更好的决策当当前工作区Case 与项目工作空间新建项目主导航⌄日常工作工作台首页Decision Case基础建设总览›战略选择目标管理语义资产分析资产项",
+        "buttons": []
+      }
+    }
+  ],
+  "errors": [],
+  "writes": []
+}

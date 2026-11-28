@@ -1,0 +1,1 @@
+{"status":"cancelled-by-author","reason":"Actual browser check found home choice-dialog focus restoration defect. Two UI files changed after the candidate-e manifest; retain this partial run and start the full checks on the newly fixed candidate instead of claiming this as fixed-candidate validation.","log":"candidate-e-full-check.log"}

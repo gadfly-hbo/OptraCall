@@ -1,0 +1,42 @@
+{
+  "out": "/workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/home-request-navigation/candidate-f-spa-red",
+  "checks": [
+    {
+      "name": "choose exact Case/issue/request dialog, cancel focus and SPA reopen 1",
+      "ok": true
+    },
+    {
+      "name": "choose exact Case/issue/request dialog, cancel focus and SPA reopen 2",
+      "ok": true
+    },
+    {
+      "name": "choose exact Case/issue/request dialog, cancel focus and SPA reopen 3",
+      "ok": true
+    },
+    {
+      "name": "observe home request navigation",
+      "ok": false,
+      "error": "locator.click: Error: strict mode violation: getByRole('dialog', { name: '回录实际反馈', exact: true }).locator('details').filter({ hasText: /原请求与来源/ }).first().locator('summary') resolved to 3 elements:\n    1) <summary>原请求与来源 · 回应已选请求</summary> aka getByText('原请求与来源 · 回应已选请求')\n    2) <summary>请求的准确引用与原文来源</summary> aka getByText('请求的准确引用与原文来源')\n    3) <summary>保存冲突时：对照最新反馈，保留我的输入</summary> aka getByText('保存冲突时：对照最新反馈，保留我的输入')\n\nCall log:\n\u001b[2m  - waiting for getByRole('dialog', { name: '回录实际反馈', exact: true }).locator('details').filter({ hasText: /原请求与来源/ }).first().locator('summary')\u001b[22m\n\n    at /workspace/OptraCall-issue149-ui-conformance/tests/browser-case-home-requests.mjs:39:37"
+    }
+  ],
+  "errors": [],
+  "businessWrites": []
+}
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+1 !== 0
+
+    at file:///workspace/OptraCall-issue149-ui-conformance/tests/browser-case-home-requests.mjs:56:79 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: 1,
+  expected: 0,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v25.9.0

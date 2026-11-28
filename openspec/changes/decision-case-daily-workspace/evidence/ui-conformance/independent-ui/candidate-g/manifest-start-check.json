@@ -1,0 +1,1009 @@
+{
+  "at": "2026-11-28T02:09:57.798212+00:00",
+  "manifestFileSHA256": "5b45fd085fc89d83420f1dfd35f16ab34ea4d39d87c2b54f079decf97676722a",
+  "manifestSha256": "510d2a392b83c77ead70dce61a23988dcd93454d99220aad475870e7d82e2df8",
+  "fileCount": 2601,
+  "drift": [
+    {
+      "path": "tests/browser-case-home-requests.mjs",
+      "expected": "09957e4a520cf703e0d02b8081a4dde6976ddc4f880836114ded961d5da57893",
+      "actual": "987eb7b1559c1570279f29ff2c130a7f4783b5b63425e85c34f7eed1ba3608bd"
+    }
+  ],
+  "fToGChanges": [
+    {
+      "path": "extensions/business-plugins/decision-board/ui/DecisionBoardPage.tsx",
+      "f": "c4834fc4d282ffb15700d479580bf4046dbbe53743204b1d9be083762bdd87a5",
+      "g": "b549c0209b31c1d1e4f315baa39d9bbfa8b28a127e2fe81ebac2fb553e662e63"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/candidate-f-complete-manifest.json",
+      "f": null,
+      "g": "48320f9946ff62c62a030dcc52a3dd8878e20aa743f3eacbc3403dcdfe960707"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/artifact-recheck/independent-owner-switch.test.ts",
+      "f": null,
+      "g": "701c2a7dfa4972e906d304dc156195629d0ebd34ec5fc6d9f3b2600fee17af1a"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/artifact-recheck/input-manifest.json",
+      "f": null,
+      "g": "e19dfbaab579c06087bffe9c64066080a5ffd09b73877d8794615fa9f9d84be9"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/artifact-recheck/review.json",
+      "f": null,
+      "g": "94dc8fd7cad451ce4392e9b574b9be56a816f283e8395e14e6d48af9d16d5bf0"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/artifact-recheck/tests.log",
+      "f": null,
+      "g": "54cccaa95379ff0ddd00a3b50ca936febd896b9281974b77deb3ebd86695e513"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/choice-nextstep/independent.test.ts",
+      "f": null,
+      "g": "e11408e33d9a9db9bc493d71e122fe15171c26f66380274a74687447e2c9a845"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/choice-nextstep/input-manifest.json",
+      "f": null,
+      "g": "367d98b0ebc40405f6ae381f87a5ef2c502a6413ae7197e5009d1c1a5c66b4a6"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/choice-nextstep/post-run-manifest.json",
+      "f": null,
+      "g": "7490ef136a232c40c276b84935e601e6c5af54edc9b78df3128f56f8c31e63ea"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/choice-nextstep/review.json",
+      "f": null,
+      "g": "7a0c7e54d5a0c0f2543a4e1836da50b343308bd159c345b5b7fd015efc6d2a50"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/choice-nextstep/run-v1.log",
+      "f": null,
+      "g": "dcc9e3e07f16b23cc0bd653e6c85089f7d44408c137a2c91fd9015489c29a794"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/choice-nextstep/run-v2.log",
+      "f": null,
+      "g": "5962acecf28b2e0dba106799ed2b67a89484124f17a1944848cbee58f1fff2d0"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/evidence-publish-list.json",
+      "f": null,
+      "g": "40a1e8db682d7b0e64b3b60df03cb33892b40c9a569400c31f99b325f6176dfa"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/candidate-e-get-review.json",
+      "f": null,
+      "g": "1efc1c034c136bf0e20a8803f837ce5f9c12347e959cbd0f2acbcd84a88b53e5"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/candidate-e-health.json",
+      "f": null,
+      "g": "abee5750099e28f9624efbc64ff2d3394fcba63721f35aa539690e9e91dc77e2"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/candidate-e-home.json",
+      "f": null,
+      "g": "ad8f871762d24ca4af3951509c3c81563302f64194750d1cbb18f4671c2d5c01"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/candidate-e-post-run-manifest.json",
+      "f": null,
+      "g": "95a5ca4dfe5edd98c398f6cecb30eb68c13d0e8281a31d845c9f2860465fedba"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/candidate-e-reviewed-inputs.json",
+      "f": null,
+      "g": "c721bea2be1b5a72a9d3890241195e198196ae553382b4e11c4d709e0a388ca0"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/compact-independent-v2.log",
+      "f": null,
+      "g": "32976111ec54bf3736fb0dfcf11af3aaccc5c274d0e76fddfa3317bdf381dd3d"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/compact-run-v1.log",
+      "f": null,
+      "g": "6c151cfda4bc1b8d43b2f468341ef6b181e5f1016cbe3c0cbd81564ff77d3809"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/focus-return-delta-review.json",
+      "f": null,
+      "g": "883e574c84757b21e557d32e2b8b1f8cd2b12ab2c470777257f48c8ffb34729b"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/focus-return-delta.diff",
+      "f": null,
+      "g": "4ee39a8f8001fb16c3422c67e0a8c19e9a18dc3ed81644e782787b4227e52831"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/independent-legacy-form.test.ts",
+      "f": null,
+      "g": "83c343c7091c4c0af487ac2dc0fb3fea33a3b5defe03a9feffb55acfea516a17"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/preaudit-inventory.json",
+      "f": null,
+      "g": "dfa354d9966f82f8a05890a267960d33ea1a990eb374bf323f0dcfb9e1dffe58"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/recovery-metadata-recheck.log",
+      "f": null,
+      "g": "51c38ae430b1ca7b26779338dcb007136ae838b09f7227896d7679fb970d5da5"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/review-candidate-e.json",
+      "f": null,
+      "g": "8c6e12fa509ad4f875cca8c91ffb01b8acbfac2bcfccafa79bf1ea4fdbfc6c89"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/tri-state/board-after.log",
+      "f": null,
+      "g": "4fccdc13b58459ce4377ea4b9b94910aea32c309197065a8c7080eb10bffa30a"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/tri-state/board-before.sha256",
+      "f": null,
+      "g": "997817e0b31e6fc52e69ee654e773a4cd5ec029e7cd0f62ca81240602ef1c1b3"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/tri-state/board-consumers.log",
+      "f": null,
+      "g": "33d7d2993251ef22c0322ea5dc224d2663f06e6bf9b4ba3fc0f056eb5a00620f"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/tri-state/board-consumers.test.ts",
+      "f": null,
+      "g": "e49c337bc6b4383816ef16249e16525d4dfe4f7cc02f353af068e56c8c1ad2a6"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/tri-state/board-final-after.log",
+      "f": null,
+      "g": "4fccdc13b58459ce4377ea4b9b94910aea32c309197065a8c7080eb10bffa30a"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/tri-state/board-final-consumers.log",
+      "f": null,
+      "g": "620b079679416b9e3fcde81b97fea48562914c8d6db178e1b66ff5769fb8ac7c"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/tri-state/daily-after.log",
+      "f": null,
+      "g": "08517ac2d7229bc7bf0956adc28e97f70856e54ab9e57d120c0ee35d9b184262"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/tri-state/daily-before.sha256",
+      "f": null,
+      "g": "ca6b4cb8913d6480740b4b5265c34e1f9ea27f1fb24de3a37932029912e543bb"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/tri-state/daily-consumers.log",
+      "f": null,
+      "g": "226cdebf48b467ccec2d523c6cfe8ec2e756d17ee16c943d1027c581769ad64b"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/tri-state/daily-consumers.test.ts",
+      "f": null,
+      "g": "1088eefd342dfbc28fd15bdaa0345746a721336ee73db69a24fdab1975d5d182"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/tri-state/fixed-after.log",
+      "f": null,
+      "g": "38615f89c2cdcf2559186277d4f7f102d0ac5fafc64bb2444dd70d1d87f813a2"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/tri-state/fixed-before.sha256",
+      "f": null,
+      "g": "19ecb5a6be09137965b8c0ba7f3abbc802aa5c48527e77178c94d069f04a7884"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/tri-state/fixed-consumers.log",
+      "f": null,
+      "g": "a116e267b5cd889bc5c47d1cf4f724cf3f5375ae28429a33b105459866615ef2"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/tri-state/fixed-consumers.test.ts",
+      "f": null,
+      "g": "7db79373b65014b6049144bd37bed251436730c3e58ad3910624cdbe545da6dc"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/tri-state/quoted-after.log",
+      "f": null,
+      "g": "f7b9ef3cde5f788d561fd2a0e20f3419fe5047d03b4a7bb6ea4754e82ab096b8"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/tri-state/quoted-before.sha256",
+      "f": null,
+      "g": "cf1c99145a0524b5f2b9a6b4afe38335b6ac4b1c828ce8021ff9f12f2fd5b5e0"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/tri-state/quoted-consumer.log",
+      "f": null,
+      "g": "6e1b9a3d355d243fcd8cde0fbd50a770923e1b3abd2a21334a38c7691654762c"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/tri-state/quoted-consumer.test.ts",
+      "f": null,
+      "g": "16d0685f955a6fecb8f0aa0f88b21eea229edfd922f41a4393a0891a2e560895"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/tri-state/review.json",
+      "f": null,
+      "g": "48bfdada782d6caf15d2bf2f7ee9dd3983f489e4c783faebceaa4417af66bfd2"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/tri-state/timeline-after.log",
+      "f": null,
+      "g": "38615f89c2cdcf2559186277d4f7f102d0ac5fafc64bb2444dd70d1d87f813a2"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-consumers/tri-state/timeline-consumer.test.ts",
+      "f": null,
+      "g": "dea4d29532cf9f38c7fddd29fe5a50a9c6311e925bd330db35ad71d5a67e5d6d"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-contract/independent.test.ts",
+      "f": null,
+      "g": "34b8d991b0e4a4f467a76196c77c63b8e6b231afac461bbcff6f6e348dedea88"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-contract/input-files.sha256",
+      "f": null,
+      "g": "4482bb1cc630ba8b36731cef028b797eb6ac91c7a917739a5b80c1ba6782cd58"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-contract/post-run-manifest.json",
+      "f": null,
+      "g": "44f0216e46e79445867cb564a9df54f55619b0d98d94770a8608f626569c267a"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-contract/post-run-sha-check.log",
+      "f": null,
+      "g": "aa35f7bbb68877e3d51906aadde4f41e3bb5a57ed683d4fdcaa7789557cfff56"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-contract/review.json",
+      "f": null,
+      "g": "60d77bf9ca92d5122f25a62f9fc99e712fb980ad623a2ef7518ac804f4884aba"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-contract/run-v1.log",
+      "f": null,
+      "g": "4ee94a3d4e48d1f58019ccf6d7131df288c2643af24696c3f37b9aac0772120a"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/feedback-contract/tmp/http-MPq7Ld/http-evidence.json",
+      "f": null,
+      "g": "36a9ca52d18f011992b722cd29a11b542f43177dc9683ec987b8c174f8594d4b"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/final-f/health.json",
+      "f": null,
+      "g": "d907c1fa552b76c21697650afd4e2f94eb1b92bb3fb33541865ff17ed0774a6d"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/final-f/home.json",
+      "f": null,
+      "g": "a856e1f6fcba16cc7a81562cf74cd411bf2a9bcd67d3704680915d080cac0ce6"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/final-f/review.json",
+      "f": null,
+      "g": "523854cb61c04039aa0b3858b4c5577613439ec5fbc4c50f29fb121d7d458d82"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/final-f/reviewed-source-manifest.json",
+      "f": null,
+      "g": "17f6929b7108bcfaf5e95e14584a0a313f538f2b56702b39ca2e2ba0d7528f67"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/final-f/runtime-get-review.json",
+      "f": null,
+      "g": "6c97ddd29cb75e71581dc2e1ecb86554d1c4e274fbd494e30adeeb27f6b5d50b"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/http-home-headers.txt",
+      "f": null,
+      "g": "2321b0d12fdfcdb9d085ba63d562f7dc335e91544b01847a497bec922ab76f47"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/http-home.json",
+      "f": null,
+      "g": "7900f2b8df28683060e3d7fad57106ba07c5c46e39ddfc8bcb38597d683896c4"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/http-project-faa7d49f-07da-4d4f-a552-a2aeacc44a58.json",
+      "f": null,
+      "g": "3c63dd94e8419d034de80453c26ac8ceea24f9617226055906d660ef6fb7718a"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/http-readonly-verification.json",
+      "f": null,
+      "g": "e62a50b4e8753f8c858c5fd9508328fe3265b4a9c658f84d75a67c8e19b3e570"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-controller/b2/delta-review.json",
+      "f": null,
+      "g": "c67e024d00922abd617054c674e715d058bb3a2711792bdc545cb761e82d753c"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-controller/b2/fixed-source-manifest.json",
+      "f": null,
+      "g": "f1b8b1c140e268b6efb46d4125a736271ef9700fe1bb676d57d8b11d874bfe5e"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-controller/b2/formal-tests.log",
+      "f": null,
+      "g": "862334816505f48d05c64074a7a0930faa5973ab045771ee47784b1907848612"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-controller/b2/independent-controller.test.ts",
+      "f": null,
+      "g": "8bc5d1ef4b8bc62cf047b44e133ace1cf143f2eaa418b7235888b91a5d15d663"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-controller/b2/independent-recovery.test.ts",
+      "f": null,
+      "g": "c23742350e68267a71cd210abc33287de28e6b6497ca336654fb20c1a76ee5e1"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-controller/b2/independent-restored.test.ts",
+      "f": null,
+      "g": "22f2f711199ab81b4551cf01ea77f1ded22aa69334d1e50edb9a9947fb779b5c"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-controller/b2/independent-tests.log",
+      "f": null,
+      "g": "729f228c7d7abe231f512bddbf0c356646dc46ec6a4fe0ba2fd1fb756b181a6c"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-controller/b3/delta-review.json",
+      "f": null,
+      "g": "69c9625ef25cb165218e78ee14237833d9068a6a2f79f53be4debb34050c169b"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-controller/b3/fixed-source-manifest.json",
+      "f": null,
+      "g": "151aeb7a559a33d292a25d9a1a8de8bae3fb1f9f911a7ab369da394b8075a9c7"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-controller/b3/formal-tests.log",
+      "f": null,
+      "g": "1299738eb9d62b641e5c077142cfa32d559223c07fcf0b10b0bb492551b2bfbb"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-controller/b3/generic-owner-risk.log",
+      "f": null,
+      "g": "e72ea12f2d16db077124e2b801610333e64c0005678bbcaded8fc8e8f9076009"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-controller/b3/independent-controller.test.ts",
+      "f": null,
+      "g": "b5fece1319ed33c163636d1493a8ab95321b59fc255e03b68b8f3550085ddf6d"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-controller/b3/independent-readonly-generic.test.ts",
+      "f": null,
+      "g": "32eaf10572812255554a9cb275b0d23433adbc9701b43cc07b329e079c6e5d32"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-controller/b3/independent-readonly-keyed.test.ts",
+      "f": null,
+      "g": "4ab9102ef657a803115a5f69981ae4c26bbf1dba90dd56972f48bc6c954359d5"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-controller/b3/independent-recovery.test.ts",
+      "f": null,
+      "g": "c23742350e68267a71cd210abc33287de28e6b6497ca336654fb20c1a76ee5e1"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-controller/b3/independent-restored.test.ts",
+      "f": null,
+      "g": "22f2f711199ab81b4551cf01ea77f1ded22aa69334d1e50edb9a9947fb779b5c"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-controller/b3/independent-tests.log",
+      "f": null,
+      "g": "a11e88480fdc7d0fbd95ab23459e5172bd879c6cdb702d0b32649cf4930833fb"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-controller/fixed-source-manifest.json",
+      "f": null,
+      "g": "b8f6bc36bc250be3057c85a01c687a13a2ca042aeae878901171d7dd7d7e7ee3"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-controller/formal-tests.log",
+      "f": null,
+      "g": "0afa4c32de9465bbaca12ebecfb3bdde3823ada5857b65fb288968be476be588"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-controller/independent-controller.test.ts",
+      "f": null,
+      "g": "8d86cd77ce2a5441da6371cecf175f2cfb65182c2e7c357a9e279b90d7295d46"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-controller/independent-recovery.test.ts",
+      "f": null,
+      "g": "c23742350e68267a71cd210abc33287de28e6b6497ca336654fb20c1a76ee5e1"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-controller/independent-tests.log",
+      "f": null,
+      "g": "bbe93e31c02cdbf5da22f54ffa31ba5f78d4b29fca470308b6afaf17b39e5ccb"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-controller/review.json",
+      "f": null,
+      "g": "e0d8547eae82e8b80ae70a9524944d58e8c655308cb7a0024296d13b4da75a82"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-review/b2-original-recheck.log",
+      "f": null,
+      "g": "5be5bc42b9285bf7f7056db6f0511078e0837aa495ef25a822ec36607003931d"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-review/b3-choice-recheck.log",
+      "f": null,
+      "g": "b0bd21e47df1222909b9740e4efc12acca4b40564982cb957a9a39998b5220e8"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-review/b3-closed-review.json",
+      "f": null,
+      "g": "6be9e93b8aad04e5794e3bfcda1f9f00cb05c6b98994f493cd1a38b9b45af964"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-review/b3-feedback-hook-recheck.log",
+      "f": null,
+      "g": "c18aa6d8498cb920655a9d1afecfa5f5c319595c94063e384a6cb7b14d261f25"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-review/b3-input-manifest.json",
+      "f": null,
+      "g": "baa80740ae05b5c678655ca64d32acc033e01f36185030d9679d9650a4a74710"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-review/candidate-c-get-review.json",
+      "f": null,
+      "g": "680b2551228c3ed04bbcb8383ecfbaf8aaad7b1329b7fc3230965c1f3246b38c"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-review/candidate-c-health.json",
+      "f": null,
+      "g": "00575e3eace0a52de251f829e156f72cd66a4865f71587ea6745e70844a7f620"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-review/candidate-c-home.json",
+      "f": null,
+      "g": "ad8f871762d24ca4af3951509c3c81563302f64194750d1cbb18f4671c2d5c01"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-review/independent-choice-closed.log",
+      "f": null,
+      "g": "f9445fce1abc28c6d6dd4ceaf8fb42fd751971376a2e23987a8fb5a4a1d7e5cd"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-review/independent-choice-closed.test.ts",
+      "f": null,
+      "g": "5a2ab97e704c3f514e1cb549994beb81ef4dcf84ded22ec85e082d4dd7ad8569"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-review/independent-choice-reopen.log",
+      "f": null,
+      "g": "e8a525eb3d4999bdc2adbcd3e90392914de2553ba3638cba3657854a8f1bf53c"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-review/independent-choice-reopen.test.ts",
+      "f": null,
+      "g": "e3cb1c7ea14d48e81148c5d6b46acf738a1b764f8598a065fe35b1cb2ff3f6f8"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-review/independent-feedback-contract.test.ts",
+      "f": null,
+      "g": "5bc72026624a13b518e8641da4d142a7be84c61edec00b693038b4a0bc6e40f7"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-review/independent-feedback-owner.log",
+      "f": null,
+      "g": "a2a7c6c5e8aae0301383b52412a0081ada6bbf668c6ed41dd3179118a8ae2941"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-review/independent-feedback-owner.test.ts",
+      "f": null,
+      "g": "739ac9a26ffe4820ea769c3471db716a3a012399b123f18a66ed4e5b6f2a81b7"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-review/independent-feedback-v2.log",
+      "f": null,
+      "g": "48236d77e88310f748b6efec300f32177ab6e94a7c82a97b6da0611f39712036"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-review/input-manifest.json",
+      "f": null,
+      "g": "046bc0c6ad3f4b5ef3c7aef290163d0896d3f91da9887841711fa7430bf4380e"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-review/preliminary.json",
+      "f": null,
+      "g": "34c54ee360c52cbb8775cd214ebbc2f92dc418d7260fee108d937274602f0938"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-review/prior-reviewed-scope-hash-recheck.json",
+      "f": null,
+      "g": "28d641ca491d168589fa88c87b80cd2d24fdad53211294f374c2113196305d86"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-review/review-b2-b3-limited.json",
+      "f": null,
+      "g": "b427db1af21b609149092569bc18a86c24df7f015dd5b0585b526d64a971cace"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-review/review-candidate-c.json",
+      "f": null,
+      "g": "b505008cd51d4e6cdc6a28542a628ba3c701b0175ddb383d3d7080ab0a4d6ca3"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/modal-review/targeted-v1.log",
+      "f": null,
+      "g": "cc6f506d749091b681551b3323cf3d85cc08babc44b20539a86295d61d55c8c6"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/preparation-model.log",
+      "f": null,
+      "g": "be86e8dcc7cee929dd0eabe0d267a3ee879d761a332d5bc93356f21c6a595ebf"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/preparation/independent-repro.log",
+      "f": null,
+      "g": "d58ddad34ef76f1daae5ffbd8d4e7fe66cbe250f0f6d304ef364ef6e8b9d90e1"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/preparation/independent-repro.test.ts",
+      "f": null,
+      "g": "a9f8187787b06c7c08f29557362d68101b2206cb620c3907ac9dc382b9675d37"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/preparation/original-tests.log",
+      "f": null,
+      "g": "9b4793043660b7d99818de2518938d2f7f572787a79dd782531d7020e24548c2"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/preparation/recheck/current-tests.log",
+      "f": null,
+      "g": "bf0046c40412a4ba497e4e7e961eee56f59103e5dcbef2584a312d9df97b048f"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/preparation/recheck/independent-identity.log",
+      "f": null,
+      "g": "e0cd921bbfb2eab5fa22c175f401f86b67ecc3618bc2bf4d9d62422fe2ea6178"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/preparation/recheck/independent-identity.test.ts",
+      "f": null,
+      "g": "296473ab8016d285b895c499dac48ffda2bbc29c6906d65359dbb0d423feb1c2"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/preparation/recheck/original-repro.log",
+      "f": null,
+      "g": "89ee632b2ed6ad3c9b27fe944d8cbe6612020f3797462353d136afad2fa52218"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/preparation/recheck/review.json",
+      "f": null,
+      "g": "242077bdda7ffb9daeea144be844b2f15eb18b798699e9d6f2733ab66cfacdc5"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/preparation/review.json",
+      "f": null,
+      "g": "f39f33125c7c0865abdd2d36690a32f3b888b26ff9f963728aafc3e9b45d0479"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/request-regressions.log",
+      "f": null,
+      "g": "a1433ba778583337c222c7cea10d815b698218925fab854fd79761c979467cb5"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/review-initial.json",
+      "f": null,
+      "g": "b10cab657e964ff2fdba24906d06d1a9e38184bbf159414814b63a824bd9611b"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/round-recheck/http-health-candidate-b.json",
+      "f": null,
+      "g": "d54e99c3dd72e5ba412db34ec9c9d191136bfa830aa02935a8498ba3ff67d4b4"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/round-recheck/http-home-candidate-b.json",
+      "f": null,
+      "g": "dfdd8cff4e8a091f3345b7afbc13bdb02f9d48453384eda4e20f040165ca766a"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/round-recheck/http-home.json",
+      "f": null,
+      "g": "7900f2b8df28683060e3d7fad57106ba07c5c46e39ddfc8bcb38597d683896c4"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/round-recheck/http-startup-retry.log",
+      "f": null,
+      "g": "f7b67e0b44b39a1e8cd8e91bf8efe8bff707e648401d5919f415142dc2813e73"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/round-recheck/http-timeline-5bf19271-6202-4fe0-a6ae-2db4f00e8f74.json",
+      "f": null,
+      "g": "5f61ebd7257e3331bfbf5fdde6dc5592182363685cf67cdd2d93a20f1624f192"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/round-recheck/http-timeline-c76092d5-870e-49c1-871f-ccc44be84d55.json",
+      "f": null,
+      "g": "9fad8f1b05d773eb860ec707206c31824495aef0a61eb7136dead4da13d7609d"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/round-recheck/independent-probes.log",
+      "f": null,
+      "g": "79db55ab22a2b4c3d2b514da90f74c1d784d8d55c84c7d7ee3961c13f4e9375d"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/round-recheck/independent-round-probes.test.ts",
+      "f": null,
+      "g": "f3f5b7b06ba6c9d79e3d5a65f378ffd998bb2d13a17c0f73f57e83bfcdeabf6a"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/round-recheck/input-manifest.json",
+      "f": null,
+      "g": "294ee83bbbc30704285b751b18b70c1281a34b097990ae7e4496d7d9c4bd5ba4"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/round-recheck/review.json",
+      "f": null,
+      "g": "7f44d7fd9087e24e32db04223539c3203e7cf8054df532adc405d0fff0b798eb"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/round-recheck/runtime-candidate-b-verification.json",
+      "f": null,
+      "g": "715bca9f994237ab75fd6477b9450cf5bbd2955abe2cb93e6564a58df177133b"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/round-recheck/targeted.log",
+      "f": null,
+      "g": "747e88fc9843e906bd00b1b910586f96d7af2fffbc49f7ab6e557710343dfc9b"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/targeted.log",
+      "f": null,
+      "g": "34b3bdeb062e3abf3416ef8f454577fe9160e38d84ec26e27c8721a69b3469c2"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/01-home-1440.png",
+      "f": null,
+      "g": "e5011d846bb4f9e6e7e9edfc79dae5364321742bb296e2b4973a9318036fb982"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/01-home-1440.txt",
+      "f": null,
+      "g": "86ebd6a25080c7096eb06c1cc2402af280d9bd98c69b08ed2683050646f9682a"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/02-case-overview-1440.png",
+      "f": null,
+      "g": "357dcfd731fc81cc8732ee76f00ad6be3586f519025765426d4af89587380570"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/02-case-overview-1440.txt",
+      "f": null,
+      "g": "55003afd287ab18bf66205060445ea11ea426b0b4119d49d6a94127de349e5a6"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/03-case-current-1440.png",
+      "f": null,
+      "g": "e2bec1d79427747e4fb47e56d0390a034dcec7030e938e74725e062d8c23cb86"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/03-case-current-1440.txt",
+      "f": null,
+      "g": "74311979b699d993783bc40a3f3fddf788d96be8a5d8a7046449dc6589b44110"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/04-case-tree-1440.png",
+      "f": null,
+      "g": "a2a1d26e4f7c9d2dd33b8433fe04516fbe69dc4d05e13f4bc8b7eac078b126b9"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/04-case-tree-1440.txt",
+      "f": null,
+      "g": "16ae42eab85bd17ffb63a11b2674e9139711b5f5b8e314d2e705683bfab02eed"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/05-case-projects-1440.png",
+      "f": null,
+      "g": "b95b81d05dbdfe31f1a56e9095b5885e468f1561b596466bdba1a008895aea29"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/05-case-projects-1440.txt",
+      "f": null,
+      "g": "f62f749b3134fe81047ed5fd0a16641954273b88d3f43060f374099d38b233ab"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/06-case-artifacts-1440.png",
+      "f": null,
+      "g": "0fe19ee6322d7ac3f71792198197b940bce1f0b4d1a7e8be4b3ec685f9a00f53"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/06-case-artifacts-1440.txt",
+      "f": null,
+      "g": "28a6296541714990448ce5115a8513763c280287469208f4edaf4f7005c79ed8"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/07-case-history-1440.png",
+      "f": null,
+      "g": "62024e48471ecbf77e8f3edd4f0ba82600c2efcb491242d88ff4ebe0d407702d"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/07-case-history-1440.txt",
+      "f": null,
+      "g": "a07981ce3e5cb027177ac49d475a67e88321b6e5e89c60b6300a5231f80d417f"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/08-case-current-390.png",
+      "f": null,
+      "g": "facc9787959132ca7698d581e095c1f5085d05edc7cb0c5784bf139eb77f1df8"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/08-case-current-390.txt",
+      "f": null,
+      "g": "9546dd2f6fdd924c6b642830776f2f941a4227e63aff9c6c8ede08af0249c692"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/09-all-projects-1440.png",
+      "f": null,
+      "g": "4da461c170ffcc17efbeab5a6229199aa7bb78d5eb3e28c3c042c6613974158c"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/09-all-projects-1440.txt",
+      "f": null,
+      "g": "85c5e4d78715073b758eccc992911a5dc381315f3eeb0996a5162679bcf6177b"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/10-project-detail-1440.png",
+      "f": null,
+      "g": "84546e61fd492bb2bb1f0c9dc48c4414f759d9537f5561376bc2493592ede192"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/10-project-detail-1440.txt",
+      "f": null,
+      "g": "d63f1cd0dfc681b7262a76299a3f7e164331a74ab90fb92b5fc120843cd9c4b0"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/11-home-390.png",
+      "f": null,
+      "g": "fe8ab5e08d5448eab8172056f3013b173eb55ba6c4f9b55da7820e26707ffe2a"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/11-home-390.txt",
+      "f": null,
+      "g": "12eb1e805cebbab8e3ccb32a13397ae64c45e97ed24d5b775bb2fa21227b74a6"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/12-choice-dialog-1440.png",
+      "f": null,
+      "g": "891a5727eec7010e9df18d658c6ddc4d46da5e89cb62bed576f43133f98de849"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/12-choice-dialog-1440.txt",
+      "f": null,
+      "g": "05ed79dd10cf7cf85ef72974b71c3f2d5a741b142011c37245c0ab2756ab9646"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/13-choice-dialog-390.png",
+      "f": null,
+      "g": "37e15977bc58eb620f8a82d50f8f79483e18fd9e7d034306300c186b17ca1ae0"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/13-choice-dialog-390.txt",
+      "f": null,
+      "g": "edee2b013952e3326a55ea9dc0ac5e66ae18f54b8d29dc055cc7358a1ca76116"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/14-feedback-dialog-1440.png",
+      "f": null,
+      "g": "6285005da96c99730b370e72e54c7c18ee9f15552e01e83368439eb062b10f02"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/14-feedback-dialog-1440.txt",
+      "f": null,
+      "g": "8188333a4d3caae00ccd7dd92e5ff25f4cd66ad0a27403b56f652fe0f028fb9f"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/15-feedback-dialog-390.png",
+      "f": null,
+      "g": "7227dc305f7a19223568c3dabc7b705d29de07396b934433b39d38bb636373b1"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/15-feedback-dialog-390.txt",
+      "f": null,
+      "g": "402b5cccb1390dbaae6ac45368240868ff17081544d279cc0b95fe6e9010a1ec"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/16-artifacts-metric-1440.png",
+      "f": null,
+      "g": "841b9b612c9ef5a331ae5992065a3cc66f1a2b28f8c6d1430b6535a8f3ff0653"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/16-artifacts-metric-1440.txt",
+      "f": null,
+      "g": "76ecc3cf959b6811bed7eca430ad4cd1eceecb49dfe934a6e0e72ff7ce889905"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/17-source-original-1440.png",
+      "f": null,
+      "g": "3a1a5cff5ceecc4303ed3c82ed94e43b9139f3e75f29a04f19621817ad3b51ef"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/17-source-original-1440.txt",
+      "f": null,
+      "g": "46ddcafa70c70b57f2631cb3d3a6b0e52d8f0fc41e72ca3418bfb583364ba5cc"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/18-reviewed-current-1440.png",
+      "f": null,
+      "g": "a33d180b9b3c1591cbbe5278bc7b0417dcb49705abdff45ca6554c901af795b8"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/18-reviewed-current-1440.txt",
+      "f": null,
+      "g": "38d7ffd94b67f9a347f1dd50ed044ae3aca9b8469c93558937ef4e1446860316"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/19-reviewed-current-1024.png",
+      "f": null,
+      "g": "501c8ef370511a84cd1ee9878737bbf6cb1e2e6d68c4617f2b22935743dc3bd2"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/19-reviewed-current-1024.txt",
+      "f": null,
+      "g": "95860a4016273e6c83c58852bd090b102edee6be653bb76672660052f11befa3"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/20-case-dark-1440.png",
+      "f": null,
+      "g": "908439e70916921a1542f2736ca7cab56810c8a06b48d096cc957b3cf7ed7ef6"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/20-case-dark-1440.txt",
+      "f": null,
+      "g": "38d7ffd94b67f9a347f1dd50ed044ae3aca9b8469c93558937ef4e1446860316"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/21-case-projects-dark-1440.png",
+      "f": null,
+      "g": "4bf6696044d2adc4d214d89609e44ee9e6d4cdb44902bf173a022f2a24e1368d"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/21-case-projects-dark-1440.txt",
+      "f": null,
+      "g": "3edd7ee76046869c3d801aa8301c57d3e30fe4583bd662e7711f132e4dd104ff"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/22-home-dark-1440.png",
+      "f": null,
+      "g": "ea359abe6923a16882dbddec5a563a5dea0edbd3f70649693c4f77e595a3640b"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/22-home-dark-1440.txt",
+      "f": null,
+      "g": "86ebd6a25080c7096eb06c1cc2402af280d9bd98c69b08ed2683050646f9682a"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/23-case-prepare-1440.png",
+      "f": null,
+      "g": "7ec15cae27c006bf068ccf1f4ee37edf39edad51ff43a5e1a90fa07cb227cffb"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/23-case-prepare-1440.txt",
+      "f": null,
+      "g": "439400906e269a1eb669641010744b83a37807a55cbf987f7d4aa3f98e465deb"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/24-case-prepare-390.png",
+      "f": null,
+      "g": "e62e509e5c47d49559490ba2d1cc66f82c2ac547f26919c1abcecfce9dcd4326"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/24-case-prepare-390.txt",
+      "f": null,
+      "g": "f698094ad747b8b6c512c1865dee1354134df2bb01bca2cb71600a6b6607545b"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/README.md",
+      "f": null,
+      "g": "99035da61e08d8bdc9a5e37343bf20ef6a47a92f9e212de0aec9a2e2d4a4d8fd"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/extra-receipt.json",
+      "f": null,
+      "g": "8bdbd994556fdc28c18cbf7387497d56bf61d6057183e1573da89f7a0852f820"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/image-manifest.json",
+      "f": null,
+      "g": "4b9a202bccc6e1581b7aa64cdc93f3af67214a5cba2cf4b99c993f003ff480ed"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product/receipt.json",
+      "f": null,
+      "g": "2fc483208de2d988324660f6a0af0b00bca0aad47ea3253ca4bba825d440c8d7"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/source-manifest-f.json",
+      "f": null,
+      "g": "0da9ed87bf4fc752215e51adfe97abc148db90b8cee5f66b6f7180d18c46f278"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/source-manifest.json",
+      "f": null,
+      "g": "0da9ed87bf4fc752215e51adfe97abc148db90b8cee5f66b6f7180d18c46f278"
+    },
+    {
+      "path": "src/host/ui/CaseFeedbackDialog.tsx",
+      "f": "cc674caa5be6d702925b2e749e3df35bf75e0c0b25b78199dbd85085693e75a6",
+      "g": "3a05d214b5bb2b58ecd55b144ea92fad451e992bf84541f201c11dee74c00563"
+    },
+    {
+      "path": "src/host/ui/CaseIssuePanel.tsx",
+      "f": "a1d9b0f8af37e723f662575c03591d7cdb70b5f5729de7b85c306b674e6e8adf",
+      "g": "94d39b160a24526da8028b6a016b97816b73fb82da5029f6a17f00ad51a08d5e"
+    },
+    {
+      "path": "tests/browser-case-home-requests.mjs",
+      "f": "41f4485476e1089aeb2e023bb5787c331f363fc59cfaa6d1f2c0a08cc4f80b7b",
+      "g": "09957e4a520cf703e0d02b8081a4dde6976ddc4f880836114ded961d5da57893"
+    }
+  ],
+  "health": {
+    "status": "ready",
+    "studio": {
+      "semanticEngineConfigured": false
+    },
+    "sdkVersion": "1.4.0",
+    "transportVersion": "1",
+    "chatMode": "live",
+    "credentials": "host-persistent",
+    "filePolicy": "soft-prompt-no-sensitive-data-isolation",
+    "runtime": {
+      "instanceId": "5b8dc9fa-1b23-45fe-9fdd-0e004b23832e",
+      "pid": 276337,
+      "codeRoot": "/workspace/OptraCall-issue149-ui-conformance",
+      "version": "0.1.0-mvp.4",
+      "commit": "5dd59909227ab46f3d989ade8b2847e077636855",
+      "tree": "1078a6e2359a29e82631ab59f56a8d6dd9492d73",
+      "builtAt": "2026-11-28T02:05:43.009Z",
+      "dirty": true
+    }
+  },
+  "sourceManifestHash": "2f8ee75d4da2c5aca3240e9b26abc4ab7c6a5f798ae6ea650def9195db436f16",
+  "assets": [
+    {
+      "path": "main.js",
+      "expected": "d70e1b809648bc01effcd0d0663761ca0b84741436dd0bd0d0350af67214d6cb",
+      "actual": "d70e1b809648bc01effcd0d0663761ca0b84741436dd0bd0d0350af67214d6cb"
+    },
+    {
+      "path": "main.css",
+      "expected": "a48bfa018bdb97c62da5f1e82e6868373a64374004f40aee6e12dcbfd1cc8c90",
+      "actual": "a48bfa018bdb97c62da5f1e82e6868373a64374004f40aee6e12dcbfd1cc8c90"
+    },
+    {
+      "path": "favicon.svg",
+      "expected": "95a5a1b4a7f74b683e11655f73fece2a7920dfb0615859cad802513f9acf69c5",
+      "actual": "95a5a1b4a7f74b683e11655f73fece2a7920dfb0615859cad802513f9acf69c5"
+    },
+    {
+      "path": "index.html",
+      "expected": "8a35d26db18d0df5074dda0d17b75b5b7c6347c5e75ea77c6dc1431925f28486",
+      "actual": "8a35d26db18d0df5074dda0d17b75b5b7c6347c5e75ea77c6dc1431925f28486"
+    }
+  ]
+}

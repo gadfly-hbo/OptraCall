@@ -1,0 +1,27 @@
+✔ D14: writable actions are the exact issue/Board/active-project intersection, with no first request match (367.901241ms)
+✔ D14: an explicitly opened request chooses its exact action and request rather than the first available action (102.691028ms)
+✔ D14: no writable action or a closed Case offers the original source without inventing observations (29.246716ms)
+✔ D14/DW13: cancel and full component recreation retain the original feedback input and save intention (38.603137ms)
+✔ D14/DW09: uncertain feedback saves query the exact original operation and preserve its ID across reopen and explicit retry (47.797942ms)
+✔ D14: querying an already-saved feedback acknowledges that revision without posting another one (8.935221ms)
+✔ D14: a changed authorization or archived project is rechecked immediately before any feedback write (17.796709ms)
+✔ D14: leaving the feedback owner during source recheck prevents a late business write (9.039677ms)
+✔ D14/DW09: two explicitly clicked requests for the same action retain separate inputs and exact request identities (14.448599ms)
+✔ D14: an untouched unavailable draft remains read-only but can cancel without a save (40.411679ms)
+✔ DW09/FUI-02: a selected open historical request loads its exact strategy revision and requires explicit historical confirmation (526.062546ms)
+✔ DW09/FUI-03: explicitly switching from request A to issue B restores B single-request matching (68.464532ms)
+✔ DW09/FUI-02: denied exact historical read never silently substitutes the latest version for the original request (21.650528ms)
+✔ DW09: current-version choices retain the normal one-request path without historical opt-in (45.167611ms)
+✔ DW09/FUI-02: unauthorized, archived or owner-mismatched original revisions cannot be used for a new choice (52.752005ms)
+✔ D13: recording a choice opens a same-page dialog; cancellation preserves its unsaved reason (9.079712ms)
+✔ D13/DW13: an untouched editor can cancel after draft GET 503 while business save stays disabled (8.661493ms)
+✔ D13/DW09: a cancelled choice reopens for a fresh entry sequence without replacing the original draft (6.612474ms)
+✔ D13: an unknown choice keeps its exact operation and resolves through the original timeline without a second write (24.346723ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1895.105323

@@ -1,0 +1,26 @@
+[
+  {
+    "path": "openspec/changes/decision-case-daily-workspace/demo.html",
+    "frozenSha256": "adff576ba604b35b95806ab6a5c0f7bf93de5f0124c1ce0540e14577572bf911",
+    "originalMainSha256": "adff576ba604b35b95806ab6a5c0f7bf93de5f0124c1ce0540e14577572bf911",
+    "currentSha256": "adff576ba604b35b95806ab6a5c0f7bf93de5f0124c1ce0540e14577572bf911",
+    "unchangedInRepair": true,
+    "sameAsFrozenBytes": true
+  },
+  {
+    "path": "openspec/changes/decision-case-daily-workspace/spec.md",
+    "frozenSha256": "834399d514fd9093d6dc93e5a897381d7ed83605499a16827e4dbac57468cc9f",
+    "originalMainSha256": "834399d514fd9093d6dc93e5a897381d7ed83605499a16827e4dbac57468cc9f",
+    "currentSha256": "834399d514fd9093d6dc93e5a897381d7ed83605499a16827e4dbac57468cc9f",
+    "unchangedInRepair": true,
+    "sameAsFrozenBytes": true
+  },
+  {
+    "path": "openspec/changes/decision-case-daily-workspace/tasks.md",
+    "frozenSha256": "6ed1d3865d7312599b321b95a4dfb08868dbe2f2b2a1dd68ba52b8fa63fc71e7",
+    "originalMainSha256": "ebeab506a7aab1325449123c8b9a38413af9e329749f924f1522ba04100cefa1",
+    "currentSha256": "ebeab506a7aab1325449123c8b9a38413af9e329749f924f1522ba04100cefa1",
+    "unchangedInRepair": true,
+    "sameAsFrozenBytes": false
+  }
+]

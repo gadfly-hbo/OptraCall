@@ -1,0 +1,38 @@
+{
+  "out": "/workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/home-request-navigation/candidate-e",
+  "checks": [
+    {
+      "name": "choose home request navigation",
+      "ok": false,
+      "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n'改善华东会员复购' !== '记录取舍'\n\n    at file:///workspace/OptraCall-issue149-ui-conformance/tests/browser-case-home-requests.mjs:38:92"
+    },
+    {
+      "name": "observe exact Case/issue/request dialog, cancel focus and reopen 1",
+      "ok": true
+    },
+    {
+      "name": "observe exact Case/issue/request dialog, cancel focus and reopen 2",
+      "ok": true
+    }
+  ],
+  "errors": [],
+  "businessWrites": []
+}
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+1 !== 0
+
+    at file:///workspace/OptraCall-issue149-ui-conformance/tests/browser-case-home-requests.mjs:49:79 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: 1,
+  expected: 0,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v25.9.0

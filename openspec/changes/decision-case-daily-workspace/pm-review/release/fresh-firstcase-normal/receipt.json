@@ -1,0 +1,38 @@
+{
+  "head": "6bc7be2849d280e5e6a6e598ee6b7a68dd5e48eb",
+  "scratch": "/tmp/issue149-independent-ui-niTYtj",
+  "dropAck": false,
+  "steps": [
+    {
+      "name": "VISITED_EMPTY_CASE_OVERVIEW_WITHOUT_INITIALIZING"
+    },
+    {
+      "name": "FRESH_GETS_AND_PREPARATION_DO_NOT_INITIALIZE_CASE_STORAGE"
+    },
+    {
+      "name": "EXPLICIT_FIRST_CREATE_INITIALIZES_AND_SAVES_ONE_CASE_ONE_ISSUE",
+      "caseId": "8eb9cceb-cd6f-44c1-ae18-96926becc33a",
+      "issueId": "d8f95960-8f82-47e1-8b15-e41fa257e111"
+    },
+    {
+      "name": "FRESH_FIRST_ISSUE_FRAGMENT_AND_REAL_COMPOSER_REOPEN_NO_SEND"
+    },
+    {
+      "name": "SAME_MOUNTED_ISSUE_NEW_FRAGMENT_VISIBLE_WITHOUT_CASE_REVISION_OR_OVERWRITE"
+    },
+    {
+      "name": "SAME_FRAGMENT_REPEAT_ACKNOWLEDGED_WITHOUT_DUPLICATION_OR_STUCK_NOTICE"
+    },
+    {
+      "name": "EXISTING_CASE_DATA_AND_MANUAL_SCOPE_PRESERVED_NO_REINITIALIZATION_OR_SEND"
+    }
+  ],
+  "networkMessages": [],
+  "createRequests": [
+    "{\"draftId\":\"prepare-fc2b1689-863b-41c9-a518-b348427092bd\",\"title\":\"干净首用第一Case\",\"description\":\"干净首用完整背景\",\"rawInput\":\"干净首用原输入 <img src=x onerror=\\\"window.__freshXss=1\\\">\",\"goal\":{\"goalId\":\"5c28dca4-bd09-48e1-90e9-cef2d19b7256\",\"version\":1,\"strategy\":\"首用明确具体S\",\"alreadyAdopted\":false},\"adoptOperationId\":\"21152a93-d06a-4cc0-bc37-51c09b0df8ea\",\"createOperationId\":\"7f923005-f1d2-4013-bda3-66da1c3929af\"}"
+  ],
+  "base": "http://127.0.0.1:45057",
+  "caseId": "8eb9cceb-cd6f-44c1-ae18-96926becc33a",
+  "issueId": "d8f95960-8f82-47e1-8b15-e41fa257e111",
+  "result": "PASS"
+}

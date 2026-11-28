@@ -1,0 +1,30 @@
+[
+  {
+    "unknown": false,
+    "clicked": "request-explicit-second",
+    "secondRequest": "request-explicit-second",
+    "secondInput": "",
+    "AInputRestored": "A的原草稿输入",
+    "ARequestRestored": "request-action-A",
+    "AOperationPreserved": true,
+    "AUnknownPreserved": true,
+    "businessPosts": 0,
+    "keys": [
+      "feedback:action-A:request-action-A:3"
+    ]
+  },
+  {
+    "unknown": true,
+    "clicked": "request-explicit-second",
+    "secondRequest": "request-explicit-second",
+    "secondInput": "",
+    "AInputRestored": "A的原草稿输入",
+    "ARequestRestored": "request-action-A",
+    "AOperationPreserved": true,
+    "AUnknownPreserved": true,
+    "businessPosts": 1,
+    "keys": [
+      "feedback:action-A:request-action-A:3"
+    ]
+  }
+]

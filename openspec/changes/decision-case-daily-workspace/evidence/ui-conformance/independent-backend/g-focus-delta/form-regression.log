@@ -1,0 +1,13 @@
+✔ independent D14 legacy input: reopened pre-date UNKNOWN and long observation query then retry exact old intent (166.162222ms)
+✔ independent D14 actual compact form: unknown execution saves exact observation metadata and request once, without guessing execution (15.884522ms)
+✔ independent original FeedbackDialog: fixed explicit request rejects a different restored context and permits cancel (137.67022ms)
+✔ independent original FeedbackDialog: read-only draft disables saving without locking cancellation (10.996715ms)
+✔ independent original FeedbackDialog: exact request uses original authorization and baseline; moved baseline blocks (12.182631ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 440.742681

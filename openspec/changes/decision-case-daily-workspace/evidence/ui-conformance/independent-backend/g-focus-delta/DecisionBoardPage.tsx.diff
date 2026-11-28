@@ -1,0 +1,31 @@
+--- candidate-f/extensions/business-plugins/decision-board/ui/DecisionBoardPage.tsx
++++ stopped-g/extensions/business-plugins/decision-board/ui/DecisionBoardPage.tsx
+@@ -17,8 +17,8 @@
+ const TASK_STATUS_LABEL: Record<string, string> = { todo: '待办', doing: '进行中', done: '已完成' };
+ const kb = (bytes: number) => bytes >= 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${bytes} B`;
+ 
+-function BoardDialog({ title, subtitle, className = '', error, children, onClose, busy = false }: { title: string; subtitle?: string; className?: string; error?: string | null; children: React.ReactNode; onClose: () => void; busy?: boolean }) {
+-  return <CaseDialog title={title} subtitle={subtitle} className={`board-dialog ${className}`} onClose={onClose} busy={busy}>
++function BoardDialog({ title, subtitle, className = '', error, children, onClose, busy = false, returnFocusId }: { title: string; subtitle?: string; className?: string; error?: string | null; children: React.ReactNode; onClose: () => void; busy?: boolean; returnFocusId?: string }) {
++  return <CaseDialog title={title} subtitle={subtitle} returnFocusId={returnFocusId} className={`board-dialog ${className}`} onClose={onClose} busy={busy}>
+     {error && <p className="board-error" role="alert">{error}</p>}
+     {children}
+   </CaseDialog>;
+@@ -371,7 +371,7 @@
+   </BoardDialog>;
+ }
+ 
+-export function FeedbackDialog({ presentation = 'board', contextLabel, task, subject, draft, error, busy, readOnly = false, requestScope, draftControls, unknownOperation, onChange, onClose, onAsk, onSubmit, onQuery }: { presentation?: 'board' | 'case'; contextLabel?: string; task: BoardTaskView; subject: ObservationSubject; draft: FeedbackDraft; busy: boolean; readOnly?: boolean; requestScope?: ObservationRequestContext; draftControls?: React.ReactNode; error?: string | null; unknownOperation: string | null; onChange: (draft: FeedbackDraft) => void; onClose: () => void; onAsk: () => void; onSubmit: (input: FeedbackInput) => Promise<void>; onQuery: () => Promise<void> }) {
++export function FeedbackDialog({ presentation = 'board', contextLabel, returnFocusId, task, subject, draft, error, busy, readOnly = false, requestScope, draftControls, unknownOperation, onChange, onClose, onAsk, onSubmit, onQuery }: { presentation?: 'board' | 'case'; contextLabel?: string; returnFocusId?: string; task: BoardTaskView; subject: ObservationSubject; draft: FeedbackDraft; busy: boolean; readOnly?: boolean; requestScope?: ObservationRequestContext; draftControls?: React.ReactNode; error?: string | null; unknownOperation: string | null; onChange: (draft: FeedbackDraft) => void; onClose: () => void; onAsk: () => void; onSubmit: (input: FeedbackInput) => Promise<void>; onQuery: () => Promise<void> }) {
+   const [latestForComparison, setLatestForComparison] = useState<TaskFeedbackRevision | null>(null), [comparisonError, setComparisonError] = useState('');
+   const [snapshot, setSnapshot] = useState<ObservationRequestSnapshot | null>(null), [requestError, setRequestError] = useState('');
+   const [readState, setReadState] = useState<'loading' | 'ready' | 'restricted' | 'stale' | 'unavailable'>('loading'), [checking, setChecking] = useState(false);
+@@ -447,7 +447,7 @@
+       <p className="board-context-note">效果和评分均是用户陈述，不代表独立核算或效果验证。未执行、负效果、观察不足均可记录；没有反馈也能直接提问。</p></>;
+   const comparison = <details className="feedback-next"><summary>保存冲突时：对照最新反馈，保留我的输入</summary><button type="button" className="secondary-button" disabled={locked} onClick={async () => { try { const result = await feedbackHistory(task.id); setLatestForComparison(result.revisions.at(-1) ?? null); setComparisonError(result.revisions.length ? '' : '当前尚无已保存反馈。'); } catch (fault) { setComparisonError(fault instanceof Error ? fault.message : '最新反馈未读回。'); } }}>读取最新反馈供对照</button>{comparisonError && <p role="status">{comparisonError}</p>}{latestForComparison && <><p className="feedback-help">已读最新 v{latestForComparison.revisionNumber} · {latestForComparison.savedAt} · {latestForComparison.adopted === true ? '按建议执行' : latestForComparison.adopted === false ? '未按建议执行' : '执行情况未知'} · {effectLabel(latestForComparison.effect)}</p><p>{latestForComparison.observationDate ? `观察日期：${latestForComparison.observationDate}` : ''}{latestForComparison.sourceScope ? ` · 来源与范围：${latestForComparison.sourceScope}` : ''}</p><pre className="feedback-text">{`${latestForComparison.outcome}\n${latestForComparison.metricDelta}\n${latestForComparison.review}`}</pre><button type="button" className="secondary-button" disabled={locked} onClick={() => { onChange({ ...draft, expectedLatestRevisionId: latestForComparison.revisionId, operationId: crypto.randomUUID() }); setComparisonError(`已明确选用v${latestForComparison.revisionNumber}作为保存基线，以上编辑正文保持原样。提交会追加新版本，不覆盖旧版。`); }}>按已查看最新版继续保存 · 保留我的输入</button></>}</details>;
+   const observationMetadata = <><div className="case-feedback-field"><label htmlFor="feedback-observation-date">观察日期</label><input id="feedback-observation-date" type="date" required={compact} disabled={locked} value={draft.observationDate ?? ''} onChange={event => change({ observationDate: event.target.value || null })}/></div></>;
+-  return <BoardDialog title={compact ? '回录实际反馈' : task.feedback ? '更新反馈' : '回录反馈'} subtitle={compact ? contextLabel ?? task.title : undefined} className={compact ? 'case-feedback-compact-dialog' : ''} error={error} onClose={onClose} busy={busy || checking}>
++  return <BoardDialog returnFocusId={returnFocusId} title={compact ? '回录实际反馈' : task.feedback ? '更新反馈' : '回录反馈'} subtitle={compact ? contextLabel ?? task.title : undefined} className={compact ? 'case-feedback-compact-dialog' : ''} error={error} onClose={onClose} busy={busy || checking}>
+     {!compact && <p className="card-source">任务：{task.title} · 保存会新增一版，旧版保留。取消或 Esc 保留未保存输入。</p>}{draftControls}
+     {compact && <>{requestError && <p className="board-error" role="alert">{requestError}</p>}{selectedProblem && <p className="board-error" role="alert">{selectedProblem}</p>}</>}
+     <form className={compact ? 'case-feedback-compact-form' : 'board-form'} onSubmit={event => { event.preventDefault(); void submit(); }}>

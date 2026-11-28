@@ -1,0 +1,168 @@
+{
+  "candidate": "be1fd36ad449d89d2fc21655ccbbb61cf8b6bdbf",
+  "root": "/workspace/OptraCall-issue149-final/.local/pm-final/backend/matrix-jq1Cwq",
+  "outputs": [
+    {
+      "name": "closed-case-unanswered-choose",
+      "statuses": [
+        {
+          "requestId": "9ab472c5-15c3-443e-9a4f-65a35ed939c4",
+          "status": "open"
+        }
+      ],
+      "pending": [
+        "9ab472c5-15c3-443e-9a4f-65a35ed939c4"
+      ],
+      "newRequestCode": "case_closed",
+      "originalChooseCode": "case_closed"
+    },
+    {
+      "name": "archived-project-observe",
+      "projectArchived": true,
+      "unanswered": "a35e5f87-92e0-4d2f-866a-f13ae0f6ee20",
+      "answered": "53b950f2-621a-4699-84aa-5e159a85f047",
+      "priorAnswerStatus": 200,
+      "statuses": [
+        {
+          "requestId": "a35e5f87-92e0-4d2f-866a-f13ae0f6ee20",
+          "status": "open"
+        },
+        {
+          "requestId": "53b950f2-621a-4699-84aa-5e159a85f047",
+          "status": "answered"
+        },
+        {
+          "requestId": "f7fb8dad-5d70-422a-ac85-f6adda1eab6c",
+          "status": "open"
+        }
+      ],
+      "pending": [
+        "f7fb8dad-5d70-422a-ac85-f6adda1eab6c",
+        "a35e5f87-92e0-4d2f-866a-f13ae0f6ee20"
+      ],
+      "newRequestCode": null,
+      "newRequestAccepted": true,
+      "originalFeedback": {
+        "status": 409,
+        "value": {
+          "code": "project_archived",
+          "message": "项目已归档，请先恢复后继续操作。"
+        }
+      }
+    },
+    {
+      "name": "restored-project-observe",
+      "statuses": [
+        {
+          "requestId": "a35e5f87-92e0-4d2f-866a-f13ae0f6ee20",
+          "status": "open"
+        },
+        {
+          "requestId": "53b950f2-621a-4699-84aa-5e159a85f047",
+          "status": "answered"
+        },
+        {
+          "requestId": "f7fb8dad-5d70-422a-ac85-f6adda1eab6c",
+          "status": "open"
+        }
+      ],
+      "originalFeedback": {
+        "status": 200,
+        "value": {
+          "feedback": {
+            "revisionId": "bb98db1f-4f22-48f8-9067-a06577884fc8",
+            "taskId": "b0238fa2-cb3f-41ee-9f0b-7d9b31c97f19",
+            "revisionNumber": 1,
+            "operationId": "b261dcc3-f124-45c7-8c1b-ca7929028e69",
+            "requestSha256": "4c9e6b3aa0b1fc43a115758e662575a0a3a06f3112aa58e0505c86a9ef56fb9d",
+            "adopted": true,
+            "outcome": "Synthetic observation",
+            "metricDelta": "",
+            "review": "",
+            "score": null,
+            "effect": "unknown",
+            "savedAt": "2026-11-27T16:05:14.966Z",
+            "origin": "user-save",
+            "legacyCreatedAt": null,
+            "legacyUpdatedAt": null,
+            "createdAt": "2026-11-27T16:05:14.966Z",
+            "updatedAt": "2026-11-27T16:05:14.966Z",
+            "respondsToRequest": {
+              "requestId": "a35e5f87-92e0-4d2f-866a-f13ae0f6ee20",
+              "revision": 1,
+              "authorizationId": "24a1eb31-3845-4f5e-8124-3c62a2fa1ac5"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "done-task-closed-case-observe-still-legal",
+      "taskStatus": "done",
+      "originalFeedbackStatus": 200,
+      "statuses": [
+        {
+          "requestId": "1c26e921-410f-461a-bcd6-0c542c56a0d6",
+          "status": "answered"
+        }
+      ]
+    },
+    {
+      "name": "explicit-board-authorization-revoke",
+      "unanswered": "45493a26-736a-4c83-b51c-08cb16ccf018",
+      "answered": "ef29a183-cafe-406e-b359-aa2e43ea6273",
+      "latestDecisions": [
+        "revoke",
+        "revoke"
+      ],
+      "statuses": [
+        {
+          "requestId": "45493a26-736a-4c83-b51c-08cb16ccf018",
+          "status": "superseded"
+        },
+        {
+          "requestId": "ef29a183-cafe-406e-b359-aa2e43ea6273",
+          "status": "answered"
+        }
+      ],
+      "newRequestCode": "case_do_authorization_unavailable"
+    },
+    {
+      "name": "new-choice-replaces-old-authority",
+      "unanswered": "bafbd5a4-95aa-4fba-b452-6721bd7b005d",
+      "answered": "84c4113a-7edb-4783-9a54-2fb92c9c93e5",
+      "statuses": [
+        {
+          "requestId": "bafbd5a4-95aa-4fba-b452-6721bd7b005d",
+          "status": "superseded"
+        },
+        {
+          "requestId": "84c4113a-7edb-4783-9a54-2fb92c9c93e5",
+          "status": "answered"
+        }
+      ],
+      "newRequestCode": "case_choice_conflict"
+    },
+    {
+      "name": "active-strategy-revision-history-still-legal",
+      "newerRevision": 2,
+      "originalDefaultCode": "case_decision_revision_conflict",
+      "historicalChoiceAllowed": true,
+      "statuses": [
+        {
+          "requestId": "e0c9a02b-5665-4f93-a841-34026fa23409",
+          "status": "answered"
+        }
+      ]
+    },
+    {
+      "name": "answered-choose-survives-later-archive-and-close",
+      "statuses": [
+        {
+          "requestId": "bb913be2-b3ff-4464-bebd-017b65bf05cc",
+          "status": "answered"
+        }
+      ]
+    }
+  ]
+}

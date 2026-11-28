@@ -1,0 +1,63 @@
+{
+  "at": "2026-11-28T01:54:07.648924+00:00",
+  "manifestFileSHA256": "48320f9946ff62c62a030dcc52a3dd8878e20aa743f3eacbc3403dcdfe960707",
+  "manifestSha256": "d437435008dc8aaca47116c3ce49dd88131b56ad670b4cd8c802b7b4e91cbad5",
+  "fileCount": 2415,
+  "drift": [],
+  "eToFChanges": [
+    {
+      "path": "src/host/ui/CaseDialogs.tsx",
+      "e": "337e6fa032c3e745f6a67567d1c2546c108a6f4f08c492887df9d868dfd5b151",
+      "f": "a2d97e73d8d6644a439115653ee7b48872a3ec1e743517a6486bc5fb35f66fb8"
+    },
+    {
+      "path": "src/host/ui/CaseIssuePanel.tsx",
+      "e": "ebb80cb124c0553aa6ce147021dc45f4c65155e72062a3bf6468ab096db99839",
+      "f": "a1d9b0f8af37e723f662575c03591d7cdb70b5f5729de7b85c306b674e6e8adf"
+    }
+  ],
+  "health": {
+    "status": "ready",
+    "studio": {
+      "semanticEngineConfigured": false
+    },
+    "sdkVersion": "1.4.0",
+    "transportVersion": "1",
+    "chatMode": "live",
+    "credentials": "host-persistent",
+    "filePolicy": "soft-prompt-no-sensitive-data-isolation",
+    "runtime": {
+      "instanceId": "0217e393-69f2-4bb3-b421-e3ab3ebb99ae",
+      "pid": 260218,
+      "codeRoot": "/workspace/OptraCall-issue149-ui-conformance",
+      "version": "0.1.0-mvp.4",
+      "commit": "5dd59909227ab46f3d989ade8b2847e077636855",
+      "tree": "1078a6e2359a29e82631ab59f56a8d6dd9492d73",
+      "builtAt": "2026-11-28T01:53:17.113Z",
+      "dirty": true
+    }
+  },
+  "sourceManifestHash": "c066a823868d61852333e56c38a5ba1a4610ec622c97e646c75932fe720108da",
+  "assets": [
+    {
+      "path": "main.js",
+      "expected": "0ffd35b5a1ce1fbdddfb5e30712971ed87e4359d15e5ba79b739c14c38d445a0",
+      "actual": "0ffd35b5a1ce1fbdddfb5e30712971ed87e4359d15e5ba79b739c14c38d445a0"
+    },
+    {
+      "path": "main.css",
+      "expected": "a48bfa018bdb97c62da5f1e82e6868373a64374004f40aee6e12dcbfd1cc8c90",
+      "actual": "a48bfa018bdb97c62da5f1e82e6868373a64374004f40aee6e12dcbfd1cc8c90"
+    },
+    {
+      "path": "favicon.svg",
+      "expected": "95a5a1b4a7f74b683e11655f73fece2a7920dfb0615859cad802513f9acf69c5",
+      "actual": "95a5a1b4a7f74b683e11655f73fece2a7920dfb0615859cad802513f9acf69c5"
+    },
+    {
+      "path": "index.html",
+      "expected": "8a35d26db18d0df5074dda0d17b75b5b7c6347c5e75ea77c6dc1431925f28486",
+      "actual": "8a35d26db18d0df5074dda0d17b75b5b7c6347c5e75ea77c6dc1431925f28486"
+    }
+  ]
+}

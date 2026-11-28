@@ -1,12 +1,14 @@
+import { HomeDailyQuickPanel } from './HomeDailyQuickPanel.tsx';
+import type { HomePendingItem } from '../home-pending.ts';
 import type { ClientProject } from './project-types.ts';
 import { useWorkspaceDeskData } from './use-workspace-desk-data.ts';
 import {
-  actionReadNotice,
   buildWorkspaceHomeModel,
   type HomeActivityTarget,
   type HomeFoundationId,
 } from './workspace-home-model.ts';
 import './workspace-home.css';
+import './case-daily-home.css';
 
 export interface WorkspaceHomeReportTarget {
   caseId: string;
@@ -27,7 +29,9 @@ export interface WorkspaceHomeProps {
   refreshToken: number;
   preferredCaseId?: string;
   onCreateCase: () => void;
-  onOpenCase: (caseId: string) => void;
+  onOpenCase: (caseId: string, issueId?: string) => void;
+  onOpenRequest?: (item: HomePendingItem) => void;
+  hidePreparation?: boolean;
   onOpenStarMap: () => void;
   onOpenProjectMap: () => void;
   onOpenDecisionBoard: () => void;
@@ -56,6 +60,8 @@ export function WorkspaceHome({
   preferredCaseId,
   onCreateCase,
   onOpenCase,
+  onOpenRequest,
+  hidePreparation,
   onOpenStarMap,
   onOpenProjectMap,
   onOpenDecisionBoard,
@@ -100,7 +106,6 @@ export function WorkspaceHome({
     foundations: desk.foundations,
   });
 
-  const actionNotice = actionReadNotice[desk.actionReadState];
   const dateInfo = todayHeadingLabel();
   const isCaseRestricted = model.caseAccessState === 'forbidden' || model.caseAccessState === 'unavailable';
   const latestActiveTask = projects
@@ -119,8 +124,8 @@ export function WorkspaceHome({
       <section className="desk-home" role="region" aria-label="工作台首页">
         <header className="dh-head">
           <div>
-            <p className="dh-date"><time dateTime={dateInfo.iso}>{dateInfo.text}</time></p>
-            <h1>{model.headline}</h1>
+            <p className="dh-eyebrow">YOUR WORK · OPTRACALL</p>
+            <h1>今天，先推进一件重要的事</h1>
             <p className="dh-intro">
               {desk.enterprises.length > 1 ? (
                 <label className="dh-enterprise-inline">
@@ -148,6 +153,7 @@ export function WorkspaceHome({
             </p>
           </div>
           <div className="dh-head-actions">
+            <time className="dh-date" dateTime={dateInfo.iso}>{dateInfo.text}</time>
             <button type="button" className="text-button" disabled={desk.loading} onClick={desk.reload}>
               {desk.loading ? '正在刷新…' : '刷新'}
             </button>
@@ -172,6 +178,45 @@ export function WorkspaceHome({
           </div>
         )}
 
+        <HomeDailyQuickPanel hidePreparation={hidePreparation} refreshToken={refreshToken}
+          onOpenCase={onOpenCase} onOpenRequest={onOpenRequest} onCreateCase={onCreateCase}
+          onOpenAllProjects={onOpenProjectMap} onOpenAllCases={onOpenStarMap} onOpenProject={onOpenProject} projects={projects}
+          independentProjects={isCaseRestricted ? [] : projects.filter(project => !project.archivedAt && !desk.projectLinks.some(link => link.projectId === project.id))}
+          foundationContent={
+        <section className="dh-foundation" aria-labelledby="foundations-title">
+          <div className="dh-section-head">
+            <h2 id="foundations-title">基础建设提醒</h2>
+            <button
+              type="button"
+              className="dh-link-btn"
+              onClick={onOpenFoundationOverview}
+            >
+              按需查看
+            </button>
+          </div>
+          <div className="dh-foundation-tiles">
+            {model.foundations.map(item => (
+              <button
+                key={item.id}
+                type="button"
+                className="dh-foundation-tile"
+                onClick={() => onOpenFoundation(item.id)}
+              >
+                <span className="dh-foundation-label">
+                  <strong>{item.title}</strong>
+                  <span className={`dh-pill ${item.tone}`}>{item.status}</span>
+                </span>
+                <p>{item.rhythm}</p>
+              </button>
+            ))}
+          </div>
+          <p className="dh-foundation-note">提醒供按需查看，继续工作无需先完成基础建设。</p>
+        </section>
+          }
+        />
+
+        <details className="dh-more-records">
+          <summary>更多工作区记录与入口</summary>
         <section className="dh-hero" aria-labelledby="focus-case">
           <div className="dh-case">
             <div className="dh-case-top">
@@ -309,64 +354,6 @@ export function WorkspaceHome({
         </section>
 
         <div className="dh-sections">
-          <section aria-labelledby="my-queue">
-            <div className="dh-section-head">
-              <h2 id="my-queue">需要你处理</h2>
-              {isCaseRestricted ? (
-                <button type="button" className="dh-link-btn" onClick={onOpenProjectMap}>查看项目地图</button>
-              ) : (
-                <button type="button" className="dh-link-btn" onClick={onOpenStarMap}>查看全部 Case</button>
-              )}
-            </div>
-            {actionNotice && (
-              <div className="dh-empty" role="status">
-                <strong>{actionNotice}</strong>
-                {desk.actionReadState !== 'loading' && (
-                  <button type="button" className="text-button" onClick={desk.reload}>重新读取行动</button>
-                )}
-              </div>
-            )}
-            {model.queue.length ? (
-              <ul className="dh-queue-list" aria-label="需要你处理">
-                {model.queue.map(item => (
-                  <li key={item.id}>
-                    <button
-                      type="button"
-                      className="dh-queue-row"
-                      onClick={() => {
-                        if (item.kind === 'case') onOpenCase(item.caseId);
-                        else if (item.kind === 'action') onOpenDecisionBoard();
-                        else onOpenReport(item);
-                      }}
-                    >
-                      <span className={`dh-status ${item.tone}`}>{item.statusLabel}</span>
-                      <span className="dh-queue-topic">
-                        <strong>{item.title}</strong>
-                        <small>{item.context}</small>
-                      </span>
-                      <span className="dh-owner">
-                        <span>{item.owner}</span>
-                        <small>{item.dateLabel}</small>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : isCaseRestricted ? (
-              <div className="dh-empty">
-                <strong>{model.caseAccessState === 'forbidden' ? '暂无权限读取待处理 Case' : '待处理事项暂不可读取'}</strong>
-                <p>{model.caseAccessMessage || '可先前往项目地图推进已授权的项目与分析任务。'}</p>
-                <button type="button" className="text-button" onClick={onOpenProjectMap}>打开项目地图</button>
-              </div>
-            ) : actionNotice ? null : (
-              <div className="dh-empty">
-                <strong>还没有待处理事项</strong>
-                <p>可以从一个业务问题创建 Case，或到项目地图继续独立分析任务。</p>
-                <button type="button" className="text-button" onClick={onOpenProjectMap}>打开项目地图</button>
-              </div>
-            )}
-          </section>
-
           <section aria-labelledby="recent-activity">
             <div className="dh-section-head">
               <h2 id="recent-activity">最近活动</h2>
@@ -426,34 +413,8 @@ export function WorkspaceHome({
           </button>
         </div>
 
-        <section className="dh-foundation" aria-labelledby="foundations-title">
-          <div className="dh-section-head">
-            <h2 id="foundations-title">基础建设</h2>
-            <button
-              type="button"
-              className="dh-link-btn"
-              onClick={onOpenFoundationOverview}
-            >
-              查看建设总览
-            </button>
-          </div>
-          <div className="dh-foundation-tiles">
-            {model.foundations.map(item => (
-              <button
-                key={item.id}
-                type="button"
-                className="dh-foundation-tile"
-                onClick={() => onOpenFoundation(item.id)}
-              >
-                <span className="dh-foundation-label">
-                  <strong>{item.title}</strong>
-                  <span className={`dh-pill ${item.tone}`}>{item.status}</span>
-                </span>
-                <p>{item.rhythm}</p>
-              </button>
-            ))}
-          </div>
-        </section>
+
+        </details>
       </section>
     </div>
   );

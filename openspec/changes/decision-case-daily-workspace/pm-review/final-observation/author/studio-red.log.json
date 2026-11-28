@@ -1,0 +1,7 @@
+{
+  "originalFileName": "studio-red.log",
+  "encoding": "utf-8",
+  "originalBytes": 1338,
+  "originalSha256": "d038c180de0c7485ebffbbd16d4458ed6ae8e79570bff93225b7b88912fde3f5",
+  "content": "✖ Studio engineering flow uses real Host/Pi tools to construct sources and original SAP candidates, then publish exact versions (5385.099935ms)\nℹ tests 1\nℹ suites 0\nℹ pass 0\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 5611.309421\n\n✖ failing tests:\n\ntest at tests/studio-flow.test.ts:61:1\n✖ Studio engineering flow uses real Host/Pi tools to construct sources and original SAP candidates, then publish exact versions (5385.099935ms)\n  AssertionError [ERR_ASSERTION]: {\"code\":\"native_snapshot_incomplete\",\"accepted\":false,\"message\":\"Synthetic one-observation response, original Host already answered.\"}\n  \n  409 !== 200\n  \n      at json (file:///workspace/OptraCall-issue149-final/tests/studio-flow.test.ts:10:81)\n      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n      at async run (file:///workspace/OptraCall-issue149-final/tests/studio-flow.test.ts:25:16)\n      at async TestContext.<anonymous> (file:///workspace/OptraCall-issue149-final/tests/studio-flow.test.ts:71:3)\n      at async Test.run (node:internal/test_runner/test:1208:7)\n      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {\n    generatedMessage: false,\n    code: 'ERR_ASSERTION',\n    actual: 409,\n    expected: 200,\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n"
+}

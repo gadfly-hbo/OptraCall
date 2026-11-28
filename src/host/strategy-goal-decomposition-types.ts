@@ -455,6 +455,8 @@ export interface DecompositionPublishPreview {
     unit: string;
     checkpoints: DecompositionRowCheckpoint[];
   }[];
+  reserves: DecompositionReserve[];
+  gapStrategies: DecompositionGapStrategy[];
   summary: {
     formalTargetValue: number;
     estimatedValue: number | null;
@@ -553,6 +555,33 @@ export type ProgressCaseChoice =
   | { kind: 'continue-existing'; caseId: string; note?: string; decidedAt: string }
   | { kind: 'create-new-draft'; intentId: string; note?: string; decidedAt: string };
 
+export interface ProgressCheckIssue {
+  field: 'metric' | 'scope' | 'unit' | 'period' | 'coverage' | 'maturity' | 'cutoff' | 'plan' | 'actual';
+  kind: 'missing' | 'mismatch' | 'incomplete' | 'observing' | 'invalid';
+  message: string;
+  expected?: string;
+  observed?: string;
+}
+
+export interface ProgressBasisResolutionItem {
+  field: 'metric' | 'scope' | 'unit' | 'periodId' | 'coverage' | 'maturity';
+  action: 'mapped' | 'supplemented';
+  submittedValue?: string;
+  sourceValue?: string;
+  adoptedValue: string;
+  evidenceQuote: string;
+  rationale: string;
+}
+
+/** Agent proposal only; the submitted scope remains authoritative until the owner submits a correction. */
+export interface ProgressBasisSuggestion {
+  field: 'scope';
+  submittedValue: string;
+  proposedValue: string;
+  evidenceQuote: string;
+  rationale: string;
+}
+
 export interface DecompositionProgressCheck {
   checkId: string;
   goalId: string;
@@ -579,6 +608,12 @@ export interface DecompositionProgressCheck {
     basis?: ProgressEvidenceBasis;
   };
   assessmentNote?: string;
+  agentAssessmentNote?: string;
+  requestedComparability?: ProgressComparability;
+  comparabilityIssues?: ProgressCheckIssue[];
+  submittedBasis?: ProgressEvidenceBasis;
+  basisResolution?: ProgressBasisResolutionItem[];
+  basisSuggestions?: ProgressBasisSuggestion[];
   evidenceQuote?: string;
   comparability: ProgressComparability;
   missingCoverageNote?: string;
@@ -818,6 +853,7 @@ export interface GoalWorkspaceView {
   activeGsaPlan: GsaPlanVersion | null;
   gsaDraft: GsaPlanDraft | null;
   draft: DecompositionDraft | null;
+  priorDraft?: DecompositionDraft | null;
   validation: DecompositionValidationResult | null;
   publications: DecompositionPublicationSummary[];
   activePublicationVersion: number | null;

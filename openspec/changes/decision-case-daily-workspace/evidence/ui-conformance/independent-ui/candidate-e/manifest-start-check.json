@@ -1,0 +1,55 @@
+{
+  "at": "2026-11-28T01:49:45.631780+00:00",
+  "manifestFileSHA256": "294710a84777fbfd779c414196a16d6651b81ddc7fe240455c4edd3432f9d034",
+  "manifestSha256": "194d05d777a9fb2e29d7ee62745f22afed394f6ad871d3971d4b03fa81595d47",
+  "fileCount": 2415,
+  "drift": [],
+  "health": {
+    "status": "ready",
+    "studio": {
+      "semanticEngineConfigured": false
+    },
+    "sdkVersion": "1.4.0",
+    "transportVersion": "1",
+    "chatMode": "live",
+    "credentials": "host-persistent",
+    "filePolicy": "soft-prompt-no-sensitive-data-isolation",
+    "runtime": {
+      "instanceId": "74b5ea0f-30d9-4872-9f53-1a515107bd53",
+      "pid": 254230,
+      "codeRoot": "/workspace/OptraCall-issue149-ui-conformance",
+      "version": "0.1.0-mvp.4",
+      "commit": "5dd59909227ab46f3d989ade8b2847e077636855",
+      "tree": "1078a6e2359a29e82631ab59f56a8d6dd9492d73",
+      "builtAt": "2026-11-28T01:49:00.388Z",
+      "dirty": true
+    }
+  },
+  "sourceManifestHash": "4a8d747b1129393cae452d31d218312a77bb0954a80baafb4f6d268242d7f985",
+  "assets": [
+    {
+      "path": "main.js",
+      "expected": "b6f3a3f454fcaaa90ed301e2fb589041cbe22e18c2af258c8e4d981eecc22864",
+      "actual": "b6f3a3f454fcaaa90ed301e2fb589041cbe22e18c2af258c8e4d981eecc22864",
+      "matches": true
+    },
+    {
+      "path": "main.css",
+      "expected": "a48bfa018bdb97c62da5f1e82e6868373a64374004f40aee6e12dcbfd1cc8c90",
+      "actual": "a48bfa018bdb97c62da5f1e82e6868373a64374004f40aee6e12dcbfd1cc8c90",
+      "matches": true
+    },
+    {
+      "path": "favicon.svg",
+      "expected": "95a5a1b4a7f74b683e11655f73fece2a7920dfb0615859cad802513f9acf69c5",
+      "actual": "95a5a1b4a7f74b683e11655f73fece2a7920dfb0615859cad802513f9acf69c5",
+      "matches": true
+    },
+    {
+      "path": "index.html",
+      "expected": "8a35d26db18d0df5074dda0d17b75b5b7c6347c5e75ea77c6dc1431925f28486",
+      "actual": "8a35d26db18d0df5074dda0d17b75b5b7c6347c5e75ea77c6dc1431925f28486",
+      "matches": true
+    }
+  ]
+}

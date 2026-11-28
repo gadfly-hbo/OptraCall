@@ -1,0 +1,6 @@
+{
+  "src/host/ui/useCaseActionDraft.ts": "6733c7b4ca34f11d564812301f01989b33d59dcf1c01e97103ffae2f46348378",
+  "src/host/ui/case-action-draft.ts": "b1dae4e8a0ba136dbda2380c8aa3acd46d996173679f252ae3395b68c0621f18",
+  "tests/case-action-draft.test.ts": "c6fd50f4787ffe78192ed4fd4e27f8eeb640c9b7dc4849205ee46ec9d545bed9",
+  "tests/case-action-draft-recovery-ui.test.ts": "e795365280aadc76d9299280a02ff569e6521e82bcf4b2f4d691ff802149e6e2"
+}

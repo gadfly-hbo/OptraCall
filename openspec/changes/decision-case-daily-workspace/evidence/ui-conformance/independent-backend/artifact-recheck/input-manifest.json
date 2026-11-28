@@ -1,0 +1,17 @@
+{
+  "createdAt": "2026-11-28T01:18:12.363853+00:00",
+  "files": [
+    {
+      "path": "src/host/ui/DailyArtifactPreview.tsx",
+      "sha256": "e13ab5eebd2ee4b130e10272ffce63cc04d5b864ead30f559eba4c764f1633fb"
+    },
+    {
+      "path": "src/host/ui/runtime-client.ts",
+      "sha256": "62cbe1cbf00f0b9cbcfd468aee4635ba6f674061466744bf89200ba5d2d42657"
+    },
+    {
+      "path": "tests/daily-artifact-preview-ui.test.ts",
+      "sha256": "a0d075a6ab5fd6db0b9f90362a2b7ce7234fdc92211018b8552429208caab466"
+    }
+  ]
+}

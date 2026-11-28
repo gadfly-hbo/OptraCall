@@ -1,0 +1,135 @@
+{
+  "runtime": {
+    "instanceId": "5b8dc9fa-1b23-45fe-9fdd-0e004b23832e",
+    "pid": 276337,
+    "codeRoot": "/workspace/OptraCall-issue149-ui-conformance",
+    "version": "0.1.0-mvp.4",
+    "commit": "5dd59909227ab46f3d989ade8b2847e077636855",
+    "tree": "1078a6e2359a29e82631ab59f56a8d6dd9492d73",
+    "builtAt": "2026-11-28T02:05:43.009Z",
+    "dirty": true
+  },
+  "sourceManifestHash": "2f8ee75d4da2c5aca3240e9b26abc4ab7c6a5f798ae6ea650def9195db436f16",
+  "fixture": "synthetic-only; actual Host and official Pi with one local synthetic Provider Teach run; no real model/provider/business data",
+  "shots": [
+    {
+      "label": "12-choice-dialog-1440",
+      "url": "http://127.0.0.1:43150/",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "capturedAt": "2026-11-28T02:10:15.190Z"
+    },
+    {
+      "label": "13-choice-dialog-390",
+      "url": "http://127.0.0.1:43150/",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "capturedAt": "2026-11-28T02:10:15.282Z"
+    },
+    {
+      "label": "14-feedback-dialog-1440",
+      "url": "http://127.0.0.1:43150/",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "capturedAt": "2026-11-28T02:10:15.685Z"
+    },
+    {
+      "label": "15-feedback-dialog-390",
+      "url": "http://127.0.0.1:43150/",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "capturedAt": "2026-11-28T02:10:15.786Z"
+    },
+    {
+      "label": "16-artifacts-metric-1440",
+      "url": "http://127.0.0.1:43150/",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "capturedAt": "2026-11-28T02:10:16.016Z"
+    },
+    {
+      "label": "17-source-original-1440",
+      "url": "http://127.0.0.1:43150/",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "capturedAt": "2026-11-28T02:10:16.152Z"
+    },
+    {
+      "label": "18-reviewed-current-1440",
+      "url": "http://127.0.0.1:43150/",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "capturedAt": "2026-11-28T02:10:16.445Z"
+    },
+    {
+      "label": "19-reviewed-current-1024",
+      "url": "http://127.0.0.1:43150/",
+      "viewport": {
+        "width": 1024,
+        "height": 900
+      },
+      "capturedAt": "2026-11-28T02:10:16.560Z"
+    },
+    {
+      "label": "20-case-dark-1440",
+      "url": "http://127.0.0.1:43150/",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "capturedAt": "2026-11-28T02:10:16.732Z"
+    },
+    {
+      "label": "21-case-projects-dark-1440",
+      "url": "http://127.0.0.1:43150/",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "capturedAt": "2026-11-28T02:10:16.922Z"
+    },
+    {
+      "label": "22-home-dark-1440",
+      "url": "http://127.0.0.1:43150/",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "capturedAt": "2026-11-28T02:10:17.135Z"
+    },
+    {
+      "label": "23-case-prepare-1440",
+      "url": "http://127.0.0.1:43150/",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "capturedAt": "2026-11-28T02:10:17.378Z"
+    },
+    {
+      "label": "24-case-prepare-390",
+      "url": "http://127.0.0.1:43150/",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "capturedAt": "2026-11-28T02:10:17.464Z"
+    }
+  ],
+  "errors": [],
+  "boundary": "Actual Host/product UI; synthetic persisted data; no model calls or business creation/choice/feedback writes. Preparation and modal draft persistence uses original product paths."
+}

@@ -1,0 +1,12 @@
+✔ FR01-REPRO: /api/workspace/create-case refuses candidate goal with alreadyAdopted:true, missing goal/version, and strategy not in version (3377.107227ms)
+✔ FR02-REPRO: partial receipt A cannot bind B; unrelated case_note cannot replay; concurrent CAS has one winner; cross-owner fragment refused (61.514228ms)
+✔ FR03-REPRO: Board saveFeedback with respondsToRequest reopens cleanly (schema v6); forged caseStoreId/authorizationId rejected (65.453945ms)
+✔ FR05-R3-REPRO: queued saveIssueEdge and saveDecisionRequest cancelled before mutate gate releases commit ZERO events (30.130093ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5365.256544

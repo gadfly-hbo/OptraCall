@@ -1,0 +1,126 @@
+{
+  "recordedAt": "2026-11-28T02:16:00.843723+00:00",
+  "reviewer": "/root/ui149_correction_backend_review",
+  "verdict": "LIMITED PASS: candidate-g optional feedback return-focus propagation and its affected source/form/consumer paths. Actual independent UI f SPA Esc-to-BODY regression is closed by the same three-entry probe on g. Not overall frozen UI or Issue149 acceptance.",
+  "candidate": {
+    "name": "g",
+    "commit": "5dd59909227ab46f3d989ade8b2847e077636855",
+    "completeManifestFileSha256": "d38d54e580de9d59e64021599b3ab4ebb2cc65701bb829737b267d764883f386",
+    "completeManifestFileCount": 2601,
+    "sourceManifestHash": "2f8ee75d4da2c5aca3240e9b26abc4ab7c6a5f798ae6ea650def9195db436f16",
+    "runtime": {
+      "instanceId": "5b8dc9fa-1b23-45fe-9fdd-0e004b23832e",
+      "pid": 276337,
+      "codeRoot": "/workspace/OptraCall-issue149-ui-conformance",
+      "version": "0.1.0-mvp.4",
+      "commit": "5dd59909227ab46f3d989ade8b2847e077636855",
+      "tree": "1078a6e2359a29e82631ab59f56a8d6dd9492d73",
+      "builtAt": "2026-11-28T02:05:43.009Z",
+      "dirty": true
+    },
+    "reviewedSourceManifest": "reviewed-source-manifest.json",
+    "reviewedEntries": 44,
+    "drift": []
+  },
+  "scope": {
+    "readOnly": true,
+    "sourceFormalTestSpecGitIssueWrites": false,
+    "delta": "Three production files only add optional returnFocusId plumbing from current feedback action through loading/selection/form/saved states to unchanged shared CaseDialog. Original Board undefined target keeps its captured trigger behavior. Browser regression strengthened to true SPA three entries, direct-child source summary and resize sequence.",
+    "sourceProof": "consumer-review.json",
+    "diffs": [
+      "CaseIssuePanel.tsx.diff",
+      "CaseFeedbackDialog.tsx.diff",
+      "DecisionBoardPage.tsx.diff"
+    ],
+    "priorBackendScope": "../final-f/review.json",
+    "priorFinalFSha256": "523854cb61c04039aa0b3858b4c5577613439ec5fbc4c50f29fb121d7d458d82",
+    "priorReportUnchanged": true,
+    "carryForward": "Exactly40 of prior44 source/test entries remain byte-identical; three source focus-only deltas and one strengthened browser-test delta are separately checked. Prior bounded backend/preparation/compatibility/draft results remain historical evidence; this delta does not claim a fresh full backend run."
+  },
+  "validation": [
+    {
+      "runner": "this independent backend reviewer",
+      "kind": "synthetic actual form/wrapper regression",
+      "pass": 5,
+      "fail": 0,
+      "log": "form-regression.log",
+      "coverage": "Original no-date long UNKNOWN exact operation/body retry, new compact null/date/scope/exact request, mismatched context, read-only cancel and original authorization/baseline."
+    },
+    {
+      "runner": "independent child prep_scope_readonly",
+      "kind": "synthetic consumer propagation",
+      "pass": 4,
+      "fail": 0,
+      "log": "consumer-probes-recheck.log",
+      "report": "consumer-review.json",
+      "coverage": "Loading/error/empty/closed/action selection; compact/restricted/legacy/UNKNOWN; saved receipt without second POST; ordinary Board absent-target behavior."
+    },
+    {
+      "runner": "independent UI reviewer, evidence inspected by backend reviewer",
+      "kind": "actual g App/Host synthetic fixture",
+      "pass": 3,
+      "fail": 0,
+      "receipt": "external-evidence/independent-g-feedback-focus-repro.json",
+      "priorActualFailure": "external-evidence/independent-f-feedback-focus-repro.json",
+      "finding": "All three true SPA entries return immediately and after settle to the same current feedback BUTTON; f attempts2/3 remained BODY. errors[] and writes[]."
+    },
+    {
+      "runner": "root, evidence inspected by backend reviewer",
+      "kind": "actual g App/Host synthetic fixture",
+      "pass": 6,
+      "fail": 0,
+      "receipt": "external-evidence/root-g-navigation-receipt.json",
+      "finding": "Choose and observe each three SPA entries; exact original Case/issue/request, observe source expand/close and viewport sequence1024/390/1440 before Esc, correct focus and unchanged pending requests. errors[] and businessWrites[].",
+      "limit": "Viewport transitions do not constitute a separate Esc assertion at each viewport or full screenshot acceptance."
+    },
+    {
+      "runner": "this independent backend reviewer",
+      "kind": "actual shared Host GET only",
+      "report": "runtime-get-review.json",
+      "finding": "Runtime identity matches browser evidence; original request/revision/case/issue/authorization/base/round/time and explicit project waiting projection unchanged from f; repeated GET stable."
+    }
+  ],
+  "retainedFailures": [
+    {
+      "classification": "actual product regression, fixed in g within tested path",
+      "evidence": "external-evidence/independent-f-feedback-focus-repro.json",
+      "detail": "f second/third true SPA feedback close left BODY focused. Earlier f root four-pass full-page-reset browser result did not cover this path and is retained as historical bounded evidence."
+    },
+    {
+      "classification": "root browser test locator error, not focus RED",
+      "evidence": "initial-root-spa-red-classification.json",
+      "receipt": "external-evidence/root-f-spa-locator-failure.json",
+      "detail": "Nested summary locator matched three nodes before observation Escape assertion. Root corrected only locator to direct child; original attempt remains."
+    },
+    {
+      "classification": "independent synthetic probe locator error",
+      "evidence": "consumer-probes.log",
+      "detail": "Initial2PASS/2FAIL used exact CaseDialog function name while esbuild created CaseDialog2. Only isolated test locator corrected; unchanged production rerun4PASS."
+    },
+    {
+      "classification": "actual generic-hook limitation still open outside verified keyed consumer paths",
+      "evidence": "../modal-controller/b3/generic-owner-risk.log",
+      "report": "../modal-controller/b3/delta-review.json",
+      "detail": "Same hook instance closed+dirty ownerA to open ownerB can read shared readOnly ref in old cleanup. Current IssueWork/FeedbackForm keyed remount probes pass; g changes no hook/owner logic. Do not generalize this limited PASS to arbitrary in-place owner swaps."
+    },
+    {
+      "classification": "earlier B1/B2/B3 actual failures and fixture/startup failures retained",
+      "evidence": "../final-f/review.json",
+      "detail": "All prior original failures, corrected reruns and bounded findings remain in publication set; no history rewritten."
+    }
+  ],
+  "fourPrinciples": {
+    "HostEnvironment": "No changes to storage/schema/permissions/CAS/UNKNOWN/op identity/authorization or professional interpretation. Only explicit DOM focus target is passed.",
+    "AgentAutonomy": "No new agent execution order, business gate or user-response assumption.",
+    "PiReuse": "Existing CaseDialog and original FeedbackDialog/BoardDialog reused; original Board default behavior retained.",
+    "ReduceOperations": "Esc returns to current relevant action after repeat SPA navigation; no new step, completion marking or business write."
+  },
+  "limits": [
+    "Full npm run check on fixed g remains root-owned and running at this report; its final status is not asserted here. e/f cancelled checks and earlier startup failures remain preserved.",
+    "Independent UI screenshot acceptance, responsive layout, all keyboard routes and explicit pre-PR user confirmation remain parent/frozen audit responsibilities. No overall Issue149 PASS or PR approval.",
+    "Actual Host contains synthetic data only. This reviewer used GET only on sharedHost; named browser runners opened/cancelled without business/model writes; draft persistence was permitted to them. No real provider/business/device adoption claim.",
+    "Behavioral coverage of large components remains limited to described paths. Manifest equality is identity evidence, not universal correctness."
+  ],
+  "evidenceIdentity": "external-evidence-provenance.json",
+  "publicationList": "../evidence-publish-list.json"
+}

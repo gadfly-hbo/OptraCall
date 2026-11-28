@@ -1,0 +1,23 @@
+{
+  "candidate": "be1fd36ad449d89d2fc21655ccbbb61cf8b6bdbf",
+  "root": "/workspace/OptraCall-issue149-final/.local/pm-final/backend/lifecycle-jXHMLl",
+  "currentLifecycle": "archived",
+  "originalExactLifecycle": "active",
+  "preexistingRequest": "e30c42bb-6d5d-4a13-ab86-bb68395a3b54",
+  "createdAfterArchive": "a7e65d86-3ff6-4911-86d6-ac8c413ce9c4",
+  "statuses": [
+    {
+      "requestId": "e30c42bb-6d5d-4a13-ab86-bb68395a3b54",
+      "status": "open"
+    },
+    {
+      "requestId": "a7e65d86-3ff6-4911-86d6-ac8c413ce9c4",
+      "status": "open"
+    }
+  ],
+  "pending": [
+    "a7e65d86-3ff6-4911-86d6-ac8c413ce9c4",
+    "e30c42bb-6d5d-4a13-ab86-bb68395a3b54"
+  ],
+  "originalChoiceErrorEvenAllowHistorical": "case_decision_archived"
+}

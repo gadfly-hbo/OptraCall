@@ -1,0 +1,12 @@
+✔ g-focus independent: loading/error/empty/closed/multiple-entry and selected form carry the same caller returnFocusId (115.298528ms)
+✔ g-focus independent: compact, read-restricted, legacy and UNKNOWN forms forward through real FeedbackDialog and BoardDialog (19.664587ms)
+✔ g-focus independent: already-saved receipt branch retains return target without a second business POST (5.529259ms)
+✔ g-focus independent: ordinary Board without a returnFocusId leaves original CaseDialog captured-trigger behavior selected (3.953221ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 372.891378

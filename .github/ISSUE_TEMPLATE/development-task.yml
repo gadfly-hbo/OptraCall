@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        按[工程规范的外发流程](https://github.com/gadfly-hbo/OptraCall/blob/main/docs/engineering-workflow.md#github-开发任务外发与交付)在本单留言领取并向 PM Agent 回执。请使用可公开的说明、样例和仓库链接。交付项仅列工程工作，设备更新和运行验收由用户自行安排。
+        按[工程规范的外发流程](https://github.com/gadfly-hbo/OptraCall/blob/main/docs/engineering-workflow.md#github-开发任务外发与交付)在本单留言领取并向 PM Agent 回执。请使用可公开的说明、样例和仓库链接。交付项仅列工程工作，设备更新和运行验收由用户自行安排。涉及 UI 的交付须执行[开 PR 前真实产品截图确认](https://github.com/gadfly-hbo/OptraCall/blob/main/docs/engineering-workflow.md#冻结基准逐项复核与-pr-前截图确认)；领取方可按授权先提交和推送任务分支。
   - type: textarea
     id: scope
     attributes:
@@ -17,13 +17,13 @@ body:
     id: inputs
     attributes:
       label: 基线与设计依据
-      description: 填写基线 SHA。新产品或新功能链接已推送的确认版 spec、适用的 Demo 及其 SHA。试用修正附核实后的复现和适用设计依据。
+      description: 填写基线 SHA，链接冻结的 spec、任务清单、适用的 Demo 及各自提交或摘要。试用修正附核实后的复现和适用设计依据。
     validations:
       required: true
   - type: textarea
     id: acceptance
     attributes:
       label: 验收与回执
-      description: 列出真实入口、预期结果、重要负例和交付物。领取方在本单回复分支、完整 SHA 和验证证据，交回 PM Agent 审核。
+      description: 列出真实入口、预期结果、重要负例和交付物；独立复核逐项核对冻结 Demo、spec、任务清单，提供验收矩阵。涉及 UI 时，PM 开 PR 前展示该候选真实产品截图并取得用户明确确认，含 draft PR；无 UI 影响须说明依据。领取方回执分支、完整 SHA、运行与截图证据、确认状态，交回 PM Agent 审核。
     validations:
       required: true

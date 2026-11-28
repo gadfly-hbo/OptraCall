@@ -1,0 +1,23 @@
+✔ independent original FeedbackDialog: fixed explicit request rejects a different restored context and permits cancel (145.922009ms)
+✔ independent original FeedbackDialog: read-only draft disables saving without locking cancellation (3.920713ms)
+✔ independent original FeedbackDialog: exact request uses original authorization and baseline; moved baseline blocks (8.879306ms)
+✔ independent feedback owner: late accepted A response cannot close or replace newly mounted request B (125.312069ms)
+✔ independent feedback owner: mismatched operation/task receipts never acknowledge or clear original UNKNOWN (18.791436ms)
+✔ D14: writable actions are the exact issue/Board/active-project intersection, with no first request match (126.028093ms)
+✔ D14: an explicitly opened request chooses its exact action and request rather than the first available action (25.658646ms)
+✔ D14: no writable action or a closed Case offers the original source without inventing observations (8.238747ms)
+✔ D14/DW13: cancel and full component recreation retain the original feedback input and save intention (11.299183ms)
+✔ D14/DW09: uncertain feedback saves query the exact original operation and preserve its ID across reopen and explicit retry (19.699487ms)
+✔ D14: querying an already-saved feedback acknowledges that revision without posting another one (11.969936ms)
+✔ D14: a changed authorization or archived project is rechecked immediately before any feedback write (12.311253ms)
+✔ D14: leaving the feedback owner during source recheck prevents a late business write (4.041462ms)
+✔ D14/DW09: two explicitly clicked requests for the same action retain separate inputs and exact request identities (7.263244ms)
+✔ D14: an untouched unavailable draft remains read-only but can cancel without a save (4.531406ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 414.161939

@@ -1,0 +1,114 @@
+{
+  "text": "跳到主内容\nOptraCall\n持续做出更好的决策\n当\n当前工作区\nCase 与项目工作空间\n新建项目\n主导航\n⌄\n\n日常工作\n\n工作台首页\nDecision Case\n基础建设总览\n›\n战略选择\n目标管理\n语义资产\n分析资产\n项目空间 (5)\n⌄\n⌄\n门店共用资料\n＋\n⋯\n尚无任务\n›\n季度资料整理\n＋\n⋯\n›\n职业访谈与小试\n＋\n⋯\n›\n会员数据口径校准\n＋\n⋯\n›\n华东会员增长实验\n＋\n⋯\n已归档项目 (1)\n›\n设置\n已保存本机配置\n中／EN\nDecision Case · Case 详情\n分析\n决策\n搜索工作区\n/\n帮助\nCase 总览\n全部项目\n← 返回 Case 总览\n\n▣ DECISION CASE\n\n改善华东会员复购\n分析中\nG\n60天会员复购率达到 23%\nv1\nS\n先验证缺货治理\nv1\n查看目标原记录\nCase 管理与状态\n当前工作\n项目与任务3\n成果与依据\n历史\nCase 内事项 3\n＋\n列表\n树状图\n\n沿已标注关系看事项承接。\n\n门店缺货原因\n第 1 轮 · 行动已授权\n等待行动反馈\n缺货核查结果为本轮扩围取舍提供依据。\n复购口径校准\n第 1 轮 · 已完成复盘\n复盘已保存，目标结果另核\n先有可比较的复购口径，才能讨论是否扩围。\n扩大试点范围\n第 2 轮 · 等待本轮取舍\n本轮尚未作新选择\n复购口径校准 → 扩大试点范围：先有可比较的复购口径，才能讨论是否扩围。\n门店缺货原因 → 扩大试点范围：缺货核查结果为本轮扩围取舍提供依据。\n\n箭头表示已记录的承接方向，可并行推进。\n\n管理事项关联\n待回应请求（1）\n新增事项\n当前事项\n／\n第 2 轮\n等待本轮取舍\n扩大试点范围\n回录反馈\n记录取舍\n\n记录本轮扩围取舍\n\n◇ 本轮概览\n按已保存记录呈现 · 可查看来源\n已明确\n上一轮已保存记录：已记录取舍：试行 · 先在现有三店核对，保持样本范围。；本轮复盘判断尚未记录或暂不可读取。\n正在推进\n本轮明确请求：记录本轮扩围取舍；尚未记录回应这条请求的新取舍。\n接下来\n由林予安回应原请求。\n事项进展与目标结果分别记录；行动完成不代表目标已达成。查看本轮原记录\nϟ\nCase Agent\n只围绕「扩大试点范围」继续\n收起协作\n放大对话\n想讨论当前事项的哪项取舍？\n会话模型 · UI 验收本地合成 Provider\n发送\n本轮记录与交接\n历次取舍与实际反馈\n关联项目\n请选择项目\n华东会员增长实验\n会员数据口径校准\n门店共用资料\n回关联项目协作\n准备 Plan Task\n准备 Teach Task\n交接与依据\n记录本次取舍\n授权本次行动\nCase 目标、项目工作与管理记录",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "overflow": false,
+  "elements": [
+    {
+      "tag": "ASIDE",
+      "id": "sidebar",
+      "class": "sidebar",
+      "x": 0,
+      "y": 0,
+      "w": 180,
+      "h": 1000,
+      "font": "13px",
+      "padding": "24px 13px 12px",
+      "grid": "none",
+      "overflowY": "visible"
+    },
+    {
+      "tag": "HEADER",
+      "id": "",
+      "class": "topbar",
+      "x": 180,
+      "y": 0,
+      "w": 1260,
+      "h": 58,
+      "font": "13px",
+      "padding": "8px 30px",
+      "grid": "none",
+      "overflowY": "visible"
+    },
+    {
+      "tag": "NAV",
+      "id": "",
+      "class": "decision-case-tabs",
+      "x": 180,
+      "y": 58,
+      "w": 1260,
+      "h": 68,
+      "font": "13px",
+      "padding": "12px 32px",
+      "grid": "none",
+      "overflowY": "visible"
+    },
+    {
+      "tag": "HEADER",
+      "id": "",
+      "class": "daily-case-header",
+      "x": 180,
+      "y": 126,
+      "w": 1260,
+      "h": 155.234375,
+      "font": "13px",
+      "padding": "26px 32px 12px",
+      "grid": "none",
+      "overflowY": "visible"
+    },
+    {
+      "tag": "DIV",
+      "id": "",
+      "class": "case-current-layout",
+      "x": 180,
+      "y": 339.234375,
+      "w": 1260,
+      "h": 660.765625,
+      "font": "13px",
+      "padding": "0px",
+      "grid": "240px 1020px",
+      "overflowY": "hidden"
+    },
+    {
+      "tag": "ASIDE",
+      "id": "",
+      "class": "case-issue-sidebar",
+      "x": 196,
+      "y": 365.234375,
+      "w": 207,
+      "h": 723.953125,
+      "font": "13px",
+      "padding": "0px",
+      "grid": "none",
+      "overflowY": "visible"
+    },
+    {
+      "tag": "DIV",
+      "id": "",
+      "class": "case-current-main",
+      "x": 420,
+      "y": 339.234375,
+      "w": 1020,
+      "h": 660.765625,
+      "font": "13px",
+      "padding": "26px 33px 24px",
+      "grid": "none",
+      "overflowY": "auto"
+    },
+    {
+      "tag": "SECTION",
+      "id": "",
+      "class": "case-current-summary",
+      "x": 453,
+      "y": 495.703125,
+      "w": 939,
+      "h": 248.28125,
+      "font": "13px",
+      "padding": "19px 25px 17px",
+      "grid": "none",
+      "overflowY": "visible"
+    }
+  ]
+}

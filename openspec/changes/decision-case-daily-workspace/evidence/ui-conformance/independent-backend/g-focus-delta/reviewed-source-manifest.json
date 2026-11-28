@@ -1,0 +1,363 @@
+{
+  "checkedAt": "2026-11-28T02:16:00.843723+00:00",
+  "candidateCompleteManifestFileSha256": "d38d54e580de9d59e64021599b3ab4ebb2cc65701bb829737b267d764883f386",
+  "candidateCompleteManifestFileCount": 2601,
+  "priorReviewedEntryCount": 44,
+  "count": 44,
+  "files": [
+    {
+      "path": "extensions/business-plugins/decision-board/api/routes.ts",
+      "candidateFSha256": "bb211f5104a3d21cc1b8ce9169a69064818b8f774d24d1aabab8da42509c48f4",
+      "candidateGSha256": "bb211f5104a3d21cc1b8ce9169a69064818b8f774d24d1aabab8da42509c48f4",
+      "actualSha256": "bb211f5104a3d21cc1b8ce9169a69064818b8f774d24d1aabab8da42509c48f4",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "extensions/business-plugins/decision-board/storage/store.ts",
+      "candidateFSha256": "bb660b03ac1a6f4ae8da60a6ed24aa3619e50455ab97c199975c4a848aeedd00",
+      "candidateGSha256": "bb660b03ac1a6f4ae8da60a6ed24aa3619e50455ab97c199975c4a848aeedd00",
+      "actualSha256": "bb660b03ac1a6f4ae8da60a6ed24aa3619e50455ab97c199975c4a848aeedd00",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "extensions/business-plugins/decision-board/types.ts",
+      "candidateFSha256": "14d445d76560bae4edd3efc60dae9698082967a4cb934a48b8f8a0a7a9d354ad",
+      "candidateGSha256": "14d445d76560bae4edd3efc60dae9698082967a4cb934a48b8f8a0a7a9d354ad",
+      "actualSha256": "14d445d76560bae4edd3efc60dae9698082967a4cb934a48b8f8a0a7a9d354ad",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "extensions/business-plugins/decision-board/ui/ActionAuthorityHistory.tsx",
+      "candidateFSha256": "f2f66032d2fe804f8f39a5e981e07d0f760bb69a4fadba2a407c4f11031b68ad",
+      "candidateGSha256": "f2f66032d2fe804f8f39a5e981e07d0f760bb69a4fadba2a407c4f11031b68ad",
+      "actualSha256": "f2f66032d2fe804f8f39a5e981e07d0f760bb69a4fadba2a407c4f11031b68ad",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "extensions/business-plugins/decision-board/ui/DecisionBoardPage.tsx",
+      "candidateFSha256": "c4834fc4d282ffb15700d479580bf4046dbbe53743204b1d9be083762bdd87a5",
+      "candidateGSha256": "b549c0209b31c1d1e4f315baa39d9bbfa8b28a127e2fe81ebac2fb553e662e63",
+      "actualSha256": "b549c0209b31c1d1e4f315baa39d9bbfa8b28a127e2fe81ebac2fb553e662e63",
+      "changedFromF": true,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "extensions/business-plugins/decision-board/ui/decision-board-client.ts",
+      "candidateFSha256": "655d1d5e6732d600fbed3ec481b15ced4ab53350d741b44f6ac27bc734f48192",
+      "candidateGSha256": "655d1d5e6732d600fbed3ec481b15ced4ab53350d741b44f6ac27bc734f48192",
+      "actualSha256": "655d1d5e6732d600fbed3ec481b15ced4ab53350d741b44f6ac27bc734f48192",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/case-decision-service.ts",
+      "candidateFSha256": "6eb882a44ae08ba89a2ade4ca4c7f3a8461443946b12aae4a6d8bab8d5b2201a",
+      "candidateGSha256": "6eb882a44ae08ba89a2ade4ca4c7f3a8461443946b12aae4a6d8bab8d5b2201a",
+      "actualSha256": "6eb882a44ae08ba89a2ade4ca4c7f3a8461443946b12aae4a6d8bab8d5b2201a",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/case-decision-types.ts",
+      "candidateFSha256": "8c53d30a8e172b51e2a26ad689221d7f8b20b07b9c68cb6080dc7710b2cacfd8",
+      "candidateGSha256": "8c53d30a8e172b51e2a26ad689221d7f8b20b07b9c68cb6080dc7710b2cacfd8",
+      "actualSha256": "8c53d30a8e172b51e2a26ad689221d7f8b20b07b9c68cb6080dc7710b2cacfd8",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/case-decision-validation.ts",
+      "candidateFSha256": "e67e930759f336f78ba807a3572058730c0ad1ac4552788c932dbfbc297a8033",
+      "candidateGSha256": "e67e930759f336f78ba807a3572058730c0ad1ac4552788c932dbfbc297a8033",
+      "actualSha256": "e67e930759f336f78ba807a3572058730c0ad1ac4552788c932dbfbc297a8033",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/case-issues.ts",
+      "candidateFSha256": "395eb271097626860c8f43667a2cf7caea65754eda2f706b51ebc1b22b0e1b8f",
+      "candidateGSha256": "395eb271097626860c8f43667a2cf7caea65754eda2f706b51ebc1b22b0e1b8f",
+      "actualSha256": "395eb271097626860c8f43667a2cf7caea65754eda2f706b51ebc1b22b0e1b8f",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/case-store.ts",
+      "candidateFSha256": "6fad3d3599ac3426f782f45fb216f635443f6924fbf717f99bf8d3e7bac38b3e",
+      "candidateGSha256": "6fad3d3599ac3426f782f45fb216f635443f6924fbf717f99bf8d3e7bac38b3e",
+      "actualSha256": "6fad3d3599ac3426f782f45fb216f635443f6924fbf717f99bf8d3e7bac38b3e",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/home-pending.ts",
+      "candidateFSha256": "1ae5414d896cb3818989f5c2c84e39517243d462a80afc53eaf2b93806e63e47",
+      "candidateGSha256": "1ae5414d896cb3818989f5c2c84e39517243d462a80afc53eaf2b93806e63e47",
+      "actualSha256": "1ae5414d896cb3818989f5c2c84e39517243d462a80afc53eaf2b93806e63e47",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/ui/App.tsx",
+      "candidateFSha256": "fc864a9e071ed2d6878541e0ccdd4077040b16013b70953d7e9ecd0b79d9193e",
+      "candidateGSha256": "fc864a9e071ed2d6878541e0ccdd4077040b16013b70953d7e9ecd0b79d9193e",
+      "actualSha256": "fc864a9e071ed2d6878541e0ccdd4077040b16013b70953d7e9ecd0b79d9193e",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/ui/CaseActionDraftRecovery.tsx",
+      "candidateFSha256": "24898c70065f0d89ab14fa056bdd29fca84007dc1813bd73827a81fc4edab3a7",
+      "candidateGSha256": "24898c70065f0d89ab14fa056bdd29fca84007dc1813bd73827a81fc4edab3a7",
+      "actualSha256": "24898c70065f0d89ab14fa056bdd29fca84007dc1813bd73827a81fc4edab3a7",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/ui/CaseBoard.tsx",
+      "candidateFSha256": "07bffe1ba1f337559b63b3d911f58a3265d891a8c72590c847dba7ce6658587c",
+      "candidateGSha256": "07bffe1ba1f337559b63b3d911f58a3265d891a8c72590c847dba7ce6658587c",
+      "actualSha256": "07bffe1ba1f337559b63b3d911f58a3265d891a8c72590c847dba7ce6658587c",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/ui/CaseDecisionsPanel.tsx",
+      "candidateFSha256": "6b2955e583afb5b68c930b8cb080f93e8234ff5565ca860adcd6c300167782ca",
+      "candidateGSha256": "6b2955e583afb5b68c930b8cb080f93e8234ff5565ca860adcd6c300167782ca",
+      "actualSha256": "6b2955e583afb5b68c930b8cb080f93e8234ff5565ca860adcd6c300167782ca",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/ui/CaseDialogs.tsx",
+      "candidateFSha256": "a2d97e73d8d6644a439115653ee7b48872a3ec1e743517a6486bc5fb35f66fb8",
+      "candidateGSha256": "a2d97e73d8d6644a439115653ee7b48872a3ec1e743517a6486bc5fb35f66fb8",
+      "actualSha256": "a2d97e73d8d6644a439115653ee7b48872a3ec1e743517a6486bc5fb35f66fb8",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/ui/CaseFeedbackDialog.tsx",
+      "candidateFSha256": "cc674caa5be6d702925b2e749e3df35bf75e0c0b25b78199dbd85085693e75a6",
+      "candidateGSha256": "3a05d214b5bb2b58ecd55b144ea92fad451e992bf84541f201c11dee74c00563",
+      "actualSha256": "3a05d214b5bb2b58ecd55b144ea92fad451e992bf84541f201c11dee74c00563",
+      "changedFromF": true,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/ui/CaseIssuePanel.tsx",
+      "candidateFSha256": "a1d9b0f8af37e723f662575c03591d7cdb70b5f5729de7b85c306b674e6e8adf",
+      "candidateGSha256": "94d39b160a24526da8028b6a016b97816b73fb82da5029f6a17f00ad51a08d5e",
+      "actualSha256": "94d39b160a24526da8028b6a016b97816b73fb82da5029f6a17f00ad51a08d5e",
+      "changedFromF": true,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/ui/CasePreparation.tsx",
+      "candidateFSha256": "af5018164c477806a0b50ec788840abdaf06512fd111a82d420718678606f759",
+      "candidateGSha256": "af5018164c477806a0b50ec788840abdaf06512fd111a82d420718678606f759",
+      "actualSha256": "af5018164c477806a0b50ec788840abdaf06512fd111a82d420718678606f759",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/ui/DailyArtifactPreview.tsx",
+      "candidateFSha256": "e13ab5eebd2ee4b130e10272ffce63cc04d5b864ead30f559eba4c764f1633fb",
+      "candidateGSha256": "e13ab5eebd2ee4b130e10272ffce63cc04d5b864ead30f559eba4c764f1633fb",
+      "actualSha256": "e13ab5eebd2ee4b130e10272ffce63cc04d5b864ead30f559eba4c764f1633fb",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/ui/DailyCaseCard.tsx",
+      "candidateFSha256": "8ce7528e5e19a2085f0eb505d818cc70c623d4b59f925bd926f98faac4072688",
+      "candidateGSha256": "8ce7528e5e19a2085f0eb505d818cc70c623d4b59f925bd926f98faac4072688",
+      "actualSha256": "8ce7528e5e19a2085f0eb505d818cc70c623d4b59f925bd926f98faac4072688",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/ui/DailyCaseHistory.tsx",
+      "candidateFSha256": "b0f1c784ef8047c4b190d83a5c1a8c784a6702be783ac26ff4e7f5daeebcda1d",
+      "candidateGSha256": "b0f1c784ef8047c4b190d83a5c1a8c784a6702be783ac26ff4e7f5daeebcda1d",
+      "actualSha256": "b0f1c784ef8047c4b190d83a5c1a8c784a6702be783ac26ff4e7f5daeebcda1d",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/ui/HomeDailyQuickPanel.tsx",
+      "candidateFSha256": "950501dff243f3c98bd57480071b5cdb5a4e7570054b8287a32ac9279207b014",
+      "candidateGSha256": "950501dff243f3c98bd57480071b5cdb5a4e7570054b8287a32ac9279207b014",
+      "actualSha256": "950501dff243f3c98bd57480071b5cdb5a4e7570054b8287a32ac9279207b014",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/ui/case-action-dialog.css",
+      "candidateFSha256": "a95bb062cb9ff754be76fcdfa272b3fcfb399dc121f8ed969d32020cea5f3edf",
+      "candidateGSha256": "a95bb062cb9ff754be76fcdfa272b3fcfb399dc121f8ed969d32020cea5f3edf",
+      "actualSha256": "a95bb062cb9ff754be76fcdfa272b3fcfb399dc121f8ed969d32020cea5f3edf",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/ui/case-action-draft.ts",
+      "candidateFSha256": "b1dae4e8a0ba136dbda2380c8aa3acd46d996173679f252ae3395b68c0621f18",
+      "candidateGSha256": "b1dae4e8a0ba136dbda2380c8aa3acd46d996173679f252ae3395b68c0621f18",
+      "actualSha256": "b1dae4e8a0ba136dbda2380c8aa3acd46d996173679f252ae3395b68c0621f18",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/ui/case-board-navigation-model.ts",
+      "candidateFSha256": "18b455a5157fe8d1fb5c1774d0e5a81916baceaa2c3c87889c2a4cf94017e0f6",
+      "candidateGSha256": "18b455a5157fe8d1fb5c1774d0e5a81916baceaa2c3c87889c2a4cf94017e0f6",
+      "actualSha256": "18b455a5157fe8d1fb5c1774d0e5a81916baceaa2c3c87889c2a4cf94017e0f6",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/ui/case-issue-progress.ts",
+      "candidateFSha256": "b89ac0fb8304d4a35cb1d3edfccb5da0b20dc0fc7a6f5e4fb361ece5a6d7fa92",
+      "candidateGSha256": "b89ac0fb8304d4a35cb1d3edfccb5da0b20dc0fc7a6f5e4fb361ece5a6d7fa92",
+      "actualSha256": "b89ac0fb8304d4a35cb1d3edfccb5da0b20dc0fc7a6f5e4fb361ece5a6d7fa92",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/ui/daily-case-current.css",
+      "candidateFSha256": "ab7864aabcc5cf5e6998b2ce8ff17b4c154ec8060bf462c6aec21d12a7fa264d",
+      "candidateGSha256": "ab7864aabcc5cf5e6998b2ce8ff17b4c154ec8060bf462c6aec21d12a7fa264d",
+      "actualSha256": "ab7864aabcc5cf5e6998b2ce8ff17b4c154ec8060bf462c6aec21d12a7fa264d",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/ui/runtime-client.ts",
+      "candidateFSha256": "62cbe1cbf00f0b9cbcfd468aee4635ba6f674061466744bf89200ba5d2d42657",
+      "candidateGSha256": "62cbe1cbf00f0b9cbcfd468aee4635ba6f674061466744bf89200ba5d2d42657",
+      "actualSha256": "62cbe1cbf00f0b9cbcfd468aee4635ba6f674061466744bf89200ba5d2d42657",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/ui/useCaseActionDraft.ts",
+      "candidateFSha256": "6733c7b4ca34f11d564812301f01989b33d59dcf1c01e97103ffae2f46348378",
+      "candidateGSha256": "6733c7b4ca34f11d564812301f01989b33d59dcf1c01e97103ffae2f46348378",
+      "actualSha256": "6733c7b4ca34f11d564812301f01989b33d59dcf1c01e97103ffae2f46348378",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "src/host/workspace-daily-routes.ts",
+      "candidateFSha256": "21015f8a6b5c595d22e8e5c4c0f2bb6fbd502c3316b628fa837cc6fb283ffad6",
+      "candidateGSha256": "21015f8a6b5c595d22e8e5c4c0f2bb6fbd502c3316b628fa837cc6fb283ffad6",
+      "actualSha256": "21015f8a6b5c595d22e8e5c4c0f2bb6fbd502c3316b628fa837cc6fb283ffad6",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "tests/browser-case-home-requests.mjs",
+      "candidateFSha256": "41f4485476e1089aeb2e023bb5787c331f363fc59cfaa6d1f2c0a08cc4f80b7b",
+      "candidateGSha256": "987eb7b1559c1570279f29ff2c130a7f4783b5b63425e85c34f7eed1ba3608bd",
+      "actualSha256": "987eb7b1559c1570279f29ff2c130a7f4783b5b63425e85c34f7eed1ba3608bd",
+      "changedFromF": true,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "tests/case-action-draft-recovery-ui.test.ts",
+      "candidateFSha256": "e795365280aadc76d9299280a02ff569e6521e82bcf4b2f4d691ff802149e6e2",
+      "candidateGSha256": "e795365280aadc76d9299280a02ff569e6521e82bcf4b2f4d691ff802149e6e2",
+      "actualSha256": "e795365280aadc76d9299280a02ff569e6521e82bcf4b2f4d691ff802149e6e2",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "tests/case-action-draft.test.ts",
+      "candidateFSha256": "c6fd50f4787ffe78192ed4fd4e27f8eeb640c9b7dc4849205ee46ec9d545bed9",
+      "candidateGSha256": "c6fd50f4787ffe78192ed4fd4e27f8eeb640c9b7dc4849205ee46ec9d545bed9",
+      "actualSha256": "c6fd50f4787ffe78192ed4fd4e27f8eeb640c9b7dc4849205ee46ec9d545bed9",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "tests/case-decision-store.test.ts",
+      "candidateFSha256": "8cb1c1710dbe17ca1c0f111cde51f2a60ff51a197bff2d66ac65bc7eac624e89",
+      "candidateGSha256": "8cb1c1710dbe17ca1c0f111cde51f2a60ff51a197bff2d66ac65bc7eac624e89",
+      "actualSha256": "8cb1c1710dbe17ca1c0f111cde51f2a60ff51a197bff2d66ac65bc7eac624e89",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "tests/case-feedback-dialog-ui.test.ts",
+      "candidateFSha256": "bdd15d1519aa5a1071b7235c5a49d368dace02b5edd18b51eea7b5a8d60ddb55",
+      "candidateGSha256": "bdd15d1519aa5a1071b7235c5a49d368dace02b5edd18b51eea7b5a8d60ddb55",
+      "actualSha256": "bdd15d1519aa5a1071b7235c5a49d368dace02b5edd18b51eea7b5a8d60ddb55",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "tests/case-feedback-presentation-ui.test.ts",
+      "candidateFSha256": "58bdaf8aebff7c90fed62e8d58627f9cbb6b1cfe394c02848710cd1b909cf9d8",
+      "candidateGSha256": "58bdaf8aebff7c90fed62e8d58627f9cbb6b1cfe394c02848710cd1b909cf9d8",
+      "actualSha256": "58bdaf8aebff7c90fed62e8d58627f9cbb6b1cfe394c02848710cd1b909cf9d8",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "tests/case-preparation-ui.test.ts",
+      "candidateFSha256": "372441a843163408754c68cb2903ca4f30a0c901bd7f7534836129193744e44f",
+      "candidateGSha256": "372441a843163408754c68cb2903ca4f30a0c901bd7f7534836129193744e44f",
+      "actualSha256": "372441a843163408754c68cb2903ca4f30a0c901bd7f7534836129193744e44f",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "tests/case-request-response-ui.test.ts",
+      "candidateFSha256": "f90942f34056bdbe36f4cf23be6e6ced8483d89cf6da9a87d57b8e5d3efb671d",
+      "candidateGSha256": "f90942f34056bdbe36f4cf23be6e6ced8483d89cf6da9a87d57b8e5d3efb671d",
+      "actualSha256": "f90942f34056bdbe36f4cf23be6e6ced8483d89cf6da9a87d57b8e5d3efb671d",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "tests/daily-artifact-preview-ui.test.ts",
+      "candidateFSha256": "a0d075a6ab5fd6db0b9f90362a2b7ce7234fdc92211018b8552429208caab466",
+      "candidateGSha256": "a0d075a6ab5fd6db0b9f90362a2b7ce7234fdc92211018b8552429208caab466",
+      "actualSha256": "a0d075a6ab5fd6db0b9f90362a2b7ce7234fdc92211018b8552429208caab466",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "tests/daily-case-history-ui.test.ts",
+      "candidateFSha256": "d6666c87976764f4a89da1ac2c2cb7725ccc5cf90e61ad355503b8edf963e567",
+      "candidateGSha256": "d6666c87976764f4a89da1ac2c2cb7725ccc5cf90e61ad355503b8edf963e567",
+      "actualSha256": "d6666c87976764f4a89da1ac2c2cb7725ccc5cf90e61ad355503b8edf963e567",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "tests/feedback-observation-contract.test.ts",
+      "candidateFSha256": "afb83d35022030a6d26e2efc5e70b28bfa22c559881256cd59a431ee57878e7f",
+      "candidateGSha256": "afb83d35022030a6d26e2efc5e70b28bfa22c559881256cd59a431ee57878e7f",
+      "actualSha256": "afb83d35022030a6d26e2efc5e70b28bfa22c559881256cd59a431ee57878e7f",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    },
+    {
+      "path": "tests/home-request-rounds.test.ts",
+      "candidateFSha256": "25da16602662851f530fc5654fe87d6123314ca79e83cbd0a8f2bf6bd648d5e7",
+      "candidateGSha256": "25da16602662851f530fc5654fe87d6123314ca79e83cbd0a8f2bf6bd648d5e7",
+      "actualSha256": "25da16602662851f530fc5654fe87d6123314ca79e83cbd0a8f2bf6bd648d5e7",
+      "changedFromF": false,
+      "scope": "Original final-f scoped review plus g optional focus propagation only; large components are not blanket reviewed."
+    }
+  ],
+  "drift": [],
+  "businessSourceChangeProof": "The three production deltas normalize byte-for-byte to f by removing returnFocusId only; see consumer-review.json and three saved diffs. Fourth changed entry is the strengthened browser test."
+}

@@ -1,6 +1,7 @@
 import type { IncomingMessage } from 'node:http';
 import { DecisionBoardFault, createDecisionBoardStore } from '../storage/store.ts';
 import type { ConfirmedConclusionRecord, BoardItemRecord, BoardItemView, BoardTaskRecord, BoardTaskView, ExtractionRecord, ExtractionStatus, FeedbackEffect, SaveFeedbackInput, TaskFeedbackRevision } from '../types.ts';
+import { isFeedbackObservationDate } from '../types.ts';
 
 export class BoardRouteError extends Error {
   readonly status: number;
@@ -54,7 +55,7 @@ const messages: Record<string, { status: number; message: string }> = {
   invalid_item_decision: { status: 409, message: '该建议已有决策，请刷新核对后再操作。' },
   task_requires_adoption: { status: 409, message: '只有已采纳的建议才能添加行动任务。' },
   invalid_text: { status: 400, message: '输入内容不完整、为空或超过长度限制。' },
-  invalid_feedback: { status: 400, message: '请明确是否按建议执行；评分可不填，填写时须为 1–5 的整数。' },
+  invalid_feedback: { status: 400, message: '请填写有效的观察日期与实际观察，或明确执行陈述；来源与范围最多300字，评分可不填，填写时须为1–5的整数。' },
   feedback_client_upgrade_required: { status: 409, message: '请刷新升级页面后保存反馈；旧页面缺少保存意图或当前修订身份，本次未写入。' },
   feedback_operation_conflict: { status: 409, message: '此保存意图已有不同内容，请先查询原操作并保留当前输入。' },
   feedback_revision_conflict: { status: 409, message: '反馈已有新修订，请对照最新内容后重新保存；当前输入应保留。' },
@@ -96,15 +97,29 @@ function feedbackInput(input: Record<string, unknown>): SaveFeedbackInput {
   const score = input.score === undefined ? null : input.score, effect = input.effect === undefined ? 'unknown' : input.effect;
   if (typeof input.operationId !== 'string' || !projectIdPattern.test(input.operationId)
     || (input.expectedLatestRevisionId !== null && (typeof input.expectedLatestRevisionId !== 'string' || !projectIdPattern.test(input.expectedLatestRevisionId)))
-    || typeof input.adopted !== 'boolean' || (score !== null && (typeof score !== 'number' || !Number.isSafeInteger(score) || score < 1 || score > 5))
+    || input.adopted !== null && typeof input.adopted !== 'boolean' || (score !== null && (typeof score !== 'number' || !Number.isSafeInteger(score) || score < 1 || score > 5))
     || typeof effect !== 'string' || !['unknown', 'positive', 'negative', 'none'].includes(effect)) throw new BoardRouteError(400, 'invalid_feedback', messages.invalid_feedback!.message);
   const content = (key: string) => {
     if (input[key] === undefined) return '';
     if (typeof input[key] !== 'string') throw new BoardRouteError(400, 'invalid_feedback', messages.invalid_feedback!.message);
     return input[key];
   };
+  let respondsToRequest: SaveFeedbackInput['respondsToRequest'];
+  if (input.respondsToRequest !== undefined) {
+    const r = input.respondsToRequest as Record<string, unknown> | null;
+    if (!r || typeof r !== 'object' || typeof r.requestId !== 'string' || !projectIdPattern.test(r.requestId) || typeof r.authorizationId !== 'string' || !projectIdPattern.test(r.authorizationId) || typeof r.revision !== 'number' || !Number.isSafeInteger(r.revision) || r.revision < 1) {
+      throw new BoardRouteError(400, 'invalid_feedback', messages.invalid_feedback!.message);
+    }
+    respondsToRequest = { requestId: r.requestId, revision: r.revision, authorizationId: r.authorizationId };
+  }
+  const outcome = content('outcome');
+  if (input.observationDate != null && !isFeedbackObservationDate(input.observationDate)
+    || input.adopted === null && (!isFeedbackObservationDate(input.observationDate) || !outcome.trim())
+    || input.sourceScope != null && (typeof input.sourceScope !== 'string' || input.sourceScope.length > 300 || input.sourceScope.includes('\0'))) throw new BoardRouteError(400, 'invalid_feedback', messages.invalid_feedback!.message);
   return { operationId: input.operationId, expectedLatestRevisionId: input.expectedLatestRevisionId, adopted: input.adopted,
-    outcome: content('outcome'), metricDelta: content('metricDelta'), review: content('review'), score, effect: effect as FeedbackEffect };
+    outcome, metricDelta: content('metricDelta'), review: content('review'), score, effect: effect as FeedbackEffect, ...(respondsToRequest ? { respondsToRequest } : {}),
+    ...(input.observationDate == null ? {} : { observationDate: input.observationDate as string }),
+    ...(input.sourceScope == null ? {} : { sourceScope: input.sourceScope as string }) };
 }
 
 /** Host-owned HTTP transport calls these handlers; the plugin never binds a port itself. */

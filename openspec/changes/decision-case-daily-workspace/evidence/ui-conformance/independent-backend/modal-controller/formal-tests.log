@@ -1,0 +1,27 @@
+✔ DW13/16: recovery readback is bound to its exact owner and backup ID; late previous-version responses never replace the new source (159.32191ms)
+✔ DW16: forbidden or misbound recovery reads remove source content and cannot be presented as the requested version (39.702635ms)
+✔ DW13: conflict replacement requires a successful preservation receipt before explicitly flushing my draft (10.348306ms)
+✔ DW13: action input and exact operation/request survive reopening without writing a business record (14.707956ms)
+✔ DW13: one flush drains edits arriving during a save before navigation can proceed (0.832179ms)
+✔ DW13: CAS conflict retains this input and never overwrites another editor (5.45707ms)
+✔ DW13: lost acknowledgement accepts only the same saved payload and exact owner (0.878911ms)
+✔ DW13: a late initial read cannot silently replace edits or overwrite an unseen saved draft (1.828831ms)
+✔ DW13: unavailable or misbound draft never becomes ready or writable (3.918871ms)
+✔ DW13: the modal hook registers the real navigation guard and preserves unsaved fields on conflict (177.153451ms)
+✔ DW13: delayed previous-owner reads cannot populate a different Case modal (3.841402ms)
+✔ DW13: an unopened unedited modal with unavailable draft storage does not block page navigation (3.361121ms)
+✔ DW13: 403 clears loaded content, retains only this session edits separately and prevents further writes (6.256948ms)
+✔ DW13: initial and lost-ack readback 403 clear unsafe defaults and mark the owner restricted (0.796358ms)
+✔ DW13: reviewed conflict is backed up before adopting its CAS baseline; explicit save keeps both versions (1.590545ms)
+✔ DW13: a failed backup cannot authorize overwrite, and another concurrent edit still fails CAS after backup (0.546434ms)
+✔ DW13: the real hook recovers a lost backup acknowledgement, then permits explicit save and reopening (50.843185ms)
+✔ DW13: the hook clears restricted remote fields and permits explicit local discard without a remote delete (9.46914ms)
+✔ DW13: discarding during an in-flight draft save never replays the old input over its accepted receipt (0.351292ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1179.099392

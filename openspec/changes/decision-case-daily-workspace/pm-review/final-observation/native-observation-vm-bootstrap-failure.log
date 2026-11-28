@@ -1,0 +1,9 @@
+file:///workspace/OptraCall-issue149-final/.local/pm-final/native-observation-vm.mjs:13
+ const file=ts.createSourceFile('fixture.ts',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS);let found;
+                                                                    ^
+
+TypeError: Cannot read properties of undefined (reading 'Latest')
+    at declaration (file:///workspace/OptraCall-issue149-final/.local/pm-final/native-observation-vm.mjs:13:69)
+    at file:///workspace/OptraCall-issue149-final/.local/pm-final/native-observation-vm.mjs:17:15
+
+Node.js v25.9.0

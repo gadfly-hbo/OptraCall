@@ -1,0 +1,11 @@
+{
+  "before": {
+    "reason": "独立终审草稿 <audit & literal> 不提交取舍",
+    "next": "独立终审下一步，不代表行动授权"
+  },
+  "after": {
+    "reason": "",
+    "next": ""
+  },
+  "restored": true
+}

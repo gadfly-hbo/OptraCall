@@ -1,0 +1,36 @@
+{
+  "text": "跳到主内容\nDecision Case · 全部项目\n帮助\nCase 总览\n全部项目\n\nPROJECTS · ALL WORKSPACES\n\n全部项目\n\n同一项目只出现一次。跨 Case 共用、独立工作和归档资料，都从这里找回。\n\n＋ 新建项目\n全部\n6\n独立\n2\n共享\n1\n归档\n1\n⌕\n刷新\n华东会员增长实验\n改善华东会员复购\n→\n待反馈\n林予安\n等待三店核查资料，再讨论是否扩围\n5\n会员数据口径校准\n改善华东会员复购\n→\n已完成\n周明\n确认完整60天观察窗口\n2\n职业访谈与小试\n探索下一步职业方向\n→\n进行中\n林予安\n补充两次访谈中的实际片段\n1\n季度资料整理\n独立项目 · 无关联 Case\n进行中\n许知微\n整理原始资料与索引\n1\n门店共用资料\n改善华东会员复购\n→\n探索下一步职业方向\n→\n未开始\n周明\n统一维护门店数据与资料约定\n0\n去年第四季度回顾\n独立项目 · 无关联 Case\n已归档\n许知微\n资料只读留存，恢复后可继续工作\n1\n\n显示 6 / 6 个项目 · “全部”包含归档；“独立”表示未关联 Case",
+  "viewport": {
+    "width": 390,
+    "height": 1000
+  },
+  "overflow": false,
+  "elements": [
+    {
+      "tag": "HEADER",
+      "id": "",
+      "class": "topbar",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 54,
+      "font": "13px",
+      "padding": "8px 12px",
+      "grid": "minmax(0px, 1fr) auto",
+      "overflowY": "visible"
+    },
+    {
+      "tag": "NAV",
+      "id": "",
+      "class": "decision-case-tabs",
+      "x": 0,
+      "y": 54,
+      "w": 390,
+      "h": 57,
+      "font": "13px",
+      "padding": "8px 16px",
+      "grid": "none",
+      "overflowY": "visible"
+    }
+  ]
+}

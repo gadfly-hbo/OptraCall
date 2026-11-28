@@ -1,0 +1,33 @@
+{
+  "recordedAt": "2026-11-28T00:57:05.232453+00:00",
+  "files": [
+    {
+      "path": "src/host/home-pending.ts",
+      "sha256": "1ae5414d896cb3818989f5c2c84e39517243d462a80afc53eaf2b93806e63e47"
+    },
+    {
+      "path": "src/host/workspace-daily-routes.ts",
+      "sha256": "21015f8a6b5c595d22e8e5c4c0f2bb6fbd502c3316b628fa837cc6fb283ffad6"
+    },
+    {
+      "path": "tests/home-request-rounds.test.ts",
+      "sha256": "25da16602662851f530fc5654fe87d6123314ca79e83cbd0a8f2bf6bd648d5e7"
+    },
+    {
+      "path": "src/host/ui/CasePreparation.tsx",
+      "sha256": "af5018164c477806a0b50ec788840abdaf06512fd111a82d420718678606f759"
+    },
+    {
+      "path": "tests/case-preparation-ui.test.ts",
+      "sha256": "372441a843163408754c68cb2903ca4f30a0c901bd7f7534836129193744e44f"
+    },
+    {
+      "path": "src/host/ui/HomeDailyQuickPanel.tsx",
+      "sha256": "950501dff243f3c98bd57480071b5cdb5a4e7570054b8287a32ac9279207b014"
+    },
+    {
+      "path": "src/host/case-issues.ts",
+      "sha256": "3db7cf0cd2fd5a1894d08ef2a2a7a77289304ffde72717bd8599fb53cd69d627"
+    }
+  ]
+}

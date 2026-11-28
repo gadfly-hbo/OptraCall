@@ -1,0 +1,62 @@
+{
+  "text": "跳到主内容\nOptraCall\n持续做出更好的决策\n当\n当前工作区\nCase 与项目工作空间\n新建项目\n主导航\n⌄\n\n日常工作\n\n工作台首页\nDecision Case\n基础建设总览\n›\n战略选择\n目标管理\n语义资产\n分析资产\n项目空间 (5)\n⌄\n⌄\n门店共用资料\n＋\n⋯\n尚无任务\n›\n季度资料整理\n＋\n⋯\n›\n职业访谈与小试\n＋\n⋯\n›\n会员数据口径校准\n＋\n⋯\n›\n华东会员增长实验\n＋\n⋯\n已归档项目 (1)\n›\n设置\n已保存本机配置\n中／EN\nDecision Case · Case 详情\n分析\n决策\n搜索工作区\n/\n帮助\nCase 总览\n全部项目\n← 返回 Case 总览\n\n▣ DECISION CASE\n\n改善华东会员复购\n分析中\nG\n60天会员复购率达到 23%\nv1\nS\n先验证缺货治理\nv1\nCase 管理与状态\n当前工作\n项目与任务3\n成果与依据\n历史\n历史与轮次\n\n原取舍、行动、观察和复盘按轮次保留。\n\n事项\n扩大试点范围\n门店缺货原因\n复购口径校准\n\n当前查看「扩大试点范围」。历史轮次只读，可返回当前工作继续。\n\n第 2 轮 · 当前轮\n等待本轮取舍\n\n记录本轮扩围取舍\n\n回到当前轮继续 →\n第 1 轮 · 11/28 08:42 · 已保存\n取舍：试行\n\n先在现有三店核对，保持样本范围。\n\n查看当时保存内容 ↗查看该轮完整记录 →\n\n查看历史不覆盖当前轮；后续保存不会改写上一轮的原取舍。\n\n其他 Case 记录与管理历史",
+  "viewport": {
+    "width": 1024,
+    "height": 1000
+  },
+  "overflow": false,
+  "elements": [
+    {
+      "tag": "ASIDE",
+      "id": "sidebar",
+      "class": "sidebar",
+      "x": 0,
+      "y": 0,
+      "w": 180,
+      "h": 1000,
+      "font": "13px",
+      "padding": "24px 13px 12px",
+      "grid": "none",
+      "overflowY": "visible"
+    },
+    {
+      "tag": "HEADER",
+      "id": "",
+      "class": "topbar",
+      "x": 180,
+      "y": 0,
+      "w": 844,
+      "h": 58,
+      "font": "13px",
+      "padding": "8px 30px",
+      "grid": "none",
+      "overflowY": "visible"
+    },
+    {
+      "tag": "NAV",
+      "id": "",
+      "class": "decision-case-tabs",
+      "x": 180,
+      "y": 58,
+      "w": 844,
+      "h": 68,
+      "font": "13px",
+      "padding": "12px 32px",
+      "grid": "none",
+      "overflowY": "visible"
+    },
+    {
+      "tag": "HEADER",
+      "id": "",
+      "class": "daily-case-header",
+      "x": 180,
+      "y": 126,
+      "w": 844,
+      "h": 149.875,
+      "font": "13px",
+      "padding": "26px 32px 12px",
+      "grid": "none",
+      "overflowY": "visible"
+    }
+  ]
+}

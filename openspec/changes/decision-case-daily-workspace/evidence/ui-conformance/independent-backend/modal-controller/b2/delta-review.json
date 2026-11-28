@@ -1,0 +1,45 @@
+{
+  "recordedAt": "2026-11-28T01:31:35.794036+00:00",
+  "reviewer": "/root/ui149_correction_backend_review/prep_scope_readonly",
+  "candidate": ".local/ui-conformance/current-modal-b2-handoff.json",
+  "conclusion": "B2 restored-state delta PASS; complete modal candidate judgment deferred until B3 author stops.",
+  "files": [
+    {
+      "path": "src/host/ui/case-action-draft.ts",
+      "sha256": "b1dae4e8a0ba136dbda2380c8aa3acd46d996173679f252ae3395b68c0621f18"
+    },
+    {
+      "path": "src/host/ui/useCaseActionDraft.ts",
+      "sha256": "ed9af6a673d3d1321906e27cbe05b21f55bf6f1e9def4b4083cf1c18f1295581"
+    }
+  ],
+  "checks": [
+    {
+      "command": "node --test .local/ui-conformance/backend-independent/modal-controller/b2/independent-controller.test.ts .local/ui-conformance/backend-independent/modal-controller/b2/independent-recovery.test.ts .local/ui-conformance/backend-independent/modal-controller/b2/independent-restored.test.ts",
+      "pass": 10,
+      "fail": 0,
+      "scope": "prior 6 independent regressions plus 4 new restored checks",
+      "output": "independent-tests.log"
+    },
+    {
+      "command": "node --test tests/case-action-draft.test.ts tests/case-action-draft-recovery-ui.test.ts",
+      "pass": 19,
+      "fail": 1,
+      "scope": "Concurrent author added B3 readOnly test during run; this is not a fixed full-candidate result. The 1 failure is the new B3 test, retained as in-progress RED.",
+      "output": "formal-tests.log",
+      "changedTestHash": "c6fd50f4787ffe78192ed4fd4e27f8eeb640c9b7dc4849205ee46ec9d545bed9"
+    }
+  ],
+  "restoredEvidence": [
+    "Before initial read and after absent record, restored=false; first write does not relabel a fresh input as restored.",
+    "Existing checked record with deliberately empty reason/request key yields restored=true and retains empty values over nonempty default initial values.",
+    "Wrong owner, 503 or 403 initial read cannot yield restored=true or ready=true.",
+    "Hook exposes the flag and resets it for a new absent owner, without inheriting previous owner state."
+  ],
+  "boundaries": [
+    "B2 controller/hook hashes matched handoff during the 10 independent tests and were re-read unchanged after the concurrent test result.",
+    "B3 hook/readOnly change remains in progress; no further testing until stopped manifest.",
+    "No preparation tests rerun. Parent covers product choice/feedback behavior and B3 closed Case gate.",
+    "Source/official tests/spec/Git untouched. Prior evidence and reports retained."
+  ]
+}

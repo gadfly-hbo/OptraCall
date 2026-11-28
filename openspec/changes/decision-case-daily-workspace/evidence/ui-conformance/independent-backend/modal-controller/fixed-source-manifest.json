@@ -1,0 +1,27 @@
+[
+  {
+    "path": "src/host/ui/CaseActionDraftRecovery.tsx",
+    "sha256": "6b734ca4b1427833d68e9730c4dd4a87d667211f3aefbe5b665c928098eb93af",
+    "matches": true
+  },
+  {
+    "path": "src/host/ui/case-action-draft.ts",
+    "sha256": "ccaa2f17161041e853f6c8967c7a3a0ba400be959122e9f8860cf2c3719eb1c7",
+    "matches": true
+  },
+  {
+    "path": "src/host/ui/useCaseActionDraft.ts",
+    "sha256": "9b2a6080983263848bc09feb996eeb6c6441e9c46fbcd32830c07c15422f9bf5",
+    "matches": true
+  },
+  {
+    "path": "tests/case-action-draft.test.ts",
+    "sha256": "d8bbdd72571e4fbe02aec1513d118ba5f6d98c424b87960e6930ab744d0e2957",
+    "matches": true
+  },
+  {
+    "path": "tests/case-action-draft-recovery-ui.test.ts",
+    "sha256": "e795365280aadc76d9299280a02ff569e6521e82bcf4b2f4d691ff802149e6e2",
+    "matches": true
+  }
+]

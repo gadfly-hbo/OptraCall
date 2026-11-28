@@ -1,0 +1,32 @@
+--- candidate-f/src/host/ui/CaseFeedbackDialog.tsx
++++ stopped-g/src/host/ui/CaseFeedbackDialog.tsx
+@@ -13,7 +13,7 @@
+ import { CaseActionDraftRecovery } from './CaseActionDraftRecovery.tsx';
+ 
+ type Candidate = { item: BoardItemView; task: BoardTaskView; authorizationId: string; roundNumber: number; issueTitle?: string; request?: CaseDecisionRequestView };
+-type Props = { record: CaseRecord; issueId: string; projects: ClientProject[]; requests: CaseDecisionRequestView[]; requested?: CaseDecisionRequestView; onClose(): void; onSaved(): void; onBoard?(target?: FeedbackReviewStart): void };
++type Props = { returnFocusId?: string; record: CaseRecord; issueId: string; projects: ClientProject[]; requests: CaseDecisionRequestView[]; requested?: CaseDecisionRequestView; onClose(): void; onSaved(): void; onBoard?(target?: FeedbackReviewStart): void };
+ 
+ /** Read-only intersection of the original issue's authorizations and the currently readable Board. */
+ export function caseFeedbackCandidates(caseId: string, issueId: string, timeline: Awaited<ReturnType<typeof caseIssueTimeline>>, board: BoardView, projects: ClientProject[], requests: CaseDecisionRequestView[]): Candidate[] {
+@@ -58,7 +58,7 @@
+   const current = candidates?.find(candidate => candidate.task.id === selected);
+   const currentRequest = props.requested?.target.kind === 'observe' && props.requested.target.taskId === current?.task.id ? props.requested : current?.request;
+   if (current && props.record.status !== 'closed') return <CaseFeedbackForm key={`${current.task.id}/${currentRequest ? `${currentRequest.requestId}@${currentRequest.revision}` : 'ordinary'}`} {...props} candidate={current} request={currentRequest} />;
+-  return <CaseDialog title="回录实际反馈" subtitle="先确认这条观察对应的原行动与授权范围。" onClose={props.onClose} className="case-feedback-entry-dialog">
++  return <CaseDialog returnFocusId={props.returnFocusId} title="回录实际反馈" subtitle="先确认这条观察对应的原行动与授权范围。" onClose={props.onClose} className="case-feedback-entry-dialog">
+     {!candidates && <p role="status">正在读取当前事项的原行动与授权…</p>}
+     {props.record.status === 'closed' ? <p>Case 已关闭，已有反馈可从原记录只读查看。</p> : candidates?.length ? <>
+       <p className="case-help">请选择实际发生观察的行动。只有保存到这条行动的原反馈，才会回到对应的事项与轮次。</p>
+@@ -123,9 +123,9 @@
+     } catch { if (mounted.current) setError('原保存结果仍未知，请保留输入，稍后再次查询。'); }
+     finally { locked.current = false; if (mounted.current) setBusy(false); }
+   }
+-  if (saved) return <CaseDialog title="反馈已保存" onClose={() => { void close(); }}><p>原行动反馈已新增一版，旧记录保留。</p><CaseFormError error={draft.error}/><button className="primary-button" onClick={async () => { if (await draft.flush()) props.onSaved(); }}>返回当前事项</button></CaseDialog>;
++  if (saved) return <CaseDialog returnFocusId={props.returnFocusId} title="反馈已保存" onClose={() => { void close(); }}><p>原行动反馈已新增一版，旧记录保留。</p><CaseFormError error={draft.error}/><button className="primary-button" onClick={async () => { if (await draft.flush()) props.onSaved(); }}>返回当前事项</button></CaseDialog>;
+   const legacyDraft = draft.restored && !Object.hasOwn(draft.value.form, 'observationDate');
+-  return <FeedbackDialog presentation={legacyDraft ? 'board' : 'case'} contextLabel={`${candidate.issueTitle ?? '当前事项'} · 原行动第 ${candidate.roundNumber} 轮`} task={task} subject={{ projectId: item.projectId, itemId: item.id, taskId: task.id }} draft={draft.value.form} busy={busy} readOnly={!draft.ready || draft.isRestricted || props.record.status === 'closed'} draftControls={<>{legacyDraft && <p className="case-help">已恢复原完整反馈草稿，保留原字段、正文和保存意图。可直接继续原保存，无需补填观察日期。</p>}<CaseActionDraftRecovery draft={draft} owner={{id:draftId,caseId:props.record.id,issueId:props.issueId,kind:'feedback'}} onDiscard={props.onClose}/></>} requestScope={request ? observationRequestContext(request) ?? undefined : undefined} error={draft.error || error} unknownOperation={draft.value.unknownOperation}
++  return <FeedbackDialog returnFocusId={props.returnFocusId} presentation={legacyDraft ? 'board' : 'case'} contextLabel={`${candidate.issueTitle ?? '当前事项'} · 原行动第 ${candidate.roundNumber} 轮`} task={task} subject={{ projectId: item.projectId, itemId: item.id, taskId: task.id }} draft={draft.value.form} busy={busy} readOnly={!draft.ready || draft.isRestricted || props.record.status === 'closed'} draftControls={<>{legacyDraft && <p className="case-help">已恢复原完整反馈草稿，保留原字段、正文和保存意图。可直接继续原保存，无需补填观察日期。</p>}<CaseActionDraftRecovery draft={draft} owner={{id:draftId,caseId:props.record.id,issueId:props.issueId,kind:'feedback'}} onDiscard={props.onClose}/></>} requestScope={request ? observationRequestContext(request) ?? undefined : undefined} error={draft.error || error} unknownOperation={draft.value.unknownOperation}
+     onChange={form => draft.change(previous => ({ ...previous, form }))} onClose={() => { void close(); }} onSubmit={submit} onQuery={query}
+     onAsk={() => { void (async () => { if (!await draft.flush()) return; props.onClose(); props.onBoard?.({ boardTaskId: task.id, feedbackRevisionId: null, draftKey: crypto.randomUUID() }); })(); }} />;
+ }

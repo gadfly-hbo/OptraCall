@@ -1,0 +1,18 @@
+✔ independent: malformed backup receipts cannot authorize original overwrite (3.867447ms)
+✔ independent: prior conversation draft survives real store conflict recovery and reopen untouched (31.150346ms)
+✔ independent: permission loss while saving clears remote fields and never retries after local discard (1.196515ms)
+✔ independent: late first load plus local edits requires exact conflict preservation before write (1.030377ms)
+✔ independent recovery: exact source revision mismatch never appears (158.523305ms)
+✔ independent recovery: switching owner hides cached text immediately and rejects late previous owner (4.570436ms)
+✔ B2 independent: absent draft is ready but not restored, including after its first save (5.550927ms)
+✔ B2 independent: explicitly saved empty selections count as restored and override supplied defaults (0.495935ms)
+✔ B2 independent: rejected owner or unavailable reads cannot assert restored (1.795481ms)
+✔ B2 independent: hook exposes restored only for the loaded owner and preserves empty request selection (153.221609ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 588.36188

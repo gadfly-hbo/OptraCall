@@ -1,0 +1,13 @@
+✔ independent Board feedbackDraft preserves all three execution states and exact optional metadata presence (79.782378ms)
+✔ independent Board history shows exact requested revision/null/date/scope, never substitutes current latest (3.091162ms)
+✔ independent Board history retains true/false/null labels and old absent metadata without invented date (2.7683ms)
+✔ independent Board comparison null stays unknown; explicit new baseline preserves user metadata/body (4.168369ms)
+✔ independent Board completed-task card calls unknown execution unknown, even though task status is done (6.504488ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 244.241321

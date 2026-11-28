@@ -1,0 +1,49 @@
+{
+  "text": "跳到主内容\nDecision Case · Case 详情\n帮助\nCase 总览\n全部项目\n← 返回 Case 总览\n\n▣ DECISION CASE\n\n改善华东会员复购\n分析中\nG\n60天会员复购率达到 23%\nv1\nS\n先验证缺货治理\nv1\nCase 管理与状态\n当前工作\n项目与任务3\n成果与依据\n历史\n项目与任务\n\n在共享项目里做具体工作，保留任务原来的会话与成果。\n\n改善华东会员复购\n项目范围\n全部当前 Case\n当前事项：扩大试点范围\n其他事项：门店缺货原因\n其他事项：复购口径校准\n所选范围内明确关联的项目与任务\n华东会员增长实验\n原项目 · 查看全局工作\n4 个任务\n原任务\t用途\t当前记录\t继续工作\n三店试点范围梳理\n原关联：改善华东会员复购 / 扩大试点范围\n\t需求 Requirement\t尚无运行记录\n更新于 11/28 08:42\n\t打开原任务\n\n华东三店试点观察\n原关联：改善华东会员复购 / 扩大试点范围\n\t分析 Analysis\t尚无运行记录\n更新于 11/28 08:42\n\t打开原任务\n\n是否扩大试点的备选方案\n原关联：改善华东会员复购 / 扩大试点范围\n\t计划 Plan\t尚无运行记录\n更新于 11/28 08:42\n\t打开原任务\n\n本轮扩围取舍\n原关联：改善华东会员复购 / 扩大试点范围\n\t决策 Decision\t尚无运行记录\n更新于 11/28 08:42\n\t打开原任务\n项目共用信息与管理\n六类任务分别用来做什么？\n按需要选用，可以重复，也可以缺少\n项目由多个事项共享。打开原任务只是查看已有内容；带着此 Case 继续协作需要明确选择。最近运行完成不等于目标已经达成。\n关联项目",
+  "viewport": {
+    "width": 390,
+    "height": 1000
+  },
+  "overflow": false,
+  "elements": [
+    {
+      "tag": "HEADER",
+      "id": "",
+      "class": "topbar",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 54,
+      "font": "13px",
+      "padding": "8px 12px",
+      "grid": "minmax(0px, 1fr) auto",
+      "overflowY": "visible"
+    },
+    {
+      "tag": "NAV",
+      "id": "",
+      "class": "decision-case-tabs",
+      "x": 0,
+      "y": 54,
+      "w": 390,
+      "h": 57,
+      "font": "13px",
+      "padding": "8px 16px",
+      "grid": "none",
+      "overflowY": "visible"
+    },
+    {
+      "tag": "HEADER",
+      "id": "",
+      "class": "daily-case-header",
+      "x": 0,
+      "y": 111,
+      "w": 390,
+      "h": 165.390625,
+      "font": "13px",
+      "padding": "26px 18px 5px",
+      "grid": "none",
+      "overflowY": "visible"
+    }
+  ]
+}

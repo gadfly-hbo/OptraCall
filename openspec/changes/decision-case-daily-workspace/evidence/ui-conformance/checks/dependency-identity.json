@@ -1,0 +1,19 @@
+{
+  "checkedAt": "2026-11-28T02:21:02.466444+00:00",
+  "files": {
+    "package.json": {
+      "sha256": "9b645f6a7f3ddc628d60d3ce777932c36a80669f0fac870bd53d81c059f394bf",
+      "unchangedFromOriginalMain": true
+    },
+    "package-lock.json": {
+      "sha256": "bd1e93ef5210e74225b8af38afd11d439b0a35050750bb83080117b745df81b3",
+      "unchangedFromOriginalMain": true
+    },
+    "node_modules/@earendil-works/pi-coding-agent/package.json": {
+      "sha256": "df6883685382d6a914e5797232744c26579fe7db5576ea0e9c859d018ca2d54e",
+      "version": "1.4.0",
+      "symlink": false
+    }
+  },
+  "scope": "No SDK/dependency/lock changes; package metadata check is not a new install or full package-integrity audit."
+}

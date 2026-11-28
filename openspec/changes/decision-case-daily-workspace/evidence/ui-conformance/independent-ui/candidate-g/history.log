@@ -1,0 +1,23 @@
+[
+  {
+    "name": "history-is-readonly",
+    "inputs": 0,
+    "writeButtons": [
+      "查看当时保存内容 ↗"
+    ]
+  },
+  {
+    "name": "history-source-focus",
+    "value": "查看当时保存内容 ↗"
+  },
+  {
+    "name": "history-return-draft",
+    "matches": true,
+    "value": "",
+    "writes": []
+  },
+  {
+    "name": "metric-return-current",
+    "title": "复购口径校准"
+  }
+]

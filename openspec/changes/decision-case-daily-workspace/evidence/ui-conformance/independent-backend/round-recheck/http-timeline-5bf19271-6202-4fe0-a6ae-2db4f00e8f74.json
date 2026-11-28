@@ -1,0 +1,95 @@
+{
+  "issue": {
+    "id": "aacab2fd-5e1a-4213-ab7c-5888d4067640",
+    "caseId": "17d851ee-0285-44a5-bcb9-a376735c4d34",
+    "title": "访谈里反复出现的要求",
+    "createdAt": "2026-11-28T00:42:54.158Z"
+  },
+  "rounds": [
+    {
+      "choice": {
+        "choiceId": "c065c201-db65-4782-8a8f-847ddcf19a0c",
+        "caseId": "17d851ee-0285-44a5-bcb9-a376735c4d34",
+        "issueId": "aacab2fd-5e1a-4213-ab7c-5888d4067640",
+        "goalBinding": {
+          "primary": {
+            "goalId": "2d11e202-9374-4e4a-81bb-9d54786d5857",
+            "version": 1
+          },
+          "related": [],
+          "strategy": "先做访谈与小规模尝试",
+          "caseId": "17d851ee-0285-44a5-bcb9-a376735c4d34",
+          "caseRevision": 1,
+          "confirmedAt": "2026-11-28T00:42:54.118Z",
+          "operationId": "b38c5920-a338-41d0-8a26-85fb2a944bf3"
+        },
+        "strategyRef": {
+          "type": "case-decision",
+          "caseStoreId": "d1d0a757-74ee-4219-a299-e54af5dda51b",
+          "caseId": "17d851ee-0285-44a5-bcb9-a376735c4d34",
+          "recordId": "d6bd8eb6-4fd2-46e1-91e4-6110785d50ef",
+          "revision": 1
+        },
+        "choice": "trial",
+        "reason": "完成两次访谈，回录自己实际观察到的工作片段。",
+        "previousChoiceId": null,
+        "operationId": "f7c1dd33-b519-455a-9aba-3d5aaeafa558",
+        "occurredAt": "2026-11-28T00:43:17.743Z",
+        "actorKind": "user"
+      },
+      "reviewSaved": false,
+      "historyLimited": false,
+      "reviewObservationLimited": false,
+      "strategy": {
+        "operationId": "99ec5b89-e6a9-4130-8147-e6b593a05a79",
+        "caseStoreId": "d1d0a757-74ee-4219-a299-e54af5dda51b",
+        "caseId": "17d851ee-0285-44a5-bcb9-a376735c4d34",
+        "recordId": "d6bd8eb6-4fd2-46e1-91e4-6110785d50ef",
+        "kind": "strategy",
+        "payload": {
+          "title": "整理两次访谈观察",
+          "proposal": "保留自己在意的工作片段和反复出现的要求。",
+          "goal": null,
+          "mechanism": null,
+          "conditions": null,
+          "limitations": null,
+          "plan": null
+        },
+        "references": [],
+        "impactNotes": [],
+        "changeReason": null,
+        "revision": 1,
+        "lifecycle": "active",
+        "origin": {
+          "actorKind": "agent",
+          "projectId": "6f245bbd-cd1e-4bcd-8cc7-615a4aad81f6",
+          "taskId": "2c747a74-acfa-48ce-846a-c79ace49c45b",
+          "requestId": "0d30f02e-ba03-48a9-a1cf-36406553bec5",
+          "sessionId": "synthetic-fixture-no-provider",
+          "toolCallId": "synthetic-fixture-plan"
+        },
+        "createdAt": "2026-11-28T00:42:54.358Z"
+      },
+      "review": null,
+      "actions": [
+        {
+          "currentAuthorizationId": "3001c1fd-98d0-416b-b12b-67fe5a62a6a6",
+          "projectId": "6f245bbd-cd1e-4bcd-8cc7-615a4aad81f6",
+          "itemId": "1a817906-4436-4937-8c6b-9209fcf2f8b3",
+          "taskId": "d4d4cfcd-13dd-4442-be9a-e4aae9bc33af",
+          "title": "完成两次职业访谈",
+          "status": "done",
+          "authorizations": [
+            {
+              "id": "3001c1fd-98d0-416b-b12b-67fe5a62a6a6",
+              "scope": "仅回录已经发生的两次访谈，不把等待第三次访谈列为个人待办。",
+              "decision": "authorize",
+              "time": "2026-11-28T00:43:17.761Z"
+            }
+          ],
+          "feedback": []
+        }
+      ]
+    }
+  ]
+}

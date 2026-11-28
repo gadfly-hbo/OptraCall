@@ -10,7 +10,7 @@ import { parseUsageContext } from './usage-context-types.ts';
 import { parseGoalBasis } from './strategy-goals-types.ts';
 import type { GoalActionArrangement, GoalArrangementInput } from './strategy-goals-types.ts';
 import type { GoalAdoptionInput, GoalAdoptionProvenance, GoalBasis, GoalContextSnapshot, GoalDraftInput, GoalFeedback, GoalFeedbackInput, GoalMutation, GoalOperationReceipt, GoalRef, GoalRelation, GoalRelationInput, GoalRelationRevisionInput, GoalRelationVersion, GoalRevisionInput, GoalSourceRef, GoalVersion, StrategyGoalRecord, StrategyGoalsIndex } from './strategy-goals-types.ts';
-import { assessProgressEvidence, checkpointPeriods, progressMetric } from './strategy-goal-progress.ts';
+import { assessProgressEvidenceDetails, checkpointPeriods, comparabilityLabel, granularityLabel, knownUnitScale, measurementNumberTokens, progressMetric, quotedMeasurementEvidence } from './strategy-goal-progress.ts';
 import { hasGsaCheckpoint, MAX_GOAL_ACTUAL_REPORT_CHARS } from './strategy-goal-decomposition-types.ts';
 import type { StrategyMapPublicationIdentity } from './strategy-map-types.ts';
 import type {
@@ -47,7 +47,10 @@ import type {
   NextCycleDraft,
   NextCycleDraftInput,
   PreConfirmEstimateRecord,
+  ProgressBasisResolutionItem,
+  ProgressBasisSuggestion,
   ProgressCaseChoice,
+  ProgressEvidenceBasis,
   ReachabilityEstimate,
   StrategyReturnInput,
   StrategyReturnRecord,
@@ -1268,6 +1271,8 @@ export class StrategyGoalsStore {
       previewSha256: publishPreviewHash(currentDraft, rowBaselines),
       nextPublicationVersion: existingPubs.length + 1,
       committedGoals,
+      reserves: currentDraft.reserves,
+      gapStrategies: currentDraft.gapStrategies,
       summary: {
         formalTargetValue: validation.formalTargetValue,
         estimatedValue: validation.estimatedValue,
@@ -1766,37 +1771,332 @@ export class StrategyGoalsStore {
       check.actualSource={...check.actualSource,cutoffAt:cutoff,cutoffQuote:quote};
     }
 
+    const submittedBasis = actual.input.actualSource.basis ? structuredClone(actual.input.actualSource.basis) : undefined;
+    const basisResolution: ProgressBasisResolutionItem[] = [];
+    const basisSuggestions: ProgressBasisSuggestion[] = [];
+
     if (observation !== undefined) {
       if (!object(observation)) fail('invalid_progress_evidence', 400);
       const quote = reqText(observation.quote, 4000);
-      if (!actual.input.actualSource.reportText?.includes(quote)) fail('actual_report_quote_mismatch', 409);
+      const reportText = actual.input.actualSource.reportText ?? '';
+      if (!reportText.includes(quote)) fail('actual_report_quote_mismatch', 409);
       check.evidenceQuote = quote;
       const value = observation.actualValue;
       const period = actual.input.actualPeriods[0]!;
-      if (value !== undefined) {
+      const extractNumbers = measurementNumberTokens;
+
+      // Optional arithmetically verified unit conversion (never allows relabeling the same number with a different unit).
+      let verifiedConversion: {
+        sourceValue: number;
+        sourceUnit: string;
+        convertedValue: number;
+        convertedUnit: string;
+        factor: number;
+        evidenceQuote: string;
+        rationale: string;
+      } | undefined;
+      if (observation.unitConversion !== undefined) {
+        if (!object(observation.unitConversion)) fail('invalid_progress_evidence', 400);
+        const conv = observation.unitConversion;
+        const sourceValue = conv.sourceValue;
+        const convertedValue = conv.convertedValue;
+        const factor = conv.factor;
+        if (typeof sourceValue !== 'number' || !Number.isFinite(sourceValue) ||
+            typeof convertedValue !== 'number' || !Number.isFinite(convertedValue) ||
+            typeof factor !== 'number' || !Number.isFinite(factor) || factor <= 0) {
+          fail('invalid_progress_evidence', 400);
+        }
+        const sourceUnit = reqText(conv.sourceUnit, 80);
+        const convertedUnit = reqText(conv.convertedUnit, 80);
+        const evidenceQuote = reqText(conv.evidenceQuote, 2000);
+        const rationale = reqText(conv.rationale, 1000);
+        if (!reportText.includes(evidenceQuote)) fail('actual_report_quote_mismatch', 409);
+        if (!extractNumbers(evidenceQuote).some(n => Number(n) === sourceValue)) fail('actual_report_value_mismatch', 409);
+        if (sourceUnit === convertedUnit || Math.abs(factor - 1) <= 1e-9) fail('invalid_progress_evidence', 400);
+        if (Math.abs(sourceValue * factor - convertedValue) > Math.max(1e-6, Math.abs(convertedValue) * 1e-6)) {
+          fail('actual_report_value_mismatch', 409);
+        }
+        const expectedScale = knownUnitScale(sourceUnit, convertedUnit);
+        // Internally consistent arithmetic does not prove the dimension or the source unit.
+        // Unverified scales remain unverified rather than becoming comparable by relabeling.
+        if (expectedScale === null || Math.abs(factor - expectedScale) > expectedScale * 1e-6) {
+          fail('actual_report_value_mismatch', 409);
+        }
+        if (period.actualValue !== null && period.actualValue !== sourceValue) {
+          fail('actual_report_value_mismatch', 409);
+        }
+        const submittedUnit = submittedBasis?.unit?.trim();
+        const evidence = quotedMeasurementEvidence(evidenceQuote, sourceValue, reportText);
+        if (!evidence.hasExactValue) fail('actual_report_value_mismatch', 409);
+        const quotedUnits = evidence.units;
+        if (quotedUnits.length > 0 && (quotedUnits.length !== 1 || quotedUnits[0] !== sourceUnit)) {
+          fail('actual_report_value_mismatch', 409);
+        }
+        if (submittedUnit ? submittedUnit !== sourceUnit : quotedUnits.length !== 1) {
+          fail('actual_report_value_mismatch', 409);
+        }
+        if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value !== convertedValue)) {
+          fail('actual_report_value_mismatch', 409);
+        }
+        if (!object(observation.basis) || typeof observation.basis.unit !== 'string' || observation.basis.unit.trim() !== convertedUnit) {
+          fail('actual_report_value_mismatch', 409);
+        }
+        verifiedConversion = { sourceValue, sourceUnit, convertedValue, convertedUnit, factor, evidenceQuote, rationale };
+        check.actualPeriods = [{ ...period, actualValue: convertedValue }];
+      } else if (value !== undefined) {
         if (typeof value !== 'number' || !Number.isFinite(value) || (period.actualValue !== null && period.actualValue !== value)) fail('actual_report_value_mismatch', 409);
-        const numbers = quote.replace(/(?<=\d)[,，](?=\d{3}(?:\D|$))/g, '').match(/[+-]?(?:\d+\.\d+|\d+|\.\d+)/g) ?? [];
-        if (!numbers.some(n => Number(n) === value)) fail('actual_report_value_mismatch', 409);
+        if (!extractNumbers(quote).some(n => Number(n) === value) ||
+            !quotedMeasurementEvidence(quote, value, reportText).hasExactValue) fail('actual_report_value_mismatch', 409);
         check.actualPeriods = [{...period, actualValue:value}];
       }
-      // The submitted value and explicitly identified basis always retain priority.
-      if (!check.actualSource.basis && observation.basis !== undefined) {
+
+      // Parse optional evidence-backed basisMappings; only metric/scope synonym mapping is accepted, never unit/periodId.
+      const mappingsByField = new Map<'metric' | 'scope', { sourceValue: string; mappedValue: string; evidenceQuote: string; rationale: string }>();
+      if (observation.basisMappings !== undefined) {
+        if (!Array.isArray(observation.basisMappings) || observation.basisMappings.length > 8) fail('invalid_progress_evidence', 400);
+        for (const item of observation.basisMappings) {
+          if (!object(item)) fail('invalid_progress_evidence', 400);
+          const field = item.field;
+          if (field !== 'metric' && field !== 'scope' && field !== 'unit' && field !== 'periodId') fail('invalid_progress_evidence', 400);
+          const sourceValue = reqText(item.sourceValue, 400);
+          const mappedValue = reqText(item.mappedValue, 400);
+          const evidenceQuote = reqText(item.evidenceQuote, 2000);
+          const rationale = reqText(item.rationale, 1000);
+          if (!reportText.includes(evidenceQuote)) fail('actual_report_quote_mismatch', 409);
+          // Structural protection (R1): unit and periodId cannot be relabeled via basisMappings.
+          if (field === 'metric' || field === 'scope') {
+            mappingsByField.set(field, { sourceValue, mappedValue, evidenceQuote, rationale });
+          }
+        }
+      }
+
+      // Merge submitted basis with Agent observation (structural protection, no regex semantic adjudication):
+      // - Explicit human-submitted unit, periodId, scope, partial coverage, open maturity, and missingCoverageNote/coverageNote are ALWAYS protected.
+      // - Unit changes require arithmetically verified unitConversion.
+      // - Empty/unknown fields may be supplemented from reportText; natural metric wording may be synonym-mapped with verbatim evidenceQuote + rationale.
+      if (observation.basis !== undefined) {
         if (!object(observation.basis)) fail('invalid_progress_evidence', 400);
-        const basis = observation.basis;
-        if ((basis.coverage !== 'complete' && basis.coverage !== 'partial' && basis.coverage !== 'unknown') ||
-            (basis.maturity !== 'closed' && basis.maturity !== 'open' && basis.maturity !== 'unknown')) fail('invalid_progress_evidence', 400);
-        check.actualSource = {...check.actualSource, basis: {metric:reqText(basis.metric,400), unit:reqText(basis.unit,80), scope:reqText(basis.scope,400),
-          periodId:reqText(basis.periodId,120), coverage:basis.coverage, maturity:basis.maturity}};
+        const obs = observation.basis;
+        if ((obs.coverage !== 'complete' && obs.coverage !== 'partial' && obs.coverage !== 'unknown') ||
+            (obs.maturity !== 'closed' && obs.maturity !== 'open' && obs.maturity !== 'unknown')) fail('invalid_progress_evidence', 400);
+        const obsBasis: ProgressEvidenceBasis = {
+          metric: reqText(obs.metric, 400),
+          unit: reqText(obs.unit, 80),
+          scope: reqText(obs.scope, 400),
+          periodId: reqText(obs.periodId, 120),
+          coverage: obs.coverage,
+          maturity: obs.maturity,
+        };
+
+        // Omitting unitConversion cannot make a literal source unit disappear. Explicit
+        // human units still follow resolveUnit below and remain pending when inconsistent.
+        const sourceValue = value ?? period.actualValue;
+        if (!verifiedConversion && !submittedBasis?.unit?.trim() && sourceValue !== null && sourceValue !== undefined &&
+            knownUnitScale(obsBasis.unit, obsBasis.unit) === 1) {
+          const evidence = quotedMeasurementEvidence(quote, sourceValue, reportText);
+          if (!evidence.hasExactValue || evidence.units.some(unit => knownUnitScale(unit, obsBasis.unit) !== 1)) {
+            fail('actual_report_value_mismatch', 409);
+          }
+        }
+
+        const resolveMetric = (): string => {
+          const subVal = submittedBasis?.metric?.trim() ?? '';
+          const obsVal = obsBasis.metric;
+          const mapping = mappingsByField.get('metric');
+          if (!subVal) {
+            if (mapping && mapping.mappedValue === obsVal) {
+              basisResolution.push({
+                field: 'metric',
+                action: 'mapped',
+                sourceValue: mapping.sourceValue,
+                adoptedValue: obsVal,
+                evidenceQuote: mapping.evidenceQuote,
+                rationale: mapping.rationale,
+              });
+            } else if (submittedBasis) {
+              basisResolution.push({
+                field: 'metric',
+                action: 'supplemented',
+                adoptedValue: obsVal,
+                evidenceQuote: quote,
+                rationale: '依据实绩原文补齐未填写指标',
+              });
+            }
+            return obsVal;
+          }
+          if (mapping && mapping.sourceValue === subVal && mapping.mappedValue === obsVal) {
+            basisResolution.push({
+              field: 'metric',
+              action: 'mapped',
+              submittedValue: subVal,
+              sourceValue: mapping.sourceValue,
+              adoptedValue: obsVal,
+              evidenceQuote: mapping.evidenceQuote,
+              rationale: mapping.rationale,
+            });
+            return obsVal;
+          }
+          return subVal;
+        };
+
+        const resolveScope = (): string => {
+          const subVal = submittedBasis?.scope?.trim() ?? '';
+          const obsVal = obsBasis.scope;
+          const mapping = mappingsByField.get('scope');
+          // Preserve explicit human scope. A qualified proposal can fill the existing
+          // correction form, but it is not an adopted scope or a comparable result.
+          if (subVal) {
+            if (mapping && mapping.sourceValue === subVal && mapping.mappedValue === obsVal && obsVal !== subVal) {
+              const publication = this.readDecompositionPublication(goalId, actual.input.publicationVersion);
+              const row = actual.input.rowId === 'G-TOTAL' ? undefined : publication.snapshot.rows.find(r => r.rowId === actual.input.rowId);
+              const expectedScope = row?.scopeLabel ?? publication.snapshot.estimate.scopeDescription;
+              if (obsVal === expectedScope) {
+                basisSuggestions.push({ field: 'scope', submittedValue: subVal, proposedValue: obsVal,
+                  evidenceQuote: mapping.evidenceQuote, rationale: mapping.rationale });
+              }
+            }
+            return subVal;
+          }
+          if (mapping && mapping.mappedValue === obsVal) {
+            basisResolution.push({
+              field: 'scope',
+              action: 'mapped',
+              sourceValue: mapping.sourceValue,
+              adoptedValue: obsVal,
+              evidenceQuote: mapping.evidenceQuote,
+              rationale: mapping.rationale,
+            });
+          } else if (submittedBasis) {
+            basisResolution.push({
+              field: 'scope',
+              action: 'supplemented',
+              adoptedValue: obsVal,
+              evidenceQuote: quote,
+              rationale: '依据实绩原文补齐未填写业务范围',
+            });
+          }
+          return obsVal;
+        };
+
+        const resolveUnit = (): string => {
+          const subVal = submittedBasis?.unit?.trim() ?? '';
+          if (verifiedConversion && verifiedConversion.convertedUnit === obsBasis.unit) {
+            basisResolution.push({
+              field: 'unit',
+              action: 'mapped',
+              ...(subVal ? { submittedValue: `${verifiedConversion.sourceValue} ${subVal}` } : {}),
+              sourceValue: `${verifiedConversion.sourceValue} ${verifiedConversion.sourceUnit}`,
+              adoptedValue: `${verifiedConversion.convertedValue} ${verifiedConversion.convertedUnit}`,
+              evidenceQuote: verifiedConversion.evidenceQuote,
+              rationale: `${verifiedConversion.rationale}（系数 ${verifiedConversion.factor}）`,
+            });
+            return verifiedConversion.convertedUnit;
+          }
+          if (subVal) return subVal;
+          if (submittedBasis) {
+            basisResolution.push({
+              field: 'unit',
+              action: 'supplemented',
+              adoptedValue: obsBasis.unit,
+              evidenceQuote: quote,
+              rationale: '依据实绩原文补齐未填写单位',
+            });
+          }
+          return obsBasis.unit;
+        };
+
+        const resolvePeriodId = (): string => {
+          const subVal = submittedBasis?.periodId?.trim() ?? '';
+          // Explicit human-submitted periodId is ALWAYS protected from overwrite.
+          if (subVal) return subVal;
+          if (submittedBasis) {
+            basisResolution.push({
+              field: 'periodId',
+              action: 'supplemented',
+              adoptedValue: obsBasis.periodId,
+              evidenceQuote: quote,
+              rationale: '依据实绩原文补齐未填写归属期间',
+            });
+          }
+          return obsBasis.periodId;
+        };
+
+        const hasHumanCoverageExclusion = Boolean(
+          actual.input.missingCoverageNote?.trim() || actual.input.actualSource.coverageNote?.trim(),
+        );
+        let resolvedCoverage: ProgressEvidenceBasis['coverage'];
+        if (submittedBasis?.coverage === 'partial') {
+          resolvedCoverage = 'partial';
+        } else if (hasHumanCoverageExclusion) {
+          // Explicit human missingCoverageNote / coverageNote blocks optimistic upgrade to 'complete'.
+          resolvedCoverage = submittedBasis?.coverage === 'unknown'
+            ? (obsBasis.coverage === 'partial' ? 'partial' : 'unknown')
+            : (obsBasis.coverage === 'complete' ? 'partial' : obsBasis.coverage);
+        } else if (submittedBasis?.coverage === 'complete') {
+          resolvedCoverage = 'complete';
+        } else {
+          resolvedCoverage = obsBasis.coverage;
+          if (submittedBasis && obsBasis.coverage !== 'unknown') {
+            basisResolution.push({
+              field: 'coverage',
+              action: 'supplemented',
+              submittedValue: submittedBasis.coverage,
+              adoptedValue: obsBasis.coverage,
+              evidenceQuote: quote,
+              rationale: '依据实绩原文补齐覆盖范围状态',
+            });
+          }
+        }
+
+        let resolvedMaturity: ProgressEvidenceBasis['maturity'];
+        if (submittedBasis?.maturity === 'open') {
+          resolvedMaturity = 'open';
+        } else if (submittedBasis?.maturity === 'closed') {
+          resolvedMaturity = 'closed';
+        } else {
+          resolvedMaturity = obsBasis.maturity;
+          if (submittedBasis && obsBasis.maturity !== 'unknown') {
+            basisResolution.push({
+              field: 'maturity',
+              action: 'supplemented',
+              submittedValue: submittedBasis.maturity,
+              adoptedValue: obsBasis.maturity,
+              evidenceQuote: quote,
+              rationale: '依据实绩原文补齐观察窗结账状态',
+            });
+          }
+        }
+
+        check.actualSource = {
+          ...check.actualSource,
+          basis: {
+            metric: resolveMetric(),
+            unit: resolveUnit(),
+            scope: resolveScope(),
+            periodId: resolvePeriodId(),
+            coverage: resolvedCoverage,
+            maturity: resolvedMaturity,
+          },
+        };
       }
     }
-    return this.writeProgressCheck(goalId, check, actual.actualId);
+    return this.writeProgressCheck(goalId, check, actual.actualId, {
+      ...(submittedBasis ? { submittedBasis } : {}),
+      ...(basisResolution.length ? { basisResolution } : {}),
+      ...(basisSuggestions.length ? { basisSuggestions } : {}),
+    });
   }
 
   recordProgressCheck(goalId: string, input: DecompositionProgressCheckInput) {
     return this.writeProgressCheck(goalId, input);
   }
 
-  private writeProgressCheck(goalId: string, input: DecompositionProgressCheckInput, submittedId?: string): { check: DecompositionProgressCheck; replayed: boolean } {
+  private writeProgressCheck(
+    goalId: string,
+    input: DecompositionProgressCheckInput,
+    submittedId?: string,
+    provenance?: { submittedBasis?: ProgressEvidenceBasis; basisResolution?: ProgressBasisResolutionItem[]; basisSuggestions?: ProgressBasisSuggestion[] },
+  ): { check: DecompositionProgressCheck; replayed: boolean } {
     this.assertDecompositionWritable();
     const id = uuid(goalId);
     const operationId = reqUuid(input.operationId);
@@ -1857,7 +2157,7 @@ export class StrategyGoalsStore {
       const planned = checkpoint ?? period;
       const plannedPeriods = [{periodId: period.periodId, label: planned.label, plannedValue: planned.targetValue, status: planned.status}];
       const metricId = progressMetric(snapshot, frozenGoal.measurement);
-      const comparability = assessProgressEvidence(actualSource.basis, {
+      const { comparability, issues: comparabilityIssues } = assessProgressEvidenceDetails(actualSource.basis, {
         metric: metricId, unit: planned.unit, scope: row?.scopeLabel ?? snapshot.estimate.scopeDescription, period,
         observationDate: checkpoint?.date ?? period.endDate, planned: planned.status === 'planned' && planned.targetValue !== null,
       }, actualSource.cutoffAt, reported.actualValue, input.comparability);
@@ -1878,8 +2178,34 @@ export class StrategyGoalsStore {
         ...(input.supplementOfCheckId ? { supplementOfCheckId: input.supplementOfCheckId } : {}),
       });
 
+      // Enrich trigger reason with concrete comparability issues (A3) or granularity applicability (A4).
+      if (comparability !== 'comparable' && comparabilityIssues.length > 0) {
+        const detail = comparabilityIssues.map(i => i.message).join('；');
+        evaluated.trigger.reason = `${evaluated.trigger.reason} 具体待核：${detail}`;
+      } else if (comparability === 'comparable' && !thresholdSnapshot.configured) {
+        const otherConfigured = (index.thresholdStreams?.[id] ?? [])
+          .filter(t => t.configured && t.metricId === metricId && t.periodGranularity && t.periodGranularity !== periodGranularity)
+          .map(t => granularityLabel(t.periodGranularity));
+        const uniqueOthers = [...new Set(otherConfigured)];
+        evaluated.trigger.reason = uniqueOthers.length > 0
+          ? `已完成可比偏差计算；当前${granularityLabel(periodGranularity)}粒度尚未配置 Case 提示阈值（已配置${uniqueOthers.join('、')}粒度规则，不适用当前${granularityLabel(periodGranularity)}检查），不阻断检查。`
+          : `已完成可比偏差计算；当前${granularityLabel(periodGranularity)}粒度尚未配置 Case 提示阈值，不阻断检查。`;
+      }
+
+      const rawNote = input.assessmentNote ? reqText(input.assessmentNote, 1000) : undefined;
+      const downgraded = input.comparability !== comparability;
+      const finalAssessmentNote = downgraded
+        ? `结构核验判定为「${comparabilityLabel(comparability)}」（未采纳原「${comparabilityLabel(input.comparability)}」结论）：${comparabilityIssues.map(i => i.message).join('；')}`.slice(0, 1000)
+        : rawNote;
+
       const check: DecompositionProgressCheck = {
-        ...(input.assessmentNote ? {assessmentNote: reqText(input.assessmentNote, 1000)} : {}),
+        ...(finalAssessmentNote ? { assessmentNote: finalAssessmentNote } : {}),
+        ...(downgraded && rawNote ? { agentAssessmentNote: rawNote } : {}),
+        ...(downgraded ? { requestedComparability: input.comparability } : {}),
+        ...(comparabilityIssues.length ? { comparabilityIssues } : {}),
+        ...(provenance?.submittedBasis ? { submittedBasis: provenance.submittedBasis } : {}),
+        ...(provenance?.basisResolution?.length ? { basisResolution: provenance.basisResolution } : {}),
+        ...(provenance?.basisSuggestions?.length ? { basisSuggestions: provenance.basisSuggestions } : {}),
         ...(input.evidenceQuote ? {evidenceQuote: input.evidenceQuote} : {}),
         checkId: `CHECK-${String(existingChecks.length + 1).padStart(3, '0')}`,
         goalId: id,
@@ -2448,6 +2774,7 @@ export class StrategyGoalsStore {
     const gsaDraft = savedGsaDraft?.goalVersion === viewVersion ? savedGsaDraft : null;
     const rawDraft = readDecompositionDraft(index, id) ?? null;
     const currentDraft = rawDraft && exactPlans.some(plan => plan.planVersion === rawDraft.gsaPlanVersion) ? rawDraft : null;
+    const priorDraft = rawDraft && activeGsaPlan && !currentDraft && rawDraft.gsaPlanVersion < activeGsaPlan.planVersion ? rawDraft : null;
     const validation = currentDraft ? validateDecompositionForPublish(activeGsaPlan, currentDraft, index.goals) : null;
     const allPublications = index.decompositionPublications?.[id] ?? [];
     const allowedPlanVersions = new Set(gsaPlans.map(p => p.planVersion));
@@ -2487,6 +2814,7 @@ export class StrategyGoalsStore {
       activeGsaPlan,
       gsaDraft,
       draft: currentDraft,
+      priorDraft,
       validation,
       publications,
       activePublicationVersion,

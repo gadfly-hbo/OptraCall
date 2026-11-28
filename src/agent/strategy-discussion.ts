@@ -1,11 +1,11 @@
 import { strategyMapDraftSchema } from './strategy-map-schema.ts';
 import { decompositionDraftFields, reachabilityEstimateSchema } from './goal-decomposition-schema.ts';
 import { Type } from 'typebox';
-export type StrategyDiscussionAction = 'read-goals' | 'find-sources' | 'read-source' | 'read-import-source' | 'propose-map-draft' | 'propose-goal' | 'adopt-goal' | 'operation' | 'public-search' | 'read-map' | 'save-map' | 'initiative-files' | 'initiative-read-file' | 'initiative-read-kickoff' | 'initiative-save-kickoff' | 'initiative-save-candidate' | 'initiative-save-verification' | 'initiative-read-candidate' | 'initiative-propose-revision' | 'initiative-read-skill' | 'goal-read-context' | 'goal-read-skill' | 'goal-run-script' | 'goal-save-estimate' | 'goal-save-decomposition-draft' | 'goal-analyze-progress' | 'goal-assess-actual' | 'goal-propose-plan' | 'goal-propose-review';
+export type StrategyDiscussionAction = 'read-goals' | 'find-sources' | 'read-source' | 'read-import-source' | 'propose-map-draft' | 'propose-goal' | 'adopt-goal' | 'case-directory' | 'case-read-declarations' | 'case-save-issue-edge' | 'case-save-decision-request' | 'operation' | 'public-search' | 'read-map' | 'save-map' | 'initiative-files' | 'initiative-read-file' | 'initiative-read-kickoff' | 'initiative-save-kickoff' | 'initiative-save-candidate' | 'initiative-save-verification' | 'initiative-read-candidate' | 'initiative-propose-revision' | 'initiative-read-skill' | 'goal-read-context' | 'goal-read-skill' | 'goal-run-script' | 'goal-save-estimate' | 'goal-save-decomposition-draft' | 'goal-analyze-progress' | 'goal-assess-actual' | 'goal-propose-plan' | 'goal-propose-review';
 export type StrategyDiscussionToolContext = { requestId:string; sessionId:string; toolCallId:string; signal:AbortSignal; assertCurrent():void; originalUserText:string; userQuoteEligible:boolean; goalBasis?:import('../host/strategy-goals-types.ts').GoalBasis; importSourceIds?:string[]; selectedImportPages?:Record<string,number[]>; importMode?:'review-draft'; draftGroupId?:string; supersedesDraftEntryId?:string; targetMapRef?:{mapId:string;version:number}; registerCleanup?:(cleanup:(options:{retryFailed?:boolean})=>Promise<void>)=>void };
 export type StrategyDiscussionToolContent = {type:'text';text:string} | {type:'image';data:string;mimeType:string};
 export type StrategyDiscussionPort = (action:StrategyDiscussionAction,input:Record<string,unknown>,context:StrategyDiscussionToolContext)=>Promise<{content:StrategyDiscussionToolContent[];details:Record<string,unknown>}>;
-export const STRATEGY_DISCUSSION_ACTIONS = ['read-goals','find-sources','read-source','read-import-source','propose-map-draft','propose-goal','adopt-goal','operation','public-search','read-map','save-map','initiative-files','initiative-read-file','initiative-read-kickoff','initiative-save-kickoff','initiative-save-candidate','initiative-save-verification','initiative-read-candidate','initiative-propose-revision','initiative-read-skill','goal-read-context','goal-read-skill','goal-run-script','goal-save-estimate','goal-save-decomposition-draft','goal-analyze-progress','goal-assess-actual','goal-propose-plan','goal-propose-review'] as const;
+export const STRATEGY_DISCUSSION_ACTIONS = ['read-goals','find-sources','read-source','read-import-source','propose-map-draft','propose-goal','adopt-goal','case-directory','case-read-declarations','case-save-issue-edge','case-save-decision-request','operation','public-search','read-map','save-map','initiative-files','initiative-read-file','initiative-read-kickoff','initiative-save-kickoff','initiative-save-candidate','initiative-save-verification','initiative-read-candidate','initiative-propose-revision','initiative-read-skill','goal-read-context','goal-read-skill','goal-run-script','goal-save-estimate','goal-save-decomposition-draft','goal-analyze-progress','goal-assess-actual','goal-propose-plan','goal-propose-review'] as const;
 const exact = { additionalProperties: false };
 const nonblank = (maxLength = 4000) => Type.String({ minLength: 1, maxLength, pattern: '\\S' });
 const textList = Type.Array(nonblank(), { maxItems: 100 });
@@ -138,9 +138,19 @@ export const projectDiscussionSourceTool = {
 
 export const editableGoalTool = {
   name: strategyDiscussionTool.name,
-  label:'可编辑 GSA 建议',
-  description:'propose-goal 仅返回由用户核对的目标建议。使用当前范围；提供 title、outcome、perspective（profit、nonprofit 或 personal）、responsible、baseline {state:known 或 pending,description}、measurement {kind:deliverable,criterion} 或已发布的 SAP metric，以及具体 strategies 数组。可选 resources、necessaryConditions、dueAt。只使用有依据的内容。',
-  parameters:Type.Object({action:Type.Literal('propose-goal'),draft:Type.Record(Type.String(),Type.Unknown())},{additionalProperties:false}),
+  label:'可编辑 GSA 建议与获准 Case 目录',
+  description:'propose-goal 仅返回由用户核对的目标建议（须使用当前范围、只用有依据内容）。case-directory 只读查询获准 Case 与事项；用 nextOffset 续查 Case，用 caseId + nextIssueOffset 续查该 Case 事项，引用准确 caseId/issueId 说明理由或无匹配。不创建 Case、不采纳目标。',
+  parameters:Type.Object({
+    action:Type.Union([Type.Literal('propose-goal'),Type.Literal('case-directory')]),
+    draft:Type.Optional(Type.Record(Type.String(),Type.Unknown())),
+    query:Type.Optional(Type.String({maxLength:200})),
+    limit:Type.Optional(Type.Integer({minimum:1,maximum:30})),
+    offset:Type.Optional(Type.Integer({minimum:0})),
+    caseId:Type.Optional(Type.String()),
+    issueLimit:Type.Optional(Type.Integer({minimum:1,maximum:20})),
+    issueOffset:Type.Optional(Type.Integer({minimum:0})),
+    includeClosed:Type.Optional(Type.Boolean()),
+  },{additionalProperties:false}),
 };
 
 const approvedGoalSkillUnion = Type.Union([
@@ -186,7 +196,7 @@ export const goalDecompositionTool = {
     'goal-read-skill 读取 Host 固定的已核定技能（target-forecast / roi-forecast / coupon-forecast / data-analysis）原文与参考资料。',
     'goal-run-script 以结构化 JSON 输入运行已核定技能脚本，获得可复算引擎版本与输入摘要；不可传任意命令或文件路径。',
     'goal-save-decomposition-draft 使用本工具声明的嵌套字段契约；estimate、rows 等放在顶层，不包入 draft。先读取上下文的 saveContract、首次 draftInputTemplate 或已有 draft，沿准确 GSA 身份和 expectedDraftRevision 保存。测算填写实际覆盖的 scope；仅原 goal.measurement.kind=quantitative 时保留其 sapMetric，其他情况省略，不编造 SAP ID。无适用脚本可保留显式算式、假设和限制，不伪造运行回执。本工具仅保存草稿，返回发布校验问题，不发布、不采用、不授权执行。格式错误未保存且未运行发布校验，未点名区块不能称已核。',
-    '实绩专属对话按已提交凭证判断覆盖、指标与成熟度，goal-assess-actual 写入该证据的核对结果。comparability 取 comparable、partial-missing、observing 或 incomparable，并用 assessmentNote 说明依据。实绩提供报告原文时按资料提取 observation 的原文逐字引句 quote、实际数值 actualValue、指标 metric（沿计划定义或 SAP ID@版本）、unit、scope 和 periodId，以及覆盖 coverage 和成熟度 maturity；证据不足保持待核。',
+    '实绩专属对话按已提交凭证判断覆盖、指标与成熟度，goal-assess-actual 写入该证据的核对结果。comparability 取 comparable、partial-missing、observing 或 incomparable，并用 assessmentNote 说明依据。实绩提供报告原文时按资料提取 observation 的原文逐字引句 quote、实际数值 actualValue、以及对照上下文 expectedBasis 的指标 metric、unit、scope、periodId、覆盖 coverage 和成熟度 maturity；原文使用自然业务表述时，可在 observation.basisMappings（仅 metric/scope）提供逐字 evidenceQuote 与 rationale 完成有证据同义映射或补齐未知项，不可改写人填单位、期间、范围、缺店说明或 partial/open 限制。确需单位换算时须在 observation.unitConversion 提供原值、原单位、换算系数、换算后值与单位及逐字依据；原单位必须来自负责人原填单位，或原文中与原数值相邻的准确单位，不从数字猜单位。只采用可核定的同量纲比例，未知或不同量纲保持待核；严禁保持原数仅换单位标签。此时 observation.actualValue 若提供必须等于 convertedValue，observation.basis.unit 必须等于 convertedUnit。证据不足保持待核。',
     '报表未手填截止时间时，先从原文提取数据截至日期到 observation.cutoffAt，并逐字保留 cutoffQuote。导出、制表、发布日期不能当数据截止时间。日期缺失或冲突时 cutoffState 取 missing/conflict，说明具体待补项，保留凭证待核。',
     'goal-analyze-progress 只读读取指定正式拆解版与阶段检查记录，辅助可比性与偏差说明。',
     'propose-goal 返回由用户核对的 GSA 修订建议。',
@@ -213,11 +223,27 @@ export const goalDecompositionTool = {
     observation: Type.Optional(Type.Object({
       cutoffAt:Type.Optional(nonblank(100)),cutoffQuote:Type.Optional(nonblank(2000)),cutoffState:Type.Optional(Type.Union(['identified','missing','conflict'].map(value=>Type.Literal(value)))),
       quote: nonblank(4000), actualValue: Type.Optional(Type.Number()),
+      unitConversion: Type.Optional(Type.Object({
+        sourceValue: Type.Number(),
+        sourceUnit: nonblank(80),
+        convertedValue: Type.Number(),
+        convertedUnit: nonblank(80),
+        factor: Type.Number({ exclusiveMinimum: 0 }),
+        evidenceQuote: nonblank(2000),
+        rationale: nonblank(1000),
+      }, exact)),
       basis: Type.Optional(Type.Object({
         metric: nonblank(400), unit:nonblank(80), scope:nonblank(400), periodId:nonblank(120),
         coverage:Type.Union(['complete','partial','unknown'].map(value => Type.Literal(value))),
         maturity:Type.Union(['closed','open','unknown'].map(value => Type.Literal(value))),
       }, exact)),
+      basisMappings: Type.Optional(Type.Array(Type.Object({
+        field: Type.Union(['metric','scope'].map(value => Type.Literal(value))),
+        sourceValue: nonblank(400),
+        mappedValue: nonblank(400),
+        evidenceQuote: nonblank(2000),
+        rationale: nonblank(1000),
+      }, exact), { maxItems: 8 })),
     }, exact)),
     draft: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
   }, exact),
@@ -233,4 +259,35 @@ export const goalReviewTool = {
   name:'strategy_goals', label:'复盘结论草拟',
   description:'goal-read-context 读取本期正式 GSA、阶段检查、结账凭证及相关 Case，goal-propose-review 返回带原证据与原范围的可编辑结论。sourceRef 只引用提供的证据身份，因果未知或扩范围标待验证。',
   parameters:Type.Object({action:Type.Union([Type.Literal('goal-read-context'),Type.Literal('goal-propose-review')]),conclusions:Type.Optional(Type.Array(Type.Object({sourceRef:nonblank(500),title:nonblank(300),summary:nonblank(2000),originalScope:nonblank(500),applicableScope:nonblank(500),evidenceMature:Type.Boolean(),causalVerified:Type.Boolean(),targetScopeSameAsOriginal:Type.Boolean()},exact),{maxItems:30}))},exact),
+};
+
+export const caseDeclarationsTool = {
+  name: strategyDiscussionTool.name,
+  label: 'Case 事项关系与明确请求保存',
+  description: 'case-read-declarations 按 section 只读本案 issues/edges 和当前事项 requests/strategies/choices/observations，使用返回的准确身份与修订；limit 1–20，offset/nextOffset 或 strategies 的 continuation 分页，不把 partial 当完整结果。修订请求时省略assignee或dueDate保留原值，assignee子字段或dueDate传null明确清除。仅在用户明确声明本案两个事项的有向承接关系（case-save-issue-edge）或明确要求由谁对方案作取舍/补录观察（case-save-decision-request）时调用；Case 与当前事项归属由 Host 绑定，不接受模型改写他案。',
+  parameters: Type.Object({
+    action: Type.Union([Type.Literal('case-read-declarations'), Type.Literal('case-save-issue-edge'), Type.Literal('case-save-decision-request')]),
+    section: Type.Optional(Type.Union(['issues','edges','requests','strategies','choices','observations'].map(value => Type.Literal(value)))),
+    offset: Type.Optional(Type.Integer({ minimum: 0, maximum: 100000 })),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 20 })),
+    continuation: Type.Optional(Type.String()),
+    edgeId: Type.Optional(Type.String()),
+    fromIssueId: Type.Optional(Type.String()),
+    toIssueId: Type.Optional(Type.String()),
+    edgeAction: Type.Optional(Type.Union([Type.Literal('save'), Type.Literal('remove')])),
+    explanation: Type.Optional(Type.String({ maxLength: 1000 })),
+    expectedEdgeRevision: Type.Optional(Type.Integer({ minimum: 0 })),
+    sourceKind: Type.Optional(Type.Union([Type.Literal('user-declaration'), Type.Literal('adopted-candidate')])),
+    requestId: Type.Optional(Type.String()),
+    requestAction: Type.Optional(Type.Union([Type.Literal('save'), Type.Literal('withdraw'), Type.Literal('supersede')])),
+    kind: Type.Optional(Type.Union([Type.Literal('choose'), Type.Literal('observe')])),
+    text: Type.Optional(Type.String({ maxLength: 4000 })),
+    assignee: Type.Optional(Type.Object({
+      label: Type.Optional(Type.Union([Type.String({ maxLength: 120 }), Type.Null()])),
+      source: Type.Optional(Type.Union([Type.String({ maxLength: 400 }), Type.Null()])),
+    }, { additionalProperties: false })),
+    dueDate: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    target: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+    expectedRequestRevision: Type.Optional(Type.Integer({ minimum: 0 })),
+  }, { additionalProperties: false }),
 };

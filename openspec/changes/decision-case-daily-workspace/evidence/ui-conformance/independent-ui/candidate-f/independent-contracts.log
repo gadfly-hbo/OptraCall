@@ -1,0 +1,25 @@
+✔ DW08/DW09-REQ-01: explicit choose request is only resolved by exact respondsToRequest choice, never by viewing or unrelated choices (367.437606ms)
+✔ DW08/DW09-REQ-02: observe request is only resolved by saveFeedback carrying exact requestId, revision, real Case authorizationId, and baseRevisionId (257.375305ms)
+✔ DW08/DW09-HOME-03: home projection separates pending, continue, externalWaiting, pendingOperations; never fabricates pending from awaiting_confirmation or missing assignee (198.99981ms)
+✔ DW14: creation recovery uses the immutable operation after later Case edits (187.132326ms)
+✔ DW14: an uncertain CaseStore commit stays UNKNOWN and retains original operation identity (27.926706ms)
+✔ D14: raw observation uses original feedback revisions; lazy v7 keeps old payload hashes and records exact (132.676143ms)
+✔ D14: rejected write rolls lazy schema migration back together with all original feedback (107.120082ms)
+✔ D14: unknown execution requires a dated observation; invalid dates and malformed metadata never migrate or save (82.159221ms)
+✔ D14: HTTP observation save/read/retry retains unknown execution, accurate request reference and CAS (6368.432552ms)
+✔ D14: original action authority display does not describe unknown execution as non-execution (71.221025ms)
+✔ D14: exact feedback source displays its original observation date and source scope without inferring execution (144.607078ms)
+✔ DW08/09 observation picker preserves two distinct requests and binds the explicitly selected second revision (1.939202ms)
+✔ DW09 request revision, target baseline and clicked owner cannot silently switch to a newer or different request (0.326153ms)
+✔ DW09 actual current Case authorization, issue and source store must match; work, revoke and another round never answer (0.570285ms)
+✔ DW09 original request baseline and current feedback CAS both apply without changing the draft (0.216519ms)
+✔ DW08/09 only genuinely open observe requests are offered; source text remains exact (0.312947ms)
+✔ DW09 original feedback HTTP save carries exact selected reference; ordinary and lost-ack saves never gain inferred requests or retries (37.993812ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 15358.27083

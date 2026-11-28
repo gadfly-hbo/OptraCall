@@ -1,0 +1,102 @@
+{
+  "candidate": "a571245698d432d39e3fbdbcfee423ebc06fd919",
+  "root": "/workspace/OptraCall-issue149-final/.local/pm-final/backend/plan-source-bPyB9V",
+  "outputs": [
+    {
+      "name": "initial-real-plan-source-qualified",
+      "initialCheckPlan": "passed",
+      "nativeReplyCount": 1,
+      "source": {
+        "type": "native-reply",
+        "projectId": "aed1ce19-631d-42a8-9154-cd1243b8cd35",
+        "taskId": "814f7763-c59d-4462-bbc5-cc18eae6458e",
+        "sessionId": "01a21dc6-0c43-716e-b76e-198dfd845a9f",
+        "messageId": "02930e47",
+        "expectedTextSha256": "5c78e94c1a354ac35a6b43c2066df0c48acfcd26726b32260b013602bb6cd3c1"
+      },
+      "strategyId": "6d54661e-5b81-4173-9c8a-835c58b7c2ac",
+      "requestId": "27dd249d-680b-4a3c-901d-020db2f9a649"
+    },
+    {
+      "name": "source-project-archived",
+      "originalChooseCode": "project_archived",
+      "newRequestCode": null,
+      "newRequestAccepted": true,
+      "statuses": [
+        {
+          "requestId": "27dd249d-680b-4a3c-901d-020db2f9a649",
+          "status": "open"
+        },
+        {
+          "requestId": "c6d6e037-e311-4994-adcc-ab8e1d51ba9c",
+          "status": "open"
+        }
+      ],
+      "pending": [
+        "c6d6e037-e311-4994-adcc-ab8e1d51ba9c",
+        "27dd249d-680b-4a3c-901d-020db2f9a649"
+      ]
+    },
+    {
+      "name": "source-plan-task-archived",
+      "originalChooseCode": "case_issue_source_scope_mismatch",
+      "newRequestCode": null,
+      "newRequestAccepted": true,
+      "statuses": [
+        {
+          "requestId": "27dd249d-680b-4a3c-901d-020db2f9a649",
+          "status": "open"
+        },
+        {
+          "requestId": "c6d6e037-e311-4994-adcc-ab8e1d51ba9c",
+          "status": "open"
+        },
+        {
+          "requestId": "56558079-6e93-49a8-8a0e-2b40512fc623",
+          "status": "open"
+        }
+      ],
+      "pending": [
+        "56558079-6e93-49a8-8a0e-2b40512fc623",
+        "c6d6e037-e311-4994-adcc-ab8e1d51ba9c",
+        "27dd249d-680b-4a3c-901d-020db2f9a649"
+      ]
+    },
+    {
+      "name": "source-native-temporarily-unavailable",
+      "originalChooseCode": "case_issue_reply_unavailable",
+      "newRequestCode": null,
+      "newRequestAccepted": true,
+      "statuses": [
+        {
+          "requestId": "27dd249d-680b-4a3c-901d-020db2f9a649",
+          "status": "open"
+        },
+        {
+          "requestId": "c6d6e037-e311-4994-adcc-ab8e1d51ba9c",
+          "status": "open"
+        },
+        {
+          "requestId": "56558079-6e93-49a8-8a0e-2b40512fc623",
+          "status": "open"
+        },
+        {
+          "requestId": "0e5990a6-0f14-4abe-a96a-81d95143745a",
+          "status": "open"
+        }
+      ],
+      "pending": [
+        "0e5990a6-0f14-4abe-a96a-81d95143745a",
+        "56558079-6e93-49a8-8a0e-2b40512fc623",
+        "c6d6e037-e311-4994-adcc-ab8e1d51ba9c",
+        "27dd249d-680b-4a3c-901d-020db2f9a649"
+      ]
+    },
+    {
+      "name": "original-plan-source-restored",
+      "originalChooseSucceeded": true,
+      "exactRequestStatus": "answered",
+      "originalNativeBytesEqual": true
+    }
+  ]
+}
