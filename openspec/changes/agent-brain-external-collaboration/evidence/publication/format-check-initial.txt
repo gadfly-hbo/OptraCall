@@ -1,0 +1,1 @@
+openspec/changes/agent-brain-external-collaboration/published-issue.md:60: new blank line at EOF.

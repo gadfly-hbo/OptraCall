@@ -21,5 +21,8 @@
   "publishedBodySha256": "9b39632fa2fc2d83990b72a5a3165d679b5e3467a52e37f188311fc3066bece7",
   "mainAtPublication": "74030911ade7a9e06ad1a0213d1fcb93ecbba6dd",
   "designFilesUnchanged": true,
-  "implementationPrCiRealAccountsDeployment": "NOT_RUN"
+  "implementationPrCiRealAccountsDeployment": "NOT_RUN",
+  "initialSnapshotWhitespaceCheck": "FAIL: original extra EOF blank line; preserved without changing issue body",
+  "snapshotWhitespacePolicy": "published-issue.md only: whitespace=-blank-at-eof",
+  "snapshotSha256StillMatches": true
 }

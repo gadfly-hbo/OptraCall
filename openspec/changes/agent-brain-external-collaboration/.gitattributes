@@ -1,0 +1,2 @@
+# Keep the GitHub-published Markdown snapshot byte-for-byte, including its final blank line.
+published-issue.md whitespace=-blank-at-eof
