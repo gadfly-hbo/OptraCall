@@ -1,0 +1,167 @@
+{
+  "at": "2026-11-28T11:29:36.626025+00:00",
+  "scope": "read-only publication metadata only",
+  "checks": [
+    {
+      "name": "candidate fixed",
+      "actual": "2f6013fd759ebac5b37999c82817e3461a245107",
+      "expected": "2f6013fd759ebac5b37999c82817e3461a245107",
+      "pass": true
+    },
+    {
+      "name": "body receipt hash",
+      "actual": "170fe60be6e73ca64e838d6c2b364a1ea9fdb9fc8b1035039c0c92c069d09105",
+      "expected": "170fe60be6e73ca64e838d6c2b364a1ea9fdb9fc8b1035039c0c92c069d09105",
+      "pass": true
+    },
+    {
+      "name": "independent GitHub body exact",
+      "actual": "170fe60be6e73ca64e838d6c2b364a1ea9fdb9fc8b1035039c0c92c069d09105",
+      "expected": "170fe60be6e73ca64e838d6c2b364a1ea9fdb9fc8b1035039c0c92c069d09105",
+      "pass": true
+    },
+    {
+      "name": "remote Issue remains Open",
+      "actual": "open",
+      "expected": "open",
+      "pass": true
+    },
+    {
+      "name": "remote no claim comments",
+      "actual": 0,
+      "expected": 0,
+      "pass": true
+    },
+    {
+      "name": "spec.md local SHA256",
+      "actual": "56522ef4db656ed047864cd9cc897fec0544bb627dd5fcf8bf26af82a27d9375",
+      "expected": "56522ef4db656ed047864cd9cc897fec0544bb627dd5fcf8bf26af82a27d9375",
+      "pass": true
+    },
+    {
+      "name": "spec.md bytes",
+      "actual": 37308,
+      "expected": 37308,
+      "pass": true
+    },
+    {
+      "name": "spec.md fixed candidate bytes",
+      "actual": "56522ef4db656ed047864cd9cc897fec0544bb627dd5fcf8bf26af82a27d9375",
+      "expected": "56522ef4db656ed047864cd9cc897fec0544bb627dd5fcf8bf26af82a27d9375",
+      "pass": true
+    },
+    {
+      "name": "spec.md candidate blob",
+      "actual": "44b525b771cccfebe8a31bcb8c118b34239f149f",
+      "expected": "44b525b771cccfebe8a31bcb8c118b34239f149f",
+      "pass": true
+    },
+    {
+      "name": "spec.md body includes fixed hash",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "tasks.md local SHA256",
+      "actual": "fe12198ab553abc388b74dc3dc94818d09b358b2e27bde527b0b9fed45fbd9bd",
+      "expected": "fe12198ab553abc388b74dc3dc94818d09b358b2e27bde527b0b9fed45fbd9bd",
+      "pass": true
+    },
+    {
+      "name": "tasks.md bytes",
+      "actual": 3221,
+      "expected": 3221,
+      "pass": true
+    },
+    {
+      "name": "tasks.md fixed candidate bytes",
+      "actual": "fe12198ab553abc388b74dc3dc94818d09b358b2e27bde527b0b9fed45fbd9bd",
+      "expected": "fe12198ab553abc388b74dc3dc94818d09b358b2e27bde527b0b9fed45fbd9bd",
+      "pass": true
+    },
+    {
+      "name": "tasks.md candidate blob",
+      "actual": "7e162546675222088dae550dc87d1a3a1c6a36e4",
+      "expected": "7e162546675222088dae550dc87d1a3a1c6a36e4",
+      "pass": true
+    },
+    {
+      "name": "tasks.md body includes fixed hash",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "ui-demo.html local SHA256",
+      "actual": "9a5626d5efe69f2d5a4c22ee234919a4abd07e4c190a0fb996a9449cd062fcb4",
+      "expected": "9a5626d5efe69f2d5a4c22ee234919a4abd07e4c190a0fb996a9449cd062fcb4",
+      "pass": true
+    },
+    {
+      "name": "ui-demo.html bytes",
+      "actual": 157525,
+      "expected": 157525,
+      "pass": true
+    },
+    {
+      "name": "ui-demo.html fixed candidate bytes",
+      "actual": "9a5626d5efe69f2d5a4c22ee234919a4abd07e4c190a0fb996a9449cd062fcb4",
+      "expected": "9a5626d5efe69f2d5a4c22ee234919a4abd07e4c190a0fb996a9449cd062fcb4",
+      "pass": true
+    },
+    {
+      "name": "ui-demo.html candidate blob",
+      "actual": "b0db1a0f5415e9a7c8414d4fa6dc766d4959b08b",
+      "expected": "b0db1a0f5415e9a7c8414d4fa6dc766d4959b08b",
+      "pass": true
+    },
+    {
+      "name": "ui-demo.html body includes fixed hash",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    },
+    {
+      "name": "not ready for claim",
+      "actual": false,
+      "expected": false,
+      "pass": true
+    },
+    {
+      "name": "user design pending",
+      "actual": "PENDING",
+      "expected": "PENDING",
+      "pass": true
+    },
+    {
+      "name": "implementation not started",
+      "actual": "NOT_STARTED",
+      "expected": "NOT_STARTED",
+      "pass": true
+    },
+    {
+      "name": "PR absent",
+      "actual": "NOT_CREATED",
+      "expected": "NOT_CREATED",
+      "pass": true
+    },
+    {
+      "name": "WB real test not run",
+      "actual": "NOT_RUN",
+      "expected": "NOT_RUN",
+      "pass": true
+    },
+    {
+      "name": "preview explicit boundary",
+      "actual": true,
+      "expected": true,
+      "pass": true
+    }
+  ],
+  "summary": {
+    "total": 26,
+    "pass": 26,
+    "fail": 0
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "issue": "https://github.com/gadfly-hbo/OptraCall/issues/155",
+  "candidate": "2f6013fd759ebac5b37999c82817e3461a245107",
+  "main": "74030911ade7a9e06ad1a0213d1fcb93ecbba6dd",
+  "state": "open",
+  "body_exact_readback": true,
+  "body_sha256": "170fe60be6e73ca64e838d6c2b364a1ea9fdb9fc8b1035039c0c92c069d09105",
+  "files": [
+    {
+      "path": "spec.md",
+      "bytes": 37308,
+      "sha256": "56522ef4db656ed047864cd9cc897fec0544bb627dd5fcf8bf26af82a27d9375",
+      "blob": "44b525b771cccfebe8a31bcb8c118b34239f149f"
+    },
+    {
+      "path": "tasks.md",
+      "bytes": 3221,
+      "sha256": "fe12198ab553abc388b74dc3dc94818d09b358b2e27bde527b0b9fed45fbd9bd",
+      "blob": "7e162546675222088dae550dc87d1a3a1c6a36e4"
+    },
+    {
+      "path": "ui-demo.html",
+      "bytes": 157525,
+      "sha256": "9a5626d5efe69f2d5a4c22ee234919a4abd07e4c190a0fb996a9449cd062fcb4",
+      "blob": "b0db1a0f5415e9a7c8414d4fa6dc766d4959b08b"
+    }
+  ],
+  "github_blob_readback": true,
+  "ready_for_claim": false,
+  "user_v03_design_confirmation": "PENDING",
+  "product_implementation": "NOT_STARTED",
+  "product_ci": "NOT_RUN_PREPARATION_ONLY",
+  "pr": "NOT_CREATED",
+  "workbuddy_live_joint_test": "NOT_RUN"
+}
