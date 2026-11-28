@@ -86,8 +86,12 @@ export type Claim = {
   updatedAt: string;
 };
 
-export type DeliveryPreservation = 'pending' | 'preserved' | 'failed' | 'unknown';
+export type DeliveryPreservation = 'pending' | 'preserved' | 'failed' | 'unknown' | 'link-only';
 export type ExternalDeliveryFacts = { done: string[]; notDone: string[]; failed: string[]; unknown: string[] };
+/** Host 分配的 external-delivery 存储条目；relativePath 在 dataRoot/external-delivery 之下，绝不指向 native 060_reports。 */
+export type ExternalDeliveryStorageEntry = { logicalPath: string; relativePath: string; sha256: string; bytes: number };
+/** 仅登记的外部链接：字节未在本机保全，绝不冒充"字节已验"。 */
+export type ExternalDeliveryLinkEntry = { logicalPath: string; url: string };
 export type ExternalDeliveryRef = {
   deliveryId: string;
   workId: string;
@@ -96,6 +100,11 @@ export type ExternalDeliveryRef = {
   idempotencyKey: string;
   manifestHash: string;
   preservation: DeliveryPreservation;
+  /** preservation=preserved 时必须非空；link-only 交付可同时携带已验字节的 storage 条目。 */
+  storage?: ExternalDeliveryStorageEntry[];
+  links?: ExternalDeliveryLinkEntry[];
+  /** failed/unknown 的审计原因（missing_pieces/content_hash_mismatch/blob_hash_mismatch/save_failed 等）。 */
+  preservationReason?: string;
   assetsUsed: ExternalAssetRef[];
   facts: ExternalDeliveryFacts;
   late: boolean;

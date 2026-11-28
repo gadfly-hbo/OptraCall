@@ -1,0 +1,364 @@
+✖ chunked upload happy path preserves bytes atomically as an independent external delivery (149.385083ms)
+✖ idempotent receipts: same key+content replays, chunk and commit content conflicts are denied (127.99675ms)
+✖ limits: chunk, single-file, file-count, cumulative and manifest ceilings are enforced (58.204792ms)
+✖ path safety: traversal, absolute paths, backslashes and drive letters are rejected (78.797334ms)
+✖ arbitrary URLs are never fetched; declared links are recorded link-only (80.918333ms)
+✖ missing pieces and byte-hash mismatch are recorded failed, never preserved, zero bytes on disk (62.243083ms)
+✖ released or revoked claims cannot complete: commit becomes isolated late evidence without byte preservation (95.791ms)
+✖ expired lease at commit refuses completion; expired grant blocks chunk writes and commit (74.902708ms)
+✖ atomic save failure rolls back every link of the attempt: zero half files, delivery recorded failed (70.991334ms)
+✖ exact GitHub blob bytes are read via the injected seam and preserved; out-of-scope or non-exact refs are refused (77.769375ms)
+✖ 24h cleanup removes expired staging, keeps audit records and confirmed deliveries (71.748ms)
+✖ store: preservation state machine, storage fields and atomic claim/epoch/grant recheck (68.588667ms)
+✖ store: recordLateDelivery keeps ledger invariants; old ledgers without new fields parse unchanged (68.92525ms)
+✖ external delivery receipts never masquerade as native report receipts (63.303209ms)
+✖ standard MCP client preserves delivery bytes end to end: claim → begin → chunks → commit → preserved (284.504667ms)
+✖ commit verifies the server-verified principal and epoch: foreign or stale callers are denied (141.421459ms)
+✖ chunk, file-count and path limits are enforced over MCP (153.72525ms)
+✖ commit idempotency and conflicts behave over MCP (140.331125ms)
+✖ missing pieces produce failed receipts over MCP, never preserved, zero bytes on disk (111.829375ms)
+✖ late commit on a released claim is isolated and never overrides the current delivery (109.949333ms)
+✖ link-only commits are recorded without bytes over MCP (102.814291ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 0
+ℹ fail 21
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1534.694542
+
+✖ failing tests:
+
+test at tests/external-delivery.test.ts:102:1
+✖ chunked upload happy path preserves bytes atomically as an independent external delivery (149.385083ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:21:48)
+      at new ExternalDeliveryPreservation (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:53:11)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:65:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:103:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    code: 'external_delivery_preservation_unimplemented',
+    status: 501
+  }
+
+test at tests/external-delivery.test.ts:130:1
+✖ idempotent receipts: same key+content replays, chunk and commit content conflicts are denied (127.99675ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:21:48)
+      at new ExternalDeliveryPreservation (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:53:11)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:65:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:131:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_delivery_preservation_unimplemented',
+    status: 501
+  }
+
+test at tests/external-delivery.test.ts:153:1
+✖ limits: chunk, single-file, file-count, cumulative and manifest ceilings are enforced (58.204792ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:21:48)
+      at new ExternalDeliveryPreservation (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:53:11)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:65:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:154:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_delivery_preservation_unimplemented',
+    status: 501
+  }
+
+test at tests/external-delivery.test.ts:184:1
+✖ path safety: traversal, absolute paths, backslashes and drive letters are rejected (78.797334ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:21:48)
+      at new ExternalDeliveryPreservation (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:53:11)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:65:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:185:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_delivery_preservation_unimplemented',
+    status: 501
+  }
+
+test at tests/external-delivery.test.ts:197:1
+✖ arbitrary URLs are never fetched; declared links are recorded link-only (80.918333ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:21:48)
+      at new ExternalDeliveryPreservation (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:53:11)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:65:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:199:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_delivery_preservation_unimplemented',
+    status: 501
+  }
+
+test at tests/external-delivery.test.ts:221:1
+✖ missing pieces and byte-hash mismatch are recorded failed, never preserved, zero bytes on disk (62.243083ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:21:48)
+      at new ExternalDeliveryPreservation (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:53:11)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:65:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:222:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_delivery_preservation_unimplemented',
+    status: 501
+  }
+
+test at tests/external-delivery.test.ts:256:1
+✖ released or revoked claims cannot complete: commit becomes isolated late evidence without byte preservation (95.791ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:21:48)
+      at new ExternalDeliveryPreservation (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:53:11)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:65:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:257:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_delivery_preservation_unimplemented',
+    status: 501
+  }
+
+test at tests/external-delivery.test.ts:286:1
+✖ expired lease at commit refuses completion; expired grant blocks chunk writes and commit (74.902708ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:21:48)
+      at new ExternalDeliveryPreservation (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:53:11)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:65:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:287:20)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_delivery_preservation_unimplemented',
+    status: 501
+  }
+
+test at tests/external-delivery.test.ts:314:1
+✖ atomic save failure rolls back every link of the attempt: zero half files, delivery recorded failed (70.991334ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:21:48)
+      at new ExternalDeliveryPreservation (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:53:11)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:65:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:316:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_delivery_preservation_unimplemented',
+    status: 501
+  }
+
+test at tests/external-delivery.test.ts:339:1
+✖ exact GitHub blob bytes are read via the injected seam and preserved; out-of-scope or non-exact refs are refused (77.769375ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:21:48)
+      at new ExternalDeliveryPreservation (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:53:11)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:65:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:341:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_delivery_preservation_unimplemented',
+    status: 501
+  }
+
+test at tests/external-delivery.test.ts:376:1
+✖ 24h cleanup removes expired staging, keeps audit records and confirmed deliveries (71.748ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:21:48)
+      at new ExternalDeliveryPreservation (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:53:11)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:65:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:377:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_delivery_preservation_unimplemented',
+    status: 501
+  }
+
+test at tests/external-delivery.test.ts:411:1
+✖ store: preservation state machine, storage fields and atomic claim/epoch/grant recheck (68.588667ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:21:48)
+      at new ExternalDeliveryPreservation (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:53:11)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:65:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:412:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_delivery_preservation_unimplemented',
+    status: 501
+  }
+
+test at tests/external-delivery.test.ts:451:1
+✖ store: recordLateDelivery keeps ledger invariants; old ledgers without new fields parse unchanged (68.92525ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:21:48)
+      at new ExternalDeliveryPreservation (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:53:11)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:65:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:452:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_delivery_preservation_unimplemented',
+    status: 501
+  }
+
+test at tests/external-delivery.test.ts:490:1
+✖ external delivery receipts never masquerade as native report receipts (63.303209ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at unimplemented (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:21:48)
+      at new ExternalDeliveryPreservation (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-delivery.ts:53:11)
+      at rig (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:65:24)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-delivery.test.ts:491:13)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_delivery_preservation_unimplemented',
+    status: 501
+  }
+
+test at tests/external-mcp-delivery.test.ts:187:1
+✖ standard MCP client preserves delivery bytes end to end: claim → begin → chunks → commit → preserved (284.504667ms)
+  AssertionError [ERR_ASSERTION]: delivery.begin must succeed, got: {"denied":"external_delivery_preservation_unimplemented","message":"外派业务记录操作未能完成。"}
+  + actual - expected
+  
+  + true
+  - undefined
+  
+      at expectOk (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-delivery.test.ts:118:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async uploadViaMcp (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-delivery.test.ts:174:17)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-delivery.test.ts:190:24)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-mcp-delivery.test.ts:207:1
+✖ commit verifies the server-verified principal and epoch: foreign or stale callers are denied (141.421459ms)
+  AssertionError [ERR_ASSERTION]: delivery.begin must succeed, got: {"denied":"external_delivery_preservation_unimplemented","message":"外派业务记录操作未能完成。"}
+  + actual - expected
+  
+  + true
+  - undefined
+  
+      at expectOk (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-delivery.test.ts:118:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async uploadViaMcp (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-delivery.test.ts:174:17)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-delivery.test.ts:210:24)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-mcp-delivery.test.ts:226:1
+✖ chunk, file-count and path limits are enforced over MCP (153.72525ms)
+  AssertionError [ERR_ASSERTION]: delivery.begin must succeed, got: {"denied":"external_delivery_preservation_unimplemented","message":"外派业务记录操作未能完成。"}
+  + actual - expected
+  
+  + true
+  - undefined
+  
+      at expectOk (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-delivery.test.ts:118:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-delivery.test.ts:229:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-mcp-delivery.test.ts:250:1
+✖ commit idempotency and conflicts behave over MCP (140.331125ms)
+  AssertionError [ERR_ASSERTION]: delivery.begin must succeed, got: {"denied":"external_delivery_preservation_unimplemented","message":"外派业务记录操作未能完成。"}
+  + actual - expected
+  
+  + true
+  - undefined
+  
+      at expectOk (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-delivery.test.ts:118:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async uploadViaMcp (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-delivery.test.ts:174:17)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-delivery.test.ts:253:24)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-mcp-delivery.test.ts:270:1
+✖ missing pieces produce failed receipts over MCP, never preserved, zero bytes on disk (111.829375ms)
+  AssertionError [ERR_ASSERTION]: delivery.begin must succeed, got: {"denied":"external_delivery_preservation_unimplemented","message":"外派业务记录操作未能完成。"}
+  + actual - expected
+  
+  + true
+  - undefined
+  
+      at expectOk (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-delivery.test.ts:118:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-delivery.test.ts:273:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-mcp-delivery.test.ts:287:1
+✖ late commit on a released claim is isolated and never overrides the current delivery (109.949333ms)
+  AssertionError [ERR_ASSERTION]: delivery.begin must succeed, got: {"denied":"external_delivery_preservation_unimplemented","message":"外派业务记录操作未能完成。"}
+  + actual - expected
+  
+  + true
+  - undefined
+  
+      at expectOk (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-delivery.test.ts:118:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async uploadViaMcp (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-delivery.test.ts:174:17)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-delivery.test.ts:290:22)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-mcp-delivery.test.ts:314:1
+✖ link-only commits are recorded without bytes over MCP (102.814291ms)
+  AssertionError [ERR_ASSERTION]: delivery.commit must succeed, got: {"denied":"external_delivery_preservation_unimplemented","message":"外派业务记录操作未能完成。"}
+  + actual - expected
+  
+  + true
+  - undefined
+  
+      at expectOk (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-delivery.test.ts:118:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-mcp-delivery.test.ts:316:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

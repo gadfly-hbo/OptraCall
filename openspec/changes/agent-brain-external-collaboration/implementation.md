@@ -29,7 +29,7 @@
 - [~] E01 内部/外派选择与授权、身份/持久记录；内部/取消零外部动作 —— S1 切片完成（store＋grant＋internal/external choice＋owner-bound port）；Host 接线（server.ts/工作方式卡）待后续切片
 - [~] E02 GitHub 独立发布/修订/回执 + 通用认证领取、原子单 claim/UNKNOWN 幂等 —— S2 切片完成（Host-only 发布编排＋UNKNOWN 只读核对＋只读收件适配＋manager Host-only 派发接缝）；原子单 claim 在 S1 store 已完成本轮复用；发布/收件的真实 GitHub 出站与 server.ts 接线属 E07/后续切片
 - [~] E03 受保护资产/工作 MCP、OAuth/精确交集/只读/错误与分片边界 —— S3a 切片完成（OAuth 2.1 授权/资源服务器＋受保护 Streamable HTTP 传输入口＋自签 TLS 闭环）；S3b 切片完成（资产只读交集＋asset.*/work.* 工具接入 S3a 服务器）；真实 Studio/原实例资格装配属 E07
-- [ ] E04 字节保全/ExternalDeliveryRef、原 owner 指纹/providedContext/非用户原话、busy/重启/暂停/取消/迟到、Agent 核验/原工具保存
+- [~] E04 字节保全/ExternalDeliveryRef、原 owner 指纹/providedContext/非用户原话、busy/重启/暂停/取消/迟到、Agent 核验/原工具保存 —— S4a 切片完成（交付字节保全：分块上传＋manifest 校验＋原子宿主保存＋独立 ExternalDeliveryRef；迟到不变式回并台账单一来源）；续接/指纹/providedContext/busy/重启/暂停/取消与 Agent 核验属 S4b
 - [ ] E05 WorkBuddy 可选适配工程合同（默认未验证禁用）
 - [ ] E06 UI 编码（沿映射）+ 三路径 + 1440/1024/390 亮暗/键盘/焦点 + 原消费者回归
 - [ ] E07 隔离 Host/Pi/标准 MCP/TLS/OAuth/GitHub 模拟供应商核心闭环 + 三冻结基准逐项非作者复核
@@ -138,6 +138,37 @@
 - S3b 未验证（明确不在本轮范围）：真实 Studio/原实例资格装配（`qualify`/`OriginalAssetReader` 本轮为注入接缝，真实装配属 E07）、大文件分块上传与宿主字节保全（S4，本轮 deliver 仅台账引用且 preservation=pending）、分片临时文件 24h 清理（S4）、主 Host server.ts 与 UI 接线（后续切片）、真实公网部署与实号执行者（E08）、实际删除/写图等写路径（不存在——工具面未含任何写工具，非“拒绝实现”而是“不外露”）。
 - 工程实现取舍（如实记录）：迟到隔离证据经 store 公开 `mutate` CAS 落账（S1 store 文件本切片冻结不改，其 `recordDelivery` 当前领取语义保持原样；late 路径在 work-tools 内完整复刻台账不变式——引用完整/幂等键唯一/容量上限，随 store 演进需回并）；read 分页按 UTF-16 码元切片、字节预算在实切片复核（多字节字符页内不越限，跨页切点在 E07 真实装配时按原工具上限复核）；拒绝信封统一 `{denied, message}`，正文级断言由测试保证。
 - 兼容回退：`ExternalWorkStore`/S3a 传输与 OAuth 语义零改动；新增工具经 `registerTools` 注入缝挂接，缺省服务器工具面不变（S3a 测试不改即绿）；ledger 新增 late 交付记录沿用 schema:1 严格解析，旧记录与旧行为不受影响。
+
+### S4a（E04，2026-11-28）：交付字节保全——分块上传、manifest 校验、原子宿主保存与独立 ExternalDeliveryRef
+
+**本轮交付**（接 S1 台账与 S3a/S3b 注入缝；不接主 Host server.ts/UI，不动 native `ProjectTaskResultBinding` 语义，不接真实 GitHub blob 装配；续接/指纹/暂停/取消/Agent 核验属 S4b）：
+
+- `src/host/external-delivery.ts`：`ExternalDeliveryPreservation` 保全服务（Host 分配存储路径＝`dataRoot/external-delivery/`：`staging/<uploadId>/{meta.json,chunks/*}`、`d/<commitId>/<逻辑路径>`；0700 目录/0600 文件/O_NOFOLLOW，惰性建目录）。
+  - 分块上传：`beginFile`（逻辑路径校验、单文件 ≤50MiB、同 claim 累计在途 ≤100MiB、同文件同内容回原 uploadId/异内容 `external_delivery_upload_conflict`）→ `writeChunk`（原始片段 ≤512KiB、偏移 512KiB 对齐、末片恰为余量；每次写前核当前领取/授权（grant 窗口先于租约：授权失效最优先拒绝，租约过期 `external_claim_expired`）；同偏移同内容回原收据、声明/实际不符或既有内容不同一律 `external_delivery_chunk_conflict`；会话内串行化）。base64 单请求 ≤1MiB（工具层 `assertArgsSize`）。
+  - manifest 校验（共享实现 `validateDeliveryManifest`）：manifest/正文 ≤256KiB、≤20 文件/累计 ≤100MiB/单文件 ≤50MiB（与原工具上限取低），超限明确拒绝；canonical manifestHash 按 path 排序（restricted 模式与 S3b work.deliver 完全同构同哈希）。extended 模式每条目恰一来源：`uploadId`（分块字节）｜`blob`（精确 GitHub blob：repo 必须等于 grant 授权仓库 stableId，否则 `external_delivery_blob_out_of_scope`；commit 必须完整 40-hex sha，分支别名 `external_delivery_blob_commit_invalid`；经注入 `readGithubBlob` 接缝读取并核 hash——未配置接缝/读取失败降级 link-only（"仅链接/待保全"），hash 不符记 failed `blob_hash_mismatch`）｜`link`（外部 http(s) 链接，只登记绝不下载）；`url` 字段永远拒绝（`external_delivery_url_rejected`）；重复逻辑路径拒绝。facts 必报（done/notDone/failed/unknown，共享 `validateDeliveryFacts`）。
+  - 提交保全语义：全量校验后才落盘（缺件/组装 hash 不符 → 记 failed `missing_pieces`/`content_hash_mismatch`，零字节落盘）；原子保存镜像 `ProjectStore.writeBoundReport`（staging tmp O_EXCL|O_NOFOLLOW 0600 → write+fsync → 目录身份核 → hardlink publish → unlink tmp → 目录 fsync → re-read observeFile 式 hash/inode/稳定性核对）；任一文件保存失败回滚本次全部链接（仅回滚仍绑定本次 staging inode 的链接，身份不确定不删）并记 failed `save_failed`（`hooks.beforeLink` 为测试/监控接缝）；成功后引用过的上传会话分片即刻清理。
+  - 提交前授权复核在台账原子变体内完成（"异步保存后提交前核当前领取/授权"无 TOCTOU）：`recordPreservedDelivery` 核 claim active+epoch+grant 窗口，失效即不可标完整——保存后失效则回滚字节并转隔离迟到证据（领取确已失效时）；部分上传/过期领取不可标完整；preservation 状态机 pending→preserved/failed/link-only（preserved 必须带非空 storage）。
+  - 24h 清理 `cleanupExpiredStaging`：仅删除过期（meta.createdAt 或 mtime >TTL）未完成 staging 会话与 `d/` 下孤儿 `.delivery-*.tmp`；台账记录与已保全字节永不触碰；宿主周期接线属装配切片（E07）。
+  - 路径安全：逻辑路径仅安全相对名（拒绝绝对路径/`..`/反斜杠/盘符/控制字符），存储路径由 Host 分配；不从任意 URL 下载。
+- `src/host/external-mcp/delivery-tools.ts`：`delivery.begin`/`delivery.upload-chunk`/`delivery.commit` 经 S3a `registerTools` 注入缝注册（同一 Bearer/路径白名单/限流之下），服务端核验 principal＋`assertArgsSize`(1MiB)；收据 `kind: 'delivery-upload'/'delivery-chunk'/'external-delivery'`，commit 收据含 preservation/storage/links/late/idempotent，固定声明"收据只证已记录事实与范围"。
+- `src/host/external-work-store.ts` 最小扩展（schema:1 兼容，S1 `recordDelivery` 当前领取语义原样不动）：`DeliveryPreservation` 增 `link-only`；`ExternalDeliveryRef` 增可选 `storage`/`links`/`preservationReason`（旧记录缺字段照常解析，preserved 无 storage 视为损坏）；新方法 `findDeliveryByIdempotencyKey`（幂等只读预检）、`recordPreservedDelivery`（字节保全落账＋原子授权复核）、`recordLateDelivery`（**S3b work-tools 迟到不变式回并台账单一来源**——引用完整/幂等键唯一/容量上限/active 领取必须走当前路径；work-tools 迟到分支改为委托，删除其本地复刻实现）。
+- `src/host/external-mcp/work-tools.ts` 最小改造：manifest/facts/assetsUsed 校验改用共享实现（行为不变、同拒绝码）；deliver 描述更新为"manifest-only 声明路径 preservation=pending，字节保全走 delivery.*"。
+- 类型：`external-work-types.ts` 增 `ExternalDeliveryStorageEntry`/`ExternalDeliveryLinkEntry`（交接清单中的"types.ts"指本文件；`external-mcp/types.ts` 无需改动）。
+
+**TDD 证据（先真实 RED 后最小 GREEN）**：
+
+- RED（桩阶段哨兵行为错误，非导入/环境错误）：`red/s4a-combined-red.log`（exit=1，21 tests 0 pass 21 fail，全部 `external_delivery_preservation_unimplemented`/`external_store_preservation_unimplemented` 哨兵）。
+- GREEN：`node --test tests/external-delivery.test.ts tests/external-mcp-delivery.test.ts` → 21/21 PASS 连跑 2 次（`green/s4a-combined-green.log`、`green/s4a-combined-green-rerun.log`）。修复记录：产品侧两处（`#observe` bigint/number 混比恒 false；`#saveFile` 目标路径双重 `d/`）、语义一处（writeChunk 同偏移异内容冲突优先于长度计划）、类型一处（测试 helper 返回类型），实现逻辑未削弱断言。
+- 检查：`npm run check:agent-sessions` PASS（`green/s4a-check-agent-sessions-green.log`）；`npm run build` PASS（`green/s4a-build-green.log`）。
+- 回归（隔离复跑全过，零改动即绿）：S3b asset/work 26/26（`green/s4a-regression-s3b-green.log`，覆盖 work.deliver 行为不变）；S3a oauth/server 24/24（`green/s4a-regression-s3a-green.log`）；S1/S2 store/dispatch/publish/inbox 52/52（`green/s4a-regression-s1s2-green.log`，含 store 扩展 schema 兼容）。
+
+**关键负例覆盖（对应交接清单）**：同幂等键同内容回原收据/异内容冲突（分片与提交两侧）；分片超 512KiB/单文件超 50MiB/21 文件/累计超 100MiB（同 claim 在途合计）/manifest 超 256KiB 拒绝；路径穿越（`../`、绝对、`./`、反斜杠、盘符）拒绝；字节条目带任意 URL 拒绝且 link 条目零抓取（注入 spy 证伪）；缺件/组装 hash 不符记 failed（missing_pieces/content_hash_mismatch）零字节落盘、永不标 preserved；已释放领取 commit 走隔离迟到证据（late=true、preservation=pending、无 storage、不覆盖当前交付、claim 不复活）；租约过期 commit `external_claim_expired` 拒绝、grant 过期拒绝 begin/writeChunk/commit（写前+提交前核）；原子保存失败（beforeLink 注入）回滚全部链接、`d/` 零残留、记 failed；preserved 字节重读 hash 与 manifest 一致；精确 blob 授权仓库+完整 commit 才可读、越仓库/分支别名拒绝、hash 不符 failed、无接缝降级 link-only；24h 清理清过期会话（TTL 前零清理）、保留台账与已确认交付、failed 审计元数据（preservationReason=missing_pieces）保留；store 扩展原子复核（epoch 错/领取已释放/授权过期在台账变体内拒绝）与旧账本（无新字段）原样解析；外部收据/台账记录不含 `optracall.project-report-write`/`ProjectTaskResultBinding`/`writeBoundReport`/`060_reports` 字样（不伪 native）；标准 MCP 客户端经自签 TLS+OAuth 2.1+Bearer 完成 claim→begin→chunks→commit→preserved 闭环（合成 store/时钟/blob 接缝，不触真实网络/凭据）。
+
+**失败/跳过/未验证项**：
+
+- S4a 未验证（明确不在本轮范围）：精确 GitHub blob 的真实读取装配（`readGithubBlob` 本轮为注入接缝，真实 GitHub 装配属 E07/E08）；清理的宿主周期触发接线（装配切片）；同 owner 续接/requestFingerprint/providedContext/busy 待处理/重启回读/暂停/取消与 Agent 核验（ReviewDecision 记录 API 在 S1 `recordReview` 已有，实际核验经 S4b 续接产生）；主 Host server.ts/UI 接线；真实公网部署与实号执行者（E08）。
+- 工程实现取舍（如实记录）：commit 幂等预检先于 active/迟到分支（已受理交付重放回原收据，含领取已释放后的重试），最终一致性仍由 store 原子变体保证；已保全交付引用过的会话分片即刻清理，未引用/失败会话留待 24h TTL；分片写按会话串行化（单实例内存链，多实例部署需共享锁——当前单实例运行前提与主 Host 一致）；`hooks.beforeLink` 为注入式保存失败测试/监控接缝；保存后授权失效转迟到证据仅在领取确已失效时发生，仅 grant 过期则按 `external_grant_not_valid` 拒绝（授权失效优先于迟到）。
+- 兼容回退：S1 `recordDelivery`/`recordReview` 语义零改动；ledger schema:1 严格解析增可选字段+`link-only` 状态，旧记录与旧行为不受影响（旧账本解析负例实测）；`external-delivery/` 存储树为净新目录，不影响 native 项目文件/060_reports；回退后已保全字节与台账记录保留，不重放外部动作。
 
 ## 范围外发现（记录并继续原任务）
 

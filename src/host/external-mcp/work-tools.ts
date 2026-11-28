@@ -1,10 +1,9 @@
-import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ExternalWorkStore } from '../external-work-store.ts';
 import type { ExternalAssetRef, ExternalDeliveryFacts, ExternalDeliveryRef } from '../external-work-types.ts';
-import { parseExternalAssetRefs } from '../external-work-types.ts';
 import { canonicalAssetRef, denied, assertArgsSize, denialResult, verifiedPrincipal, sha256Hex } from './intersection.ts';
+import { validateDeliveryFacts, validateDeliveryManifest, parseDeliveryAssetsUsed } from '../external-delivery.ts';
 
 /**
  * S3b 工作记录工具面（Issue #155 spec §6/§8 / AB06/AB11）：
@@ -14,12 +13,14 @@ import { canonicalAssetRef, denied, assertArgsSize, denialResult, verifiedPrinci
  *   一律不是身份，GitHub 留言更不代替认证。
  * - claim 原子单领取（已发布且无未核外部动作的准确 workId/revision）；renew/release 核当前
  *   领取者/epoch/授权/时效；release 不证明真实操作已经结束。
- * - deliver 核当前领取、输入工作版本与 manifest；幂等键同内容回原收据、异内容冲突；旧
- *   epoch/工作撤销后的历史已授权身份（同一核验 principal）可提交隔离迟到证据，不覆盖当前
- *   交付、不恢复资产资格；其他 principal 不能借历史 claimId 保存任意人材料。
- * - 分片限额（spec §8）：单请求参数 ≤1MiB、manifest ≤256KiB、单交付 ≤20 文件/累计 100MiB、
- *   单文件 ≤50MiB（与原工具上限取低）；路径由 Host 分配，不接受任意本机路径/任意 URL 下载；
- *   缺件不标保全——本轮交付仅落台账引用（preservation=pending），大文件分块宿主保全属 S4。
+ * - deliver 为 manifest-only 声明路径：核当前领取、输入工作版本与 manifest；幂等键同内容回
+ *   原收据、异内容冲突；preservation 恒为 pending，永不冒充字节已验——字节保全走 S4a
+ *   `delivery.begin/upload-chunk/commit`（同注入缝、同 Bearer）。迟到不变式已回并到 S1
+ *   台账 `store.recordLateDelivery` 单一来源：旧 epoch/撤销后的历史已授权身份（同一核验
+ *   principal）经台账提交隔离迟到证据，不覆盖当前交付、不恢复资产资格。
+ * - 分片限额与 manifest/facts 校验复用 S4a 共享实现（spec §8：单请求参数 ≤1MiB、
+ *   manifest ≤256KiB、≤20 文件/累计 100MiB、单文件 ≤50MiB）；路径由 Host 分配，不接受
+ *   任意本机路径/任意 URL 下载。
  */
 
 export interface WorkToolsOptions {
@@ -29,13 +30,8 @@ export interface WorkToolsOptions {
   lease?: { claimMinutes?: number; renewMinutes?: number; maxMinutes?: number };
 }
 
-const MAX_FILES = 20;
-const MAX_TOTAL_BYTES = 100 * 1024 * 1024;
-const MAX_SINGLE_FILE_BYTES = 50 * 1024 * 1024;
-const MAX_MANIFEST_BYTES = 256 * 1024;
 const DEFAULT_LEASE = { claimMinutes: 15, renewMinutes: 5, maxMinutes: 60 };
 const RECEIPT_CLAIM = 'delivery-receipt-proves-recorded-facts-and-scope-only';
-const MAX_LEDGER_RECORDS = 10000;
 
 interface IdentityArgs { workId: string }
 interface ClaimArgs extends IdentityArgs { revision?: number; leaseMinutes?: number; principal?: string }
@@ -52,87 +48,6 @@ interface DeliverArgs extends IdentityArgs {
 }
 
 function iso(ms: number): string { return new Date(ms).toISOString(); }
-
-function validateFacts(value: unknown): ExternalDeliveryFacts {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw denied('external_delivery_facts_required', 400, 'a delivery must report done/notDone/failed/unknown facts');
-  const raw = value as Record<string, unknown>;
-  const list = (key: string): string[] => {
-    const item = raw[key];
-    if (!Array.isArray(item)) throw denied('external_delivery_facts_required', 400, `facts.${key} must be an array`);
-    if (item.some(entry => typeof entry !== 'string')) throw denied('external_delivery_facts_invalid', 400, `facts.${key} must contain strings only`);
-    return item as string[];
-  };
-  return { done: list('done'), notDone: list('notDone'), failed: list('failed'), unknown: list('unknown') };
-}
-
-function validDeliveryPath(path: string): boolean {
-  if (typeof path !== 'string' || !path.length || path.length > 300) return false;
-  if (/[\u0000-\u001f\u007f]/.test(path)) return false;
-  if (path.includes('\\')) return false;
-  if (path.startsWith('/')) return false;
-  if (/^[A-Za-z]:/.test(path)) return false;
-  return path.split('/').every(segment => segment.length > 0 && segment !== '.' && segment !== '..');
-}
-
-/** manifest 限额与路径校验；manifestHash 为规范化内容承诺（按 path 排序，同集合同序无关）。 */
-function validateManifest(value: unknown): { manifestHash: string } {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw denied('external_delivery_manifest_invalid', 400, 'manifest must be an object with a files array');
-  const manifest = value as { files?: unknown };
-  if (!Array.isArray(manifest.files)) throw denied('external_delivery_manifest_invalid', 400, 'manifest.files must be an array');
-  if (manifest.files.length > MAX_FILES) throw denied('external_delivery_limit_exceeded', 413, 'a delivery carries at most 20 files');
-  if (Buffer.byteLength(JSON.stringify(value), 'utf8') > MAX_MANIFEST_BYTES) throw denied('external_delivery_manifest_limit', 413, 'the manifest exceeds the 256KiB ceiling');
-  let total = 0;
-  const normalized: Array<{ path: string; sha256: string; bytes: number }> = [];
-  for (const entry of manifest.files) {
-    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) throw denied('external_delivery_manifest_invalid', 400, 'each manifest entry must be an object');
-    const file = entry as Record<string, unknown>;
-    if ('url' in file) throw denied('external_delivery_url_rejected', 400, 'deliveries never fetch material from arbitrary URLs');
-    const path = file.path, hash = file.sha256, bytes = file.bytes;
-    if (!validDeliveryPath(path as string)) throw denied('external_delivery_path_rejected', 400, 'delivery paths are logical names; Host assigns storage paths and rejects arbitrary local paths');
-    if (typeof hash !== 'string' || !/^[a-f0-9]{64}$/.test(hash)) throw denied('external_delivery_manifest_invalid', 400, 'each file needs an exact sha256');
-    if (!Number.isSafeInteger(bytes) || (bytes as number) < 0) throw denied('external_delivery_manifest_invalid', 400, 'file bytes must be a non-negative integer');
-    if ((bytes as number) > MAX_SINGLE_FILE_BYTES) throw denied('external_delivery_limit_exceeded', 413, 'a single file exceeds the 50MiB ceiling');
-    total += bytes as number;
-    if (total > MAX_TOTAL_BYTES) throw denied('external_delivery_limit_exceeded', 413, 'a delivery totals at most 100MiB');
-    normalized.push({ path: path as string, sha256: hash, bytes: bytes as number });
-  }
-  const canonical = JSON.stringify({ files: [...normalized].sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0)) });
-  return { manifestHash: sha256Hex(canonical) };
-}
-
-function parseAssetsUsed(value: unknown): ExternalAssetRef[] {
-  if (value === undefined) return [];
-  try { return parseExternalAssetRefs(value); } catch { throw denied('external_delivery_assets_invalid', 400, 'assetsUsed must be exact authority/id/version/hash refs'); }
-}
-
-/**
- * 迟到隔离路径：S1 store 的 recordDelivery 语义（当前有效领取）保持不动；历史已授权身份的
- * 隔离迟到证据经公开 mutate CAS 落账，完整复刻台账不变式（引用完整、幂等键唯一、容量上限），
- * 标记 late=true 且 preservation 恒为 pending，不覆盖当前交付。
- */
-async function recordLateDelivery(store: ExternalWorkStore, input: { workId: string; revision: number; claimId: string; idempotencyKey: string; manifestHash: string; assetsUsed: ExternalAssetRef[]; facts: ExternalDeliveryFacts; now: () => number }): Promise<{ delivery: ExternalDeliveryRef; idempotent: boolean }> {
-  return store.mutate(state => {
-    const work = state.works.find(item => item.workId === input.workId);
-    if (!work || input.revision > work.revision) throw denied('external_delivery_invalid', 400, 'the delivery does not match a real work revision');
-    const claim = state.claims.find(item => item.claimId === input.claimId);
-    if (!claim || claim.workId !== input.workId || claim.revision !== input.revision) throw denied('external_delivery_claim_invalid', 409, 'the delivery does not match a real claim of this work');
-    if (claim.status === 'active') throw denied('external_delivery_epoch_conflict', 409, 'an active claim must deliver on the current path');
-    const existing = state.deliveries.find(item => item.idempotencyKey === input.idempotencyKey);
-    if (existing) {
-      if (existing.manifestHash !== input.manifestHash) throw denied('external_delivery_conflict', 409, 'the idempotency key was used with different content');
-      return { delivery: structuredClone(existing), idempotent: true };
-    }
-    const total = state.grants.length + state.works.length + state.claims.length + state.publications.length + state.deliveries.length + state.reviews.length + state.inboxEvents.length + state.resumeReceipts.length + state.internalChoices.length;
-    if (total + 1 > MAX_LEDGER_RECORDS) throw denied('external_store_full', 413, 'the external-work ledger is at capacity');
-    const delivery: ExternalDeliveryRef = {
-      deliveryId: randomUUID(), workId: input.workId, revision: input.revision, claimId: input.claimId,
-      idempotencyKey: input.idempotencyKey, manifestHash: input.manifestHash, preservation: 'pending',
-      assetsUsed: input.assetsUsed, facts: input.facts, late: true, createdAt: iso(input.now()),
-    };
-    state.deliveries.push(delivery);
-    return { delivery: structuredClone(delivery), idempotent: false };
-  });
-}
 
 export function registerWorkTools(server: McpServer, options: WorkToolsOptions): void {
   const store = options.store;
@@ -241,7 +156,7 @@ export function registerWorkTools(server: McpServer, options: WorkToolsOptions):
   });
 
   server.registerTool('work.deliver', {
-    description: '有效交付：核当前领取/输入工作版本/manifest；幂等键同内容回原收据、异内容冲突；本轮 preservation=pending（宿主字节保全属后续切片）。',
+    description: '有效交付（manifest-only 声明路径）：核当前领取/输入工作版本/manifest；幂等键同内容回原收据、异内容冲突；preservation=pending 永不冒充字节已验——字节保全走 delivery.begin/upload-chunk/commit。',
     inputSchema: z.looseObject({
       workId: z.string(), revision: z.number().int(), claimId: z.string(), epoch: z.number().int(),
       idempotencyKey: z.string(),
@@ -254,9 +169,9 @@ export function registerWorkTools(server: McpServer, options: WorkToolsOptions):
       const args = rawArgs as DeliverArgs;
       const principal = verifiedPrincipal(extra);
       assertArgsSize(args, 1024 * 1024);
-      const facts = validateFacts(args.facts);
-      const { manifestHash } = validateManifest(args.manifest);
-      const assetsUsed = parseAssetsUsed(args.assetsUsed);
+      const facts = validateDeliveryFacts(args.facts);
+      const { manifestHash } = validateDeliveryManifest(args.manifest, { extended: false });
+      const assetsUsed = parseDeliveryAssetsUsed(args.assetsUsed);
       const claim = await store.getClaim(args.claimId);
       if (!claim || claim.workId !== args.workId || claim.revision !== args.revision) throw denied('external_delivery_claim_invalid', 409, 'the delivery must cite a real claim of this work revision');
       if (claim.principal !== principal) throw denied('external_work_claim_not_owned', 403, 'only the claimant may deliver; foreign material is never accepted via a borrowed claim id');
@@ -277,8 +192,8 @@ export function registerWorkTools(server: McpServer, options: WorkToolsOptions):
           content: [{ type: 'text', text: `ok: delivery ${result.delivery.deliveryId}` }],
         };
       }
-      // 旧 epoch/工作撤销后的历史已授权身份（同一核验 principal）→ 隔离迟到证据。
-      const late = await recordLateDelivery(store, { workId: work.workId, revision: args.revision, claimId: claim.claimId, idempotencyKey: args.idempotencyKey, manifestHash, assetsUsed, facts, now });
+      // 旧 epoch/工作撤销后的历史已授权身份（同一核验 principal）→ 隔离迟到证据（台账单一不变式来源）。
+      const late = await store.recordLateDelivery({ workId: work.workId, revision: args.revision, claimId: claim.claimId, idempotencyKey: args.idempotencyKey, manifestHash, assetsUsed, facts });
       return {
         structuredContent: { kind: 'work-delivery', deliveryId: late.delivery.deliveryId, workId: late.delivery.workId, revision: late.delivery.revision, idempotencyKey: late.delivery.idempotencyKey, manifestHash: late.delivery.manifestHash, preservation: late.delivery.preservation, late: late.delivery.late, idempotent: late.idempotent, facts: late.delivery.facts, claim: RECEIPT_CLAIM },
         content: [{ type: 'text', text: `ok: late evidence ${late.delivery.deliveryId} (isolated; never overrides the current delivery)` }],

@@ -1,0 +1,29 @@
+✔ chunked upload happy path preserves bytes atomically as an independent external delivery (235.927084ms)
+✔ idempotent receipts: same key+content replays, chunk and commit content conflicts are denied (240.760583ms)
+✔ limits: chunk, single-file, file-count, cumulative and manifest ceilings are enforced (136.185792ms)
+✔ path safety: traversal, absolute paths, backslashes and drive letters are rejected (74.773292ms)
+✔ arbitrary URLs are never fetched; declared links are recorded link-only (119.947833ms)
+✔ missing pieces and byte-hash mismatch are recorded failed, never preserved, zero bytes on disk (136.656708ms)
+✔ released or revoked claims cannot complete: commit becomes isolated late evidence without byte preservation (281.297875ms)
+✔ expired lease at commit refuses completion; expired grant blocks chunk writes and commit (379.652333ms)
+✔ atomic save failure rolls back every link of the attempt: zero half files, delivery recorded failed (182.588541ms)
+✔ exact GitHub blob bytes are read via the injected seam and preserved; out-of-scope or non-exact refs are refused (250.412125ms)
+✔ 24h cleanup removes expired staging, keeps audit records and confirmed deliveries (227.488958ms)
+✔ store: preservation state machine, storage fields and atomic claim/epoch/grant recheck (229.689625ms)
+✔ store: recordLateDelivery keeps ledger invariants; old ledgers without new fields parse unchanged (218.288834ms)
+✔ external delivery receipts never masquerade as native report receipts (102.152458ms)
+✔ standard MCP client preserves delivery bytes end to end: claim → begin → chunks → commit → preserved (345.031792ms)
+✔ commit verifies the server-verified principal and epoch: foreign or stale callers are denied (155.629292ms)
+✔ chunk, file-count and path limits are enforced over MCP (160.832791ms)
+✔ commit idempotency and conflicts behave over MCP (230.637666ms)
+✔ missing pieces produce failed receipts over MCP, never preserved, zero bytes on disk (268.49325ms)
+✔ late commit on a released claim is isolated and never overrides the current delivery (369.703958ms)
+✔ link-only commits are recorded without bytes over MCP (141.301167ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2988.727042

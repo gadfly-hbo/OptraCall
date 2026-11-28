@@ -35,7 +35,8 @@ const WORK_STATUSES: readonly ExternalWorkStatus[] = ['authorized', 'cancelled']
 const PUBLICATION_ACTIONS: readonly ExternalPublicationAction[] = ['issue-create', 'issue-comment', 'external-trigger'];
 const PUBLICATION_STATUSES: readonly ExternalPublicationStatus[] = ['prepared', 'submitted', 'succeeded', 'rejected', 'unknown'];
 const CLAIM_STATUSES: readonly ClaimStatus[] = ['active', 'released', 'revoked', 'expired'];
-const PRESERVATIONS: readonly ExternalDeliveryRef['preservation'][] = ['pending', 'preserved', 'failed', 'unknown'];
+const PRESERVATIONS: readonly ExternalDeliveryRef['preservation'][] = ['pending', 'preserved', 'failed', 'unknown', 'link-only'];
+const PRESERVED_OUTCOMES: readonly ExternalDeliveryRef['preservation'][] = ['preserved', 'failed', 'link-only'];
 const REVIEW_DECISIONS: readonly ExternalReviewDecisionKind[] = ['accepted', 'needs-supplement', 'rejected'];
 const RESUME_STATUSES: readonly ResumeStatus[] = ['reserved', 'accepted', 'settled', 'unknown'];
 const emptyState = (): StoredExternalState => ({ schema: 1, version: 0, grants: [], works: [], claims: [], publications: [], deliveries: [], reviews: [], inboxEvents: [], resumeReceipts: [], internalChoices: [] });
@@ -160,10 +161,27 @@ function parseFacts(value: unknown): ExternalDeliveryFacts {
   externalKeys(value, ['done', 'notDone', 'failed', 'unknown']);
   return { done: strings(value.done, 1000, 50), notDone: strings(value.notDone, 1000, 50), failed: strings(value.failed, 1000, 50), unknown: strings(value.unknown, 1000, 50) };
 }
+function parseStorageEntries(value: unknown): ExternalDeliveryRef['storage'] {
+  if (!Array.isArray(value) || value.length > 20) throw new Error();
+  return value.map(item => {
+    if (!externalRecord(item)) throw new Error();
+    externalKeys(item, ['logicalPath', 'relativePath', 'sha256', 'bytes']);
+    if (!Number.isSafeInteger(item.bytes) || Number(item.bytes) < 0) throw new Error();
+    return { logicalPath: externalText(item.logicalPath, 300), relativePath: externalText(item.relativePath, 400), sha256: externalHash(item.sha256), bytes: Number(item.bytes) };
+  });
+}
+function parseLinkEntries(value: unknown): ExternalDeliveryRef['links'] {
+  if (!Array.isArray(value) || value.length > 20) throw new Error();
+  return value.map(item => {
+    if (!externalRecord(item)) throw new Error();
+    externalKeys(item, ['logicalPath', 'url']);
+    return { logicalPath: externalText(item.logicalPath, 300), url: externalText(item.url, 2000) };
+  });
+}
 function parseDelivery(input: unknown, corrupt = 'external_record_invalid'): ExternalDeliveryRef {
   try {
     if (!externalRecord(input)) throw new Error();
-    externalKeys(clean(input), ['deliveryId', 'workId', 'revision', 'claimId', 'idempotencyKey', 'manifestHash', 'preservation', 'assetsUsed', 'facts', 'late', 'createdAt']);
+    externalKeys(clean(input), ['deliveryId', 'workId', 'revision', 'claimId', 'idempotencyKey', 'manifestHash', 'preservation', 'storage', 'links', 'preservationReason', 'assetsUsed', 'facts', 'late', 'createdAt']);
     const delivery: ExternalDeliveryRef = {
       deliveryId: externalId(input.deliveryId), workId: externalId(input.workId), revision: externalRevision(input.revision),
       claimId: externalId(input.claimId), idempotencyKey: externalText(input.idempotencyKey, 200),
@@ -175,6 +193,11 @@ function parseDelivery(input: unknown, corrupt = 'external_record_invalid'): Ext
       createdAt: externalDate(input.createdAt),
     };
     if (!PRESERVATIONS.includes(delivery.preservation) || delivery.assetsUsed.length > 50) throw new Error();
+    if (input.storage !== undefined) delivery.storage = parseStorageEntries(input.storage);
+    if (input.links !== undefined) delivery.links = parseLinkEntries(input.links);
+    if (input.preservationReason !== undefined) delivery.preservationReason = externalText(input.preservationReason, 500);
+    // preserved 意味着本机已验字节；没有 storage 条目的 preserved 记录视为损坏。
+    if (delivery.preservation === 'preserved' && !(delivery.storage?.length)) throw new Error();
     return delivery;
   } catch (error) { if (error instanceof ExternalWorkError && error.code !== 'external_record_invalid') throw error; throw new ExternalWorkError(corrupt, corrupt === 'external_store_corrupt' ? 503 : 400); }
 }
@@ -617,8 +640,7 @@ export class ExternalWorkStore {
     });
   }
   /** Deliveries bind to the current active claim; the idempotency key admits exactly one content. */
-  async recordDelivery(input: { workId: string; revision: number; claimId: string; idempotencyKey: string; manifestHash: string; assetsUsed?: ExternalDeliveryRef['assetsUsed']; facts?: ExternalDeliveryFacts; late?: boolean }): Promise<{ delivery: ExternalDeliveryRef; idempotent: boolean }> {
-    const request = { workId: externalId(input.workId), revision: externalRevision(input.revision), claimId: externalId(input.claimId), idempotencyKey: externalText(input.idempotencyKey, 200), manifestHash: externalHash(input.manifestHash) };
+  async recordDelivery(input: { workId: string; revision: number; claimId: string; idempotencyKey: string; manifestHash: string; assetsUsed?: ExternalDeliveryRef['assetsUsed']; facts?: ExternalDeliveryFacts; late?: boolean }): Promise<{ delivery: ExternalDeliveryRef; idempotent: boolean }> {    const request = { workId: externalId(input.workId), revision: externalRevision(input.revision), claimId: externalId(input.claimId), idempotencyKey: externalText(input.idempotencyKey, 200), manifestHash: externalHash(input.manifestHash) };
     const assetsUsed = input.assetsUsed === undefined ? [] : parseExternalAssetRefs(input.assetsUsed);
     const facts: ExternalDeliveryFacts = input.facts === undefined ? { done: [], notDone: [], failed: [], unknown: [] } : parseFacts(input.facts);
     const late = input.late === true;
@@ -679,6 +701,95 @@ export class ExternalWorkStore {
       this.#capacity(state);
       state.resumeReceipts.push(receipt);
       return { receipt: structuredClone(receipt), idempotent: false };
+    });
+  }
+
+  // —— S4a 交付保全扩展（schema 兼容；S1 recordDelivery 语义保持不动） ——
+
+  async findDeliveryByIdempotencyKey(key: string): Promise<ExternalDeliveryRef | null> {
+    this.#assertReady();
+    const idempotencyKey = externalText(key, 200);
+    const found = (await this.#load()).deliveries.find(item => item.idempotencyKey === idempotencyKey);
+    return found ? structuredClone(found) : null;
+  }
+
+  /**
+   * 字节保全交付落账（delivery.commit 当前领取路径）。幂等键先回原收据/异文冲突；新记录
+   * 在同一原子变体内复核当前领取/授权（claim active、epoch、grant 窗口）——即"异步保存后
+   * 提交前核当前领取/授权"，过期/撤销不可在此刻标完整。preservation 仅允许
+   * preserved（须带非空 storage）/failed/link-only；late 恒为 false（迟到证据走
+   * recordLateDelivery，绝不保字节）。
+   */
+  async recordPreservedDelivery(input: {
+    workId: string; revision: number; claimId: string; epoch: number; idempotencyKey: string; manifestHash: string;
+    preservation: 'preserved' | 'failed' | 'link-only'; storage?: ExternalDeliveryRef['storage'];
+    links?: ExternalDeliveryRef['links']; preservationReason?: string;
+    assetsUsed?: ExternalDeliveryRef['assetsUsed']; facts?: ExternalDeliveryFacts;
+  }): Promise<{ delivery: ExternalDeliveryRef; idempotent: boolean }> {
+    const request = { workId: externalId(input.workId), revision: externalRevision(input.revision), claimId: externalId(input.claimId), epoch: externalEpoch(input.epoch), idempotencyKey: externalText(input.idempotencyKey, 200), manifestHash: externalHash(input.manifestHash) };
+    if (!PRESERVED_OUTCOMES.includes(input.preservation)) throw new ExternalWorkError('external_delivery_invalid', 400);
+    const storage = input.storage === undefined ? undefined : parseStorageEntries(input.storage);
+    const links = input.links === undefined ? undefined : parseLinkEntries(input.links);
+    const reason = input.preservationReason === undefined ? undefined : externalText(input.preservationReason, 500);
+    const assetsUsed = input.assetsUsed === undefined ? [] : parseExternalAssetRefs(input.assetsUsed);
+    const facts: ExternalDeliveryFacts = input.facts === undefined ? { done: [], notDone: [], failed: [], unknown: [] } : parseFacts(input.facts);
+    if (input.preservation === 'preserved' && !(storage?.length)) throw new ExternalWorkError('external_delivery_invalid', 400);
+    return this.#change(state => {
+      const work = state.works.find(item => item.workId === request.workId);
+      if (!work || request.revision > work.revision) throw new ExternalWorkError('external_delivery_invalid', 400);
+      const existing = state.deliveries.find(item => item.idempotencyKey === request.idempotencyKey);
+      if (existing) {
+        if (existing.manifestHash !== request.manifestHash) throw new ExternalWorkError('external_delivery_conflict', 409);
+        return { delivery: structuredClone(existing), idempotent: true };
+      }
+      const claim = state.claims.find(item => item.claimId === request.claimId);
+      if (!claim || claim.workId !== request.workId || claim.revision !== request.revision || claim.status !== 'active') throw new ExternalWorkError('external_delivery_claim_invalid', 409);
+      if (claim.epoch !== request.epoch) throw new ExternalWorkError('external_delivery_epoch_conflict', 409);
+      const grant = state.grants.find(item => item.grantId === work.grantId && item.grantVersion === work.grantVersion);
+      const now = this.#now();
+      if (!grant || !(Date.parse(grant.validFrom) <= now && now < Date.parse(grant.validUntil))) throw new ExternalWorkError('external_grant_not_valid', 409);
+      this.#capacity(state);
+      const delivery: ExternalDeliveryRef = {
+        deliveryId: randomUUID(), workId: request.workId, revision: request.revision, claimId: request.claimId,
+        idempotencyKey: request.idempotencyKey, manifestHash: request.manifestHash,
+        preservation: input.preservation, assetsUsed, facts, late: false, createdAt: this.#stamp(),
+      };
+      if (storage !== undefined) delivery.storage = storage;
+      if (links !== undefined) delivery.links = links;
+      if (reason !== undefined) delivery.preservationReason = reason;
+      state.deliveries.push(delivery);
+      return { delivery: structuredClone(delivery), idempotent: false };
+    });
+  }
+
+  /**
+   * 迟到隔离证据（S3b work-tools 的迟到不变式回并至台账单一来源）：历史已授权身份（非
+   * active 领取）可提交隔离迟到证据——引用完整、幂等键唯一、容量上限，late=true 且
+   * preservation 恒为 pending，不覆盖当前交付、不恢复资产资格；active 领取必须走当前路径。
+   */
+  async recordLateDelivery(input: { workId: string; revision: number; claimId: string; idempotencyKey: string; manifestHash: string; assetsUsed?: ExternalDeliveryRef['assetsUsed']; facts?: ExternalDeliveryFacts }): Promise<{ delivery: ExternalDeliveryRef; idempotent: boolean }> {
+    const request = { workId: externalId(input.workId), revision: externalRevision(input.revision), claimId: externalId(input.claimId), idempotencyKey: externalText(input.idempotencyKey, 200), manifestHash: externalHash(input.manifestHash) };
+    const assetsUsed = input.assetsUsed === undefined ? [] : parseExternalAssetRefs(input.assetsUsed);
+    const facts: ExternalDeliveryFacts = input.facts === undefined ? { done: [], notDone: [], failed: [], unknown: [] } : parseFacts(input.facts);
+    return this.#change(state => {
+      const work = state.works.find(item => item.workId === request.workId);
+      if (!work || request.revision > work.revision) throw new ExternalWorkError('external_delivery_invalid', 400);
+      const claim = state.claims.find(item => item.claimId === request.claimId);
+      if (!claim || claim.workId !== request.workId || claim.revision !== request.revision) throw new ExternalWorkError('external_delivery_claim_invalid', 409);
+      if (claim.status === 'active') throw new ExternalWorkError('external_delivery_epoch_conflict', 409);
+      const existing = state.deliveries.find(item => item.idempotencyKey === request.idempotencyKey);
+      if (existing) {
+        if (existing.manifestHash !== request.manifestHash) throw new ExternalWorkError('external_delivery_conflict', 409);
+        return { delivery: structuredClone(existing), idempotent: true };
+      }
+      this.#capacity(state);
+      const delivery: ExternalDeliveryRef = {
+        deliveryId: randomUUID(), workId: request.workId, revision: request.revision, claimId: request.claimId,
+        idempotencyKey: request.idempotencyKey, manifestHash: request.manifestHash,
+        preservation: 'pending', assetsUsed, facts, late: true, createdAt: this.#stamp(),
+      };
+      state.deliveries.push(delivery);
+      return { delivery: structuredClone(delivery), idempotent: false };
     });
   }
 }

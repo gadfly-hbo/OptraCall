@@ -1,0 +1,32 @@
+✔ token issuance requires management-plane approval, binds exact audience/issuer/scope and verifies (3.494583ms)
+✔ unregistered clients and non-exact redirect URIs cannot start authorization (0.626292ms)
+✔ authorization requires PKCE S256 and rejects plain or missing challenges (0.19075ms)
+✔ cross-resource authorization is rejected; absent resource binds the protected resource (0.2735ms)
+✔ scope requests outside the client registration are rejected (0.095875ms)
+✔ approval requires the management token, a live pending request and honors expiry (0.173875ms)
+✔ public authorization parameters can never approve: fabricated consent flags yield no code (0.397208ms)
+✔ token exchange rejects wrong verifier, malformed verifier, wrong redirect and bad client auth (0.46225ms)
+✔ confidential clients must present their secret; public clients must not authenticate by secret (0.54875ms)
+✔ revocation on replay is scoped to the replayed code and does not touch unrelated tokens (0.279708ms)
+✔ replay of a consumed code revokes the token issued from that code (0.138125ms)
+✔ expired codes and expired access tokens are rejected by the injected clock (0.167542ms)
+✔ tokens for other audiences or issuers cannot pass verification (no passthrough) (1.052625ms)
+✔ tampered payloads and foreign signing keys are rejected as invalid tokens (0.199625ms)
+✔ RFC 9728 protected resource metadata and AS metadata are accurate (0.122667ms)
+✔ unsupported grant types and missing exchange fields are rejected (0.0645ms)
+✔ RFC 9728 discovery and AS metadata are public and accurate over TLS (82.163ms)
+✔ MCP endpoint rejects missing, malformed and expired bearers with 401 challenges (20.05925ms)
+✔ tokens for another audience or without required scope are rejected (8.034917ms)
+✔ over-limit principals receive 429 with Retry-After (6.544917ms)
+✔ tokens in the URL are rejected outright and never honored (11.040333ms)
+✔ only whitelisted paths are served; the Host API is not exposed (9.766833ms)
+✔ authorization cannot be approved from the public network or forged URLs (14.44025ms)
+✔ a standard MCP client completes initialize/tools/list/ping over TLS with the OAuth loop (44.406875ms)
+ℹ tests 24
+ℹ suites 0
+ℹ pass 24
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 478.15275
