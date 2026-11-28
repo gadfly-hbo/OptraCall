@@ -1,0 +1,56 @@
+{
+  "testedCandidate": "d674deaa6c80e254bf97e2c4e022d3642f486eb1",
+  "boundary": "isolated actual App/Host/Pi with synthetic provider; controlled browser event transport; no Mac or real-provider root cause assertion; fixture health omits release runtime identity, source/built asset identity binds this diagnostic",
+  "files": [
+    {
+      "path": "build-stamp.json",
+      "bytes": 859,
+      "sha256": "dfe043e322a0b6280c33d9bb396043bb3366d2bcd7c997135cb6898c598919e7"
+    },
+    {
+      "path": "build.log",
+      "bytes": 147,
+      "sha256": "054a094d8bb9decba880eb80c0b42002d429ebf330e2a7bfd74f75e1c07685cf"
+    },
+    {
+      "path": "cf01-missing-terminal.log",
+      "bytes": 1212,
+      "sha256": "74248d85b6c86b22af16cf465fe55aa7ce163cf5db4f0e99039b524e2e60b1e0"
+    },
+    {
+      "path": "normal-browser-receipt.json",
+      "bytes": 28849,
+      "sha256": "d5ec483dbd9a59f92137a2b50d1beabc7a9af1efc1e00c0792420b7bdfd69664"
+    },
+    {
+      "path": "pm-cf01-after-forcing-eof.png",
+      "bytes": 115670,
+      "sha256": "a04ac267833a7133e27a471e6bc24b34c482700269d3653e0517baf87a04b8d3"
+    },
+    {
+      "path": "pm-cf01-heartbeats-missing-terminal.png",
+      "bytes": 115170,
+      "sha256": "d32d70b91218782661bd8735243c4f4aa33cf7f5bed70a47c96847d3901b8c16"
+    },
+    {
+      "path": "pm-cf01-heartbeats-receipt.json",
+      "bytes": 3252,
+      "sha256": "49ab190020c3c5cc397da98dda504fbc12bf41929394ff5f960645716f9e2847"
+    },
+    {
+      "path": "repro-cf01-missing-terminal.mjs",
+      "bytes": 11975,
+      "sha256": "1a689380583d18ad6a2e3497ed16bcab8ddaefbfff5f871e390f048671f58653"
+    },
+    {
+      "path": "session-boundary.log",
+      "bytes": 198,
+      "sha256": "107e10d5c225b32308e0748a4172b55923c26b7d460ac459ca5ac310da3f7152"
+    },
+    {
+      "path": "target-tests.log",
+      "bytes": 5683,
+      "sha256": "67d0ad61715fb4c82c07a4863a510943afd09a2ecc13b22f21974c5558311906"
+    }
+  ]
+}

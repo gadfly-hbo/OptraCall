@@ -1,0 +1,118 @@
+{
+  "candidate": "d674deaa6c80e254bf97e2c4e022d3642f486eb1",
+  "condition": "controlled real initial snapshot, sustain heartbeats but omit terminal events; actual Host/Pi completes",
+  "backendBusy": false,
+  "backendStatus": "completed",
+  "checkpoints": [
+    {
+      "seconds": 5,
+      "stillReplying": true,
+      "hasFinal": false,
+      "stats": {
+        "heartbeats": 41,
+        "streams": 1,
+        "reads": 3
+      }
+    },
+    {
+      "seconds": 10,
+      "stillReplying": true,
+      "hasFinal": false,
+      "stats": {
+        "heartbeats": 66,
+        "streams": 1,
+        "reads": 3
+      }
+    },
+    {
+      "seconds": 15,
+      "stillReplying": true,
+      "hasFinal": false,
+      "stats": {
+        "heartbeats": 91,
+        "streams": 1,
+        "reads": 3
+      }
+    },
+    {
+      "seconds": 20,
+      "stillReplying": true,
+      "hasFinal": false,
+      "stats": {
+        "heartbeats": 116,
+        "streams": 1,
+        "reads": 3
+      }
+    },
+    {
+      "seconds": 25,
+      "stillReplying": true,
+      "hasFinal": false,
+      "stats": {
+        "heartbeats": 141,
+        "streams": 1,
+        "reads": 3
+      }
+    },
+    {
+      "seconds": 30,
+      "stillReplying": true,
+      "hasFinal": false,
+      "stats": {
+        "heartbeats": 166,
+        "streams": 1,
+        "reads": 3
+      }
+    },
+    {
+      "seconds": 35,
+      "stillReplying": true,
+      "hasFinal": false,
+      "stats": {
+        "heartbeats": 191,
+        "streams": 1,
+        "reads": 3
+      }
+    },
+    {
+      "seconds": 40,
+      "stillReplying": true,
+      "hasFinal": false,
+      "stats": {
+        "heartbeats": 217,
+        "streams": 1,
+        "reads": 3
+      }
+    },
+    {
+      "seconds": 45,
+      "stillReplying": true,
+      "hasFinal": false,
+      "stats": {
+        "heartbeats": 242,
+        "streams": 1,
+        "reads": 3
+      }
+    },
+    {
+      "seconds": 50,
+      "stillReplying": true,
+      "hasFinal": false,
+      "stats": {
+        "heartbeats": 267,
+        "streams": 1,
+        "reads": 3
+      }
+    }
+  ],
+  "textBefore": "ϟ\nCase Agent\n只围绕「CF05 验证准备件」继续\n收起协作\n待带入片段（1，不会自动覆盖既有草稿或发送）\n\n准备名称：CF05 验证准备件\n\n来源：Case 创建时的准备原文\n追加到事项草稿\n放大对话\n你\n\n请完成本轮核对\n\n想讨论当前事项的哪项取舍？\n会话模型\nCF合成模型\n停止\n发送\n\n正在回复…",
+  "afterClose": "ϟ\nCase Agent\n只围绕「CF05 验证准备件」继续\n收起协作\n待带入片段（1，不会自动覆盖既有草稿或发送）\n\n准备名称：CF05 验证准备件\n\n来源：Case 创建时的准备原文\n追加到事项草稿\n放大对话\n你\n\n请完成本轮核对\n\nOptraCall\nsynthetic\n\nPM 核对：这轮实际已经完成。\n\n想讨论当前事项的哪项取舍？\n会话模型\nCF合成模型\n发送",
+  "writesBeforeClose": [
+    {
+      "path": "/api/business-role?owner=%7B%22role%22%3A%22case%22%2C%22caseId%22%3A%22c1cbd15c-7967-483b-b790-6d3dba4f0b93%22%2C%22itemId%22%3A%22a79be37e-4b2c-4e21-bbca-bbd10553ed1f%22%7D&action=messages",
+      "method": "POST"
+    }
+  ],
+  "pageErrors": [],
+  "providerRequests": 1
+}

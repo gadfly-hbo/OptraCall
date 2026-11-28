@@ -1,0 +1,11 @@
+{"checkpoint":{"seconds":5,"stillReplying":true,"hasFinal":false,"stats":{"heartbeats":41,"streams":1,"reads":3}}}
+{"checkpoint":{"seconds":10,"stillReplying":true,"hasFinal":false,"stats":{"heartbeats":66,"streams":1,"reads":3}}}
+{"checkpoint":{"seconds":15,"stillReplying":true,"hasFinal":false,"stats":{"heartbeats":91,"streams":1,"reads":3}}}
+{"checkpoint":{"seconds":20,"stillReplying":true,"hasFinal":false,"stats":{"heartbeats":116,"streams":1,"reads":3}}}
+{"checkpoint":{"seconds":25,"stillReplying":true,"hasFinal":false,"stats":{"heartbeats":141,"streams":1,"reads":3}}}
+{"checkpoint":{"seconds":30,"stillReplying":true,"hasFinal":false,"stats":{"heartbeats":166,"streams":1,"reads":3}}}
+{"checkpoint":{"seconds":35,"stillReplying":true,"hasFinal":false,"stats":{"heartbeats":191,"streams":1,"reads":3}}}
+{"checkpoint":{"seconds":40,"stillReplying":true,"hasFinal":false,"stats":{"heartbeats":217,"streams":1,"reads":3}}}
+{"checkpoint":{"seconds":45,"stillReplying":true,"hasFinal":false,"stats":{"heartbeats":242,"streams":1,"reads":3}}}
+{"checkpoint":{"seconds":50,"stillReplying":true,"hasFinal":false,"stats":{"heartbeats":267,"streams":1,"reads":3}}}
+PM lost-terminal probe finished; see receipt.
