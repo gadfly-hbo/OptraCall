@@ -1,0 +1,44 @@
+✔ authorize persists the grant snapshot and a revision-1 work without any external record (138.674917ms)
+✔ restricted profiles cannot authorize external work, but the internal path stays open (112.82525ms)
+✔ asset refs are granted only inside the original qualification intersection (88.57425ms)
+✔ missing explicit enterprise never falls back to a legacy default (93.823917ms)
+✔ resource policy snapshots honor lower approved policies and refuse anything above the default ceiling (144.055667ms)
+✔ default 1work/24h rate holds until the window passes or the work is cancelled (95.14075ms)
+✔ grant validity must be explicitly confirmed in the future (15.015625ms)
+✔ chooseInternal records intent with zero external side effects (88.796291ms)
+✔ chooseInternal refuses a silent switch-back while external work is active; cancel unblocks (77.646458ms)
+✔ cancel preserves every fact, revokes the active claim and creates no external record (134.263375ms)
+✔ authorize input integrity: executors, repository identity, target executor and validation errors (31.728417ms)
+✔ summarize exposes separately recorded facts, never a merged success flag (186.071417ms)
+✔ ledger stays one private atomic file with no lock or temp residue (136.104292ms)
+✔ expectedVersion CAS admits exactly one competing writer (315.684875ms)
+✔ startup keeps own submissions and marks foreign submitted publications unknown without retrying (225.677166ms)
+▶ strict schema parsing rejects corrupt ledgers instead of guessing
+  ✔ schema bump (224.143791ms)
+  ✔ unknown top-level key (214.061625ms)
+  ✔ dangling claim reference (220.609083ms)
+  ✔ malformed body hash (268.998041ms)
+  ✔ duplicate delivery identity (161.025458ms)
+  ✔ non-ISO timestamp (322.0875ms)
+  ✔ review hash mismatch (385.42875ms)
+  ✔ invalid internal choice mode (148.422834ms)
+  ✔ broken json (188.926833ms)
+✔ strict schema parsing rejects corrupt ledgers instead of guessing (2176.939542ms)
+✔ a failed mutation leaves the ledger byte-identical with no half records (42.005834ms)
+✔ one work revision keeps at most one active claim; the winner gets idempotent duplicates (268.368291ms)
+✔ renew and release verify the exact epoch; released revisions can be claimed again with a new epoch (429.858833ms)
+✔ claim eligibility: unpublished work, unlisted principal and cancelled work are all rejected (83.117333ms)
+✔ lease deadlines are bounded by grant validity and expired claims cannot be released or renewed (248.108625ms)
+✔ publication identity is unique per work revision and action; transitions follow the guarded table (419.093ms)
+✔ deliveries dedupe by idempotency key, reviews bind the exact delivery hash, and inbox/resume identities are unique (667.998041ms)
+✔ cancel revokes active claims and keeps every recorded fact without creating external records (145.214834ms)
+✔ empty ledgers read like legacy tasks and grant validation rejects overreach (29.1555ms)
+✔ asset references and summaries round-trip without losing identity separation (109.463667ms)
+ℹ tests 35
+ℹ suites 0
+ℹ pass 35
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5476.574667

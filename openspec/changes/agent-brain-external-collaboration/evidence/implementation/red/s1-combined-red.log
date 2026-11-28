@@ -1,0 +1,424 @@
+✖ authorize persists the grant snapshot and a revision-1 work without any external record (4.518208ms)
+✖ restricted profiles cannot authorize external work, but the internal path stays open (2.619625ms)
+✖ asset refs are granted only inside the original qualification intersection (1.536375ms)
+✖ missing explicit enterprise never falls back to a legacy default (0.687375ms)
+✖ resource policy snapshots honor lower approved policies and refuse anything above the default ceiling (0.611208ms)
+✖ default 1work/24h rate holds until the window passes or the work is cancelled (0.609292ms)
+✖ grant validity must be explicitly confirmed in the future (0.999166ms)
+✖ chooseInternal records intent with zero external side effects (0.6985ms)
+✖ chooseInternal refuses a silent switch-back while external work is active; cancel unblocks (0.609583ms)
+✖ cancel preserves every fact, revokes the active claim and creates no external record (1.326666ms)
+✖ authorize input integrity: executors, repository identity, target executor and validation errors (0.565542ms)
+✖ summarize exposes separately recorded facts, never a merged success flag (0.510083ms)
+✖ ledger stays one private atomic file with no lock or temp residue (4.950041ms)
+✖ expectedVersion CAS admits exactly one competing writer (1.675833ms)
+✖ startup keeps own submissions and marks foreign submitted publications unknown without retrying (0.626667ms)
+▶ strict schema parsing rejects corrupt ledgers instead of guessing
+  ✖ schema bump (0.512041ms)
+  ✖ unknown top-level key (0.595042ms)
+  ✖ dangling claim reference (0.329834ms)
+  ✖ malformed body hash (0.429083ms)
+  ✖ duplicate delivery identity (0.477791ms)
+  ✖ non-ISO timestamp (0.494875ms)
+  ✖ review hash mismatch (0.413042ms)
+  ✖ invalid internal choice mode (0.635125ms)
+  ✖ broken json (1.286875ms)
+✖ strict schema parsing rejects corrupt ledgers instead of guessing (6.977042ms)
+✖ a failed mutation leaves the ledger byte-identical with no half records (0.442417ms)
+✖ one work revision keeps at most one active claim; duplicates are idempotent for the same principal (0.537125ms)
+✖ renew and release verify the exact epoch; released revisions can be claimed again with a new epoch (0.570625ms)
+✖ claim eligibility: unpublished work, unlisted principal and cancelled work are all rejected (0.447583ms)
+✖ lease deadlines are bounded by grant validity and expired claims cannot be released or renewed (0.651583ms)
+✖ publication identity is unique per work revision and action; transitions follow the guarded table (0.636583ms)
+✖ deliveries dedupe by idempotency key, reviews bind the exact delivery hash, and inbox/resume identities are unique (0.588458ms)
+✖ cancel revokes active claims and keeps every recorded fact without creating external records (0.388833ms)
+✖ legacy ledgers without external records read as empty and capacity limits reject overflow (0.431041ms)
+✖ asset references and summaries round-trip without losing identity separation (0.559375ms)
+ℹ tests 35
+ℹ suites 0
+ℹ pass 0
+ℹ fail 35
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 125.495416
+
+✖ failing tests:
+
+test at tests/external-dispatch.test.ts:61:1
+✖ authorize persists the grant snapshot and a revision-1 work without any external record (4.518208ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalDispatch.authorize (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-dispatch.ts:16:137)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:63:42)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    code: 'external_dispatch_unimplemented',
+    status: 503
+  }
+
+test at tests/external-dispatch.test.ts:93:1
+✖ restricted profiles cannot authorize external work, but the internal path stays open (2.619625ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'external_dispatch_unimplemented'
+  - 'external_profile_forbidden'
+              ^
+  
+      at Object.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:21:10)
+      at expectedException (node:assert:553:17)
+      at expectsError (node:assert:678:21)
+      at strict.rejects (node:assert:744:3)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:95:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'external_dispatch_unimplemented',
+    expected: 'external_profile_forbidden',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-dispatch.test.ts:103:1
+✖ asset refs are granted only inside the original qualification intersection (1.536375ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'external_dispatch_unimplemented'
+  - 'external_asset_not_qualified'
+              ^
+  
+      at Object.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:21:10)
+      at expectedException (node:assert:553:17)
+      at expectsError (node:assert:678:21)
+      at strict.rejects (node:assert:744:3)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:105:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'external_dispatch_unimplemented',
+    expected: 'external_asset_not_qualified',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-dispatch.test.ts:113:1
+✖ missing explicit enterprise never falls back to a legacy default (0.687375ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'external_dispatch_unimplemented'
+  - 'external_enterprise_required'
+              ^
+  
+      at Object.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:21:10)
+      at expectedException (node:assert:553:17)
+      at expectsError (node:assert:678:21)
+      at strict.rejects (node:assert:744:3)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:115:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'external_dispatch_unimplemented',
+    expected: 'external_enterprise_required',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-dispatch.test.ts:122:1
+✖ resource policy snapshots honor lower approved policies and refuse anything above the default ceiling (0.611208ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalDispatch.authorize (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-dispatch.ts:16:137)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:124:32)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_dispatch_unimplemented',
+    status: 503
+  }
+
+test at tests/external-dispatch.test.ts:132:1
+✖ default 1work/24h rate holds until the window passes or the work is cancelled (0.609292ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalDispatch.authorize (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-dispatch.ts:16:137)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:134:32)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_dispatch_unimplemented',
+    status: 503
+  }
+
+test at tests/external-dispatch.test.ts:148:1
+✖ grant validity must be explicitly confirmed in the future (0.999166ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'external_dispatch_unimplemented'
+  - 'external_grant_expired'
+              ^
+  
+      at Object.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:21:10)
+      at expectedException (node:assert:553:17)
+      at expectsError (node:assert:678:21)
+      at strict.rejects (node:assert:744:3)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:150:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'external_dispatch_unimplemented',
+    expected: 'external_grant_expired',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-dispatch.test.ts:155:1
+✖ chooseInternal records intent with zero external side effects (0.6985ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalDispatch.chooseInternal (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-dispatch.ts:15:84)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:157:18)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_dispatch_unimplemented',
+    status: 503
+  }
+
+test at tests/external-dispatch.test.ts:173:1
+✖ chooseInternal refuses a silent switch-back while external work is active; cancel unblocks (0.609583ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalDispatch.authorize (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-dispatch.ts:16:137)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:175:35)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_dispatch_unimplemented',
+    status: 503
+  }
+
+test at tests/external-dispatch.test.ts:184:1
+✖ cancel preserves every fact, revokes the active claim and creates no external record (1.326666ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalDispatch.authorize (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-dispatch.ts:16:137)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:186:35)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_dispatch_unimplemented',
+    status: 503
+  }
+
+test at tests/external-dispatch.test.ts:206:1
+✖ authorize input integrity: executors, repository identity, target executor and validation errors (0.565542ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'external_dispatch_unimplemented'
+  - 'external_grant_invalid'
+              ^
+  
+      at Object.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:21:10)
+      at expectedException (node:assert:553:17)
+      at expectsError (node:assert:678:21)
+      at strict.rejects (node:assert:744:3)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:208:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'external_dispatch_unimplemented',
+    expected: 'external_grant_invalid',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-dispatch.test.ts:217:1
+✖ summarize exposes separately recorded facts, never a merged success flag (0.510083ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalDispatch.authorize (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-dispatch.ts:16:137)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:219:35)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_dispatch_unimplemented',
+    status: 503
+  }
+
+test at tests/external-work-store.test.ts:84:1
+✖ ledger stays one private atomic file with no lock or temp residue (4.950041ms)
+  TypeError: store.createGrantWithWork is not a function
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:87:15)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)
+
+test at tests/external-work-store.test.ts:97:1
+✖ expectedVersion CAS admits exactly one competing writer (1.675833ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalWorkStore.version (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-work-store.ts:23:65)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:101:28)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_store_unimplemented',
+    status: 503
+  }
+
+test at tests/external-work-store.test.ts:120:1
+✖ startup keeps own submissions and marks foreign submitted publications unknown without retrying (0.626667ms)
+  TypeError: store.createGrantWithWork is not a function
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:123:15)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-work-store.test.ts:158:13
+✖ schema bump (0.512041ms)
+  TypeError: store.createGrantWithWork is not a function
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:161:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:158:5)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-work-store.test.ts:158:13
+✖ unknown top-level key (0.595042ms)
+  TypeError: store.createGrantWithWork is not a function
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:161:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:158:5)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-work-store.test.ts:158:13
+✖ dangling claim reference (0.329834ms)
+  TypeError: store.createGrantWithWork is not a function
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:161:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:158:5)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-work-store.test.ts:158:13
+✖ malformed body hash (0.429083ms)
+  TypeError: store.createGrantWithWork is not a function
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:161:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:158:5)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-work-store.test.ts:158:13
+✖ duplicate delivery identity (0.477791ms)
+  TypeError: store.createGrantWithWork is not a function
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:161:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:158:5)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-work-store.test.ts:158:13
+✖ non-ISO timestamp (0.494875ms)
+  TypeError: store.createGrantWithWork is not a function
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:161:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:158:5)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-work-store.test.ts:158:13
+✖ review hash mismatch (0.413042ms)
+  TypeError: store.createGrantWithWork is not a function
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:161:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:158:5)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-work-store.test.ts:158:13
+✖ invalid internal choice mode (0.635125ms)
+  TypeError: store.createGrantWithWork is not a function
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:161:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:158:5)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-work-store.test.ts:158:13
+✖ broken json (1.286875ms)
+  TypeError: store.createGrantWithWork is not a function
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:161:19)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:158:5)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-work-store.test.ts:182:1
+✖ a failed mutation leaves the ledger byte-identical with no half records (0.442417ms)
+  TypeError: store.createGrantWithWork is not a function
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:185:15)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-work-store.test.ts:201:1
+✖ one work revision keeps at most one active claim; duplicates are idempotent for the same principal (0.537125ms)
+  TypeError: store.createGrantWithWork is not a function
+      at publishedWork (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:78:15)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:203:9)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-work-store.test.ts:230:1
+✖ renew and release verify the exact epoch; released revisions can be claimed again with a new epoch (0.570625ms)
+  TypeError: store.createGrantWithWork is not a function
+      at publishedWork (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:78:15)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:232:9)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-work-store.test.ts:256:1
+✖ claim eligibility: unpublished work, unlisted principal and cancelled work are all rejected (0.447583ms)
+  TypeError: store.createGrantWithWork is not a function
+      at publishedWork (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:78:15)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:258:9)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-work-store.test.ts:270:1
+✖ lease deadlines are bounded by grant validity and expired claims cannot be released or renewed (0.651583ms)
+  TypeError: store.createGrantWithWork is not a function
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:273:15)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-work-store.test.ts:304:1
+✖ publication identity is unique per work revision and action; transitions follow the guarded table (0.636583ms)
+  TypeError: store.createGrantWithWork is not a function
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:307:15)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-work-store.test.ts:330:1
+✖ deliveries dedupe by idempotency key, reviews bind the exact delivery hash, and inbox/resume identities are unique (0.588458ms)
+  TypeError: store.createGrantWithWork is not a function
+      at publishedWork (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:78:15)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:332:9)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-work-store.test.ts:384:1
+✖ cancel revokes active claims and keeps every recorded fact without creating external records (0.388833ms)
+  TypeError: store.createGrantWithWork is not a function
+      at publishedWork (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:78:15)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:386:9)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-work-store.test.ts:403:1
+✖ legacy ledgers without external records read as empty and capacity limits reject overflow (0.431041ms)
+  TypeError: store.listWorks is not a function
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:405:32)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+
+test at tests/external-work-store.test.ts:417:1
+✖ asset references and summaries round-trip without losing identity separation (0.559375ms)
+  TypeError: store.createGrantWithWork is not a function
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-work-store.test.ts:420:15)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)

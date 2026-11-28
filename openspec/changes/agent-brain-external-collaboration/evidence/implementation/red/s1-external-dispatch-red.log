@@ -1,0 +1,219 @@
+✖ authorize persists the grant snapshot and a revision-1 work without any external record (4.501541ms)
+✖ restricted profiles cannot authorize external work, but the internal path stays open (2.514208ms)
+✖ asset refs are granted only inside the original qualification intersection (0.904833ms)
+✖ missing explicit enterprise never falls back to a legacy default (0.545375ms)
+✖ resource policy snapshots honor lower approved policies and refuse anything above the default ceiling (0.741208ms)
+✖ default 1work/24h rate holds until the window passes or the work is cancelled (0.588459ms)
+✖ grant validity must be explicitly confirmed in the future (0.487042ms)
+✖ chooseInternal records intent with zero external side effects (0.541ms)
+✖ chooseInternal refuses a silent switch-back while external work is active; cancel unblocks (0.535542ms)
+✖ cancel preserves every fact, revokes the active claim and creates no external record (0.490292ms)
+✖ authorize input integrity: executors, repository identity, target executor and validation errors (0.406ms)
+✖ summarize exposes separately recorded facts, never a merged success flag (0.46ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 0
+ℹ fail 12
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 109.219667
+
+✖ failing tests:
+
+test at tests/external-dispatch.test.ts:61:1
+✖ authorize persists the grant snapshot and a revision-1 work without any external record (4.501541ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalDispatch.authorize (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-dispatch.ts:16:137)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:63:42)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    code: 'external_dispatch_unimplemented',
+    status: 503
+  }
+
+test at tests/external-dispatch.test.ts:93:1
+✖ restricted profiles cannot authorize external work, but the internal path stays open (2.514208ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'external_dispatch_unimplemented'
+  - 'external_profile_forbidden'
+              ^
+  
+      at Object.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:21:10)
+      at expectedException (node:assert:553:17)
+      at expectsError (node:assert:678:21)
+      at strict.rejects (node:assert:744:3)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:95:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'external_dispatch_unimplemented',
+    expected: 'external_profile_forbidden',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-dispatch.test.ts:103:1
+✖ asset refs are granted only inside the original qualification intersection (0.904833ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'external_dispatch_unimplemented'
+  - 'external_asset_not_qualified'
+              ^
+  
+      at Object.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:21:10)
+      at expectedException (node:assert:553:17)
+      at expectsError (node:assert:678:21)
+      at strict.rejects (node:assert:744:3)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:105:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'external_dispatch_unimplemented',
+    expected: 'external_asset_not_qualified',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-dispatch.test.ts:113:1
+✖ missing explicit enterprise never falls back to a legacy default (0.545375ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'external_dispatch_unimplemented'
+  - 'external_enterprise_required'
+              ^
+  
+      at Object.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:21:10)
+      at expectedException (node:assert:553:17)
+      at expectsError (node:assert:678:21)
+      at strict.rejects (node:assert:744:3)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:115:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'external_dispatch_unimplemented',
+    expected: 'external_enterprise_required',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-dispatch.test.ts:122:1
+✖ resource policy snapshots honor lower approved policies and refuse anything above the default ceiling (0.741208ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalDispatch.authorize (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-dispatch.ts:16:137)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:124:32)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_dispatch_unimplemented',
+    status: 503
+  }
+
+test at tests/external-dispatch.test.ts:132:1
+✖ default 1work/24h rate holds until the window passes or the work is cancelled (0.588459ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalDispatch.authorize (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-dispatch.ts:16:137)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:134:32)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_dispatch_unimplemented',
+    status: 503
+  }
+
+test at tests/external-dispatch.test.ts:148:1
+✖ grant validity must be explicitly confirmed in the future (0.487042ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'external_dispatch_unimplemented'
+  - 'external_grant_expired'
+              ^
+  
+      at Object.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:21:10)
+      at expectedException (node:assert:553:17)
+      at expectsError (node:assert:678:21)
+      at strict.rejects (node:assert:744:3)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:150:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'external_dispatch_unimplemented',
+    expected: 'external_grant_expired',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-dispatch.test.ts:155:1
+✖ chooseInternal records intent with zero external side effects (0.541ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalDispatch.chooseInternal (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-dispatch.ts:15:84)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:157:18)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_dispatch_unimplemented',
+    status: 503
+  }
+
+test at tests/external-dispatch.test.ts:173:1
+✖ chooseInternal refuses a silent switch-back while external work is active; cancel unblocks (0.535542ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalDispatch.authorize (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-dispatch.ts:16:137)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:175:35)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_dispatch_unimplemented',
+    status: 503
+  }
+
+test at tests/external-dispatch.test.ts:184:1
+✖ cancel preserves every fact, revokes the active claim and creates no external record (0.490292ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalDispatch.authorize (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-dispatch.ts:16:137)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:186:35)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_dispatch_unimplemented',
+    status: 503
+  }
+
+test at tests/external-dispatch.test.ts:206:1
+✖ authorize input integrity: executors, repository identity, target executor and validation errors (0.406ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'external_dispatch_unimplemented'
+  - 'external_grant_invalid'
+              ^
+  
+      at Object.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:21:10)
+      at expectedException (node:assert:553:17)
+      at expectsError (node:assert:678:21)
+      at strict.rejects (node:assert:744:3)
+      at async TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:208:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'external_dispatch_unimplemented',
+    expected: 'external_grant_invalid',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/external-dispatch.test.ts:217:1
+✖ summarize exposes separately recorded facts, never a merged success flag (0.46ms)
+  Error [ExternalWorkError]: 外派业务记录操作未能完成。
+      at ExternalDispatch.authorize (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/src/host/external-dispatch.ts:16:137)
+      at TestContext.<anonymous> (file:///Users/bendandebaba/.qoder-cn/worktrees/issue-155-agent-brain-external-collaboration/tests/external-dispatch.test.ts:219:35)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    code: 'external_dispatch_unimplemented',
+    status: 503
+  }
