@@ -1,0 +1,142 @@
+{
+  "recordedAt": "2026-11-28T01:56:34.645711+00:00",
+  "reviewer": "/root/ui149_correction_backend_review",
+  "conclusion": "LIMITED PASS for all explicitly reviewed backend/preparation/modal-source/compatibility/read-consumer paths in candidate f; no confirmed unresolved blocker in current reachable product paths. Not full frozen visual acceptance or PR/user approval. Generic same-hook owner limitation remains an actual recorded FAIL outside verified keyed consumers.",
+  "candidate": {
+    "name": "f",
+    "commit": "5dd59909227ab46f3d989ade8b2847e077636855",
+    "completeManifestSha256": "d437435008dc8aaca47116c3ce49dd88131b56ad670b4cd8c802b7b4e91cbad5",
+    "sourceManifestHash": "c066a823868d61852333e56c38a5ba1a4610ec622c97e646c75932fe720108da",
+    "runtime": {
+      "instanceId": "0217e393-69f2-4bb3-b421-e3ab3ebb99ae",
+      "pid": 260218,
+      "codeRoot": "/workspace/OptraCall-issue149-ui-conformance",
+      "version": "0.1.0-mvp.4",
+      "commit": "5dd59909227ab46f3d989ade8b2847e077636855",
+      "tree": "1078a6e2359a29e82631ab59f56a8d6dd9492d73",
+      "builtAt": "2026-11-28T01:53:17.113Z",
+      "dirty": true
+    },
+    "reviewedManifest": "reviewed-source-manifest.json",
+    "reviewedEntryCount": 44,
+    "all44RecordedInputsMatchCandidateAndCurrentSource": true
+  },
+  "basis": {
+    "frozenDemoSpecTasks": "5f15cf3b677c743bda0b5b2c3ee0e4b4f57e1af2",
+    "engineeringWorkflow": "v1.16",
+    "requirements": [
+      "DW08",
+      "DW09",
+      "DW10",
+      "DW12",
+      "DW13",
+      "DW14",
+      "DW15",
+      "DW16",
+      "T08",
+      "T09",
+      "T10",
+      "T11",
+      "T12",
+      "T13",
+      "T14 (limited to recorded actual runtime evidence)"
+    ],
+    "readOnly": "No product source, formal tests, specification, Git or Issue changes by this reviewer or reviewer subagents."
+  },
+  "scopes": [
+    {
+      "scope": "External waiting and exact request round projection",
+      "evidence": "../round-recheck/review.json",
+      "runtimeEvidence": "runtime-get-review.json",
+      "finding": "Original explicit ProjectWork waiting only, project de-dup/related readable Cases/original source/time; partial/unreadable separated. Choose complete original predecessor chain and observe exact authorization project/item/task/choice source; no latest-round inference. Current f GET exact request/time/round/waiting values equal original qualified fixture, repeat stable."
+    },
+    {
+      "scope": "Preparation scope/order and prior B1",
+      "evidence": "../preparation/recheck/review.json",
+      "finding": "Manual G/S remains editable before scope; explicit valid ownership required on create, no auto default. B1 original failure passes fixed source; old adoption/create/firstIssue receipts remain distinct with new draft identity/no replay. Original37PASS and B1FAIL preserved as historical evidence."
+    },
+    {
+      "scope": "Original choice optional nextStep",
+      "evidence": "../choice-nextstep/review.json",
+      "pass": 24,
+      "finding": "Old event/operation/hash/schema compatibility, real isolated HTTP,200/201 bound, exact replay/conflict/closed Case and summary precedence. Original Case global nextStep/task/authorization unchanged."
+    },
+    {
+      "scope": "Exact artifact read client/preview",
+      "evidence": "../artifact-recheck/review.json",
+      "pass": 4,
+      "finding": "Exact project/path/SHA;403/409/503 distinctions; source switch/late response clear/ignore. Current f CaseBoard artifact wrapper statically rechecked at recorded latest hash only; broader CaseBoard UI belongs to frozen audit."
+    },
+    {
+      "scope": "D13 modal and durable drafts, B2/B3 fixed",
+      "evidence": "../modal-review/review-b2-b3-limited.json",
+      "finding": "Original request-scoped persistence, clean503 cancel,403 old-content clearing/current-edit retention, CAS backup before overwrite, recovery source identity, late-owner isolation, original UNKNOWN operation query/no replay; deliberate changed/empty/unlinked choice restored; closed pure view no new write. Both independent B2/B3 original failing probes now pass. Generic hook limitation separately retained."
+    },
+    {
+      "scope": "D14 nullable execution/date/scope persistence and old data",
+      "evidence": "../feedback-contract/review.json",
+      "pass": 30,
+      "finding": "Old v1/v4/v6 columns, raw times, hashes, quote/request provenance and receipts preserved; v7 migration+new row transactional; old reader refuses without changing bytes. Null requires date and actual observation, invalid input no write/migration; original op replay/late CAS; declaration date never changes savedAt authorization."
+    },
+    {
+      "scope": "D14 actual original form plus durable wrapper, compact and legacy",
+      "evidence": "../feedback-consumers/review-candidate-e.json",
+      "checks": [
+        "compact-run-v1:30PASS +2 independent fixture render errors (missing required source.ref), retained",
+        "compact-independent-v2:2PASS after fixing only local invalid fixture source/time; assertions/source unchanged",
+        "recovery-metadata-recheck:3PASS"
+      ],
+      "finding": "Old no-date/1400+ text/known execution/full metric-review-score-effect UNKNOWN reopens, queries then retries same op/body without injecting date or truncating. New actual compact form saves null with exact date/scope/request/auth/base, duplicate click one POST and lost response keeps intent."
+    },
+    {
+      "scope": "Tri-state and exact original read consumers, including root DailyCaseHistory",
+      "evidence": "../feedback-consumers/tri-state/review.json",
+      "independentPass": 18,
+      "permanentHistoryPass": 5,
+      "finding": "Unknown stays unknown; exact source/Board/AuthorityHistory/personal export/review prompt/history preserve metadata and version identity; absent metadata not synthesized; savedAt/legacy time remain distinct. Original Board full mode preserved."
+    },
+    {
+      "scope": "Root App original home request route and focus-return f delta",
+      "evidence": "../feedback-consumers/focus-return-delta-review.json",
+      "finding": "Source verified observe and choose both carry exact original case/issue/requestId/revision with existing flush; Panel e→f bytes differ only optional choice returnFocusId. Default CaseDialog trigger restore retained. Actual browser evidence below is ROOT-RUN, independently inspected, not executed by this reviewer."
+    }
+  ],
+  "actualBrowserEvidenceFromRoot": {
+    "path": ".local/ui-conformance/home-request-navigation/candidate-f/receipt.json",
+    "runtimeMatchesIndependentGET": true,
+    "pass": 4,
+    "errors": [],
+    "businessWrites": [],
+    "coverage": "choose+observe, each twice: exact Case/issue/request dialog, Esc/cancel return focus and reopen; pending requests unchanged",
+    "limits": "Synthetic fixture; draft persistence permitted to root browser; not a claim of all frozen UI screenshots or user acceptance."
+  },
+  "fourPrinciples": {
+    "HostEnvironment": "PASS within scope: existing storage/migration/ownership/permission/CAS, accurate source and structural input checks; no professional effect/causality/goal result inference.",
+    "AgentAutonomy": "PASS: no new agent execution order or runtime gate; optional manual path preserved; original quote writer contract unchanged.",
+    "PiReuse": "PASS: original Board revisions/APIs/form validation, original Case events and workspace draft CAS reused; no competing SDK lifecycle or provider/dependency change.",
+    "ReduceOperations": "PASS for current flows: manual preparation immediate, same-page choice/three-field observation, legacy drafts and partial intent continue intact, save/query/retry only explicit correct intent; no extra completion marking."
+  },
+  "knownLimitations": [
+    {
+      "id": "GENERIC-HOOK-OWNER",
+      "result": "FAIL retained, not confirmed reachable in current keyed product consumers",
+      "evidence": "../modal-controller/b3/generic-owner-risk.log",
+      "report": "../modal-controller/b3/delta-review.json",
+      "detail": "Within one hook instance A closed+dirty→B open may use shared readOnly ref to PUT A in old cleanup. Actual IssueWork/FeedbackForm owner-key remount probes pass. Do not generalize this to arbitrary in-place hook owner swaps."
+    },
+    "Full npm run check is root-owned; this subreview neither reruns it nor claims its final status. Candidate-e cancelled check and original startup failures/retries remain preserved.",
+    "Frozen layout,1440/1024/390 coverage,all keyboard/browser paths,actual screenshot presentation and explicit pre-PR user confirmation belong to final root/frozen audit. This report is not overall Issue149 PASS.",
+    "Synthetic data/isolated Host fixtures only; no real provider, business operation or device adoption claim. Shared Host43150 used GET only by this reviewer.",
+    "Hash manifest includes identity snapshots; only described paths of large shared components were behaviorally reviewed."
+  ],
+  "preservedEvidence": [
+    "../review-initial.json original37PASS/B1FAIL",
+    "../preparation/independent-repro.log B1FAIL",
+    "../modal-review/independent-choice-reopen.log B2FAIL",
+    "../modal-review/independent-choice-closed.log B3FAIL",
+    "../modal-review/targeted-v1.log independent CSS harness build failures",
+    "../feedback-consumers/compact-run-v1.log independent missing source fixture errors",
+    "../feedback-consumers/review-candidate-e.json e source transition and root focus failure",
+    "All prior scoped reports/logs and new schema/consumer reports retained without rewriting history"
+  ]
+}

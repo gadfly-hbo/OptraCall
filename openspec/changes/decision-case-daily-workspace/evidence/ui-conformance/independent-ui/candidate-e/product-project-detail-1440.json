@@ -1,0 +1,62 @@
+{
+  "text": "跳到主内容\nOptraCall\n持续做出更好的决策\n当\n当前工作区\nCase 与项目工作空间\n新建项目\n主导航\n⌄\n\n日常工作\n\n工作台首页\nDecision Case\n基础建设总览\n›\n战略选择\n目标管理\n语义资产\n分析资产\n项目空间 (5)\n⌄\n⌄\n门店共用资料\n＋\n⋯\n尚无任务\n›\n季度资料整理\n＋\n⋯\n›\n职业访谈与小试\n＋\n⋯\n›\n会员数据口径校准\n＋\n⋯\n›\n华东会员增长实验\n＋\n⋯\n已归档项目 (1)\n›\n设置\n已保存本机配置\n中／EN\nDecision Case · 全部项目\n分析\n决策\n搜索工作区\n/\n帮助\nCase 总览\n全部项目\n←\n返回全部项目 · 保留搜索与筛选\n\nPROJECT · SHARED WORKSPACE\n\n华东会员增长实验\n待反馈\n\n林予安 · 5 个原任务 · 1 个关联 Case\n\n归档项目\n项目共用工作信息\n\n华东会员增长实验的合成验收资料与原任务工作空间\n\n项目内共享同一份资料与约定；Case 只引用明确关联的原任务与成果。\n\n已确认项目约定 v1 · 11/28 08:42\n打开项目空间，查看资料与约定 ↗\n编辑工作信息\n当前承接与下一步\n\n林予安\n\n等待三店核查资料，再讨论是否扩围\n\n项目工作范围独立于任何一次 Case 浏览。\n关联 Case\n改善华东会员复购\n→\n项目内任务\n\n六类用途按需要使用；未出现的类型无需补齐。查看原任务不会自动带入任何 Case 或事项。\n\n＋ 新建任务\n全部 5\n需求 Requirement 1\n分析 Analysis 1\n计划 Plan 1\n决策 Decision 1\n执行 Do 1\n反馈 Teach 0\n原任务\t用途\t已保存状态\t查看\n三店试点范围梳理\n原关联：改善华东会员复购 · 具体事项见原任务\n\t需求 Requirement\t尚无运行记录\t打开原任务 ↗\n华东三店试点观察\n原关联：改善华东会员复购 · 具体事项见原任务\n\t分析 Analysis\t尚无运行记录\t打开原任务 ↗\n是否扩大试点的备选方案\n原关联：改善华东会员复购 · 具体事项见原任务\n\t计划 Plan\t尚无运行记录\t打开原任务 ↗\n本轮扩围取舍\n原关联：改善华东会员复购 · 具体事项见原任务\n\t决策 Decision\t尚无运行记录\t打开原任务 ↗\n三店缺货核查行动记录\n原关联：改善华东会员复购 · 具体事项见原任务\n\t执行 Do\t尚无运行记录\t打开原任务 ↗\n六类任务的用途说明\n项目协作、管理与其他业务入口\n项目工作记录\n\n共用项目保持同一个身份，进入关联 Case 只改变查看位置。项目资料需要明确关联后才会进入对应 Case 的成果与依据。\n更新于 11/28 08:42",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "overflow": false,
+  "elements": [
+    {
+      "tag": "ASIDE",
+      "id": "sidebar",
+      "class": "sidebar",
+      "x": 0,
+      "y": 0,
+      "w": 180,
+      "h": 1000,
+      "font": "13px",
+      "padding": "24px 13px 12px",
+      "grid": "none",
+      "overflowY": "visible"
+    },
+    {
+      "tag": "HEADER",
+      "id": "",
+      "class": "topbar",
+      "x": 180,
+      "y": 0,
+      "w": 1260,
+      "h": 58,
+      "font": "13px",
+      "padding": "8px 30px",
+      "grid": "none",
+      "overflowY": "visible"
+    },
+    {
+      "tag": "NAV",
+      "id": "",
+      "class": "decision-case-tabs",
+      "x": 180,
+      "y": 58,
+      "w": 1260,
+      "h": 68,
+      "font": "13px",
+      "padding": "12px 32px",
+      "grid": "none",
+      "overflowY": "visible"
+    },
+    {
+      "tag": "DIV",
+      "id": "",
+      "class": "daily-project-detail",
+      "x": 218,
+      "y": 160,
+      "w": 1184,
+      "h": 1223.578125,
+      "font": "13px",
+      "padding": "0px",
+      "grid": "none",
+      "overflowY": "visible"
+    }
+  ]
+}

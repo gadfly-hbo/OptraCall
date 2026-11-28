@@ -1,0 +1,69 @@
+{
+  "recordedAt": "2026-11-28T01:36:46.053417+00:00",
+  "state": "Read-only preaudit inventory only; author writing; NOT acceptance manifest",
+  "files": [
+    {
+      "path": "extensions/business-plugins/decision-board/storage/store.ts",
+      "sha256": "e42b655b4759f6ba19c62d917db891ffce2d8592355a269b0836e108ef5da8ca"
+    },
+    {
+      "path": "extensions/business-plugins/decision-board/api/routes.ts",
+      "sha256": "61b355cec26ec4dd4c96d1d0502e88a5a2987eb285b18a7e6d6d3d046ba6d49c"
+    },
+    {
+      "path": "extensions/business-plugins/decision-board/types.ts",
+      "sha256": "371a389b8101185597e9dc69596d3abefbe3c97e336fd8fbdaf7bb42acda5646"
+    },
+    {
+      "path": "extensions/business-plugins/decision-board/ui/decision-board-client.ts",
+      "sha256": "080eee4391541863bea95d53733bcbd5f3932331c2086c8de147bfb83bfc9849"
+    },
+    {
+      "path": "extensions/business-plugins/decision-board/ui/DecisionBoardPage.tsx",
+      "sha256": "dcdf1310468037a4ae03cde2658dd9b7243204e6b803e507cd7ee07773ddc80c"
+    },
+    {
+      "path": "extensions/business-plugins/decision-board/ui/ActionAuthorityHistory.tsx",
+      "sha256": "9954993b9577d3348bee25237d7965f2b15f3738fdfc528c740070de665786c6"
+    },
+    {
+      "path": "src/host/quoted-decision-adapter.ts",
+      "sha256": "1e5a4cab80d8fae6c014704ca37a138c91e46dc4259fa63c4351aa15df76d206"
+    },
+    {
+      "path": "src/host/quoted-feedback-origins.ts",
+      "sha256": "bd86218f0c0168a50134aba80414185c1c3a3b724354dd4d3e6db2cafb624ce8"
+    },
+    {
+      "path": "src/host/case-issues.ts",
+      "sha256": "3db7cf0cd2fd5a1894d08ef2a2a7a77289304ffde72717bd8599fb53cd69d627"
+    },
+    {
+      "path": "src/host/case-decision-service.ts",
+      "sha256": "6eb882a44ae08ba89a2ade4ca4c7f3a8461443946b12aae4a6d8bab8d5b2201a"
+    },
+    {
+      "path": "src/host/ui/CaseDecisionsPanel.tsx",
+      "sha256": "74f7fc282b7cf9b8f9bda828f96938dfd8b4fd90360c49c4bc46ba4dd29d541e"
+    },
+    {
+      "path": "src/host/ui/CaseFeedbackDialog.tsx",
+      "sha256": "048cc6e25ae0bea7163d2a8ccdfa4cac2eab6a6662d45b2fe826c5e9d19a4f0f"
+    },
+    {
+      "path": "src/host/decision-feedback-context.ts",
+      "sha256": "9d9026dd94b1c653c7557b6d1d13c443ee5b26483811784ffc48cab2efbc7b20"
+    },
+    {
+      "path": "src/host/decision-feedback-routes.ts",
+      "sha256": "48a755b335cc39705094f387c420e55017acf272326c65d138f1a330628e77de"
+    }
+  ],
+  "reviewChecks": [
+    "true/false/null remain distinct in feedbackDraft, Board cards, comparison/history, ActionAuthorityHistory and exact Case source viewer",
+    "Host projections and quoted/feedback source records preserve nullable adopted and optional date/scope without inventing yes/no/date/coverage",
+    "Old full Board form keeps original behavior; Case compact interface does not synthesize adopted=false or replace metricDelta/review/score/effect",
+    "Request/auth/baseline revalidation, CAS and UNKNOWN keep original identity; closed/archived and scoped draft safeguards remain",
+    "Schema compatibility, old operation sha/receipts and HTTP reviewed separately by choice_nextstep_review"
+  ]
+}

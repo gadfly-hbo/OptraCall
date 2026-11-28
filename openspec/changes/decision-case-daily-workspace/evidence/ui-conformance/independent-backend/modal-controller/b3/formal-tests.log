@@ -1,0 +1,28 @@
+✔ DW13/16: recovery readback is bound to its exact owner and backup ID; late previous-version responses never replace the new source (124.218535ms)
+✔ DW16: forbidden or misbound recovery reads remove source content and cannot be presented as the requested version (13.790804ms)
+✔ DW13: conflict replacement requires a successful preservation receipt before explicitly flushing my draft (4.082399ms)
+✔ DW13: action input and exact operation/request survive reopening without writing a business record (5.409046ms)
+✔ DW13: one flush drains edits arriving during a save before navigation can proceed (1.397705ms)
+✔ DW13: CAS conflict retains this input and never overwrites another editor (1.87542ms)
+✔ DW13: lost acknowledgement accepts only the same saved payload and exact owner (4.070593ms)
+✔ DW13: a late initial read cannot silently replace edits or overwrite an unseen saved draft (0.958916ms)
+✔ DW13: unavailable or misbound draft never becomes ready or writable (4.463128ms)
+✔ DW13: the modal hook registers the real navigation guard and preserves unsaved fields on conflict (166.109219ms)
+✔ DW13: delayed previous-owner reads cannot populate a different Case modal (7.808378ms)
+✔ DW13: an unopened unedited modal with unavailable draft storage does not block page navigation (7.65054ms)
+✔ DW13: 403 clears loaded content, retains only this session edits separately and prevents further writes (1.04379ms)
+✔ DW13: initial and lost-ack readback 403 clear unsafe defaults and mark the owner restricted (1.65529ms)
+✔ DW13: reviewed conflict is backed up before adopting its CAS baseline; explicit save keeps both versions (4.548382ms)
+✔ DW13: a failed backup cannot authorize overwrite, and another concurrent edit still fails CAS after backup (0.804378ms)
+✔ DW13: the real hook recovers a lost backup acknowledgement, then permits explicit save and reopening (14.401439ms)
+✔ DW13: the hook clears restricted remote fields and permits explicit local discard without a remote delete (2.442004ms)
+✔ DW13: discarding during an in-flight draft save never replays the old input over its accepted receipt (0.296779ms)
+✔ DW13/B3: a live draft becoming read-only retains unsaved input and cannot autosave, flush or mutate it until reopened (353.590885ms)
+ℹ tests 20
+ℹ suites 0
+ℹ pass 20
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1052.415688

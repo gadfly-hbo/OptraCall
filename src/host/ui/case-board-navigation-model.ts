@@ -48,5 +48,5 @@ export function projectCaseRoundSummary(timeline: CaseIssueTimeline): CaseRoundS
   return { title: `${timeline.issue.title} · 选择链第 ${timeline.rounds.length} 轮`,
     known: round.review ? `复盘判断：${round.review.judgement}` : `已记录取舍：${choiceName[choice.choice]}${choice.reason ? ` · ${choice.reason}` : ' · 原理由未记录'}；本轮复盘判断尚未记录或暂不可读取。`,
     advancing: actions.length ? actions.join('\n') : limited ? '原行动或观察部分不可读取，当前进展待核。' : '尚未记录本轮有效行动授权。',
-    next: round.review?.nextStep || '本轮下一步尚未记录或暂不可读取，请核对原事项记录。', sources, limited };
+    next: round.review?.nextStep || choice.nextStep || '本轮下一步尚未记录或暂不可读取，请核对原事项记录。', sources, limited };
 }

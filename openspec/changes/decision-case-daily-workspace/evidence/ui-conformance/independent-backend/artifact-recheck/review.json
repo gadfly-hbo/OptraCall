@@ -1,0 +1,44 @@
+{
+  "recordedAt": "2026-11-28T01:18:27.527408+00:00",
+  "conclusion": "PASS for exact original-file client and preview component boundary; no unresolved finding here",
+  "files": [
+    {
+      "path": "src/host/ui/DailyArtifactPreview.tsx",
+      "sha256": "e13ab5eebd2ee4b130e10272ffce63cc04d5b864ead30f559eba4c764f1633fb",
+      "unchanged": true
+    },
+    {
+      "path": "src/host/ui/runtime-client.ts",
+      "sha256": "62cbe1cbf00f0b9cbcfd468aee4635ba6f674061466744bf89200ba5d2d42657",
+      "unchanged": true
+    },
+    {
+      "path": "tests/daily-artifact-preview-ui.test.ts",
+      "sha256": "a0d075a6ab5fd6db0b9f90362a2b7ce7234fdc92211018b8552429208caab466",
+      "unchanged": true
+    },
+    {
+      "path": "src/host/ui/CaseBoard.tsx",
+      "sha256": "5ce3afde69e11b7a5565f04104b8dbd25d7e8c4989e45483eda6ca99d5ba4327",
+      "review": "403 wrapper static only; DOM/browser delegated to root frozen UI audit"
+    }
+  ],
+  "command": "node --test tests/daily-artifact-preview-ui.test.ts .local/ui-conformance/backend-independent/artifact-recheck/independent-owner-switch.test.ts",
+  "pass": 4,
+  "fail": 0,
+  "output": "tests.log",
+  "coverage": [
+    "Exact original project/path/SHA passed into existing content endpoint.",
+    "403 -> forbidden; 409 -> changed; 503 -> unavailable; error responses never rendered as content.",
+    "Unknown availability, binary, >1MiB do not request content.",
+    "Close ignores late response. Independent owner-switch test resolves new B then old A even with abort-ignoring transport: B remains, A never renders.",
+    "Switch to changed source clears old successful content.",
+    "CaseBoard wrapper static check: forbidden state removes body/source/download; explicit retry remounts original preview."
+  ],
+  "limits": [
+    "Mocked HTTP and actual bundled component, not runtime screenshot or real business files.",
+    "Existing markdown renderer stubbed in tests; this review does not separately claim markdown sanitization coverage.",
+    "CaseBoard wrapper interaction/browser remains root audit scope."
+  ],
+  "writes": "Only artifact-recheck evidence; source/tests/spec/Git/Issue read-only"
+}

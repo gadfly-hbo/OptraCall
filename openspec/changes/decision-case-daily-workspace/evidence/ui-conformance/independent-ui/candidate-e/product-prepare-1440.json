@@ -1,0 +1,49 @@
+{
+  "text": "跳到主内容\nOptraCall\n持续做出更好的决策\n当\n当前工作区\nCase 与项目工作空间\n新建项目\n主导航\n⌄\n\n日常工作\n\n工作台首页\nDecision Case\n基础建设总览\n›\n战略选择\n目标管理\n语义资产\n分析资产\n项目空间 (5)\n⌄\n⌄\n门店共用资料\n＋\n⋯\n尚无任务\n›\n季度资料整理\n＋\n⋯\n›\n职业访谈与小试\n＋\n⋯\n›\n会员数据口径校准\n＋\n⋯\n›\n华东会员增长实验\n＋\n⋯\n已归档项目 (1)\n›\n设置\n已保存本机配置\n中／EN\n工作台首页\n分析\n决策\n搜索工作区\n/\n帮助\n← 返回工作台 · 保留草稿\nCase 准备草稿 · 关闭与返回都会保留\n先把这件事说清楚\n\n从一句话出发，先准备可编辑的 G/S。明确采纳并创建后，才会成为新的 Case。\n\n保留的输入\n这段输入尚未发送到任何已有对话；新建后将作为待带入片段保留。\n人工填写 · 无模型依赖\n请 Agent 协助整理\n或使用已有 G/S\n选择已采纳目标版本，或在下方手填\n60天会员复购率达到 23% · v1 · 林予安（合成验收）\n形成下一阶段职业选择 · v1 · 林予安（合成验收）\n形成全家共同认可的年度安排 · v1 · 林予安（合成验收）\n这件事的名字\n补充问题背景\n准备目标与策略\nG · 目标名称\n想看到什么结果\nS · 这次先怎么推进\n可核成果\n责任角色／承担人\n明确目标归属\n已有企业或个人\n请选择已有企业或个人\n个人目标\n保存候选、明确采纳 G/S 并创建 Case\n\n创建会建立 Case 与第一件事项，完整名称、背景和原输入保留为待带入片段，仍需明确追加与发送；不创建项目任务、不授权行动或宣布目标达成。\n\n查找已有 Case\n明确放弃这份准备草稿\n查看全部项目",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "overflow": false,
+  "elements": [
+    {
+      "tag": "ASIDE",
+      "id": "sidebar",
+      "class": "sidebar",
+      "x": 0,
+      "y": 0,
+      "w": 180,
+      "h": 1000,
+      "font": "13px",
+      "padding": "24px 13px 12px",
+      "grid": "none",
+      "overflowY": "visible"
+    },
+    {
+      "tag": "HEADER",
+      "id": "",
+      "class": "topbar",
+      "x": 180,
+      "y": 0,
+      "w": 1260,
+      "h": 58,
+      "font": "13px",
+      "padding": "8px 30px",
+      "grid": "none",
+      "overflowY": "visible"
+    },
+    {
+      "tag": "SECTION",
+      "id": "",
+      "class": "daily-case-preparation-shell",
+      "x": 180,
+      "y": 58,
+      "w": 1260,
+      "h": 942,
+      "font": "13px",
+      "padding": "26px 38px 40px",
+      "grid": "none",
+      "overflowY": "auto"
+    }
+  ]
+}

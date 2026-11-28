@@ -1,0 +1,24 @@
+✔ DW12/DW13-DRAFT-01: drafts persist across reopen, CAS conflict keeps input, fragment append is idempotent & non-overwriting, discard is scoped (157.806088ms)
+✔ DW11/DW14-CREATE-02: three creation branches, partial success adoption receipt preservation, and idempotent retry (140.563796ms)
+✔ DW10-DIR-03: bounded read-only Case directory and daily routes work end-to-end (97.785055ms)
+✔ DW-HTTP-01: real Host HTTP round-trip for issue edges, explicit requests -> choice response -> home-pending update, drafts, and case-directory (18775.037349ms)
+✔ DW-AGENT-02: Pi tool schemas expose case-directory on goal-draft and save-issue-edge/save-decision-request on Case Agent (0.405148ms)
+✔ DW-HTTP-03: real Host HTTP POST /api/workspace/create-case adopts candidate goal via StrategyGoalsStore and continues on exact G/S (10132.044161ms)
+✖ DW-PI-LOOP-01: real Host -> official Pi 1.4.0 -> synthetic Provider invokes case-directory on goal-draft and save-issue-edge/save-decision-request on {role:case} (18165.756097ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 6
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 31016.58438
+
+✖ failing tests:
+
+test at tests/workspace-daily-pi-loop.test.ts:22:1
+✖ DW-PI-LOOP-01: real Host -> official Pi 1.4.0 -> synthetic Provider invokes case-directory on goal-draft and save-issue-edge/save-decision-request on {role:case} (18165.756097ms)
+  Error: Test Host startup timed out.
+      at Timeout._onTimeout (file:///workspace/OptraCall-issue149-ui-conformance/tests/fixtures/host-process.ts:24:68)
+      at listOnTimeout (node:internal/timers:605:17)
+      at process.processTimers (node:internal/timers:541:7)

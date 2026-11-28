@@ -1,0 +1,54 @@
+{
+  "reviewer": "/root/ui149_correction_backend_review/prep_scope_readonly",
+  "recordedAt": "2026-11-28T00:57:52.771696+00:00",
+  "finding": "B1 / PREP-01",
+  "conclusion": "PASS for B1 correction and affected preparation input/identity scope. Initial FAIL remains retained; no overall UI or user acceptance claim.",
+  "files": [
+    {
+      "path": "src/host/ui/CasePreparation.tsx",
+      "sha256": "af5018164c477806a0b50ec788840abdaf06512fd111a82d420718678606f759",
+      "matchesFixedCandidate": true
+    },
+    {
+      "path": "tests/case-preparation-ui.test.ts",
+      "sha256": "372441a843163408754c68cb2903ca4f30a0c901bd7f7534836129193744e44f",
+      "matchesFixedCandidate": true
+    }
+  ],
+  "checks": [
+    {
+      "command": "node --test .local/ui-conformance/backend-independent/preparation/independent-repro.test.ts",
+      "exit": 0,
+      "pass": 1,
+      "fail": 0,
+      "output": "original-repro.log"
+    },
+    {
+      "command": "node --test tests/case-preparation-ui.test.ts",
+      "exit": 0,
+      "pass": 10,
+      "fail": 0,
+      "output": "current-tests.log"
+    },
+    {
+      "command": "node --test .local/ui-conformance/backend-independent/preparation/recheck/independent-identity.test.ts",
+      "exit": 0,
+      "pass": 1,
+      "fail": 0,
+      "output": "independent-identity.log"
+    }
+  ],
+  "observed": [
+    "Original reproduction now exposes both manual G/S and scope fields after Prepare another Case, without opening optional Agent.",
+    "Additional independent test seeds prior enterprise scope, exact selected Goal, adoption and creation receipts; new draft has null scope/selection/receipts and fresh draft/adopt/create operation identities.",
+    "Prior preparation including original adoption/creation and first-issue receipts is byte-structure unchanged after new draft edits.",
+    "New unowned Goal editing causes no Goal or Case writes and does not replay previous first issue.",
+    "Current permanent tests cover persisted unowned G/S, explicit scope requirement, lost reply/frozen creation retry, conflict preservation, directory 403/503 and paging."
+  ],
+  "preservedInitialFailure": "../independent-repro.log",
+  "limitations": [
+    "Actual bundled product component tested with isolated hooks and mocked HTTP; not actual browser screenshot.",
+    "No production data, real Provider, complete three-branch backend or user screenshot acceptance in this recheck."
+  ],
+  "writes": "Only evidence under this recheck directory; source/tests/spec/Git/Issue read-only."
+}

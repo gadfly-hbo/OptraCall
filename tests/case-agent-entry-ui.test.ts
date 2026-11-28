@@ -16,7 +16,8 @@ test('a Case detail exposes its collaboration entry before any independent issue
   const html = renderToStaticMarkup(createElement(CaseIssuePanel, {
     record, projects: [], onChange() {}, onCreate() {},
   }));
-  assert.match(html, /<h3[^>]*>Decision Case Agent<\/h3>/);
-  assert.match(html, /<button[^>]*aria-expanded="false"[^>]*>与决策 Agent 协作<\/button>/);
+  assert.match(html, /<h3[^>]*>Case Agent<\/h3>/);
+  assert.match(html, /先选择一件事项/);
+  assert.match(html, /aria-label="事项关系与视图切换"/);
   assert.doesNotMatch(html, /<textarea/);
 });

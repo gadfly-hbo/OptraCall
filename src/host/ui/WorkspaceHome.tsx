@@ -8,6 +8,7 @@ import {
   type HomeFoundationId,
 } from './workspace-home-model.ts';
 import './workspace-home.css';
+import './case-daily-home.css';
 
 export interface WorkspaceHomeReportTarget {
   caseId: string;
@@ -121,11 +122,10 @@ export function WorkspaceHome({
   return (
     <div className="workspace-home-scroll">
       <section className="desk-home" role="region" aria-label="工作台首页">
-        <HomeDailyQuickPanel hidePreparation={hidePreparation} refreshToken={refreshToken} onOpenCase={(caseId: string, issueId?: string) => onOpenCase(caseId, issueId)} onOpenRequest={onOpenRequest} onCreateCase={onCreateCase} onOpenAllProjects={onOpenProjectMap} />
         <header className="dh-head">
           <div>
-            <p className="dh-date"><time dateTime={dateInfo.iso}>{dateInfo.text}</time></p>
-            <h1>{model.headline}</h1>
+            <p className="dh-eyebrow">YOUR WORK · OPTRACALL</p>
+            <h1>今天，先推进一件重要的事</h1>
             <p className="dh-intro">
               {desk.enterprises.length > 1 ? (
                 <label className="dh-enterprise-inline">
@@ -153,6 +153,7 @@ export function WorkspaceHome({
             </p>
           </div>
           <div className="dh-head-actions">
+            <time className="dh-date" dateTime={dateInfo.iso}>{dateInfo.text}</time>
             <button type="button" className="text-button" disabled={desk.loading} onClick={desk.reload}>
               {desk.loading ? '正在刷新…' : '刷新'}
             </button>
@@ -177,6 +178,45 @@ export function WorkspaceHome({
           </div>
         )}
 
+        <HomeDailyQuickPanel hidePreparation={hidePreparation} refreshToken={refreshToken}
+          onOpenCase={onOpenCase} onOpenRequest={onOpenRequest} onCreateCase={onCreateCase}
+          onOpenAllProjects={onOpenProjectMap} onOpenAllCases={onOpenStarMap} onOpenProject={onOpenProject} projects={projects}
+          independentProjects={isCaseRestricted ? [] : projects.filter(project => !project.archivedAt && !desk.projectLinks.some(link => link.projectId === project.id))}
+          foundationContent={
+        <section className="dh-foundation" aria-labelledby="foundations-title">
+          <div className="dh-section-head">
+            <h2 id="foundations-title">基础建设提醒</h2>
+            <button
+              type="button"
+              className="dh-link-btn"
+              onClick={onOpenFoundationOverview}
+            >
+              按需查看
+            </button>
+          </div>
+          <div className="dh-foundation-tiles">
+            {model.foundations.map(item => (
+              <button
+                key={item.id}
+                type="button"
+                className="dh-foundation-tile"
+                onClick={() => onOpenFoundation(item.id)}
+              >
+                <span className="dh-foundation-label">
+                  <strong>{item.title}</strong>
+                  <span className={`dh-pill ${item.tone}`}>{item.status}</span>
+                </span>
+                <p>{item.rhythm}</p>
+              </button>
+            ))}
+          </div>
+          <p className="dh-foundation-note">提醒供按需查看，继续工作无需先完成基础建设。</p>
+        </section>
+          }
+        />
+
+        <details className="dh-more-records">
+          <summary>更多工作区记录与入口</summary>
         <section className="dh-hero" aria-labelledby="focus-case">
           <div className="dh-case">
             <div className="dh-case-top">
@@ -373,34 +413,8 @@ export function WorkspaceHome({
           </button>
         </div>
 
-        <section className="dh-foundation" aria-labelledby="foundations-title">
-          <div className="dh-section-head">
-            <h2 id="foundations-title">基础建设</h2>
-            <button
-              type="button"
-              className="dh-link-btn"
-              onClick={onOpenFoundationOverview}
-            >
-              查看建设总览
-            </button>
-          </div>
-          <div className="dh-foundation-tiles">
-            {model.foundations.map(item => (
-              <button
-                key={item.id}
-                type="button"
-                className="dh-foundation-tile"
-                onClick={() => onOpenFoundation(item.id)}
-              >
-                <span className="dh-foundation-label">
-                  <strong>{item.title}</strong>
-                  <span className={`dh-pill ${item.tone}`}>{item.status}</span>
-                </span>
-                <p>{item.rhythm}</p>
-              </button>
-            ))}
-          </div>
-        </section>
+
+        </details>
       </section>
     </div>
   );

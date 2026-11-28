@@ -1,0 +1,43 @@
+/* Same-page actions in the confirmed daily Case workspace. */
+.case-round-choice-dialog, .case-feedback-entry-dialog { width: min(600px, calc(100vw - 32px)); }
+.case-round-choice { display: grid; gap: 18px; }
+.case-round-choice > label { display: grid; gap: 8px; font-size: 14px; color: var(--ink); }
+.case-round-choice :is(input:not([type="checkbox"]),select,textarea) { box-sizing: border-box; width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); font: inherit; }
+.case-round-choice textarea { min-height: 108px; resize: vertical; }
+.case-round-choice > label:has(input[type="checkbox"]) { display: flex; align-items: flex-start; font-size: 12px; line-height: 1.7; }
+.case-round-choice > label:has(input[type="checkbox"]) input { flex: 0 0 auto; margin-top: 3px; }
+.case-round-choice .case-help { margin: 0; }
+.case-round-choice .case-dialog-actions { margin-top: 8px; }
+.case-feedback-action-list { display: grid; gap: 10px; margin-top: 18px; }
+.case-feedback-action-list button { display: grid; gap: 6px; padding: 12px 16px; text-align: left; }
+.case-feedback-action-list span { color: var(--muted); font-size: 12px; }
+.case-action-draft-recovery { margin: 14px 0; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-soft); }
+.case-action-draft-recovery pre { max-height: 180px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.case-action-draft-recovery button { margin: 6px 8px 0 0; }
+@media(max-width: 620px) { .case-round-choice-dialog, .case-feedback-entry-dialog { width: calc(100vw - 24px); } }
+.case-feedback-compact-dialog { width: min(530px, calc(100vw - 32px)); padding: 0; border-color: #e8e0f3; border-radius: 13px; color: #655771; }
+.case-feedback-compact-dialog > .case-dialog-heading { margin: 0; padding: 24px 26px 18px; border-bottom: 1px solid #eee7f5; }
+.case-feedback-compact-dialog > .case-dialog-heading h2 { color: #302a3a; font-size: 20px; font-weight: 650; }
+.case-feedback-compact-dialog > .case-dialog-heading p { color: #978aa5; font-size: 12px; margin-top: 5px; }
+.case-feedback-compact-form { display: grid; gap: 18px; padding: 22px 26px 24px; margin: 0; }
+.case-feedback-field { display: grid; gap: 8px; }
+.case-feedback-field > label { color: #867194; font-size: 13px; font-weight: 400; }
+.case-feedback-field small { margin-left: 5px; color: #ad9dbb; font-size: 11px; }
+.case-feedback-field :is(input,textarea) { box-sizing: border-box; width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid #dfd4ed; border-radius: 7px; background: #fdfcfe; color: #67566f; font: inherit; font-size: 14px; line-height: 1.6; }
+.case-feedback-field textarea { min-height: 96px; resize: vertical; }
+.case-feedback-field :is(input,textarea)::placeholder { color: #b5a1c5; }
+.case-feedback-field :is(input,textarea):focus { outline: 2px solid #bfa5f2; outline-offset: 3px; }
+.case-feedback-compact-note { margin: 0; padding: 12px 14px; border-radius: 7px; background: #f7f3fc; color: #a28db5; font-size: 11px; line-height: 1.8; }
+.case-feedback-disclosures { display: grid; gap: 8px; margin-top: -4px; color: #9583a3; font-size: 12px; }
+.case-feedback-disclosures > details > summary { cursor: pointer; }
+.case-feedback-disclosures > details[open] { padding: 10px 12px; border: 1px solid #e8dff1; border-radius: 7px; background: #fcfaff; }
+.case-feedback-disclosures section { display: grid; gap: 8px; margin-top: 10px; }
+.case-feedback-disclosures select { max-width: 100%; }
+.case-feedback-compact-form > .board-dialog-actions { display: flex; align-items: center; gap: 18px; justify-content: flex-end; margin-top: 0; }
+.case-feedback-compact-form > .board-dialog-actions button { min-height: 39px; font-size: 13px; }
+.case-feedback-compact-dialog > .board-error, .case-feedback-compact-dialog > .case-action-draft-recovery { margin: 16px 26px 0; }
+@media (max-width: 620px) {
+  .case-feedback-compact-dialog { width: calc(100vw - 24px); max-height: calc(100dvh - 24px); }
+  .case-feedback-compact-dialog > .case-dialog-heading { padding: 18px 18px 14px; }
+  .case-feedback-compact-form { padding: 18px; gap: 16px; }
+}

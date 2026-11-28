@@ -1,0 +1,50 @@
+{
+  "at": "2026-11-28T02:39:39.592652+00:00",
+  "executionOwner": "PM",
+  "reviewer": "ui149_frozen_audit",
+  "method": "Read original complete-run receipt and log; verify published copies byte-identical; independently rehash production/permanent tests/package inputs against the fixed g manifest. This is not a claim of independently rerunning the full suite.",
+  "sourceManifestHash": "2f8ee75d4da2c5aca3240e9b26abc4ab7c6a5f798ae6ea650def9195db436f16",
+  "completeManifestSHA256": "d38d54e580de9d59e64021599b3ab4ebb2cc65701bb829737b267d764883f386",
+  "command": "npm run check:agent-sessions && node --test --test-concurrency=4 tests/*.test.ts && npm run build && npm audit --audit-level=high",
+  "startedAt": "2026-11-28T02:11:24.729203+00:00",
+  "finishedAt": "2026-11-28T02:37:56.638229+00:00",
+  "exitCode": 0,
+  "tests": {
+    "total": 3686,
+    "pass": 3490,
+    "fail": 0,
+    "skipped": 196,
+    "skipMeaning": "Original condition-based skips remain SKIP; not relabeled PASS."
+  },
+  "build": "PASS",
+  "audit": {
+    "command": "npm audit --audit-level=high",
+    "exitCode": 0,
+    "existingModerate": 2,
+    "highOrCriticalReported": 0,
+    "dependencyChanges": "none requested or performed by this review"
+  },
+  "verifiedInputCount": 1296,
+  "productionPermanentTestPackageDrift": [],
+  "externalEvidence": [
+    {
+      "relativeReference": "../checks/candidate-g-check-status.json",
+      "source": ".local/ui-conformance/candidate-g-check-status.json",
+      "destination": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/checks/candidate-g-check-status.json",
+      "bytes": 596,
+      "sha256": "939a75807f5602a7634638b8eb9fd57ce52c778e80a04146e84b786b30c44dfc",
+      "publicationOwner": "PM",
+      "reviewed": true
+    },
+    {
+      "relativeReference": "../checks/candidate-g-full-check.log",
+      "source": ".local/ui-conformance/candidate-g-full-check.log",
+      "destination": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/checks/candidate-g-full-check.log",
+      "bytes": 467981,
+      "sha256": "629ee260bd128e2995056163a0ab98b10e137de6f5eeafd37870624f83541f33",
+      "publicationOwner": "PM",
+      "reviewed": true
+    }
+  ],
+  "conclusion": "T15 / DW18 applicable complete-check condition satisfied for the fixed g candidate; T16/T17/T18 and user screenshot approval remain pending."
+}

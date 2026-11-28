@@ -1,0 +1,139 @@
+{
+  "recordedAt": "2026-11-28T01:51:44.533765+00:00",
+  "reviewer": "/root/ui149_correction_backend_review",
+  "candidate": "e",
+  "commit": "5dd59909227ab46f3d989ade8b2847e077636855",
+  "completeCandidateManifestSha256": "194d05d777a9fb2e29d7ee62745f22afed394f6ad871d3971d4b03fa81595d47",
+  "sourceManifestHash": "4a8d747b1129393cae452d31d218312a77bb0954a80baafb4f6d268242d7f985",
+  "conclusion": "LIMITED PASS for recorded D14 persistence/compatibility, exact request/write-intent interfaces and nullable read consumers; no confirmed blocking finding in current reachable modal paths. NOT complete frozen UI/user acceptance. Known generic hook limitation remains separately recorded.",
+  "manifest": "candidate-e-post-run-manifest.json",
+  "all27RecordedInputsMatchCompleteCandidateAndUnchanged": false,
+  "checks": [
+    {
+      "log": "compact-run-v1.log",
+      "pass": 30,
+      "fail": 2,
+      "classification": "25 permanent request/wrapper/presentation checks and5 prior independent exact-form/owner checks passed;2 new double-layer independent probes errored in renderer because synthetic request fixture omitted required source.ref. No product failure inferred."
+    },
+    {
+      "log": "compact-independent-v2.log",
+      "pass": 2,
+      "fail": 0,
+      "change": "Only isolated fixture supplied valid required request source/ref/time; source and assertions unchanged. Both real original FeedbackDialog+durable wrapper chains pass."
+    },
+    {
+      "log": "recovery-metadata-recheck.log",
+      "pass": 3,
+      "fail": 0
+    },
+    {
+      "report": "../feedback-contract/review.json",
+      "pass": 30,
+      "fail": 0,
+      "scope": "Backend migration/old schema and receipt compatibility/isolated HTTP/late CAS/exact authorization projection"
+    },
+    {
+      "report": "tri-state/review.json",
+      "independentPass": 18,
+      "permanentHistoryPass": 5,
+      "fail": 0,
+      "scope": "Tri-state read consumers and precise metadata/revision/export, including DailyCaseHistory and original Board full mode"
+    },
+    {
+      "report": "candidate-e-get-review.json",
+      "scope": "Shared synthetic actual Host43150 e PID254230 builtAt01:49:00.388Z; GET only exact original request/round/waiting identity and stable repeated projection"
+    }
+  ],
+  "matrix": [
+    {
+      "requirements": [
+        "DW09",
+        "DW13",
+        "DW14"
+      ],
+      "actual": "Original old no-date,1400-character saved UNKNOWN form is restored in full mode, query-null then explicit same operation/body retry keeps old bool,outcome,metric/review/score/effect,request ref; no new date/scope injected. New drafts use compact case form.",
+      "result": "PASS"
+    },
+    {
+      "requirements": [
+        "D14",
+        "DW09",
+        "DW15",
+        "DW16"
+      ],
+      "actual": "Actual compact form keeps unknown execution as null, observation date and scope exact, original request/auth/baseline exact, no inferred effect/score or action completion. Double submit produces one business call;503 retains original intent. Invalid date/empty observation and changed source/baseline/auth cannot write.",
+      "result": "PASS"
+    },
+    {
+      "requirements": [
+        "DW13",
+        "DW14",
+        "DW18"
+      ],
+      "actual": "Old v1/v4/v6 original column values, legacy time, quote/request references and operation digests preserved; v7 migration and new row transactional; old readers reject without touching bytes; old operation replay returns original receipt.",
+      "result": "PASS"
+    },
+    {
+      "requirements": [
+        "DW05",
+        "DW09",
+        "DW15"
+      ],
+      "actual": "null/true/false distinct across exact source/history/Board/AuthorityHistory/exports. Exact declared date/scope and savedAt remain separate; date never chooses authorization/round. Precise revisions retained, absent metadata remains absent.",
+      "result": "PASS"
+    },
+    {
+      "requirements": [
+        "DW08",
+        "DW09"
+      ],
+      "actual": "App openHomeRequest routes original caseId+issueId+requestId/revision to same Case editor; prior navigation flush remains. Static inspected only by this reviewer; root candidate-e browser verification is separate.",
+      "result": "SOURCE PASS / BROWSER NOT RUN BY THIS REVIEWER"
+    },
+    {
+      "requirements": [
+        "DW13",
+        "DW16"
+      ],
+      "actual": "Restoration/conflict/restricted/late safeguards retained; changed recovery labels render new metadata as ordinary text. B2/B3 source fixes remain unchanged.",
+      "result": "PASS FOR CURRENT KEYED MODAL PATHS; GENERIC HOOK LIMITATION RETAINED"
+    }
+  ],
+  "fourPrinciples": {
+    "HostEnvironment": "Original Board revision persistence, structural date/scope validation, exact source/permission and CAS only; no causal/effect/goal inference. No new task or authorization from observation.",
+    "AgentAutonomy": "No runtime scheduling, forced analysis order or provider change. Original quote writer retains explicit boolean contract; reading nullable observations remains accurate.",
+    "PiReuse": "Existing Board revision table/APIs, original form validation, Case interfaces and workspace draft CAS reused. No replacement SDK lifecycle or dependency change.",
+    "ReduceOperations": "New Case observation is date/outcome/optional scope on same page. Execution/effect/rating can stay unknown; legacy full drafts and original partial intent continue without reentry, auto replay or forced truncation."
+  },
+  "knownLimitations": [
+    {
+      "id": "GENERIC-HOOK-OWNER",
+      "report": "../modal-controller/b3/delta-review.json",
+      "evidence": "../modal-controller/b3/generic-owner-risk.log",
+      "meaning": "A closed+dirty→B open in-place within one hook instance can use shared readOnly ref and PUT old A on cleanup. Current IssueWork/FeedbackForm keyed remount boundary passes; no product reachability confirmed. This FAIL is not erased or called PASS."
+    },
+    "Browser focus, visual frozen Demo conformance, all-width product screenshots and user pre-PR approval are root/frozen-audit responsibilities, not proved by these renderer tests.",
+    "No real business data or provider/model operation. Shared Host43150 GET only; real HTTP writes used isolated synthetic Host fixtures.",
+    "Full npm run check remains root-owned; this report does not replace it.",
+    "27 hashes include unchanged author-owned snapshots for identity; behavior conclusions apply only to described reviewed paths."
+  ],
+  "preservedPriorEvidence": [
+    "../review-initial.json and original B1 failure",
+    "../modal-review/review-candidate-c.json B2 blocked report",
+    "../modal-review/b3-closed-review.json B3 fail",
+    "../modal-review/review-b2-b3-limited.json fixed reachable-path pass and generic limitation",
+    "../choice-nextstep/review.json separate original nextStep compatibility",
+    "All independent fixture failures and original pass logs retained"
+  ],
+  "writes": "Only .local/ui-conformance/backend-independent probes/reports; product source, formal tests, specs, Git and Issue unchanged by reviewer.",
+  "candidateTransition": {
+    "cause": "Root actual e browser found choose-dialog cancellation focus wrong; observe browser path passed. Root changed CaseDialogs optional returnFocusId and CaseIssuePanel caller after e freeze, now stopped.",
+    "scope": "D14 backend/form/source consumers remain fixed and passed; current filesystem is no longer complete candidate e. Final focus delta and runtime identity require candidate f record.",
+    "changedFiles": [
+      "src/host/ui/CaseDialogs.tsx",
+      "src/host/ui/CaseIssuePanel.tsx"
+    ],
+    "rootEvidence": ".local/ui-conformance/focus-return-f-tests.log and future actual candidate-f browser output",
+    "knownRootFailure": "Candidate e choose cancel focus, retained in root browser evidence."
+  }
+}

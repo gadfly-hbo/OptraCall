@@ -1,0 +1,20 @@
+{
+  "checkedAt": "2026-11-28T00:50:43.427249+00:00",
+  "method": "GET only",
+  "host": "http://127.0.0.1:43150",
+  "scope": "isolated synthetic fixture only",
+  "results": [
+    {
+      "projectId": "faa7d49f-07da-4d4f-a552-a2aeacc44a58",
+      "checks": {
+        "explicit_wait": true,
+        "revision_exact": true,
+        "time_exact": true,
+        "assignee_exact": true,
+        "reason_exact": true,
+        "no_issue_guessed": true,
+        "events_unchanged": true
+      }
+    }
+  ]
+}

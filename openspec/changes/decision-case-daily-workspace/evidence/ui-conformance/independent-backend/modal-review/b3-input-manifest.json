@@ -1,0 +1,60 @@
+{
+  "status": "author-stopped",
+  "scope": "B3 closed-Case draft read-only gate and automatic-modal return focus",
+  "checks": {
+    "red": ".local/ui-conformance/current-modal-b3-red.log",
+    "green": ".local/ui-conformance/current-modal-b3-green.log",
+    "targeted": "50/50 PASS",
+    "typecheck": "PASS",
+    "diff-check": "PASS"
+  },
+  "changes": [
+    "Closed Cases cannot default-initialize a new choice draft or autosave/flush/backup new draft writes. Existing fields and uncertain operation remain readable.",
+    "When a known owner becomes read-only, current input remains in memory and cannot mutate/save until reopened.",
+    "Automatic request entry first focuses the matching current-work action so the existing CaseDialog focus contract has a surviving return target; normal trigger handling is unchanged."
+  ],
+  "limits": [
+    "Original independent B2/B3 probes and failures were not modified. Reviewers must rerun against root fixed candidate.",
+    "Automatic return-focus component tests cover selecting the correct target; actual native dialog Escape restoration remains final browser review."
+  ],
+  "files": [
+    {
+      "path": "src/host/ui/CaseIssuePanel.tsx",
+      "sha256": "ebb80cb124c0553aa6ce147021dc45f4c65155e72062a3bf6468ab096db99839"
+    },
+    {
+      "path": "src/host/ui/useCaseActionDraft.ts",
+      "sha256": "6733c7b4ca34f11d564812301f01989b33d59dcf1c01e97103ffae2f46348378"
+    },
+    {
+      "path": "tests/case-request-response-ui.test.ts",
+      "sha256": "2712e5f5d14c46d24939c93b20d9a2e061cb9530e7e355b1c2ece2008e11121b"
+    },
+    {
+      "path": "tests/case-action-draft.test.ts",
+      "sha256": "c6fd50f4787ffe78192ed4fd4e27f8eeb640c9b7dc4849205ee46ec9d545bed9"
+    }
+  ],
+  "verifiedFiles": [
+    {
+      "path": "src/host/ui/CaseIssuePanel.tsx",
+      "sha256": "ebb80cb124c0553aa6ce147021dc45f4c65155e72062a3bf6468ab096db99839",
+      "currentSha": "ebb80cb124c0553aa6ce147021dc45f4c65155e72062a3bf6468ab096db99839"
+    },
+    {
+      "path": "src/host/ui/useCaseActionDraft.ts",
+      "sha256": "6733c7b4ca34f11d564812301f01989b33d59dcf1c01e97103ffae2f46348378",
+      "currentSha": "6733c7b4ca34f11d564812301f01989b33d59dcf1c01e97103ffae2f46348378"
+    },
+    {
+      "path": "tests/case-request-response-ui.test.ts",
+      "sha256": "2712e5f5d14c46d24939c93b20d9a2e061cb9530e7e355b1c2ece2008e11121b",
+      "currentSha": "2712e5f5d14c46d24939c93b20d9a2e061cb9530e7e355b1c2ece2008e11121b"
+    },
+    {
+      "path": "tests/case-action-draft.test.ts",
+      "sha256": "c6fd50f4787ffe78192ed4fd4e27f8eeb640c9b7dc4849205ee46ec9d545bed9",
+      "currentSha": "c6fd50f4787ffe78192ed4fd4e27f8eeb640c9b7dc4849205ee46ec9d545bed9"
+    }
+  ]
+}

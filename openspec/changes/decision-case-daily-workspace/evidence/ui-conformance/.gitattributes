@@ -1,0 +1,6 @@
+# Preserve reviewer/source evidence bytes, including original HTTP CRLF.
+* -text
+# Raw terminal logs and patch-context lines intentionally retain original whitespace.
+*.log -whitespace
+*.diff -whitespace
+independent-backend/http-home-headers.txt -whitespace

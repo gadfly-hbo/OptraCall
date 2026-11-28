@@ -1,0 +1,60 @@
+{
+  "at": "2026-11-28T02:03:14.207Z",
+  "base": "http://127.0.0.1:43151",
+  "precondition": "real Host APIs seeded/adopted one synthetic goal before UI; actual UI performed create branch",
+  "results": [
+    {
+      "name": "adopted-without-case-create",
+      "casesBefore": 5,
+      "casesAfter": 6,
+      "goalVersionsAfter": 1,
+      "adoptedAtUnchanged": true,
+      "goalId": "10f0d2a6-0a23-46a0-90d1-01cab4d1b656",
+      "version": 1,
+      "text": "Case 准备草稿 · 关闭与返回都会保留\n先把这件事说清楚\n\n从一句话出发，先准备可编辑的 G/S。明确采纳并创建后，才会成为新的 Case。\n\n保留的输入\n这段输入尚未发送到任何已有对话；新建后将作为待带入片段保留。\n准备另一件 Case\n\nCase「独立已采纳目标创建路径」与第一件事项已建立；完整准备原文作为待带入片段保留。\n\n沿用已采纳目标版本\n请 Agent 协助整理\n或使用已有 G/S\n选择已采纳目标版本，或在下方手填\n独立复核目标 20261128 · v1 · 独立审查合成人员\n独立复核目标 20261128 · v1 · 独立审查合成人员\n独立已采纳但未建Case 1795828200731 · v1 · 独立审查合成人员\n独立核对原始反馈的准确记录 · v1 · 独立合成验收\n独立复核目标 20261128 · v1 · 独立审查合成人员\n独立已采纳但未建Case 1795831389882 · v1 · 独立审查合成人员\n该版具体策略\n请选择具体策略\n核对既有目标的准确版本\n这件事的名字\n补充问题背景\n创建或继续 Case\n\n创建会建立 Case 与第一件事项，完整名称、背景和原输入保留为待带入片段，仍需明确追加与发送；不创建项目任务、不授权行动或宣布目标达成。\n\n进入已创建 Case「独立已采纳目标创建路径」\n查找已有 Case\n明确放弃这份准备草稿\n查看全部项目",
+      "writes": [
+        {
+          "method": "PUT",
+          "url": "http://127.0.0.1:43151/api/workspace/drafts/prepare/prepare-a53e04ba-d515-49c7-8eb8-2702a36b34d5"
+        },
+        {
+          "method": "PUT",
+          "url": "http://127.0.0.1:43151/api/workspace/drafts/prepare/prepare-a53e04ba-d515-49c7-8eb8-2702a36b34d5"
+        },
+        {
+          "method": "PUT",
+          "url": "http://127.0.0.1:43151/api/workspace/drafts/prepare/prepare-a53e04ba-d515-49c7-8eb8-2702a36b34d5"
+        },
+        {
+          "method": "PUT",
+          "url": "http://127.0.0.1:43151/api/workspace/drafts/prepare/prepare-a53e04ba-d515-49c7-8eb8-2702a36b34d5"
+        },
+        {
+          "method": "PUT",
+          "url": "http://127.0.0.1:43151/api/workspace/drafts/prepare/prepare-a53e04ba-d515-49c7-8eb8-2702a36b34d5"
+        },
+        {
+          "method": "POST",
+          "url": "http://127.0.0.1:43151/api/workspace/create-case"
+        },
+        {
+          "method": "PUT",
+          "url": "http://127.0.0.1:43151/api/workspace/drafts/prepare/prepare-a53e04ba-d515-49c7-8eb8-2702a36b34d5"
+        },
+        {
+          "method": "POST",
+          "url": "http://127.0.0.1:43151/api/cases/a485addd-3f8b-48c9-b650-d174b35cca54/decisions/issues"
+        },
+        {
+          "method": "PUT",
+          "url": "http://127.0.0.1:43151/api/workspace/drafts/carry-over/first-frag-18b723d0-bc2c-417a-841a-b97b0f5c2247"
+        },
+        {
+          "method": "PUT",
+          "url": "http://127.0.0.1:43151/api/workspace/drafts/prepare/prepare-a53e04ba-d515-49c7-8eb8-2702a36b34d5"
+        }
+      ],
+      "adoptPosts": []
+    }
+  ]
+}

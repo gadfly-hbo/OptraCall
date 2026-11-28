@@ -1,0 +1,148 @@
+{
+  "runtime": {
+    "instanceId": "0217e393-69f2-4bb3-b421-e3ab3ebb99ae",
+    "pid": 260218,
+    "codeRoot": "/workspace/OptraCall-issue149-ui-conformance",
+    "version": "0.1.0-mvp.4",
+    "commit": "5dd59909227ab46f3d989ade8b2847e077636855",
+    "tree": "1078a6e2359a29e82631ab59f56a8d6dd9492d73",
+    "builtAt": "2026-11-28T01:53:17.113Z",
+    "dirty": true
+  },
+  "capturedAt": "2026-11-28T01:53:59.922Z",
+  "base": "http://127.0.0.1:43150",
+  "sourceIdentity": {
+    "schema": 1,
+    "version": "0.1.0-mvp.4",
+    "commit": "5dd59909227ab46f3d989ade8b2847e077636855",
+    "tree": "1078a6e2359a29e82631ab59f56a8d6dd9492d73",
+    "builtAt": "2026-11-28T01:53:17.113Z",
+    "dirty": true,
+    "files": [
+      {
+        "path": "main.js",
+        "bytes": 6313217,
+        "sha256": "0ffd35b5a1ce1fbdddfb5e30712971ed87e4359d15e5ba79b739c14c38d445a0"
+      },
+      {
+        "path": "main.css",
+        "bytes": 491289,
+        "sha256": "a48bfa018bdb97c62da5f1e82e6868373a64374004f40aee6e12dcbfd1cc8c90"
+      },
+      {
+        "path": "favicon.svg",
+        "bytes": 278,
+        "sha256": "95a5a1b4a7f74b683e11655f73fece2a7920dfb0615859cad802513f9acf69c5"
+      },
+      {
+        "path": "index.html",
+        "bytes": 531,
+        "sha256": "8a35d26db18d0df5074dda0d17b75b5b7c6347c5e75ea77c6dc1431925f28486"
+      }
+    ]
+  },
+  "sourceManifestHash": "c066a823868d61852333e56c38a5ba1a4610ec622c97e646c75932fe720108da",
+  "fixture": "synthetic-only; actual Host and official Pi with one local synthetic Provider Teach run; no real model/provider/business data",
+  "shots": [
+    {
+      "label": "01-home-1440",
+      "url": "http://127.0.0.1:43150/",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "path": "/workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/captures/candidate-f/01-home-1440.png"
+    },
+    {
+      "label": "02-case-overview-1440",
+      "url": "http://127.0.0.1:43150/",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "path": "/workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/captures/candidate-f/02-case-overview-1440.png"
+    },
+    {
+      "label": "03-case-current-1440",
+      "url": "http://127.0.0.1:43150/",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "path": "/workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/captures/candidate-f/03-case-current-1440.png"
+    },
+    {
+      "label": "04-case-tree-1440",
+      "url": "http://127.0.0.1:43150/",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "path": "/workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/captures/candidate-f/04-case-tree-1440.png"
+    },
+    {
+      "label": "05-case-projects-1440",
+      "url": "http://127.0.0.1:43150/",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "path": "/workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/captures/candidate-f/05-case-projects-1440.png"
+    },
+    {
+      "label": "06-case-artifacts-1440",
+      "url": "http://127.0.0.1:43150/",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "path": "/workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/captures/candidate-f/06-case-artifacts-1440.png"
+    },
+    {
+      "label": "07-case-history-1440",
+      "url": "http://127.0.0.1:43150/",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "path": "/workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/captures/candidate-f/07-case-history-1440.png"
+    },
+    {
+      "label": "08-case-current-390",
+      "url": "http://127.0.0.1:43150/",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "path": "/workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/captures/candidate-f/08-case-current-390.png"
+    },
+    {
+      "label": "09-all-projects-1440",
+      "url": "http://127.0.0.1:43150/",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "path": "/workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/captures/candidate-f/09-all-projects-1440.png"
+    },
+    {
+      "label": "10-project-detail-1440",
+      "url": "http://127.0.0.1:43150/",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "path": "/workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/captures/candidate-f/10-project-detail-1440.png"
+    },
+    {
+      "label": "11-home-390",
+      "url": "http://127.0.0.1:43150/",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "path": "/workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/captures/candidate-f/11-home-390.png"
+    }
+  ],
+  "errors": []
+}

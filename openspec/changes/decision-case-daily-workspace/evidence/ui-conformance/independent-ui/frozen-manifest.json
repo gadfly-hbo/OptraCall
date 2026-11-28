@@ -1,0 +1,18 @@
+{
+  "demo.html": {
+    "bytes": 208858,
+    "sha256": "adff576ba604b35b95806ab6a5c0f7bf93de5f0124c1ce0540e14577572bf911"
+  },
+  "spec.md": {
+    "bytes": 23201,
+    "sha256": "834399d514fd9093d6dc93e5a897381d7ed83605499a16827e4dbac57468cc9f"
+  },
+  "tasks.md": {
+    "bytes": 4785,
+    "sha256": "6ed1d3865d7312599b321b95a4dfb08868dbe2f2b2a1dd68ba52b8fa63fc71e7"
+  },
+  "demo-guide.md": {
+    "bytes": 2560,
+    "sha256": "a5967e4198061e604c080553c90fa5d45f83b497b6b0516251dab21daf38e54a"
+  }
+}

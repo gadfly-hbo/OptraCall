@@ -1,0 +1,49 @@
+{
+  "text": "跳到主内容\nDecision Case · Case 详情\n帮助\nCase 总览\n全部项目\n← 返回 Case 总览\n\n▣ DECISION CASE\n\n改善华东会员复购\n分析中\nG\n60天会员复购率达到 23%\nv1\nS\n先验证缺货治理\nv1\nCase 管理与状态\n当前工作\n项目与任务3\n成果与依据\n历史\n历史与轮次\n\n原取舍、行动、观察和复盘按轮次保留。\n\n事项\n扩大试点范围\n门店缺货原因\n复购口径校准\n\n当前查看「扩大试点范围」。历史轮次只读，可返回当前工作继续。\n\n第 2 轮 · 当前轮\n等待本轮取舍\n\n记录本轮扩围取舍\n\n回到当前轮继续 →\n第 1 轮 · 11/28 08:42 · 已保存\n取舍：试行\n\n先在现有三店核对，保持样本范围。\n\n查看当时保存内容 ↗查看该轮完整记录 →\n\n查看历史不覆盖当前轮；后续保存不会改写上一轮的原取舍。\n\n其他 Case 记录与管理历史",
+  "viewport": {
+    "width": 390,
+    "height": 1000
+  },
+  "overflow": false,
+  "elements": [
+    {
+      "tag": "HEADER",
+      "id": "",
+      "class": "topbar",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 54,
+      "font": "13px",
+      "padding": "8px 12px",
+      "grid": "minmax(0px, 1fr) auto",
+      "overflowY": "visible"
+    },
+    {
+      "tag": "NAV",
+      "id": "",
+      "class": "decision-case-tabs",
+      "x": 0,
+      "y": 54,
+      "w": 390,
+      "h": 57,
+      "font": "13px",
+      "padding": "8px 16px",
+      "grid": "none",
+      "overflowY": "visible"
+    },
+    {
+      "tag": "HEADER",
+      "id": "",
+      "class": "daily-case-header",
+      "x": 0,
+      "y": 111,
+      "w": 390,
+      "h": 165.390625,
+      "font": "13px",
+      "padding": "26px 18px 5px",
+      "grid": "none",
+      "overflowY": "visible"
+    }
+  ]
+}

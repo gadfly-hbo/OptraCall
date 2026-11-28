@@ -1,0 +1,51 @@
+{
+  "checkedAt": "2026-11-28T01:01:01.901768+00:00",
+  "result": "PASS",
+  "methods": "GET only",
+  "environment": "Synthetic actual product Host43150 candidate b",
+  "runtime": {
+    "instanceId": "e2a15a7e-fdbd-47c5-b10a-30fc639d0add",
+    "pid": 217253,
+    "codeRoot": "/workspace/OptraCall-issue149-ui-conformance",
+    "version": "0.1.0-mvp.4",
+    "commit": "5dd59909227ab46f3d989ade8b2847e077636855",
+    "tree": "1078a6e2359a29e82631ab59f56a8d6dd9492d73",
+    "builtAt": "2026-11-28T00:59:16.714Z",
+    "dirty": true
+  },
+  "parentProvidedSourceManifestHash": "9743e01f0df0e937f1be93bd06c1efe156377015ab064df75a49ca89dbc65684",
+  "sourceManifestHashAuthority": "Parent-provided build identity; health API does not expose sourceManifestHash",
+  "checks": [
+    {
+      "requestId": "c76092d5-870e-49c1-871f-ccc44be84d55",
+      "kind": "choose",
+      "expected": 2,
+      "actual": 2,
+      "basis": "request.target.expectedPreviousChoiceId",
+      "chain": [
+        "8829d60f-8c28-4bff-897d-f77c3d69016a"
+      ],
+      "originalTargetAndTimeUnchanged": true
+    },
+    {
+      "requestId": "5bf19271-6202-4fe0-a6ae-2db4f00e8f74",
+      "kind": "observe",
+      "expected": 1,
+      "actual": 1,
+      "basis": "exact target authorization in original project/item/task of source choice",
+      "chain": [
+        "c065c201-db65-4782-8a8f-847ddcf19a0c"
+      ],
+      "originalTargetAndTimeUnchanged": true
+    }
+  ],
+  "additionalChecks": [
+    "Existing waiting projection preserves explicit source, revision and timestamp.",
+    "Repeated GET projection unchanged."
+  ],
+  "previousRuntimeEvidence": "http-home.json remains old process response with no roundNumber; not rewritten.",
+  "limitations": [
+    "No screenshot or user acceptance claim.",
+    "Synthetic data only; no writes or real Provider calls."
+  ]
+}

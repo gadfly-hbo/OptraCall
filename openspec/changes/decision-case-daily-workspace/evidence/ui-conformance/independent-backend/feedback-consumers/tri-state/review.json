@@ -1,0 +1,156 @@
+{
+  "task": "D14 independent tri-state feedback read-consumer review",
+  "verdict": "LIMITED_PASS",
+  "blockingFindingsInScope": [],
+  "sourceOwnership": "Read only. Only isolated audit probes and logs written in this directory. No production/formal test/spec/Git/Issue writes.",
+  "frozenManifests": [
+    ".local/ui-conformance/feedback-contract/final-files.sha256",
+    ".local/ui-conformance/current-compact-handoff.json"
+  ],
+  "verification": {
+    "independentUniqueTestsPassed": 18,
+    "formalDailyHistoryTestsPassed": 5,
+    "totalUniqueTestsPassed": 23,
+    "failed": 0,
+    "runs": [
+      {
+        "log": "fixed-consumers.log",
+        "independentPass": 8
+      },
+      {
+        "log": "quoted-consumer.log",
+        "independentPass": 1
+      },
+      {
+        "log": "daily-consumers.log",
+        "independentPass": 2,
+        "formalPass": 5
+      },
+      {
+        "log": "board-final-consumers.log",
+        "independentPass": 7
+      }
+    ],
+    "earlierPassRetained": "board-consumers.log has the first 5 Board probes, rerun in final 7; not added to total twice."
+  },
+  "findingsClosed": [
+    {
+      "finding": "CaseDecisionsPanel exact feedback SourceBody omitted date/source metadata in prior preaudit",
+      "current": "Actual React SSR displays original observationDate, sourceScope and savedAt distinctly; hash 6b2955e583afb5b68c930b8cb080f93e8234ff5565ca860adcd6c300167782ca verified"
+    }
+  ],
+  "verified": [
+    "null remains unknown, distinct from true and false, in feedbackDraft, Board completed-task card, FeedbackHistory, comparison, ActionAuthorityHistory, Case exact SourceBody, Host links, quoted read catalog.",
+    "feedbackDraft preserves existing metadata values, null/empty/presence and exact expectedLatestRevisionId; legacy absence does not invent date/scope.",
+    "Exact Board history filters requested feedback revision, displays original date/scope/save time, and prepares review with same revision; newer row never substituted.",
+    "Comparison explicitly changes CAS baseline but preserves user body/date/scope/execution and creates new operation id.",
+    "Legacy full-form read keeps unknown selected and all 4000 characters; no invented observation date or altered original operation id.",
+    "Case exact service, personal-source export, review snapshot and prompt preserve null, metadata and immutable revision identity; quoted catalog preserves null without writes.",
+    "authorityAtFeedback derives association only from savedAt or original legacyUpdatedAt, never observationDate (1900/2099 negative probes).",
+    "Actual issueTimeline projects exact revision/date/scope while observedAt is save time or legacy original edit time; absent legacy metadata stays absent.",
+    "DailyCaseHistory list and original-record detail retain each selected feedback revision/date/scope separately from recording time. Legacy absence is unrecorded; all tested calls GET. Existing denied-owner and late-response formal tests pass."
+  ],
+  "limitations": [
+    "Synthetic unit/hook/React SSR fixtures and stub repositories only; not real-business evidence, browser screenshot confirmation, whole-product or overall UI PASS.",
+    "Compact form write/UNKNOWN/request/long persisted draft and schema/HTTP are reviewed by other agents, not claimed by this report.",
+    "Quoted write tool remains its original boolean-only contract; this review exercises quoted read catalog, not new null-writing authorization.",
+    "Old summary cards are not required to repeat metadata where exact original-history/source read preserves it; no layout expansion demanded.",
+    "Prior B3 generic hook same-instance owner-switch readOnly cleanup risk remains separately documented in modal-controller/b3/delta-review.json. Current D14 report neither retests nor overrides that limitation."
+  ],
+  "fixedFiles": [
+    {
+      "path": "src/host/ui/CaseDecisionsPanel.tsx",
+      "expectedSha256": "6b2955e583afb5b68c930b8cb080f93e8234ff5565ca860adcd6c300167782ca",
+      "sha256": "6b2955e583afb5b68c930b8cb080f93e8234ff5565ca860adcd6c300167782ca",
+      "unchanged": true
+    },
+    {
+      "path": "extensions/business-plugins/decision-board/ui/ActionAuthorityHistory.tsx",
+      "expectedSha256": "f2f66032d2fe804f8f39a5e981e07d0f760bb69a4fadba2a407c4f11031b68ad",
+      "sha256": "f2f66032d2fe804f8f39a5e981e07d0f760bb69a4fadba2a407c4f11031b68ad",
+      "unchanged": true
+    },
+    {
+      "path": "src/host/case-issues.ts",
+      "expectedSha256": "395eb271097626860c8f43667a2cf7caea65754eda2f706b51ebc1b22b0e1b8f",
+      "sha256": "395eb271097626860c8f43667a2cf7caea65754eda2f706b51ebc1b22b0e1b8f",
+      "unchanged": true
+    },
+    {
+      "path": "src/host/case-decision-service.ts",
+      "expectedSha256": "6eb882a44ae08ba89a2ade4ca4c7f3a8461443946b12aae4a6d8bab8d5b2201a",
+      "sha256": "6eb882a44ae08ba89a2ade4ca4c7f3a8461443946b12aae4a6d8bab8d5b2201a",
+      "unchanged": true
+    },
+    {
+      "path": "src/host/personal-retention-sources.ts",
+      "expectedSha256": "b41fb31ef7ce2814aad553aa7ca8f480d0452a6544789382dbc3ad9ddbc11636",
+      "sha256": "b41fb31ef7ce2814aad553aa7ca8f480d0452a6544789382dbc3ad9ddbc11636",
+      "unchanged": true
+    },
+    {
+      "path": "src/host/decision-feedback-context.ts",
+      "expectedSha256": "9d9026dd94b1c653c7557b6d1d13c443ee5b26483811784ffc48cab2efbc7b20",
+      "sha256": "9d9026dd94b1c653c7557b6d1d13c443ee5b26483811784ffc48cab2efbc7b20",
+      "unchanged": true
+    },
+    {
+      "path": "src/host/quoted-decision-adapter.ts",
+      "expectedSha256": "1e5a4cab80d8fae6c014704ca37a138c91e46dc4259fa63c4351aa15df76d206",
+      "sha256": "1e5a4cab80d8fae6c014704ca37a138c91e46dc4259fa63c4351aa15df76d206",
+      "unchanged": true
+    },
+    {
+      "path": "src/host/ui/DailyCaseHistory.tsx",
+      "expectedSha256": "b0f1c784ef8047c4b190d83a5c1a8c784a6702be783ac26ff4e7f5daeebcda1d",
+      "sha256": "b0f1c784ef8047c4b190d83a5c1a8c784a6702be783ac26ff4e7f5daeebcda1d",
+      "unchanged": true
+    },
+    {
+      "path": "tests/daily-case-history-ui.test.ts",
+      "expectedSha256": "d6666c87976764f4a89da1ac2c2cb7725ccc5cf90e61ad355503b8edf963e567",
+      "sha256": "d6666c87976764f4a89da1ac2c2cb7725ccc5cf90e61ad355503b8edf963e567",
+      "unchanged": true
+    },
+    {
+      "path": "extensions/business-plugins/decision-board/ui/DecisionBoardPage.tsx",
+      "expectedSha256": "c4834fc4d282ffb15700d479580bf4046dbbe53743204b1d9be083762bdd87a5",
+      "sha256": "c4834fc4d282ffb15700d479580bf4046dbbe53743204b1d9be083762bdd87a5",
+      "unchanged": true
+    },
+    {
+      "path": "extensions/business-plugins/decision-board/ui/decision-board-client.ts",
+      "expectedSha256": "655d1d5e6732d600fbed3ec481b15ced4ab53350d741b44f6ac27bc734f48192",
+      "sha256": "655d1d5e6732d600fbed3ec481b15ced4ab53350d741b44f6ac27bc734f48192",
+      "unchanged": true
+    },
+    {
+      "path": "src/host/ui/CaseFeedbackDialog.tsx",
+      "expectedSha256": "cc674caa5be6d702925b2e749e3df35bf75e0c0b25b78199dbd85085693e75a6",
+      "sha256": "cc674caa5be6d702925b2e749e3df35bf75e0c0b25b78199dbd85085693e75a6",
+      "unchanged": true
+    }
+  ],
+  "probes": [
+    {
+      "path": ".local/ui-conformance/backend-independent/feedback-consumers/tri-state/board-consumers.test.ts",
+      "sha256": "e49c337bc6b4383816ef16249e16525d4dfe4f7cc02f353af068e56c8c1ad2a6"
+    },
+    {
+      "path": ".local/ui-conformance/backend-independent/feedback-consumers/tri-state/daily-consumers.test.ts",
+      "sha256": "1088eefd342dfbc28fd15bdaa0345746a721336ee73db69a24fdab1975d5d182"
+    },
+    {
+      "path": ".local/ui-conformance/backend-independent/feedback-consumers/tri-state/fixed-consumers.test.ts",
+      "sha256": "7db79373b65014b6049144bd37bed251436730c3e58ad3910624cdbe545da6dc"
+    },
+    {
+      "path": ".local/ui-conformance/backend-independent/feedback-consumers/tri-state/quoted-consumer.test.ts",
+      "sha256": "16d0685f955a6fecb8f0aa0f88b21eea229edfd922f41a4393a0891a2e560895"
+    },
+    {
+      "path": ".local/ui-conformance/backend-independent/feedback-consumers/tri-state/timeline-consumer.test.ts",
+      "sha256": "dea4d29532cf9f38c7fddd29fe5a50a9c6311e925bd330db35ad71d5a67e5d6d"
+    }
+  ]
+}

@@ -50,7 +50,7 @@ export function ActionAuthorityHistory({ task, initialHistory }: { task: BoardTa
     <summary>选择、授权与反馈</summary>
     <p className="board-context-note">方案选择：{latest ? 'kind' in latest.source ? '已明确工作的原话安排，未制造Case选择' : `参见原Case选择 ${latest.source.choiceId}` : '尚未关联原Case选择'}。看板采纳不代表行动授权。</p>
     <p className="board-context-note">行动授权：{latest ? latest.decision === 'authorize' ? `已记录明确授权 · ${latest.scope}` : '已记录撤回授权' : history || task.authorization === null ? '未记录明确行动授权' : '待查询，不能从采纳或任务状态推定'}。</p>
-    <p className="board-context-note">用户报告发生：{task.feedback ? task.feedback.adopted ? task.feedback.outcome || '已回录按建议执行' : '已回录未按原建议执行' : '尚未回录'}。</p>
+    <p className="board-context-note">用户报告发生：{task.feedback ? task.feedback.adopted === true ? task.feedback.outcome || '已回录按建议执行' : task.feedback.adopted === false ? '已回录未按原建议执行' : `执行情况未知${task.feedback.outcome ? ` · ${task.feedback.outcome}` : ''}` : '尚未回录'}。</p>
     <p className="board-context-note">效果验证：未独立验证。用户反馈的效果与主观评分保留原义，不能从授权或任务完成推定效果。</p>
     {busy && <p role="status">正在读取原授权记录…</p>}{error && <p role="alert">{error}</p>}
     {history && [...history].reverse().map(entry => <article className="feedback-history-item" key={entry.authorizationId}>

@@ -1,0 +1,17 @@
+✔ DW10/DW13: completed prepare is not reused; title/background/exact G/S persist and failed navigation keeps text (113.978489ms)
+✔ DW10/FR06: explicit real scope and persisted preparation identity own editable Agent candidate with exact source (11.100398ms)
+✔ DW14: original creation retry keeps later saved title/background/input while reusing frozen operation (3.781355ms)
+✔ DW14: completed Case resumes first issue only, reads lost issue operation and keeps full preparation fragment (5.23781ms)
+✔ DW10: exact Goal and original Case/Task source initialize a separate recoverable preparation (6.350078ms)
+✔ DW13: conflicting current text is separately saved without overwriting the other window (3.97535ms)
+✔ DW10 directory: all Case and issue pages remain reachable without losing the selected issue or preparation input (7.160998ms)
+✔ DW10 directory: an unread nonempty issue page is never described as having no issues (3.631825ms)
+✔ DW10/DW13: G/S can be written and reopened before scope is chosen; explicit scope is still required before any Goal or Case write (24.783903ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 386.05679

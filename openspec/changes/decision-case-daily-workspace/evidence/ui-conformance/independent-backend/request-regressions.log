@@ -1,0 +1,18 @@
+✔ DW08/DW09-REQ-01: explicit choose request is only resolved by exact respondsToRequest choice, never by viewing or unrelated choices (195.791588ms)
+✔ DW08/DW09-REQ-02: observe request is only resolved by saveFeedback carrying exact requestId, revision, real Case authorizationId, and baseRevisionId (112.145807ms)
+✔ DW08/DW09-HOME-03: home projection separates pending, continue, externalWaiting, pendingOperations; never fabricates pending from awaiting_confirmation or missing assignee (56.187275ms)
+✔ DW-PLAN-REQUEST-01: original checkPlan governs new writes and unanswered projections across real Project/Task/native/recipient loss (631.57635ms)
+✔ DW08/09 observation picker preserves two distinct requests and binds the explicitly selected second revision (6.750994ms)
+✔ DW09 request revision, target baseline and clicked owner cannot silently switch to a newer or different request (0.503911ms)
+✔ DW09 actual current Case authorization, issue and source store must match; work, revoke and another round never answer (2.989202ms)
+✔ DW09 original request baseline and current feedback CAS both apply without changing the draft (0.346956ms)
+✔ DW08/09 only genuinely open observe requests are offered; source text remains exact (0.370926ms)
+✔ DW09 original feedback HTTP save carries exact selected reference; ordinary and lost-ack saves never gain inferred requests or retries (81.960898ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2617.176175

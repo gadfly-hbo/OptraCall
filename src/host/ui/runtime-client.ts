@@ -92,8 +92,9 @@ function projectFileContent(id: string, path: string, expectedSha256?: string, s
 }
 export async function readSavedReport(id: string, path: string, sha256: string, signal: AbortSignal): Promise<string> {
   const response = await projectFileContent(id, path, sha256, signal);
-  if (response.status === 409) throw new HostRequestError('文件已变化，无法读取原版本。请核对原路径与版本。');
-  if (!response.ok) throw new HostRequestError('这版报告目前无法读取。原路径与版本保留。');
+  if (response.status === 403) throw new HostRequestError('当前身份无权读取这份原文。', {}, 'report_source_forbidden', undefined, undefined, 403);
+  if (response.status === 409) throw new HostRequestError('文件已变化，无法读取原版本。请核对原路径与版本。', {}, 'report_source_changed', undefined, undefined, 409);
+  if (!response.ok) throw new HostRequestError('这版报告暂时无法读取。原路径与版本保留。', {}, 'report_source_unavailable', undefined, undefined, response.status);
   return new TextDecoder('utf-8', { fatal: true }).decode(await response.arrayBuffer());
 }
 export async function downloadFile(id: string, file: FileNode, expectedSha256?: string): Promise<void> {

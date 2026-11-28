@@ -1,0 +1,41 @@
+✔ DW08/DW09-REQ-01: explicit choose request is only resolved by exact respondsToRequest choice, never by viewing or unrelated choices (485.603011ms)
+✔ DW08/DW09-REQ-02: observe request is only resolved by saveFeedback carrying exact requestId, revision, real Case authorizationId, and baseRevisionId (270.305548ms)
+✔ DW08/DW09-HOME-03: home projection separates pending, continue, externalWaiting, pendingOperations; never fabricates pending from awaiting_confirmation or missing assignee (234.980294ms)
+✔ DW-PLAN-REQUEST-01: original checkPlan governs new writes and unanswered projections across real Project/Task/native/recipient loss (2824.336681ms)
+✔ DW08 waiting: shared project saved waiting appears once alongside continuing Case, without guessing the last issue or an action (464.840485ms)
+✔ DW08 waiting: Case observing or a missing feedback alone cannot fabricate a specific external waiting source (210.770421ms)
+✔ DW16 waiting: archived, forbidden and unqualified project reads never expose saved waiting; valid records recover without replay (168.422565ms)
+✔ DW16 waiting: one unreadable shared project does not erase another readable project or fabricate its issue (172.506781ms)
+✔ DW08 round: choose uses the exact original predecessor chain, independent of array order, other issues or strategy version (1.806807ms)
+✔ DW08 round: missing, cross-owner, cross-issue, cyclic or ambiguous predecessor chains remain unknown (0.591587ms)
+✔ DW08 round: real route keeps old observation authorization on round1 while a new request follows round2 of the same issue (420.861535ms)
+✔ DW08 round: observation authorization from another issue or wrong project is unknown, not guessed from the Case latest choice (192.708654ms)
+✔ DW08/09 observation picker preserves two distinct requests and binds the explicitly selected second revision (6.822492ms)
+✔ DW09 request revision, target baseline and clicked owner cannot silently switch to a newer or different request (0.518619ms)
+✔ DW09 actual current Case authorization, issue and source store must match; work, revoke and another round never answer (0.705222ms)
+✔ DW09 original request baseline and current feedback CAS both apply without changing the draft (0.400957ms)
+✔ DW08/09 only genuinely open observe requests are offered; source text remains exact (0.531085ms)
+✔ DW09 original feedback HTTP save carries exact selected reference; ordinary and lost-ack saves never gain inferred requests or retries (125.344929ms)
+✔ DW12/DW13-DRAFT-01: drafts persist across reopen, CAS conflict keeps input, fragment append is idempotent & non-overwriting, discard is scoped (251.141784ms)
+✔ DW11/DW14-CREATE-02: three creation branches, partial success adoption receipt preservation, and idempotent retry (224.864171ms)
+✔ DW10-DIR-03: bounded read-only Case directory and daily routes work end-to-end (161.132873ms)
+✖ DW-HTTP-01: real Host HTTP round-trip for issue edges, explicit requests -> choice response -> home-pending update, drafts, and case-directory (10043.483434ms)
+✔ DW-AGENT-02: Pi tool schemas expose case-directory on goal-draft and save-issue-edge/save-decision-request on Case Agent (2.768092ms)
+✔ DW-HTTP-03: real Host HTTP POST /api/workspace/create-case adopts candidate goal via StrategyGoalsStore and continues on exact G/S (7636.862384ms)
+ℹ tests 24
+ℹ suites 0
+ℹ pass 23
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 27676.628272
+
+✖ failing tests:
+
+test at tests/workspace-daily-http-pi.test.ts:11:1
+✖ DW-HTTP-01: real Host HTTP round-trip for issue edges, explicit requests -> choice response -> home-pending update, drafts, and case-directory (10043.483434ms)
+  Error: Test Host startup timed out.
+      at Timeout._onTimeout (file:///workspace/OptraCall-issue149-ui-conformance/tests/fixtures/host-process.ts:24:68)
+      at listOnTimeout (node:internal/timers:685:17)
+      at process.processTimers (node:internal/timers:618:7)

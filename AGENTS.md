@@ -2,6 +2,8 @@
 
 开始任务、修改规范或准备交付时，先读 [工程规范](docs/engineering-workflow.md)；涉及产品方向、运行时或插件责任边界时，再读 [产品讨论稿 v0.4](docs/OptraCall_产品讨论稿_v0.4.md)。工程规范是开发流程的唯一详细来源，工具专属入口应引用它。
 
+**长期事故记忆（2026-11-28）：** Issue #149 / PR #151 工程结案后，用户报告真实产品 UI 与冻结 Demo 完全不一致，并明确指出这类事故重复发生，属于严重验收事故。PM 承认审核遗漏。原测试、独立复核和 CI 的 PASS 不证明冻结 UI 已落地；保留原证据和覆盖边界，不追溯改写为验收合规。所有 Agent 开工及交付前必须读取[冻结基准逐项复核与 PR 前截图确认](docs/engineering-workflow.md#冻结基准逐项复核与-pr-前截图确认)：按冻结 Demo、spec、任务清单逐项独立审核；有 UI 影响时，开 PR 前展示真实产品截图并取得用户明确确认。门禁在开 PR 前，领取 Agent 可按授权先提交和推送任务分支。详细规则只在工程规范维护。
+
 开发前，按[任务目标执行清单与范围管理](docs/engineering-workflow.md#任务目标执行清单与范围管理)列出目标和阶段任务，执行中逐项更新并据此处理新发现的问题。
 
 新产品、新功能和试用修正以云端开发为主，均通过 GitHub Issue 发单、领取、交接和结案。按[两类开发流程](docs/engineering-workflow.md#github-issues-问题收件与结案)找到入口，再按[GitHub 开发任务外发与交付](docs/engineering-workflow.md#github-开发任务外发与交付)执行。PM Agent 通常由 Codex 担任，也可由其他 Agent 担任或代理。具备任务分支推送权限的 Agent（包括 Codex）均可领取。

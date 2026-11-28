@@ -1,0 +1,14 @@
+{
+  "scope": [
+    "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/README.md",
+    "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/checks/README.md",
+    "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product-g/README.md",
+    "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/reproduction/README.md",
+    "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-ui/final-review.md",
+    "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-ui/review-history.md",
+    "openspec/changes/decision-case-daily-workspace/ui-conformance-repair.md"
+  ],
+  "checkedLocalLinks": 317,
+  "missing": [],
+  "boundary": "Frozen original documents keep historical relative links in the context of their original commit; not rewritten."
+}

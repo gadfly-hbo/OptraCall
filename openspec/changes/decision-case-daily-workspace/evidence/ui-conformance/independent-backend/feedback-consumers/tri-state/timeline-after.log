@@ -1,0 +1,6 @@
+src/host/ui/CaseDecisionsPanel.tsx: OK
+extensions/business-plugins/decision-board/ui/ActionAuthorityHistory.tsx: OK
+src/host/case-issues.ts: OK
+src/host/case-decision-service.ts: OK
+src/host/personal-retention-sources.ts: OK
+src/host/decision-feedback-context.ts: OK

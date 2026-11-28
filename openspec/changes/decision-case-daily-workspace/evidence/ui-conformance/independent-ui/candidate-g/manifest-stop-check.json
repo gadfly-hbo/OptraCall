@@ -1,0 +1,19 @@
+{
+  "at": "2026-11-28T02:18:51.135464+00:00",
+  "fixedManifestFileSHA256": "d38d54e580de9d59e64021599b3ab4ebb2cc65701bb829737b267d764883f386",
+  "fileCount": 2601,
+  "productionTestDrift": [],
+  "otherDrift": [
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/evidence-publish-list.json",
+      "expected": "40a1e8db682d7b0e64b3b60df03cb33892b40c9a569400c31f99b325f6176dfa",
+      "actual": "30daa346218dea2f657c660cf3a3d28a8c316af0258e00d86875012baac67457"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/ui-conformance-repair.md",
+      "expected": "2f86366af2471818378da5e365b1e4b019b88082d518690dde0ab676fe42d687",
+      "actual": "a17ed1567f9def343efdd404a019f9b1e99a62886eac60ffa14c3c82f67d6f79"
+    }
+  ],
+  "scope": "PM may add/update public evidence/docs; production and permanent test drift must remain empty. New unlisted public delivery artifacts require PM final delivery manifest."
+}

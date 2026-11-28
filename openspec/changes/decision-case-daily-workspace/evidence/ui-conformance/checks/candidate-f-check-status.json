@@ -1,0 +1,8 @@
+{
+  "status": "cancelled-by-author",
+  "reason": "Independent repeated SPA navigation and responsive feedback modal exposed missing explicit focus return. Three UI prop-forwarding files and the browser regression changed after f snapshot; preserve this partial run and rerun full checks after the corrected candidate is fixed.",
+  "stoppedPids": [
+    260871
+  ],
+  "log": "candidate-f-full-check.log"
+}

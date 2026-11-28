@@ -1,0 +1,62 @@
+✖ independent D14 legacy input: reopened pre-date UNKNOWN and long observation query then retry exact old intent (189.974272ms)
+✖ independent D14 actual compact form: unknown execution saves exact observation metadata and request once, without guessing execution (10.758402ms)
+✔ independent original FeedbackDialog: fixed explicit request rejects a different restored context and permits cancel (181.495813ms)
+✔ independent original FeedbackDialog: read-only draft disables saving without locking cancellation (6.068269ms)
+✔ independent original FeedbackDialog: exact request uses original authorization and baseline; moved baseline blocks (13.684262ms)
+✔ independent feedback owner: late accepted A response cannot close or replace newly mounted request B (142.989942ms)
+✔ independent feedback owner: mismatched operation/task receipts never acknowledge or clear original UNKNOWN (16.902832ms)
+✔ D14: writable actions are the exact issue/Board/active-project intersection, with no first request match (92.668258ms)
+✔ D14: an explicitly opened request chooses its exact action and request rather than the first available action (16.728671ms)
+✔ D14: no writable action or a closed Case offers the original source without inventing observations (3.991119ms)
+✔ D14/DW13: cancel and full component recreation retain the original feedback input and save intention (8.162603ms)
+✔ D14/DW09: uncertain feedback saves query the exact original operation and preserve its ID across reopen and explicit retry (14.160606ms)
+✔ D14: querying an already-saved feedback acknowledges that revision without posting another one (8.440997ms)
+✔ D14: a changed authorization or archived project is rechecked immediately before any feedback write (17.211346ms)
+✔ D14: leaving the feedback owner during source recheck prevents a late business write (4.100313ms)
+✔ D14/DW09: two explicitly clicked requests for the same action retain separate inputs and exact request identities (10.419351ms)
+✔ D14: an untouched unavailable draft remains read-only but can cancel without a save (5.96786ms)
+✔ D14/DW13: a fully reopened legacy UNKNOWN feedback retries its original full body and operation without adding a date (54.095821ms)
+✔ D14: a new Case observation keeps only the real feedback baseline and never copies prior execution or causal judgement (1.309081ms)
+✔ D14/DW09: the real compact form and durable Case wrapper preserve the clicked observation request, metadata and UNKNOWN intent together (6.323106ms)
+✔ D14: Case presentation exposes the three frozen observation fields and folds original request and optional judgement controls (92.757908ms)
+✔ D14: a date and actual observation can save unknown execution as null without inventing effect, rating or request (7.845936ms)
+✔ D14: a failed source read blocks even ordinary compact observation without erasing its text (6.059178ms)
+✔ D14: compact rejects missing/invalid observation dates and preserves explicit original judgement edits only (18.081583ms)
+✔ D14: compact exact request saves recheck authorization and feedback baseline without substituting a later request (12.881394ms)
+✔ D14: original Board forms preserve boolean payloads without new metadata and read unknown execution accurately (6.153292ms)
+✔ DW08/09 observation picker preserves two distinct requests and binds the explicitly selected second revision (1.836478ms)
+✔ DW09 request revision, target baseline and clicked owner cannot silently switch to a newer or different request (0.324047ms)
+✔ DW09 actual current Case authorization, issue and source store must match; work, revoke and another round never answer (0.294691ms)
+✔ DW09 original request baseline and current feedback CAS both apply without changing the draft (0.219033ms)
+✔ DW08/09 only genuinely open observe requests are offered; source text remains exact (0.273887ms)
+✔ DW09 original feedback HTTP save carries exact selected reference; ordinary and lost-ack saves never gain inferred requests or retries (58.003305ms)
+ℹ tests 32
+ℹ suites 0
+ℹ pass 30
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 834.805358
+
+✖ failing tests:
+
+test at .local/ui-conformance/backend-independent/feedback-consumers/independent-legacy-form.test.ts:98:1
+✖ independent D14 legacy input: reopened pre-date UNKNOWN and long observation query then retry exact old intent (189.974272ms)
+  TypeError [Error]: Cannot read properties of undefined (reading 'ref')
+      at FeedbackDialog (evalmachine.<anonymous>:378:36)
+      at render (file:///workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/backend-independent/feedback-consumers/independent-legacy-form.test.ts:36:90)
+      at Object.settle (file:///workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/backend-independent/feedback-consumers/independent-legacy-form.test.ts:37:117)
+      at async TestContext.<anonymous> (file:///workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/backend-independent/feedback-consumers/independent-legacy-form.test.ts:108:59)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+
+test at .local/ui-conformance/backend-independent/feedback-consumers/independent-legacy-form.test.ts:118:1
+✖ independent D14 actual compact form: unknown execution saves exact observation metadata and request once, without guessing execution (10.758402ms)
+  TypeError [Error]: Cannot read properties of undefined (reading 'ref')
+      at FeedbackDialog (evalmachine.<anonymous>:378:36)
+      at render (file:///workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/backend-independent/feedback-consumers/independent-legacy-form.test.ts:36:90)
+      at Object.settle (file:///workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/backend-independent/feedback-consumers/independent-legacy-form.test.ts:37:117)
+      at async TestContext.<anonymous> (file:///workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/backend-independent/feedback-consumers/independent-legacy-form.test.ts:126:57)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)

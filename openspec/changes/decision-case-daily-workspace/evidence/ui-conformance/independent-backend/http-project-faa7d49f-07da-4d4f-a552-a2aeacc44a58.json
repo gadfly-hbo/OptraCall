@@ -1,0 +1,71 @@
+{
+  "source": {
+    "work": {
+      "projectId": "faa7d49f-07da-4d4f-a552-a2aeacc44a58",
+      "workStatus": "awaiting_feedback",
+      "workScope": "华东会员增长实验的合成验收资料与原任务工作空间",
+      "assignee": "林予安",
+      "nextStep": "等待三店核查资料，再讨论是否扩围",
+      "statusReason": null,
+      "statusChangedAt": "2026-11-28T00:42:54.171Z",
+      "revision": 1,
+      "createdAt": "2026-11-28T00:42:54.171Z",
+      "updatedAt": "2026-11-28T00:42:54.171Z"
+    }
+  },
+  "events": {
+    "events": [
+      {
+        "id": "68c046db-9c52-4c1e-9949-100410258dd1",
+        "subjectType": "project",
+        "subjectId": "faa7d49f-07da-4d4f-a552-a2aeacc44a58",
+        "revision": 1,
+        "eventType": "project_work_updated",
+        "operationId": "bf9af7be-cd3e-4317-9c74-95aba8034a84",
+        "actorKind": "user",
+        "originCaseId": null,
+        "note": null,
+        "feedbackSource": null,
+        "occurredAt": "2026-11-28T00:42:54.171Z",
+        "changes": {
+          "projectId": {
+            "before": null,
+            "after": "faa7d49f-07da-4d4f-a552-a2aeacc44a58"
+          },
+          "workStatus": {
+            "before": null,
+            "after": "awaiting_feedback"
+          },
+          "workScope": {
+            "before": null,
+            "after": "华东会员增长实验的合成验收资料与原任务工作空间"
+          },
+          "assignee": {
+            "before": null,
+            "after": "林予安"
+          },
+          "nextStep": {
+            "before": null,
+            "after": "等待三店核查资料，再讨论是否扩围"
+          },
+          "statusChangedAt": {
+            "before": null,
+            "after": "2026-11-28T00:42:54.171Z"
+          },
+          "revision": {
+            "before": null,
+            "after": 1
+          },
+          "createdAt": {
+            "before": null,
+            "after": "2026-11-28T00:42:54.171Z"
+          },
+          "updatedAt": {
+            "before": null,
+            "after": "2026-11-28T00:42:54.171Z"
+          }
+        }
+      }
+    ]
+  }
+}

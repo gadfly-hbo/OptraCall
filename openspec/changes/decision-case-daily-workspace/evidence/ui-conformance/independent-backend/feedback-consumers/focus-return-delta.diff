@@ -1,0 +1,23 @@
+diff --git a/src/host/ui/CaseDialogs.tsx b/src/host/ui/CaseDialogs.tsx
+index 0a4dcaa..a3ede37 100644
+--- a/src/host/ui/CaseDialogs.tsx
++++ b/src/host/ui/CaseDialogs.tsx
+@@ -22,15 +22,15 @@ export function useOperationId() {
+   const last = useRef<{ value: string; id: string } | null>(null);
+   return (input: unknown) => { const value = JSON.stringify(input); if (last.current?.value !== value) last.current = { value, id: crypto.randomUUID() }; return last.current.id; };
+ }
+-export function CaseDialog({ title, subtitle, children, onClose, busy = false, className = '', active = true }: { title: string; subtitle?: string; children: ReactNode; onClose: () => void; busy?: boolean; className?: string; active?: boolean }) {
++export function CaseDialog({ title, subtitle, children, onClose, busy = false, className = '', active = true, returnFocusId }: { title: string; subtitle?: string; children: ReactNode; onClose: () => void; busy?: boolean; className?: string; active?: boolean; returnFocusId?: string }) {
+   const ref = useRef<HTMLDialogElement>(null), titleId = useId();
+   useEffect(() => {
+     const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null, dialog = ref.current;
+     if (!active) { dialog?.close(); return; }
+     if (!dialog?.open) dialog?.showModal();
+     dialog?.querySelector<HTMLElement>('input:not([disabled]), textarea:not([disabled]), select:not([disabled])')?.focus();
+-    return () => { dialog?.close(); if (trigger?.isConnected) trigger.focus({ preventScroll: true }); };
+-  }, [active]);
++    return () => { dialog?.close(); const target = returnFocusId ? document.getElementById(returnFocusId) : trigger; if (target?.isConnected) target.focus({ preventScroll: true }); };
++  }, [active, returnFocusId]);
+   return <dialog ref={ref} className={`case-dialog ${className}`} tabIndex={-1} aria-labelledby={titleId} onClickCapture={focusCaseButton} onKeyDown={event => { if (event.key !== 'Tab') return; const current = ref.current; if (!current) return; const targets = Array.from(current.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]):not([type="hidden"]), textarea:not([disabled]), select:not([disabled]), a[href], summary, [tabindex]:not([tabindex="-1"])')).filter(element => element.getClientRects().length > 0 && !element.closest('[hidden], [inert]')); const first = targets[0], last = targets.at(-1); if (!first) { event.preventDefault(); current.focus(); } else if (event.shiftKey && (document.activeElement === first || document.activeElement === current)) { event.preventDefault(); last?.focus(); } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); } }} onCancel={event => { event.preventDefault(); event.stopPropagation(); if (!busy) onClose(); }}>
+     <header className="case-dialog-heading"><div><h2 id={titleId}>{title}</h2>{subtitle && <p>{subtitle}</p>}</div><button type="button" className="icon-button" aria-label={`关闭${title}`} disabled={busy} onClick={onClose}>✕</button></header>{children}
+   </dialog>;

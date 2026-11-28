@@ -1,0 +1,18 @@
+{
+  "runtime": {
+    "instanceId": "0217e393-69f2-4bb3-b421-e3ab3ebb99ae",
+    "pid": 260218,
+    "codeRoot": "/workspace/OptraCall-issue149-ui-conformance",
+    "version": "0.1.0-mvp.4",
+    "commit": "5dd59909227ab46f3d989ade8b2847e077636855",
+    "tree": "1078a6e2359a29e82631ab59f56a8d6dd9492d73",
+    "builtAt": "2026-11-28T01:53:17.113Z",
+    "dirty": true
+  },
+  "sourceManifestHashFromRoot": "c066a823868d61852333e56c38a5ba1a4610ec622c97e646c75932fe720108da",
+  "methods": [
+    "GET"
+  ],
+  "checks": "Original request case/issue/target/revision/time/round and original waiting project/source/revision/assignee/time exactly unchanged; repeated GET stable",
+  "limitations": "Synthetic actual Host only; no writes or screenshot acceptance claimed"
+}

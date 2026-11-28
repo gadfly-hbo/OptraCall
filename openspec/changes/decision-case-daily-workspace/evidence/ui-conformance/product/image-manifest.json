@@ -1,0 +1,122 @@
+[
+  {
+    "label": "工作台首页",
+    "file": "01-home-1440.png",
+    "sha256": "e5011d846bb4f9e6e7e9edfc79dae5364321742bb296e2b4973a9318036fb982"
+  },
+  {
+    "label": "Case 总览",
+    "file": "02-case-overview-1440.png",
+    "sha256": "357dcfd731fc81cc8732ee76f00ad6be3586f519025765426d4af89587380570"
+  },
+  {
+    "label": "当前工作·事项列表",
+    "file": "03-case-current-1440.png",
+    "sha256": "e2bec1d79427747e4fb47e56d0390a034dcec7030e938e74725e062d8c23cb86"
+  },
+  {
+    "label": "当前工作·事项关系树",
+    "file": "04-case-tree-1440.png",
+    "sha256": "a2a1d26e4f7c9d2dd33b8433fe04516fbe69dc4d05e13f4bc8b7eac078b126b9"
+  },
+  {
+    "label": "当前事项的项目与任务",
+    "file": "05-case-projects-1440.png",
+    "sha256": "b95b81d05dbdfe31f1a56e9095b5885e468f1561b596466bdba1a008895aea29"
+  },
+  {
+    "label": "当前事项的成果与依据",
+    "file": "06-case-artifacts-1440.png",
+    "sha256": "0fe19ee6322d7ac3f71792198197b940bce1f0b4d1a7e8be4b3ec685f9a00f53"
+  },
+  {
+    "label": "按事项回看历史",
+    "file": "07-case-history-1440.png",
+    "sha256": "62024e48471ecbf77e8f3edd4f0ba82600c2efcb491242d88ff4ebe0d407702d"
+  },
+  {
+    "label": "当前工作·390 窄屏",
+    "file": "08-case-current-390.png",
+    "sha256": "facc9787959132ca7698d581e095c1f5085d05edc7cb0c5784bf139eb77f1df8"
+  },
+  {
+    "label": "全部项目",
+    "file": "09-all-projects-1440.png",
+    "sha256": "4da461c170ffcc17efbeab5a6229199aa7bb78d5eb3e28c3c042c6613974158c"
+  },
+  {
+    "label": "原项目详情与六类任务",
+    "file": "10-project-detail-1440.png",
+    "sha256": "84546e61fd492bb2bb1f0c9dc48c4414f759d9537f5561376bc2493592ede192"
+  },
+  {
+    "label": "首页·390 窄屏",
+    "file": "11-home-390.png",
+    "sha256": "fe8ab5e08d5448eab8172056f3013b173eb55ba6c4f9b55da7820e26707ffe2a"
+  },
+  {
+    "label": "本轮取舍弹窗",
+    "file": "12-choice-dialog-1440.png",
+    "sha256": "891a5727eec7010e9df18d658c6ddc4d46da5e89cb62bed576f43133f98de849"
+  },
+  {
+    "label": "取舍弹窗·390 窄屏",
+    "file": "13-choice-dialog-390.png",
+    "sha256": "37e15977bc58eb620f8a82d50f8f79483e18fd9e7d034306300c186b17ca1ae0"
+  },
+  {
+    "label": "原始观察反馈弹窗",
+    "file": "14-feedback-dialog-1440.png",
+    "sha256": "6285005da96c99730b370e72e54c7c18ee9f15552e01e83368439eb062b10f02"
+  },
+  {
+    "label": "反馈弹窗·390 窄屏",
+    "file": "15-feedback-dialog-390.png",
+    "sha256": "7227dc305f7a19223568c3dabc7b705d29de07396b934433b39d38bb636373b1"
+  },
+  {
+    "label": "手动查看另一事项的资料",
+    "file": "16-artifacts-metric-1440.png",
+    "sha256": "841b9b612c9ef5a331ae5992065a3cc66f1a2b28f8c6d1430b6535a8f3ff0653"
+  },
+  {
+    "label": "准确原文与来源",
+    "file": "17-source-original-1440.png",
+    "sha256": "3a1a5cff5ceecc4303ed3c82ed94e43b9139f3e75f29a04f19621817ad3b51ef"
+  },
+  {
+    "label": "已复盘事项当前工作",
+    "file": "18-reviewed-current-1440.png",
+    "sha256": "a33d180b9b3c1591cbbe5278bc7b0417dcb49705abdff45ca6554c901af795b8"
+  },
+  {
+    "label": "当前工作·1024",
+    "file": "19-reviewed-current-1024.png",
+    "sha256": "501c8ef370511a84cd1ee9878737bbf6cb1e2e6d68c4617f2b22935743dc3bd2"
+  },
+  {
+    "label": "Case·深色",
+    "file": "20-case-dark-1440.png",
+    "sha256": "908439e70916921a1542f2736ca7cab56810c8a06b48d096cc957b3cf7ed7ef6"
+  },
+  {
+    "label": "事项项目·深色",
+    "file": "21-case-projects-dark-1440.png",
+    "sha256": "4bf6696044d2adc4d214d89609e44ee9e6d4cdb44902bf173a022f2a24e1368d"
+  },
+  {
+    "label": "首页·深色",
+    "file": "22-home-dark-1440.png",
+    "sha256": "ea359abe6923a16882dbddec5a563a5dea0edbd3f70649693c4f77e595a3640b"
+  },
+  {
+    "label": "准备或继续 Case",
+    "file": "23-case-prepare-1440.png",
+    "sha256": "7ec15cae27c006bf068ccf1f4ee37edf39edad51ff43a5e1a90fa07cb227cffb"
+  },
+  {
+    "label": "准备页·390 窄屏",
+    "file": "24-case-prepare-390.png",
+    "sha256": "e62e509e5c47d49559490ba2d1cc66f82c2ac547f26919c1abcecfce9dcd4326"
+  }
+]

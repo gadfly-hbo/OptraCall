@@ -1,0 +1,48 @@
+{
+  "verdict": "PASS_WITH_SCOPE",
+  "recordedAt": "2026-11-28T01:21:53.243252+00:00",
+  "reviewer": "independent non-author child agent choice_nextstep_review",
+  "scope": "D13 original strategy choice optional nextStep only; exact seven-file manifest",
+  "basis": [
+    "AGENTS.md and engineering-workflow v1.16",
+    "Frozen Demo/spec/tasks 5f15cf3b677c743bda0b5b2c3ee0e4b4f57e1af2 D13 optional 200-character next step",
+    "Unmodified pre-change CaseStore/validator code obtained read-only from 5dd59909227ab46f3d989ade8b2847e077636855"
+  ],
+  "command": "node --test tests/case-decision-store.test.ts tests/case-board-navigation-model.test.ts tests/daily-case-history-ui.test.ts .local/ui-conformance/backend-independent/choice-nextstep/independent.test.ts",
+  "results": {
+    "tests": 24,
+    "pass": 24,
+    "fail": 0,
+    "log": "run-v2.log",
+    "sourceHashesUnchanged": true,
+    "manifest": "post-run-manifest.json"
+  },
+  "preservedFailure": {
+    "log": "run-v1.log",
+    "pass": 23,
+    "fail": 1,
+    "reason": "Independent HTTP probe fixture accidentally nested projectsRoot inside dataRoot; Host correctly rejected overlapping_data_roots. Only isolated probe projectsRoot changed; no production fix required."
+  },
+  "verified": [
+    "Old baseline CaseStore generated real SQLite choice event and operation receipt. Current Store replays identical old request, omitted/null/empty/undefined optional nextStep variants with exact old result.",
+    "Original event and receipt raw SQLite column values remain identical on new Store replay, new append, and actual isolated Host HTTP replay; original PRAGMA user_version remains 2. This verifies row content, not whole SQLite file byte identity.",
+    "New optional text is stored and read exactly in original choice event/receipt, including markup-like plain text; same operation exact replay returns original result, changed same-operation text is rejected with conflict.",
+    "200 CJK code units accepted; 201, object, NUL, and numeric inputs rejected without new event writes. HTTP 201 characters returns 400.",
+    "Actual isolated synthetic Host HTTP route and issue timeline preserve exact optional nextStep; timeline has zero authorized actions; original Case-wide nextStep remains unchanged.",
+    "After Case closure, completed original old/new operations still replay exact results; a new operation fails HTTP 409.",
+    "Old baseline reader can open database containing new choice event and replay old operation, without rewriting new event/receipt raw column values.",
+    "Current summary selects exact review.nextStep first, then choice.nextStep, and keeps absent data explicit. History reads original choice nextStep separately from review nextStep."
+  ],
+  "staticAssessment": [
+    "No schema migration added; nextStep is omitted from normalized legacy inputs and therefore legacy operation digest shape is unchanged.",
+    "No Case-wide nextStep update, task creation, authorization, or Provider call added. Existing Host ownership/CAS/immutable operation path retained.",
+    "Four principles remain within current original Host environment and original human-choice path: no new orchestration system, no restriction on Agent autonomy, no competing Pi lifecycle, no additional confirmation steps."
+  ],
+  "limitations": [
+    "Synthetic isolated Store/Host evidence only; not real business or real Provider validation.",
+    "No actual product screenshot/UI interaction evidence from this subreview.",
+    "Not an overall Issue149 pass, PR permission, or carryover of earlier PASS. Prior parent 37 PASS / B1 FAIL and author RED/GREEN logs remain separate.",
+    "Whole-application check, non-nextStep modal drafts, and broader 403/CAS source-selection work belong to other current reviewers."
+  ],
+  "writes": "Only isolated evidence/probe/data under .local/ui-conformance/backend-independent/choice-nextstep; no source, permanent test, specification, Git, or Issue mutation."
+}

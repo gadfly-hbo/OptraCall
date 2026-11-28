@@ -1,0 +1,31 @@
+✖ independent DW13: reopening explicit historical-request editor preserves consciously selected current plan and original response association (110.234454ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 308.89654
+
+✖ failing tests:
+
+test at .local/ui-conformance/backend-independent/modal-review/independent-choice-reopen.test.ts:79:1
+✖ independent DW13: reopening explicit historical-request editor preserves consciously selected current plan and original response association (110.234454ms)
+  AssertionError [ERR_ASSERTION]: Saved explicit plan selection must survive reopen; the old requested default cannot silently replace it
+  + actual - expected
+  
+  + 'plan-A@1'
+  - 'plan-A@2'
+            ^
+  
+      at TestContext.<anonymous> (file:///workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/backend-independent/modal-review/independent-choice-reopen.test.ts:90:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'plan-A@1',
+    expected: 'plan-A@2',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

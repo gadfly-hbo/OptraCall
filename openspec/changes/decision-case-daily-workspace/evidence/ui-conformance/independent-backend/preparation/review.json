@@ -1,0 +1,64 @@
+{
+  "reviewer": "/root/ui149_correction_backend_review/prep_scope_readonly",
+  "recordedAt": "2026-11-28T00:49:46.224882+00:00",
+  "baseline": "5f15cf3b677c743bda0b5b2c3ee0e4b4f57e1af2",
+  "scope": "Independent source review of the uncommitted preparation scope/order changes, deterministic bundled product component checks. No production browser, real provider, or real business acceptance claim.",
+  "files": [
+    {
+      "path": "src/host/ui/CasePreparation.tsx",
+      "sha256": "0e2c3c824117c248f7f84f5461b82ef9e568507f78699a80b0851c8e3b01d02c"
+    },
+    {
+      "path": "tests/case-preparation-ui.test.ts",
+      "sha256": "4040057b4a0446f4266c8f633c4c826ff87917692ea3167b13cee1e5bc16dec5"
+    },
+    {
+      "path": "src/host/ui/case-preparation-model.ts",
+      "sha256": "6fcf3578b56766ecad2d08a74d743c2bd8c333bb7f165c07447418735d42740c"
+    }
+  ],
+  "conclusion": "FAIL: one blocking regression in the changed expanded preparation UI",
+  "finding": {
+    "id": "PREP-01",
+    "priority": "P2",
+    "requirement": "DW10, T10, spec 4.4 manual path available without model",
+    "locations": [
+      "src/host/ui/CasePreparation.tsx:150",
+      "src/host/ui/CasePreparation.tsx:344",
+      "src/host/ui/CasePreparation.tsx:346",
+      "src/host/ui/CasePreparation.tsx:356"
+    ],
+    "description": "After clicking Prepare another Case in expanded mode, newPreparation calls install (which sets manualOpen=true) then overrides it to false. Expanded mode hides the manual edit toggle. Goal and scope fields are absent; the user must click optional Agent assistance to reveal manual inputs, or leave/reopen.",
+    "reproduction": "Seed a completed recoverable preparation, render the actual bundled component with expanded:true, click Prepare another Case, inspect editable fields. manualGoal=false, manualScope=false, manualToggle=false.",
+    "testFile": ".local/ui-conformance/backend-independent/preparation/independent-repro.test.ts",
+    "output": ".local/ui-conformance/backend-independent/preparation/independent-repro.log"
+  },
+  "checks": [
+    {
+      "command": "node --test tests/case-preparation-ui.test.ts",
+      "pass": 9,
+      "fail": 0,
+      "output": ".local/ui-conformance/backend-independent/preparation/original-tests.log"
+    },
+    {
+      "command": "node --test .local/ui-conformance/backend-independent/preparation/independent-repro.test.ts",
+      "pass": 0,
+      "fail": 1,
+      "output": ".local/ui-conformance/backend-independent/preparation/independent-repro.log"
+    }
+  ],
+  "positiveFindings": [
+    "Unselected ownership stays scope:null; the blank personal object has empty id/name and is not a selected scope.",
+    "Goal edits persist with all fields before scope selection; original targeted regression passed reopening and explicit ownership selection.",
+    "runCreate requires nonempty explicit scope.id/name and readable enterprise identity before Goal writes.",
+    "Candidate source owner/scope guards and lockedGoal retain exact adopted/pending identities; create recovery and three-branch call logic are unchanged by this diff.",
+    "Existing lost reply/frozen create intent and conflict preservation tests passed."
+  ],
+  "limitations": [
+    "No complete three-branch backend retest performed in this subreview.",
+    "No actual browser screenshot or keyboard check performed in this subreview.",
+    "Original tests use the actual bundled component with a hook harness and mocked HTTP; independent reproduction has the same boundary.",
+    "No new real Provider call or production service mutation performed."
+  ],
+  "writes": "Only isolated reproduction and review evidence under .local/ui-conformance/backend-independent/preparation/. No source, tests, spec, Git or Issue writes."
+}

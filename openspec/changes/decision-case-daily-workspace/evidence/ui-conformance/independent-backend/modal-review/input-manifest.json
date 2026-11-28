@@ -1,0 +1,59 @@
+{
+  "files": [
+    {
+      "path": "src/host/ui/CaseIssuePanel.tsx",
+      "sha256": "8935307d7c75331ea59130a3a5743cc5a9a9c6fde8f5626dad866fdd64080b49",
+      "matchesAuthor": true
+    },
+    {
+      "path": "src/host/ui/CaseFeedbackDialog.tsx",
+      "sha256": "048cc6e25ae0bea7163d2a8ccdfa4cac2eab6a6662d45b2fe826c5e9d19a4f0f",
+      "matchesAuthor": true
+    },
+    {
+      "path": "src/host/ui/CaseActionDraftRecovery.tsx",
+      "sha256": "6b734ca4b1427833d68e9730c4dd4a87d667211f3aefbe5b665c928098eb93af",
+      "matchesAuthor": true
+    },
+    {
+      "path": "src/host/ui/case-action-dialog.css",
+      "sha256": "46e04a4f7107fdcda779abdc9eb945d01c5f746e6c75abedc821c654d3cfc070",
+      "matchesAuthor": true
+    },
+    {
+      "path": "src/host/ui/case-action-draft.ts",
+      "sha256": "ccaa2f17161041e853f6c8967c7a3a0ba400be959122e9f8860cf2c3719eb1c7",
+      "matchesAuthor": true
+    },
+    {
+      "path": "src/host/ui/useCaseActionDraft.ts",
+      "sha256": "9b2a6080983263848bc09feb996eeb6c6441e9c46fbcd32830c07c15422f9bf5",
+      "matchesAuthor": true
+    },
+    {
+      "path": "extensions/business-plugins/decision-board/ui/DecisionBoardPage.tsx",
+      "sha256": "dcdf1310468037a4ae03cde2658dd9b7243204e6b803e507cd7ee07773ddc80c",
+      "matchesAuthor": true
+    },
+    {
+      "path": "tests/case-request-response-ui.test.ts",
+      "sha256": "a23617c8606d53cf032dcb660ba9b7f4590b195eedb375624ad863f66d1d9bc1",
+      "matchesAuthor": true
+    },
+    {
+      "path": "tests/case-feedback-dialog-ui.test.ts",
+      "sha256": "f521c317219e98a585c2ab5f0db82ad726782b1f377f32c49a453ad5c8a3b29b",
+      "matchesAuthor": true
+    },
+    {
+      "path": "tests/case-action-draft.test.ts",
+      "sha256": "d8bbdd72571e4fbe02aec1513d118ba5f6d98c424b87960e6930ab744d0e2957",
+      "matchesAuthor": true
+    },
+    {
+      "path": "tests/case-action-draft-recovery-ui.test.ts",
+      "sha256": "e795365280aadc76d9299280a02ff569e6521e82bcf4b2f4d691ff802149e6e2",
+      "matchesAuthor": true
+    }
+  ]
+}

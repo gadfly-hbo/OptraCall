@@ -1,0 +1,16 @@
+✔ independent fixed consumers: exact source renders null as unknown and original metadata as escaped visible text (82.078809ms)
+✔ independent fixed consumers: true, false and absent execution remain distinct; old missing metadata is not invented (3.574485ms)
+✔ independent fixed consumers: unavailable source and paged JSON never manufacture structured feedback facts (1.657226ms)
+✔ independent fixed consumers: authority panel keeps unknown report independent of authority/effect (1.495153ms)
+✔ independent fixed consumers: Host exact source and links preserve null without substituting latest metadata (2.706631ms)
+✔ independent fixed consumers: personal exact-source export retains null/date/scope and full revision identity (0.936068ms)
+✔ independent fixed consumers: review material snapshot and prompt preserve null/date/scope with exact identity (0.731156ms)
+✔ independent fixed consumers: observation date never determines authority; save time or original legacy edit time does (0.306756ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1237.188714

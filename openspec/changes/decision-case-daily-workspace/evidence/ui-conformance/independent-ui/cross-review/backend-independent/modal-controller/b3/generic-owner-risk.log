@@ -1,0 +1,32 @@
+✖ B3 generic-hook risk: in-place A closed to B open must not authorize old A cleanup (94.253532ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 640.588539
+
+✖ failing tests:
+
+test at .local/ui-conformance/backend-independent/modal-controller/b3/independent-readonly-generic.test.ts:57:1
+✖ B3 generic-hook risk: in-place A closed to B open must not authorize old A cleanup (94.253532ms)
+  AssertionError [ERR_ASSERTION]: Old closed owner A cannot inherit writable status from B
+  + actual - expected
+  
+  + [
+  +   'choice:case:issue'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file:///workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/backend-independent/modal-controller/b3/independent-readonly-generic.test.ts:58:383)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'choice:case:issue' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

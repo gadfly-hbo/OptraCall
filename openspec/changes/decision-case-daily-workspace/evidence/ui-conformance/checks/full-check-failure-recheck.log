@@ -1,0 +1,10 @@
+✔ R1/R2/R4/R5 · Real Pi SDK 1.4.0 enforces default-deny, live Pi native read/bash narrowing, directory-only feedback separation & taskCutoff preservation, exact version read + report verification, authority revision v1.0->v1.1, and independent Python recalculation (C07 changes, C13 stays) (63649.33035ms)
+✔ PR08 ending a first unobserved retain can register its receipt before any personal item exists (2245.42518ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 66491.614851

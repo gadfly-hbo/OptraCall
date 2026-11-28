@@ -1,0 +1,119 @@
+{
+  "recordedAt": "2026-11-28T02:19:01.342353+00:00",
+  "reviewer": "/root/ui149_correction_backend_review",
+  "verdict": "LIMITED PASS for final delivery-record accuracy after root-owned wording corrections. Read-only documentation review, not an expansion or repetition of product acceptance.",
+  "reviewedDocuments": [
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/ui-conformance-repair.md",
+      "sha256": "a17ed1567f9def343efdd404a019f9b1e99a62886eac60ffa14c3c82f67d6f79",
+      "reviewedRange": "Only sections at/after 固定候选 g 与待交付门禁"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product-g/README.md",
+      "sha256": "7cb79f342319d4d35b70997d921360cb1e2170366b2ceb3d8f948ff60fd3fa70",
+      "reviewedRange": "Whole README"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/checks/README.md",
+      "sha256": "71b0bd78267ecc3dfd4974798835336388244054535880b75a81e49b1194d9ab",
+      "reviewedRange": "Whole README"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/reproduction/README.md",
+      "sha256": "4dee651cd12af9ef47de7e08e5387904c7b411741dfbde8ab880e1b2872b31a7",
+      "reviewedRange": "Whole README"
+    }
+  ],
+  "checks": [
+    {
+      "topic": "Candidate identity",
+      "result": "PASS",
+      "finding": "Published source manifest is byte-identical to independent g identity source. sourceManifestHash 2f8ee75d4da2c5aca3240e9b26abc4ab7c6a5f798ae6ea650def9195db436f16, builtAt2026-11-28T02:05:43.009Z, HEAD5dd5990/dirty true and exact complete-manifest SHA d38d54e580de9d59e64021599b3ab4ebb2cc65701bb829737b267d764883f386/2601 agree. Three screenshot receipts match identity; image manifest has26entries. No fresh screenshot visual assessment."
+    },
+    {
+      "topic": "D13 compatibility",
+      "result": "PASS",
+      "finding": "Optional nextStep retained within original choice event; no global Case nextStep, authorization/task creation or database migration claim. Old normalized input, fingerprint and event replay description matches prior independent evidence."
+    },
+    {
+      "topic": "D14 compatibility/rollback",
+      "result": "PASS",
+      "finding": "Nullable adoption/new optional metadata lazy v7, valid date/nonempty observation for null, old Boolean payload without added metadata keeps original schema/input/hash, preserved old rows/provenance/time/receipts and exact CAS/request/auth operation semantics agree with independent report. Observation date does not change saved-time authorization or complete action."
+    },
+    {
+      "topic": "Reader rollback boundary",
+      "result": "PASS",
+      "finding": "Old reader refusal without byte changes is stated, automatic downgrade is explicitly absent, compatible reader/new observation preservation is required. No real user/device migration is claimed. This is an evidence boundary, not an independently executed operational rollback procedure."
+    },
+    {
+      "topic": "Old compact/full drafts and UNKNOWN",
+      "result": "PASS",
+      "finding": "Legacy full Board/no-date/long text and original save intent preserved as stated. Current compact defaults do not justify altering old operation body; description is consistent with actual double-layer probes."
+    },
+    {
+      "topic": "Generic hook owner limitation",
+      "result": "PASS for disclosure, underlying limitation remains open",
+      "finding": "Confirmed same-hook closed+dirty A→openB cleanup risk remains explicit. Current keyed consumers qualified by independent synthetic boundary probes; no blanket or real-browser owner-swap PASS is asserted."
+    },
+    {
+      "topic": "Failures and coverage classification",
+      "result": "PASS",
+      "finding": "Original full check failures, isolated retries, cancelled e/f checks, initial root summary locator error and true independent f BODY failure remain separated; old full-page-reset f4PASS is not promoted to SPA coverage. g6root +3independent evidence agrees; viewport sequence followed by finalEsc is stated accurately."
+    },
+    {
+      "topic": "Open delivery gates",
+      "result": "PASS",
+      "finding": "g full-check final log/exit and independent final matrix remain pending as requested at review time; screenshot user confirmation, PR/head CI/merge/mainCI remain unfinished. Document archive is not treated as user acceptance."
+    },
+    {
+      "topic": "Reproduction description",
+      "result": "PASS within documentation scope",
+      "finding": "All .mjs instruction matches6archivedscripts; synthetic data/provider limitations, actual source/esbuild versus formal build, full-process restart and no fresh reproduction identity equivalence are disclosed. Scripts were not rerun; Pi/fixture generation assertions are author provenance rather than new backend-review execution."
+    }
+  ],
+  "findingsRaisedAndResolvedByRoot": [
+    {
+      "id": "DOC1",
+      "initial": "三尺寸焦点检查 could imply separate Esc assertion at each viewport.",
+      "resolution": "Explicitly now three-size sequence before close, not Esc once per size.",
+      "status": "resolved"
+    },
+    {
+      "id": "DOC2",
+      "initial": "Reproduction said five .mjs while six are archived.",
+      "resolution": "Now says all .mjs.",
+      "status": "resolved"
+    },
+    {
+      "id": "DOC3",
+      "initial": "修代码前取消 stated a chronology not established by status receipts.",
+      "resolution": "Now describes cancellation/retained partial results after finding problem without unsupported order.",
+      "status": "resolved"
+    },
+    {
+      "id": "DOC4",
+      "initial": "独立真实路径 could imply browser proof for generic owner transition.",
+      "resolution": "Now says independent synthetic probes of actual keyed consumer boundary.",
+      "status": "resolved"
+    }
+  ],
+  "unresolvedDocumentAccuracyFindingsInScope": [],
+  "evidence": [
+    "review.json",
+    "../final-f/review.json",
+    "../choice-nextstep/review.json",
+    "../feedback-contract/review.json",
+    "../feedback-consumers/review-candidate-e.json",
+    "../modal-controller/b3/delta-review.json",
+    "external-evidence/independent-f-feedback-focus-repro.json",
+    "external-evidence/independent-g-feedback-focus-repro.json",
+    "external-evidence/root-f-spa-locator-failure.json",
+    "external-evidence/root-g-navigation-receipt.json"
+  ],
+  "limits": [
+    "Only the specified delivery documents and the stated independent-review scope were checked. No new product tests, real-business runs, UI screenshot acceptance or release approval.",
+    "Generic hook limitation remains a recorded actual FAIL outside verified keyed consumer paths; disclosure correction does not fix it.",
+    "Root may append final full-check/matrix status later; this receipt only fixes exact listed document bytes and currently pending statements."
+  ],
+  "writes": "Only this review receipt and curated publication list; no product source, formal tests, specs, delivery document, Git or Issue writes by this reviewer."
+}

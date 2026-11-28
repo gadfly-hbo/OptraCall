@@ -68,12 +68,12 @@ export function caseChoicePermitsAction(value: CaseStrategyChoiceValue): boolean
 
 export type CaseStrategyChoiceInput = {
   operationId: string; caseStoreId: string; caseId: string; strategyRef: CaseDecisionRef;
-  choice: CaseStrategyChoiceValue; reason?: string | null; expectedPreviousChoiceId: string | null;
+  choice: CaseStrategyChoiceValue; reason?: string | null; nextStep?: string | null; expectedPreviousChoiceId: string | null;
   allowHistorical?: boolean; issueId?: string; respondsToRequest?: CaseDecisionRequestRef;
 };
 export type CaseStrategyChoice = {
   choiceId: string; caseId: string; issueId?: string; goalBinding?: import('./case-types.ts').CaseGoalBinding | null; strategyRef: CaseDecisionRef; choice: CaseStrategyChoiceValue;
-  reason: string | null; previousChoiceId: string | null; operationId: string; occurredAt: string; actorKind: 'user';
+  reason: string | null; nextStep?: string | null; previousChoiceId: string | null; operationId: string; occurredAt: string; actorKind: 'user';
   quoteProvenance?: UserQuoteProvenance; respondsToRequest?: CaseDecisionRequestRef;
 };
 export type CaseDecisionListOptions = { includeArchived?: boolean; history?: boolean; pageSize?: number; continuation?: string | null };

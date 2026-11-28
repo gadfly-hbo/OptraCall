@@ -1,0 +1,36 @@
+{
+  "recordedAt": "2026-11-28T02:05:07.725137+00:00",
+  "baselineCompleteManifestSha256": "d437435008dc8aaca47116c3ce49dd88131b56ad670b4cd8c802b7b4e91cbad5",
+  "files": [
+    {
+      "path": "src/host/ui/CaseIssuePanel.tsx",
+      "candidateFSha256": "a1d9b0f8af37e723f662575c03591d7cdb70b5f5729de7b85c306b674e6e8adf",
+      "currentSha256": "94d39b160a24526da8028b6a016b97816b73fb82da5029f6a17f00ad51a08d5e",
+      "pureOptionalReturnFocusPropagationConfirmed": true
+    },
+    {
+      "path": "src/host/ui/CaseFeedbackDialog.tsx",
+      "candidateFSha256": "cc674caa5be6d702925b2e749e3df35bf75e0c0b25b78199dbd85085693e75a6",
+      "currentSha256": "3a05d214b5bb2b58ecd55b144ea92fad451e992bf84541f201c11dee74c00563",
+      "pureOptionalReturnFocusPropagationConfirmed": true
+    },
+    {
+      "path": "extensions/business-plugins/decision-board/ui/DecisionBoardPage.tsx",
+      "candidateFSha256": "c4834fc4d282ffb15700d479580bf4046dbbe53743204b1d9be083762bdd87a5",
+      "currentSha256": "b549c0209b31c1d1e4f315baa39d9bbfa8b28a127e2fe81ebac2fb553e662e63",
+      "pureOptionalReturnFocusPropagationConfirmed": true
+    },
+    {
+      "path": "src/host/ui/CaseDialogs.tsx",
+      "candidateFSha256": "a2d97e73d8d6644a439115653ee7b48872a3ec1e743517a6486bc5fb35f66fb8",
+      "currentSha256": "a2d97e73d8d6644a439115653ee7b48872a3ec1e743517a6486bc5fb35f66fb8",
+      "role": "unchanged shared dialog base"
+    },
+    {
+      "path": "tests/browser-case-home-requests.mjs",
+      "candidateFSha256": "41f4485476e1089aeb2e023bb5787c331f363fc59cfaa6d1f2c0a08cc4f80b7b",
+      "currentSha256": "09957e4a520cf703e0d02b8081a4dde6976ddc4f880836114ded961d5da57893",
+      "role": "strengthened permanent actual-browser regression"
+    }
+  ]
+}
