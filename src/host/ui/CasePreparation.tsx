@@ -312,7 +312,7 @@ export function CasePreparation({ onOpenCase, onCreateCase, onCaseChanged, onOpe
       else {
         onCaseChanged?.();
         setNotice(`Case「${response.createdCase.title}」已创建${response.replayedFromOperation ? '，已核对原操作回执' : ''}；正在核对第一件事项。`);
-        try { if (await finishFirstIssue(session, response.createdCase.id, attempt)) setNotice(`Case「${response.createdCase.title}」与第一件事项已建立；完整准备原文作为待带入片段保留。`); }
+        try { if (await finishFirstIssue(session, response.createdCase.id, attempt)) { onCaseChanged?.(); setNotice(`Case「${response.createdCase.title}」与第一件事项已建立；完整准备原文作为待带入片段保留。`); } }
         catch (failure) { setError(`Case 已创建；第一件事项或原文片段尚未确认。原操作与输入保留，请继续核对。${caseError(failure)}`); }
       }
     } catch (failure) {

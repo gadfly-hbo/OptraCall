@@ -388,12 +388,14 @@ function IssueWork({ entrySeq, actionFocusIds, actionFocus, openRequests = [], i
         <p>当前事项尚无可供取舍的准确方案版本（Case 主目标 G/S 策略不直接作为本事项方案）；已填写的理由与下一步草稿已保留。</p>
         <div className="case-inline-actions">
           {project ? <>
-            <button type="button" className="secondary-button" disabled={writing || record.status === 'closed'} onClick={() => { void (async () => { if (choiceDraft.dirty && !await choiceDraft.flush()) return; setChoiceOpen(false); task('plan'); })(); }}>去准备 Plan Task</button>
+            <button type="button" className="secondary-button" disabled={writing || record.status === 'closed'} onClick={() => { void (async () => { if (choiceDraft.dirty && !await choiceDraft.flush()) return; if (!mounted.current) return; setChoiceOpen(false); task('plan'); })(); }}>去准备 Plan Task</button>
             <button type="button" className="text-button" disabled={writing} onClick={() => {
               void (async () => {
                 if (choiceDraft.dirty && !await choiceDraft.flush()) return;
+                if (!mounted.current) return;
                 setChoiceOpen(false);
                 requestAnimationFrame(() => {
+                  if (!mounted.current) return;
                   const section = planHandoffSection.current;
                   if (section) { section.open = true; section.scrollIntoView({ block: 'start', behavior: 'smooth' }); section.querySelector('summary')?.focus({ preventScroll: true }); }
                 });
@@ -401,7 +403,7 @@ function IssueWork({ entrySeq, actionFocusIds, actionFocus, openRequests = [], i
             }}>{sources?.replies.some(r => r.type === 'plan') ? `去交回已有 Plan 原回复（${sources.replies.filter(r => r.type === 'plan').length}）` : '查看交接与依据（交回 Plan 原回复）'}</button>
           </> : <>
             <span>当前 Case 尚未关联可用项目，请先关联或新建项目，再准备 Plan Task。</span>
-            {onLinkProject && <button type="button" className="secondary-button" disabled={writing || record.status === 'closed'} onClick={() => { void (async () => { if (choiceDraft.dirty && !await choiceDraft.flush()) return; setChoiceOpen(false); onLinkProject(); })(); }}>去关联或新建项目</button>}
+            {onLinkProject && <button type="button" className="secondary-button" disabled={writing || record.status === 'closed'} onClick={() => { void (async () => { if (choiceDraft.dirty && !await choiceDraft.flush()) return; if (!mounted.current) return; setChoiceOpen(false); onLinkProject(); })(); }}>去关联或新建项目</button>}
           </>}
         </div>
       </div>}

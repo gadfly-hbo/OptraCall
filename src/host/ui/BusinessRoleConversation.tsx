@@ -157,6 +157,7 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,open
       const readSignal=AbortSignal.any([deadline.signal,...(signal?[signal]:[]),...(lifetime?[lifetime]:[])]);
       next=await call('','GET',undefined,readSignal,request?.requestId);
     }catch(failure){
+      if(!alive.current||ticket!==seq.current)return;
       if(deadline.signal.aborted&&!signal?.aborted&&!lifetime?.aborted)
         throw new Error('读取原对话状态超时，原输入与原请求已保留；未重发消息，可点击「核对原操作」继续读取。');
       throw failure;
@@ -248,6 +249,7 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,open
         let next:RoleView|undefined,loadError:unknown;
         try{next=await load(controller.signal);}catch(f){if(controller.signal.aborted)return;loadError=f;}
         if(controller.signal.aborted)return;
+        if(!next&&!loadError)return;
         const activeRun=!loadError&&isRoleRunUnresolved(next,pendingRef.current);
         if(!loadError&&!activeRun){
           if(alive.current&&(!streamError||!next?.busy))setError('');
@@ -295,6 +297,7 @@ function ScopedConversation({owner,ownerKey,readOnly,showInlineTitle = true,open
         let next:RoleView|undefined,loadError:unknown;
         try{next=await load(controller.signal);}catch(f){if(controller.signal.aborted)return;loadError=f;}
         if(controller.signal.aborted)return;
+        if(!next&&!loadError)return;
         if(loadError){
           consecutiveErrors+=1;
           if(consecutiveErrors>backoff.length){

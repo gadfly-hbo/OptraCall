@@ -227,16 +227,24 @@ try {
   // Verify on CaseBoard immediately without manual reload/refresh button
   await page.getByRole('heading', { level: 1, name: 'Case 总览', exact: true }).waitFor();
   await page.getByText('Case 三号自动刷新', { exact: true }).first().waitFor();
+  await page.getByRole('button', { name: 'Case 卡片', exact: true }).click();
+  const thirdCase = (await get('/api/cases')).cases.find(c => c.title === 'Case 三号自动刷新');
+  assert.ok(thirdCase);
+  assert.equal((await get(`/api/cases/${thirdCase.id}/decisions/issues`)).issues.length, 1);
+  const thirdCard = page.locator('.daily-case-card').filter({ hasText: 'Case 三号自动刷新' });
+  await thirdCard.getByRole('button', { name: /继续当前事项/ }).waitFor();
+  assert.match(await thirdCard.innerText(), /1\s*件事项/, 'CF06: the new card must refresh its first issue as well as its Case title');
+  await page.screenshot({ path: path.join(outDir, '04-case-overview-cards-1440.png'), fullPage: true });
+  await page.getByRole('button', { name: '星图', exact: true }).click();
   await page.screenshot({ path: path.join(outDir, '03-case-overview-map-1440.png'), fullPage: true });
   await page.getByRole('button', { name: 'Case 卡片', exact: true }).click();
-  await page.getByRole('button', { name: 'Case 三号自动刷新', exact: true }).waitFor();
-  await page.screenshot({ path: path.join(outDir, '04-case-overview-cards-1440.png'), fullPage: true });
   checks.push({ id: 'CF06', detail: 'Creating 3rd Case and returning directly updates Case overview to all 3 Cases with 0 manual reloads' });
 
   // Open Case #1 detail
   await page.getByRole('button', { name: 'CF05 验证准备件', exact: true }).click();
   const detailRegion = page.getByRole('region', { name: 'Case 详情', exact: true });
   await detailRegion.getByRole('heading', { level: 1, name: 'CF05 验证准备件', exact: true }).waitFor();
+  await detailRegion.getByText('本轮概览', { exact: true }).waitFor();
   await page.screenshot({ path: path.join(outDir, '05-case-detail-1440.png'), fullPage: true });
 
   // CF03 Part A: No linked active project -> open 记录取舍 -> see guidance + 去关联或新建项目 + draft preserved

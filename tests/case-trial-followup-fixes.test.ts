@@ -1028,3 +1028,103 @@ test('PM: a role reconciliation GET with headers but stalled JSON body has a fin
     assert.equal(abortedReads,2,'unmount must immediately abort an in-flight body read rather than await its deadline');
   } finally {ui.close();}
 });
+
+test('PM: stale read errors cannot replace a newer completed role state', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let reads = 0, requestId = '', oldAborted = false;
+  const fetcher: typeof fetch = async (input, init) => {
+    const url = new URL(String(input), 'http://localhost');
+    if (url.pathname === '/api/configurations') return Response.json({ configurations: [{ id: 'cfg', revision: 1, name: 'Synthetic', model: 'synthetic', hasApiKey: true }] });
+    if (url.searchParams.get('action') === 'events') return new Response(new ReadableStream({ start(c) {
+      c.enqueue(new TextEncoder().encode('data: '+JSON.stringify({ type: 'snapshot', snapshot: { sessionId: 's', status: 'idle', messages: [], tools: [] } })+'\n\n'));
+      init?.signal?.addEventListener('abort', () => c.close(), { once: true });
+    } }));
+    if (init?.method === 'POST') { requestId = JSON.parse(String(init.body)).requestId; return Response.json({ requestId }, { status: 202 }); }
+    if (++reads === 2) return new Response(new ReadableStream({ start(c) {
+      c.enqueue(new TextEncoder().encode('{"discussion":'));
+      init?.signal?.addEventListener('abort', () => { oldAborted = true; c.error(new DOMException('Aborted', 'AbortError')); }, { once: true });
+    } }));
+    return Response.json({ discussion: { id: 'd', revision: 1, configurationId: 'cfg', configurationRevision: 1, ...(requestId ? { lastRun: { id: requestId, status: 'completed' } } : {}) }, busy: false,
+      snapshot: { sessionId: 's', status: 'idle', messages: requestId ? [{ role: 'assistant', content: '较新请求已完成' }] : [], tools: [] },
+      ...(requestId ? { requestReceipt: { requestId, originalUserText: '新请求', nativeEntryId: 'entry', sessionId: 's' } } : {}) });
+  };
+  const ui = await mountBusinessRole(fetcher, { role: 'project', projectId: 'pm-read-order' });
+  try {
+    assert.equal(reads, 2);
+    ui.nodes().find(n => n.type === 'textarea')!.props.onChange({ target: { value: '新请求' } }); await ui.settle();
+    ui.nodes().find(n => n.type === 'form')!.props.onSubmit({ preventDefault() {} }); await ui.settle(12);
+    assert.match(ui.text(), /较新请求已完成/);
+    t.mock.timers.tick(10000); await ui.settle(12);
+    assert.equal(oldAborted, true);
+    assert.doesNotMatch(ui.text(), /读取原对话状态超时|原请求已保留/, 'superseded read failure must be discarded just like its late success');
+  } finally { ui.close(); }
+});
+
+test('PM: choice navigation cannot outlive its issue while a draft save is pending', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const linked of [true, false]) {
+    let release: (() => void) | undefined, navigations = 0;
+    const fetcher: typeof fetch = async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/issues')) return Response.json({ issues: [{ id: 'issue-1', caseId: 'case-1', title: 'One', createdAt: '2026-11-28T00:00:00Z' }] });
+      if (url.endsWith('/issues/issue-1')) return Response.json({ issue: { id: 'issue-1', caseId: 'case-1', title: 'One' }, rounds: [] });
+      if (url.endsWith('/issues/issue-1/sources')) return Response.json({ replies: [], limitations: [] });
+      if (url.endsWith('/decisions/requests')) return Response.json({ requests: [] });
+      if (url.includes('/decisions?')) return Response.json({ items: [], continuation: null });
+      if (url.includes('/workspace/drafts/')) {
+        if (init?.method !== 'PUT') return Response.json({ code: 'not_found' }, { status: 404 });
+        return new Promise<Response>(resolve => { release = () => resolve(Response.json({ draft: { kind: 'issue-draft', id: decodeURIComponent(new URL(url, 'http://localhost').pathname.split('/').at(-1)!), revision: 1, payload: JSON.parse(String(init.body)).payload } })); });
+      }
+      return Response.json({});
+    };
+    const project = { schemaVersion: 2, id: 'proj-linked', name: 'Linked', configuration: { id: 'c', revision: 1, name: 'M', api: 'openai-completions', provider: 'custom', baseUrl: 'https://e.invalid', model: 'm' }, rootPath: '/synthetic', createdAt: '', updatedAt: '', archivedAt: null, tasks: [] };
+    const ui = await mountCaseIssuePanel(fetcher, { projects: linked ? [project] : [], onCreate() { navigations++; }, onLinkProject() { navigations++; } });
+    try {
+      ui.nodes().find(n => n.type === 'button' && textOf(n) === '记录取舍')!.props.onClick(); await ui.settle();
+      const label = ui.nodes().find(n => n.type === 'label' && textOf(n).includes('为什么这样选'))!;
+      descendants(label).find(n => n.type === 'textarea')!.props.onChange({ target: { value: '保存后再继续的理由' } }); await ui.settle();
+      ui.nodes().find(n => n.type === 'button' && textOf(n) === (linked ? '去准备 Plan Task' : '去关联或新建项目'))!.props.onClick();
+      await new Promise(r => setImmediate(r));
+      assert.ok(release, 'navigation must first wait for the original draft PUT');
+      ui.close(); release();
+      await new Promise(r => setImmediate(r)); await new Promise(r => setImmediate(r));
+      assert.equal(navigations, 0, 'late draft completion must not reopen the unmounted issue or its task/project flow');
+    } finally { ui.close(); }
+  }
+});
+
+test('PM: first-issue completion invalidates the overview again after partial Case creation', async () => {
+  const caseId = '00000000-0000-4000-8000-000000000010', issueId = '00000000-0000-4000-8000-000000000011', goalId = '00000000-0000-4000-8000-000000000012';
+  const goal = { goalId, version: 1, title: 'Goal', status: 'adopted', scope: { kind: 'personal', id: 'self', name: 'Self' }, strategies: ['Strategy'] };
+  let payload: any = { ...emptyPreparePayload(), title: 'New Case', rawInput: 'First issue input', selectedGoal: { goalId, version: 1, strategy: 'Strategy' } };
+  let revision = 1, firstIssue = false, releaseIssue: (() => void) | undefined;
+  const notifications: boolean[] = [];
+  const record = { id: caseId, title: 'New Case', status: 'analyzing', revision: 1, description: '', judgement: '', nextStep: '', updatedAt: '2026-11-28T00:00:00Z', createdAt: '2026-11-28T00:00:00Z' };
+  const draft = () => ({ kind: 'prepare', id: 'p-first', revision, payload });
+  const fetcher: typeof fetch = async (input, init) => {
+    const url = String(input), method = init?.method ?? 'GET';
+    if (url.endsWith('/strategy/goals')) return Response.json({ goals: [{ goalId, currentVersion: 1, versions: [goal] }] });
+    if (url.endsWith(`/strategy/goals/${goalId}`)) return Response.json({ goal: { goalId, currentVersion: 1, versions: [goal] } });
+    if (url.endsWith(`/cases/${caseId}`)) return Response.json({ case: { ...record, revision: firstIssue ? 2 : 1 } });
+    if (url.endsWith('/studio/enterprises')) return Response.json({ enterprises: [] });
+    if (url.endsWith('/drafts/prepare')) return Response.json({ drafts: [draft()] });
+    if (url.includes('/workspace/drafts/prepare/') && method === 'PUT') { payload = JSON.parse(String(init?.body)).payload; revision++; return Response.json({ draft: draft() }); }
+    if (url.endsWith('/workspace/create-case')) {
+      payload = { ...payload, creationState: 'completed', creationReceipt: { caseId, operationId: payload.createOperationId } }; revision++;
+      return Response.json({ branch: 'created', createdCase: record, creationReceipt: payload.creationReceipt, adoptionReceipt: null, replayedFromOperation: false, draft: draft() });
+    }
+    if (url.endsWith('/cases/operations/')) return Response.json({ operation: null });
+    if (url.endsWith(`/cases/${caseId}/decisions/issues`) && method === 'POST') return new Promise<Response>(resolve => { releaseIssue = () => { firstIssue = true; resolve(Response.json({ issue: { id: issueId, caseId, title: 'First issue input' } })); }; });
+    if (url.includes('/workspace/drafts/carry-over/')) return method === 'GET' ? Response.json({ code: 'not_found' }, { status: 404 }) : Response.json({ draft: { kind: 'carry-over', id: decodeURIComponent(url.split('/').at(-1)!), revision: 1, payload: JSON.parse(String(init?.body)).payload } });
+    return Response.json({});
+  };
+  const ui = await mountCasePrep(fetcher, { expanded: true, onCaseChanged() { notifications.push(firstIssue); } });
+  try {
+    ui.nodes().find(n => n.type === 'button' && textOf(n) === '创建或继续 Case')!.props.onClick(); await ui.settle(30);
+    assert.ok(releaseIssue, ui.text());
+    assert.ok(notifications.includes(false), 'partial Case creation must still become visible while its first issue is pending');
+    releaseIssue(); await ui.settle(30);
+    assert.match(ui.text(), /与第一件事项已建立/);
+    assert.ok(notifications.includes(true), 'consumers must also refresh the confirmed first issue without a manual reload');
+  } finally { ui.close(); }
+});
