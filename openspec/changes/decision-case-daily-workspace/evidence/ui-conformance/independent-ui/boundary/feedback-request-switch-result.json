@@ -1,0 +1,46 @@
+{
+  "clickedRequest": {
+    "requestId": "request-explicit-second",
+    "revision": 7
+  },
+  "passedRequest": {
+    "kind": "observe",
+    "caseId": "case-A",
+    "issueId": "issue-A",
+    "requestId": "request-explicit-second",
+    "revision": 7,
+    "status": "open",
+    "lifecycle": "open",
+    "text": "补充 action-A 观察",
+    "assignee": {
+      "label": "原承担人"
+    },
+    "target": {
+      "kind": "observe",
+      "projectId": "project-A",
+      "itemId": "item-action-A",
+      "taskId": "action-A",
+      "authorizationId": "auth-action-A",
+      "feedbackBaseRevisionId": null
+    }
+  },
+  "actualDraftRequest": {
+    "caseId": "case-A",
+    "issueId": "issue-A",
+    "requestId": "request-action-A",
+    "revision": 3,
+    "target": {
+      "kind": "observe",
+      "projectId": "project-A",
+      "itemId": "item-action-A",
+      "taskId": "action-A",
+      "authorizationId": "auth-action-A",
+      "feedbackBaseRevisionId": null
+    }
+  },
+  "input": "已有草稿原文，必须保留",
+  "unknownOperation": null,
+  "posts": 0,
+  "errors": "",
+  "mismatch": true
+}

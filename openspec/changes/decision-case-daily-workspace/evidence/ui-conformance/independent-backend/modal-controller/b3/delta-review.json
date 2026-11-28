@@ -1,0 +1,58 @@
+{
+  "recordedAt": "2026-11-28T01:39:10.882668+00:00",
+  "reviewer": "/root/ui149_correction_backend_review/prep_scope_readonly",
+  "candidate": ".local/ui-conformance/current-modal-b3-handoff.json",
+  "conclusion": "Limited PASS for reviewed current product modal controller/recovery paths with owner-keyed remounts. Confirmed generic in-place owner-switch defect remains separately recorded; generic hook cross-owner readOnly behavior is not PASS.",
+  "files": {
+    "src/host/ui/useCaseActionDraft.ts": "6733c7b4ca34f11d564812301f01989b33d59dcf1c01e97103ffae2f46348378",
+    "src/host/ui/case-action-draft.ts": "b1dae4e8a0ba136dbda2380c8aa3acd46d996173679f252ae3395b68c0621f18",
+    "tests/case-action-draft.test.ts": "c6fd50f4787ffe78192ed4fd4e27f8eeb640c9b7dc4849205ee46ec9d545bed9",
+    "tests/case-action-draft-recovery-ui.test.ts": "e795365280aadc76d9299280a02ff569e6521e82bcf4b2f4d691ff802149e6e2"
+  },
+  "unchangedDuringReview": true,
+  "checks": [
+    {
+      "command": "node --test tests/case-action-draft.test.ts tests/case-action-draft-recovery-ui.test.ts",
+      "pass": 20,
+      "fail": 0,
+      "skip": 0,
+      "output": "formal-tests.log"
+    },
+    {
+      "command": "node --test b3/independent-controller.test.ts b3/independent-recovery.test.ts b3/independent-restored.test.ts b3/independent-readonly-keyed.test.ts",
+      "pass": 11,
+      "fail": 0,
+      "skip": 0,
+      "output": "independent-tests.log"
+    },
+    {
+      "command": "node --test b3/independent-readonly-generic.test.ts",
+      "pass": 0,
+      "fail": 1,
+      "skip": 0,
+      "output": "generic-owner-risk.log",
+      "scope": "Generic hook is reused in place across owner A closed -> owner B open. This differs from the current product owner-keyed remount boundary."
+    }
+  ],
+  "deltaCoverage": [
+    "B2 absent/read failure restored=false, saved explicit empty restored=true, defaults remain suppressed for restored owner.",
+    "B3 same owner becomes readOnly: autosave/explicit flush/edit blocked, unsaved input retained; reopening same owner restores writable path.",
+    "B3 actual owner-keyed remount boundary: closing A with dirty readonly draft does not write A when new B hook opens.",
+    "Prior normal/reopen/CAS/backup exactness/lost acknowledgement/403/late source owner checks and real Store conversation-draft isolation remain PASS."
+  ],
+  "finding": {
+    "id": "B3-GENERIC-OWNER",
+    "status": "confirmed outside reviewed current keyed modal path",
+    "location": "src/host/ui/useCaseActionDraft.ts:11,21,76",
+    "actual": "The readOnly ref is shared across controller generations. B render changes it to false before A cleanup runs, allowing A cleanup fallback flush to write choice:case:issue even though A was closed.",
+    "expected": "Each retired controller should keep the last write permission of its own owner; a new owner cannot authorize a write to a closed previous owner.",
+    "reproduction": "Create A, edit without saving, rerender A readOnly=true, then reuse same hook instance for B readOnly=false; observed one PUT to A.",
+    "currentProductBoundary": "Current IssueWork and CaseFeedbackForm use owner/request-dependent keys and remount, so this same-hook transition was not established as a current reachable product regression. The separate keyed-remount probe passed.",
+    "evidence": "generic-owner-risk.log"
+  },
+  "limits": [
+    "No actual browser/UI screenshots or user acceptance by this reviewer. Parent covers choice/feedback dialogs and automatic focus.",
+    "New D14 feedback schema is excluded; this report must not be extrapolated to schema or three-state business semantics.",
+    "No production source, formal tests, spec, Git, Issue or PR writes. Previous failure and review evidence preserved."
+  ]
+}

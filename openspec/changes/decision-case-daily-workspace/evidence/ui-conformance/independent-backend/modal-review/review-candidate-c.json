@@ -1,0 +1,158 @@
+{
+  "recordedAt": "2026-11-28T01:28:25.215941+00:00",
+  "candidate": "c",
+  "conclusion": "BLOCKED B2; other scoped checks pass, do not infer complete UI acceptance",
+  "files": [
+    {
+      "path": "src/host/ui/CaseIssuePanel.tsx",
+      "sha256": "8935307d7c75331ea59130a3a5743cc5a9a9c6fde8f5626dad866fdd64080b49",
+      "matchesAuthor": true,
+      "postRunSha256": "8935307d7c75331ea59130a3a5743cc5a9a9c6fde8f5626dad866fdd64080b49",
+      "unchanged": true,
+      "matchesBuiltCandidateC": true
+    },
+    {
+      "path": "src/host/ui/CaseFeedbackDialog.tsx",
+      "sha256": "048cc6e25ae0bea7163d2a8ccdfa4cac2eab6a6662d45b2fe826c5e9d19a4f0f",
+      "matchesAuthor": true,
+      "postRunSha256": "048cc6e25ae0bea7163d2a8ccdfa4cac2eab6a6662d45b2fe826c5e9d19a4f0f",
+      "unchanged": true,
+      "matchesBuiltCandidateC": true
+    },
+    {
+      "path": "src/host/ui/CaseActionDraftRecovery.tsx",
+      "sha256": "6b734ca4b1427833d68e9730c4dd4a87d667211f3aefbe5b665c928098eb93af",
+      "matchesAuthor": true,
+      "postRunSha256": "6b734ca4b1427833d68e9730c4dd4a87d667211f3aefbe5b665c928098eb93af",
+      "unchanged": true,
+      "matchesBuiltCandidateC": true
+    },
+    {
+      "path": "src/host/ui/case-action-dialog.css",
+      "sha256": "46e04a4f7107fdcda779abdc9eb945d01c5f746e6c75abedc821c654d3cfc070",
+      "matchesAuthor": true,
+      "postRunSha256": "46e04a4f7107fdcda779abdc9eb945d01c5f746e6c75abedc821c654d3cfc070",
+      "unchanged": true,
+      "matchesBuiltCandidateC": true
+    },
+    {
+      "path": "src/host/ui/case-action-draft.ts",
+      "sha256": "ccaa2f17161041e853f6c8967c7a3a0ba400be959122e9f8860cf2c3719eb1c7",
+      "matchesAuthor": true,
+      "postRunSha256": "ccaa2f17161041e853f6c8967c7a3a0ba400be959122e9f8860cf2c3719eb1c7",
+      "unchanged": true,
+      "matchesBuiltCandidateC": true
+    },
+    {
+      "path": "src/host/ui/useCaseActionDraft.ts",
+      "sha256": "9b2a6080983263848bc09feb996eeb6c6441e9c46fbcd32830c07c15422f9bf5",
+      "matchesAuthor": true,
+      "postRunSha256": "9b2a6080983263848bc09feb996eeb6c6441e9c46fbcd32830c07c15422f9bf5",
+      "unchanged": true,
+      "matchesBuiltCandidateC": true
+    },
+    {
+      "path": "extensions/business-plugins/decision-board/ui/DecisionBoardPage.tsx",
+      "sha256": "dcdf1310468037a4ae03cde2658dd9b7243204e6b803e507cd7ee07773ddc80c",
+      "matchesAuthor": true,
+      "postRunSha256": "dcdf1310468037a4ae03cde2658dd9b7243204e6b803e507cd7ee07773ddc80c",
+      "unchanged": true,
+      "matchesBuiltCandidateC": true
+    },
+    {
+      "path": "tests/case-request-response-ui.test.ts",
+      "sha256": "a23617c8606d53cf032dcb660ba9b7f4590b195eedb375624ad863f66d1d9bc1",
+      "matchesAuthor": true,
+      "postRunSha256": "a2968e5be0502721efafb7ce136107dbf909530f9cf2f3fdae6dbb35b69b638e",
+      "unchanged": false,
+      "matchesBuiltCandidateC": null,
+      "buildManifestNote": "Tests outside production build-source manifest; author-stopped input manifest controls test identity"
+    },
+    {
+      "path": "tests/case-feedback-dialog-ui.test.ts",
+      "sha256": "f521c317219e98a585c2ab5f0db82ad726782b1f377f32c49a453ad5c8a3b29b",
+      "matchesAuthor": true,
+      "postRunSha256": "f521c317219e98a585c2ab5f0db82ad726782b1f377f32c49a453ad5c8a3b29b",
+      "unchanged": true,
+      "matchesBuiltCandidateC": null,
+      "buildManifestNote": "Tests outside production build-source manifest; author-stopped input manifest controls test identity"
+    },
+    {
+      "path": "tests/case-action-draft.test.ts",
+      "sha256": "d8bbdd72571e4fbe02aec1513d118ba5f6d98c424b87960e6930ab744d0e2957",
+      "matchesAuthor": true,
+      "postRunSha256": "d8bbdd72571e4fbe02aec1513d118ba5f6d98c424b87960e6930ab744d0e2957",
+      "unchanged": true,
+      "matchesBuiltCandidateC": null,
+      "buildManifestNote": "Tests outside production build-source manifest; author-stopped input manifest controls test identity"
+    },
+    {
+      "path": "tests/case-action-draft-recovery-ui.test.ts",
+      "sha256": "e795365280aadc76d9299280a02ff569e6521e82bcf4b2f4d691ff802149e6e2",
+      "matchesAuthor": true,
+      "postRunSha256": "e795365280aadc76d9299280a02ff569e6521e82bcf4b2f4d691ff802149e6e2",
+      "unchanged": true,
+      "matchesBuiltCandidateC": null,
+      "buildManifestNote": "Tests outside production build-source manifest; author-stopped input manifest controls test identity"
+    }
+  ],
+  "checks": [
+    {
+      "log": "targeted-v1.log",
+      "permanentTests": "25/25 PASS",
+      "independent": "3 build failures before assertions: local harness CSS loader missing"
+    },
+    {
+      "log": "independent-feedback-v2.log",
+      "pass": 3,
+      "fail": 0,
+      "repair": "Only .local test bundler CSS empty loader configured; source and assertions unchanged"
+    },
+    {
+      "log": "independent-feedback-owner.log",
+      "pass": 2,
+      "fail": 0
+    },
+    {
+      "report": "../modal-controller/review.json",
+      "permanentTests": "19/19 PASS",
+      "independentProbes": "6/6 PASS"
+    },
+    {
+      "log": "independent-choice-reopen.log",
+      "pass": 0,
+      "fail": 1
+    }
+  ],
+  "blockers": [
+    {
+      "id": "B2",
+      "requirement": "DW13/DW09 and frozen D13 cancellation/full reopen",
+      "file": "src/host/ui/CaseIssuePanel.tsx",
+      "lines": [
+        238,
+        254,
+        260
+      ],
+      "actual": "Explicit request for original strategy v1; user selects v2, cancels and fully remounts. Durable reason remains but planId silently resets from v2 to v1 and responseKey resets to request default.",
+      "cause": "Request default effects do not distinguish restored user selection from fresh default initialization.",
+      "proof": "independent-choice-reopen.test.ts + independent-choice-reopen.log",
+      "status": "Reported immediately to root and author; not fixed by reviewer"
+    }
+  ],
+  "priorEvidence": "Initial B1 FAIL and37PASS retained; previous B1 recheck, exact home projection, artifact and nextStep scope reports remain separate",
+  "fourPrinciples": {
+    "HostEnvironment": "Existing workspace issue-draft CAS and original Case/Board actions reused; no new professional decision logic",
+    "AgentAutonomy": "No Agent runtime routing or forced execution introduced",
+    "PiReuse": "No new SDK lifecycle or provider use",
+    "ReduceOperations": "Same-page original actions reduce navigation, but B2 currently causes repeated selection and violates restored user intent"
+  },
+  "limitations": [
+    "No source/test/spec/Git/Issue writes; isolated independent probe/report only",
+    "Controller and bundled component verification do not replace actual product screenshots, keyboard/focus paths or user confirmation",
+    "Synthetic actual Host only; no real business/provider data or write to Host43150"
+  ],
+  "runtimeGet": "candidate-c-get-review.json",
+  "productionStableDuringReview": true,
+  "testChangeAfterB2Report": "Author has appended permanent B2 regression to tests/case-request-response-ui.test.ts after initial fixed run; old result applies to recorded input sha only."
+}

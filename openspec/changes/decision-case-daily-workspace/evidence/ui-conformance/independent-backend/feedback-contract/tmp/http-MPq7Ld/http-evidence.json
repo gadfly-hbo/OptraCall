@@ -1,0 +1,50 @@
+{
+  "baseUrl": "http://127.0.0.1:34853",
+  "pid": 252973,
+  "oldReceipt": {
+    "revisionId": "7a86d343-0ace-40ef-8646-5a5013e69a89",
+    "taskId": "ad9ccc55-4369-4064-ad91-4e8634e7d073",
+    "revisionNumber": 1,
+    "operationId": "2b0357af-6e1b-415a-9584-d34a680f0732",
+    "requestSha256": "e9caa9962ceb08d186b3a6435592b16e89bc11b3ff987bc67156d80697a3eee0",
+    "adopted": false,
+    "outcome": "原样观察：未取得执行反馈",
+    "metricDelta": "",
+    "review": "未知不是否定效果",
+    "score": null,
+    "effect": "unknown",
+    "savedAt": "2026-11-28T01:43:41.574Z",
+    "origin": "user-save",
+    "legacyCreatedAt": null,
+    "legacyUpdatedAt": null,
+    "createdAt": "2026-11-28T01:43:41.574Z",
+    "updatedAt": "2026-11-28T01:43:41.574Z"
+  },
+  "newReceipt": {
+    "revisionId": "695be69d-2fbd-4b81-809b-9b5ca07db223",
+    "taskId": "ad9ccc55-4369-4064-ad91-4e8634e7d073",
+    "revisionNumber": 3,
+    "operationId": "d00ae958-e84a-4748-b058-994907bc81fc",
+    "requestSha256": "d766680a393d3fa7d868987c42cfc0e794e38a6fd0131dbae6e0bd344ecdeb58",
+    "adopted": null,
+    "outcome": "两店答复矛盾，未确认整体执行或效果",
+    "metricDelta": "",
+    "review": "未知不是否定效果",
+    "score": null,
+    "effect": "unknown",
+    "savedAt": "2026-11-28T01:43:43.947Z",
+    "origin": "user-save",
+    "legacyCreatedAt": null,
+    "legacyUpdatedAt": null,
+    "createdAt": "2026-11-28T01:43:43.947Z",
+    "updatedAt": "2026-11-28T01:43:43.947Z",
+    "observationDate": "2024-02-29",
+    "sourceScope": "仅两店原访谈，不代表全部门店"
+  },
+  "taskStatus": "todo",
+  "authorization": null,
+  "output": {
+    "stdout": "{\"kind\":\"host-ready\",\"port\":34853,\"sdkVersion\":\"1.4.0\",\"transportVersion\":\"8.12.2\"}\n",
+    "stderr": "{\"kind\":\"host-shutdown-start\",\"at\":\"2026-11-28T01:43:43.992Z\",\"pid\":252973,\"signal\":\"SIGTERM\"}\n{\"kind\":\"host-shutdown-complete\",\"at\":\"2026-11-28T01:43:43.999Z\",\"pid\":252973,\"signal\":\"SIGTERM\",\"exitCode\":0}\n{\"kind\":\"host-process-exit\",\"at\":\"2026-11-28T01:43:44.000Z\",\"pid\":252973,\"exitCode\":0,\"reason\":\"signal_sigterm\"}\n"
+  }
+}

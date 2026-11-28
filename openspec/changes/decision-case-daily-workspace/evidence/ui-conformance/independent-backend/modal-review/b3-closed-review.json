@@ -1,0 +1,28 @@
+{
+  "recordedAt": "2026-11-28T01:29:55.346785+00:00",
+  "status": "FAIL B3",
+  "requirement": "Closed Case read-only; DW09 open/view not write; DW13 input protection",
+  "test": "independent-choice-closed.test.ts",
+  "log": "independent-choice-closed.log",
+  "scope": "No business choice POST occurred; unintended new issue-draft PUT did occur from request default initialization",
+  "input": [
+    {
+      "path": "src/host/ui/CaseIssuePanel.tsx",
+      "sha256": "6695efaae7ad131604d1c3eedc9f4025b06e257045cfd5d1b419fea304468e45"
+    },
+    {
+      "path": "src/host/ui/case-action-draft.ts",
+      "sha256": "b1dae4e8a0ba136dbda2380c8aa3acd46d996173679f252ae3395b68c0621f18"
+    },
+    {
+      "path": "src/host/ui/useCaseActionDraft.ts",
+      "sha256": "ed9af6a673d3d1321906e27cbe05b21f55bf6f1e9def4b4083cf1c18f1295581"
+    },
+    {
+      "path": "tests/case-request-response-ui.test.ts",
+      "sha256": "a2968e5be0502721efafb7ce136107dbf909530f9cf2f3fdae6dbb35b69b638e"
+    }
+  ],
+  "currentShaMatchesStoppedB2": true,
+  "reported": "root and case_current immediately"
+}

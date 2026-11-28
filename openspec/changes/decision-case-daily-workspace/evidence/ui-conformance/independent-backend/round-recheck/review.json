@@ -1,0 +1,183 @@
+{
+  "reviewer": "/root/ui149_correction_backend_review",
+  "recordedAt": "2026-11-28T00:59:49.759672+00:00",
+  "conclusion": "PASS within reviewed B1 correction and exact round backend source scope; no unresolved blocker found in this scope",
+  "initialReviewRetained": "../review-initial.json",
+  "initialB1FailRetained": "../preparation/independent-repro.log",
+  "files": [
+    {
+      "path": "src/host/home-pending.ts",
+      "sha256": "1ae5414d896cb3818989f5c2c84e39517243d462a80afc53eaf2b93806e63e47",
+      "postReviewSha256": "1ae5414d896cb3818989f5c2c84e39517243d462a80afc53eaf2b93806e63e47",
+      "unchanged": true
+    },
+    {
+      "path": "src/host/workspace-daily-routes.ts",
+      "sha256": "21015f8a6b5c595d22e8e5c4c0f2bb6fbd502c3316b628fa837cc6fb283ffad6",
+      "postReviewSha256": "21015f8a6b5c595d22e8e5c4c0f2bb6fbd502c3316b628fa837cc6fb283ffad6",
+      "unchanged": true
+    },
+    {
+      "path": "tests/home-request-rounds.test.ts",
+      "sha256": "25da16602662851f530fc5654fe87d6123314ca79e83cbd0a8f2bf6bd648d5e7",
+      "postReviewSha256": "25da16602662851f530fc5654fe87d6123314ca79e83cbd0a8f2bf6bd648d5e7",
+      "unchanged": true
+    },
+    {
+      "path": "src/host/ui/CasePreparation.tsx",
+      "sha256": "af5018164c477806a0b50ec788840abdaf06512fd111a82d420718678606f759",
+      "postReviewSha256": "af5018164c477806a0b50ec788840abdaf06512fd111a82d420718678606f759",
+      "unchanged": true
+    },
+    {
+      "path": "tests/case-preparation-ui.test.ts",
+      "sha256": "372441a843163408754c68cb2903ca4f30a0c901bd7f7534836129193744e44f",
+      "postReviewSha256": "372441a843163408754c68cb2903ca4f30a0c901bd7f7534836129193744e44f",
+      "unchanged": true
+    },
+    {
+      "path": "src/host/ui/HomeDailyQuickPanel.tsx",
+      "sha256": "950501dff243f3c98bd57480071b5cdb5a4e7570054b8287a32ac9279207b014",
+      "postReviewSha256": "950501dff243f3c98bd57480071b5cdb5a4e7570054b8287a32ac9279207b014",
+      "unchanged": true
+    },
+    {
+      "path": "src/host/case-issues.ts",
+      "sha256": "3db7cf0cd2fd5a1894d08ef2a2a7a77289304ffde72717bd8599fb53cd69d627",
+      "postReviewSha256": "3db7cf0cd2fd5a1894d08ef2a2a7a77289304ffde72717bd8599fb53cd69d627",
+      "unchanged": true
+    }
+  ],
+  "baselines": {
+    "frozenDemoSpecTasks": "5f15cf3b677c743bda0b5b2c3ee0e4b4f57e1af2",
+    "engineeringWorkflow": "v1.16",
+    "priorResults": "Original 37 PASS and B1 independent FAIL remain historical; this record closes B1 only for new recorded hashes"
+  },
+  "checks": [
+    {
+      "command": "TMPDIR=<isolated> node --test tests/home-request-rounds.test.ts tests/home-external-waiting.test.ts tests/case-decision-requests.test.ts tests/observation-request-model.test.ts tests/case-request-plan-qualification.test.ts tests/workspace-daily-backend.test.ts tests/workspace-daily-http-pi.test.ts",
+      "pass": 23,
+      "fail": 1,
+      "output": "targeted.log",
+      "failure": "DW-HTTP-01 failed before assertions: Test Host startup timed out at 10 seconds."
+    },
+    {
+      "command": "TMPDIR=<isolated> node --test --test-name-pattern=DW-HTTP-01 tests/workspace-daily-http-pi.test.ts",
+      "pass": 1,
+      "fail": 0,
+      "output": "http-startup-retry.log",
+      "meaning": "Affected sole failed test passed on isolated rerun; original startup failure remains retained."
+    },
+    {
+      "command": "TMPDIR=<isolated> node --test .local/ui-conformance/backend-independent/round-recheck/independent-round-probes.test.ts",
+      "pass": 3,
+      "fail": 0,
+      "output": "independent-probes.log",
+      "coverage": "Extra original chain/outer owner checks; 13 authorization mismatch/duplicate variants; old exact observe round and project/report revocation/recovery; reads preserve original events."
+    },
+    {
+      "command": "node --test tests/case-preparation-ui.test.ts",
+      "pass": 10,
+      "fail": 0,
+      "output": "../preparation/recheck/current-tests.log"
+    },
+    {
+      "command": "node --test unchanged original independent-repro.test.ts",
+      "pass": 1,
+      "fail": 0,
+      "output": "../preparation/recheck/original-repro.log"
+    },
+    {
+      "command": "independent preparation identity probe",
+      "pass": 1,
+      "fail": 0,
+      "output": "../preparation/recheck/independent-identity.log"
+    },
+    {
+      "command": "git diff --check",
+      "result": "exit 0"
+    }
+  ],
+  "matrix": [
+    {
+      "requirements": [
+        "DW10",
+        "DW13",
+        "DW14",
+        "T10",
+        "T12"
+      ],
+      "expected": "Completed preparation -> another preparation remains manual, clear new ownership and identities without clearing old receipts",
+      "actual": "CasePreparation.tsx:150 removed the manualOpen=false override; install owns expanded default. Exact independent failure now passes, old scope/G/S/receipts untouched, new draft/adopt/create identities and no replay verified",
+      "result": "PASS, B1 closed for af501816…06f759"
+    },
+    {
+      "requirements": [
+        "DW08",
+        "DW09",
+        "T08",
+        "T09"
+      ],
+      "expected": "Choose round comes only from original complete predecessor chain and never strategy revision/latest choice/array order",
+      "actual": "home-pending.ts:97–126 checks target kind, Case/store/issue, complete predecessor lookup, duplicates/cycles/missing owner. Original request.previousChoiceId yields upcoming ordinal even when later choices exist",
+      "result": "PASS"
+    },
+    {
+      "requirements": [
+        "DW08",
+        "DW09",
+        "DW16",
+        "T09"
+      ],
+      "expected": "Observation round comes only from exact original authorization and project/item/task/Case/store/issue/choice/strategy source",
+      "actual": "workspace-daily-routes.ts:41–59 reuses request qualification, exact one authorization ID, original owner comparisons and observationAuthorizationMatches; helper counts exact authorization choice ancestry. Unknown/unreadable/mismatch returns null. No latest-choice fallback",
+      "result": "PASS"
+    },
+    {
+      "requirements": [
+        "DW08",
+        "DW16",
+        "T09"
+      ],
+      "expected": "Waiting remains explicit original project state, deduplicated, correctly qualified and side-effect free",
+      "actual": "Original four waiting regressions still pass under new round code; explicit source and original time/assignee unchanged",
+      "result": "PASS"
+    },
+    {
+      "requirements": [
+        "DW12",
+        "DW13",
+        "DW14",
+        "T12",
+        "T13"
+      ],
+      "expected": "Existing input/three-branch/partial unknown/request response behavior unaffected",
+      "actual": "Targeted Store/real Host and request models passed; initial timeout is retained separately from isolated rerun result. No Runtime/schema/goal authority writes introduced",
+      "result": "PASS in targeted scope"
+    },
+    {
+      "requirements": [
+        "DW17",
+        "DW18",
+        "T14"
+      ],
+      "expected": "Running final candidate screenshots and affected browser paths",
+      "actual": "Not performed by this reviewer. At observation time shared Host43150 still omitted new roundNumber field; exact source tests used separate actual Host processes from current source",
+      "result": "NOT_RUN in this subreview; root must rebuild/restart final candidate before screenshots"
+    }
+  ],
+  "fourPrinciples": {
+    "HostEnvironment": "PASS: exact owner/permission/source projection only, no professional result calculation",
+    "AgentAutonomy": "PASS: no internal analysis ordering or runtime loop added",
+    "PiReuse": "PASS: existing Case/Board/request qualification reused, no SDK dependency or lifecycle changes",
+    "ReduceOperations": "PASS for B1: expanded manual entry restored without optional Agent click or prior result replay"
+  },
+  "limitations": [
+    "This is not complete frozen UI conformance, screenshot confirmation, PR approval or user product acceptance.",
+    "No real Provider/model or business data accessed. Isolated Store/Host and synthetic/controlled invalid inputs only.",
+    "Shared Host43150 read returned no roundNumber as captured in http-home.json. Its old process output is not claimed as new-round runtime evidence; parent informed.",
+    "No source/tests/spec/Git/Issue writes. Independent probes and reports only under backend-independent; initial FAIL and initial 37 PASS untouched.",
+    "Report covers exact recorded source hashes; additional source changes require impact re-review."
+  ],
+  "b1Review": "../preparation/recheck/review.json"
+}

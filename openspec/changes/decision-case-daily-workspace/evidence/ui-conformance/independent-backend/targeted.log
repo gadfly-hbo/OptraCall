@@ -1,0 +1,18 @@
+✔ DW08 waiting: shared project saved waiting appears once alongside continuing Case, without guessing the last issue or an action (183.215398ms)
+✔ DW08 waiting: Case observing or a missing feedback alone cannot fabricate a specific external waiting source (68.035602ms)
+✔ DW16 waiting: archived, forbidden and unqualified project reads never expose saved waiting; valid records recover without replay (126.350102ms)
+✔ DW16 waiting: one unreadable shared project does not erase another readable project or fabricate its issue (133.316016ms)
+✔ DW12/DW13-DRAFT-01: drafts persist across reopen, CAS conflict keeps input, fragment append is idempotent & non-overwriting, discard is scoped (167.951028ms)
+✔ DW11/DW14-CREATE-02: three creation branches, partial success adoption receipt preservation, and idempotent retry (93.590926ms)
+✔ DW10-DIR-03: bounded read-only Case directory and daily routes work end-to-end (36.592371ms)
+✔ DW-HTTP-01: real Host HTTP round-trip for issue edges, explicit requests -> choice response -> home-pending update, drafts, and case-directory (7764.272156ms)
+✔ DW-AGENT-02: Pi tool schemas expose case-directory on goal-draft and save-issue-edge/save-decision-request on Case Agent (4.330443ms)
+✔ DW-HTTP-03: real Host HTTP POST /api/workspace/create-case adopts candidate goal via StrategyGoalsStore and continues on exact G/S (3726.776909ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 12557.778084

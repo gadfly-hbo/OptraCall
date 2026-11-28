@@ -1,0 +1,10 @@
+{"afterNewPreparation":{"manualGoal":true,"manualScope":true,"manualToggle":false,"buttons":["请 Agent 协助整理","保存候选、明确采纳 G/S 并创建 Case","查找已有 Case","明确放弃这份准备草稿","恢复这份准备"]}}
+✔ INDEPENDENT DW10: expanded new preparation keeps manual G/S and ownership fields reachable (296.215892ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 958.445168

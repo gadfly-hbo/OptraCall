@@ -236,7 +236,7 @@ test('DW10 directory: all Case and issue pages remain reachable without losing t
   const ui = await harness(fetcher);
   try {
     ui.nodes().find(n => n.type === 'textarea')!.props.onChange({ target: { value: '分页期间必须保留的问题' } }); await ui.settle();
-    ui.find('button', '查找获准 Case').props.onClick(); await ui.settle();
+    ui.find('button', '整理与查找').props.onClick(); await ui.settle();
     assert.ok(ui.find('button', '读取更多事项'), 'A Case with 132 issues must expose the unread issue pages');
     const select = ui.nodes().find(n => n.type === 'select' && n.props['aria-label'] === '选择 Case A 的目标事项')!;
     select.props.onChange({ target: { value: 'issue-3' } }); ui.render();
@@ -267,9 +267,104 @@ test('DW10 directory: an unread nonempty issue page is never described as having
     : api.fetcher(input, init));
   try {
     ui.nodes().find(n => n.type === 'textarea')!.props.onChange({ target: { value: '保留问题' } }); await ui.settle();
-    ui.find('button', '查找获准 Case').props.onClick(); await ui.settle();
+    ui.find('button', '整理与查找').props.onClick(); await ui.settle();
     assert.ok(ui.find('button', '读取更多事项'));
     assert.ok(ui.nodes().some(n => n.type === 'p' && label(n).includes('事项尚未读完')));
     assert.ok(!ui.nodes().some(n => n.type === 'p' && label(n).includes('暂无独立事项')));
+  } finally { ui.close(); }
+});
+
+test('DW10/DW13: G/S can be written and reopened before scope is chosen; explicit scope is still required before any Goal or Case write', async () => {
+  const api = server();
+  let ui = await harness(api.fetcher, { expanded: true });
+  const inputFor = (text: string, kind: 'input' | 'textarea' | 'select') => {
+    const parent = ui.nodes().find(n => n.type === 'label' && label(n).includes(text));
+    assert.ok(parent, `visible field ${text}`);
+    const field = descendants(parent).find(n => n.type === kind);
+    assert.ok(field, `editable ${kind} for ${text}`);
+    return field;
+  };
+  const fields = [
+    ['G · 目标名称', 'input', '先表达而不预定归属的目标'],
+    ['想看到什么结果', 'textarea', '保存未定归属的目标结果'],
+    ['S · 这次先怎么推进', 'textarea', '先查看现有事实'],
+    ['可核成果', 'input', '一份可回读的观察记录'],
+    ['责任角色／承担人', 'input', '用户指定的承担人'],
+  ] as const;
+  try {
+    inputFor('这件事的名字', 'input').props.onChange({ target: { value: '未定归属的准备' } });
+    await ui.settle();
+    for (const [text, kind, value] of fields) {
+      inputFor(text, kind).props.onChange({ target: { value } });
+      await ui.settle();
+    }
+    assert.equal(inputFor('已有企业或个人', 'select').props.value, '', 'editing G/S must not select a personal or enterprise owner');
+    const saved = api.writes.at(-1);
+    assert.equal(saved.payload.scope, null);
+    assert.equal(saved.payload.goalDraft.scope.id, '');
+    assert.equal(saved.payload.goalDraft.scope.name, '');
+    assert.equal(saved.payload.goalDraft.title, fields[0][2]);
+    assert.equal(saved.payload.goalDraft.outcome, fields[1][2]);
+    assert.deepEqual(saved.payload.goalDraft.strategies, [fields[2][2]]);
+    assert.equal(api.goalRequests.length, 0);
+    assert.equal(api.createRequests.length, 0);
+    ui.close();
+    ui = await harness(api.fetcher, { expanded: true });
+    for (const [text, kind, value] of fields) assert.equal(inputFor(text, kind).props.value, value, `${text} survives reopen before scope selection`);
+    assert.equal(inputFor('已有企业或个人', 'select').props.value, '');
+    ui.find('button', '保存候选、明确采纳 G/S 并创建 Case').props.onClick();
+    await ui.settle();
+    assert.equal(api.goalRequests.length, 0, 'unselected scope cannot create a Goal candidate');
+    assert.equal(api.createRequests.length, 0, 'unselected scope cannot create or continue a Case');
+    assert.ok(ui.nodes().some(n => n.props.role === 'alert' && label(n).includes('原输入和原请求保留')));
+    inputFor('已有企业或个人', 'select').props.onChange({ target: { value: 'personal' } });
+    await ui.settle();
+    inputFor('个人归属名称', 'input').props.onChange({ target: { value: '明确选择的归属' } });
+    await ui.settle();
+    for (const [text, kind, value] of fields) assert.equal(inputFor(text, kind).props.value, value, `${text} survives explicit scope selection`);
+    ui.find('button', '保存候选、明确采纳 G/S 并创建 Case').props.onClick();
+    await ui.settle();
+    assert.equal(api.goalRequests.length, 1);
+    assert.equal(api.createRequests.length, 1);
+    assert.deepEqual(api.goalRequests[0].scope, { kind: 'personal', id: 'personal:明确选择的归属', name: '明确选择的归属' });
+    assert.equal(api.goalRequests[0].title, fields[0][2]);
+    assert.equal(api.goalRequests[0].outcome, fields[1][2]);
+    assert.deepEqual(api.goalRequests[0].strategies, [fields[2][2]]);
+  } finally { ui.close(); }
+});
+
+test('DW10/B1: another Case after completed expanded preparation keeps the manual path open and preserves prior results', async () => {
+  const original = emptyPreparePayload();
+  const payload = { ...original, title: '已创建的原 Case', rawInput: '原始问题', creationState: 'completed', creationReceipt: { caseId: 'created-case', operationId: original.createOperationId, createdAt: 'now' } };
+  const api = server([{ kind: 'prepare', id: 'completed-expanded', revision: 4, payload, createdAt: 'now', updatedAt: 'now' }]);
+  const ui = await harness(api.fetcher, { expanded: true });
+  try {
+    ui.find('button', 'Case 已创建，核对并建立第一件事项').props.onClick();
+    await ui.settle();
+    const preserved = structuredClone(api.records.get('completed-expanded'));
+    assert.equal(preserved.payload.firstIssueReceipt.issueId, 'first-issue');
+    assert.equal(api.issueRequests.length, 1);
+    ui.find('button', '准备另一件 Case').props.onClick();
+    await ui.settle();
+    const manualGoal = ui.nodes().find(n => n.type === 'label' && label(n).includes('G · 目标名称'));
+    const manualScope = ui.nodes().find(n => n.type === 'label' && label(n).includes('已有企业或个人'));
+    assert.ok(manualGoal && manualScope, 'another expanded preparation must show G/S and scope without requiring the optional Agent');
+    const goalInput = descendants(manualGoal).find(n => n.type === 'input');
+    const scopeSelect = descendants(manualScope).find(n => n.type === 'select');
+    assert.ok(goalInput && scopeSelect);
+    assert.equal(goalInput.props.value, '');
+    assert.equal(scopeSelect.props.value, '', 'new preparation must not inherit or guess the previous scope');
+    goalInput.props.onChange({ target: { value: '下一件事的新目标' } });
+    await ui.settle();
+    const next = api.writes.at(-1);
+    assert.notEqual(next.id, 'completed-expanded');
+    assert.notEqual(next.payload.createOperationId, original.createOperationId);
+    assert.equal(next.payload.goalDraft.title, '下一件事的新目标');
+    assert.equal(next.payload.creationReceipt, null);
+    assert.equal(next.payload.adoptionReceipt, null);
+    assert.deepEqual(api.records.get('completed-expanded'), preserved, 'the completed Case and its first-issue receipt remain intact');
+    assert.equal(api.goalRequests.length, 0);
+    assert.equal(api.createRequests.length, 0);
+    assert.equal(api.issueRequests.length, 1, 'starting a new preparation does not replay the previous issue creation');
   } finally { ui.close(); }
 });

@@ -1,0 +1,25 @@
+{
+  "recordedAt": "2026-11-28T01:53:35.209551+00:00",
+  "scope": "Stopped root focus-return delta source inspection only",
+  "files": [
+    {
+      "path": "src/host/ui/CaseIssuePanel.tsx",
+      "candidateESha256": "ebb80cb124c0553aa6ce147021dc45f4c65155e72062a3bf6468ab096db99839",
+      "sha256": "a1d9b0f8af37e723f662575c03591d7cdb70b5f5729de7b85c306b674e6e8adf"
+    },
+    {
+      "path": "src/host/ui/CaseDialogs.tsx",
+      "candidateESha256": "337e6fa032c3e745f6a67567d1c2546c108a6f4f08c492887df9d868dfd5b151",
+      "sha256": "a2d97e73d8d6644a439115653ee7b48872a3ec1e743517a6486bc5fb35f66fb8"
+    }
+  ],
+  "verified": [
+    "CaseIssuePanel differs from exact e bytes only by the optional returnFocusId prop on choice modal.",
+    "CaseDialogs e bytes equal HEAD original. Current diff only adds optional returnFocusId to interface/effect dependency and uses current matching DOM id on cleanup; default undefined preserves original captured trigger.",
+    "No business request, draft, operation identity, permissions or source qualification changed."
+  ],
+  "limitations": [
+    "Native Escape/cancel/Tab/focus timing remains root actual running-browser acceptance; not inferred from component code.",
+    "Final candidate-f complete manifest/runtime identity pending."
+  ]
+}

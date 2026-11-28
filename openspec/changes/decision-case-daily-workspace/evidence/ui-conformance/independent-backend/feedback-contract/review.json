@@ -1,0 +1,50 @@
+{
+  "verdict": "PASS_WITH_SCOPE",
+  "recordedAt": "2026-11-28T01:44:56.719716+00:00",
+  "reviewer": "Independent non-author choice_nextstep_review agent; separate D14 feedback-contract audit",
+  "fixedManifestSha256": "4482bb1cc630ba8b36731cef028b797eb6ac91c7a917739a5b80c1ba6782cd58",
+  "fixedManifest": "input-files.sha256",
+  "postRunManifest": "post-run-manifest.json",
+  "allSevenHashesUnchanged": true,
+  "baseline": "5dd59909227ab46f3d989ade8b2847e077636855",
+  "frozenContract": "5f15cf3b677c743bda0b5b2c3ee0e4b4f57e1af2 D14 observation date / actual observation / optional source and scope",
+  "command": "node --test tests/feedback-observation-contract.test.ts tests/decision-board-store.test.ts tests/case-decision-requests.test.ts .local/ui-conformance/backend-independent/feedback-contract/independent.test.ts",
+  "execution": {
+    "log": "run-v1.log",
+    "tests": 30,
+    "pass": 30,
+    "fail": 0,
+    "durationMs": 4443.368033,
+    "independentProbeGroups": 6,
+    "independentProbeCountIncludingSubtests": 8,
+    "firstRun": true
+  },
+  "findings": [],
+  "verified": [
+    "Read-only git show of the pre-change baseline supplies all bundled legacy Store dependencies. Actual old v4/v6 Store writes produce original Boolean feedback, operation requestSha256, original quote provenance, and exact respondsToRequest references before current code is opened.",
+    "Absent/null optional metadata does not alter old normalized input fingerprints. Original old operation results deep-equal after current initialization, v7 migration, late replay after a newer revision, and reopening.",
+    "v7 migration preserves every original raw SQLite column value in all original tables, including feedback revision IDs/numbers, old digest, quote/request JSON, original user text, legacy timestamps, and Boolean adoption.",
+    "True schema1 task_feedback data retains its whitespace-bearing original text and created/updated timestamps through the existing migration and later nullable v7 append; legacy-current remains explicit and its operation/hash stay null.",
+    "Nullable adopted persists and reads as null, separately from true and false. Declared date and scope preserve submitted values and do not complete the task or create authorization. Saved time remains separate from declared observation date.",
+    "Old baseline reader rejects schema7 as unsupported_board_schema before rewriting: entire SQLite file bytes are identical before and after the rejected open.",
+    "A synthetic permission loss at the precommit check rolls back v7 DDL, new revision and original operation together; complete prior schema inventory and table rows remain equal.",
+    "Missing/null/empty date with null adoption, empty/whitespace observation, malformed/impossible date, invalid adoption type, NUL/wrong-type/301-code-unit scope reject without schema migration or append. Leap-day 2024-02-29 and 300 CJK code units succeed.",
+    "Actual isolated Host HTTP saves and reads exact nullable/date/scope via operation GET, history and Board; exact old/new operations replay their original revisions, changed intent and stale expectedLatestRevisionId return 409, impossible date returns 400. Host output and returned receipts are retained under tmp/http-*/http-evidence.json.",
+    "Case service test distinguishes wrong authorization metadata from exact request revision and feedback base: wrong authorization does not answer the request; exact request and original authorization answer it. Timeline retains the exact revision and authorization, observedAt remains savedAt, while observationDate/sourceScope are parallel user-declared fields.",
+    "Original permanent targeted regression suites independently rerun in the same command pass, including UI source rendering of null as unknown, legacy storage safety, and request/source identity tests."
+  ],
+  "staticAssessment": [
+    "Lazy v7 is used only when new observation metadata or nullable adoption is written. Unchanged old Boolean saves remain on their existing schema.",
+    "Migration copies every original feedback column; no rewriting of task_feedback, original old request hash or provenance. New metadata is omitted when absent.",
+    "authorityAtFeedback and saved-time authorization ordering are unchanged. No date-to-authorization inference is introduced.",
+    "Quoted Agent write schema remains the original explicit Boolean contract, while existing read projection passes nullable data through. This was inspected, not expanded with a new tool contract.",
+    "Four principles retained in this scope: original Host feedback store and original operation path; no competing runtime or Pi lifecycle; no new provider work; no added confirmation flow."
+  ],
+  "limitations": [
+    "This is a new D14 backend/schema result; previous nextStep PASS and older Issue149 results are not reused.",
+    "Synthetic isolated data and Host only. No real business data, external provider, actual product screenshot or browser interaction claim.",
+    "Does not certify the Case compact dialog, workspace draft lifecycle, broader 403/closed-Case UI gates, whole repository check, or full Issue149 conformance. Those remain with the parent/current frontend reviewers.",
+    "No PR or publication approval is implied."
+  ],
+  "writes": "Only .local/ui-conformance/backend-independent/feedback-contract evidence/probe/synthetic data. No production source, permanent tests, specification, Git or Issue write."
+}

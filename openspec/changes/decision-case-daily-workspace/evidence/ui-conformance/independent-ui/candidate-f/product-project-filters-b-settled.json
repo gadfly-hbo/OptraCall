@@ -1,0 +1,53 @@
+[
+  {
+    "filter": "独立",
+    "names": [
+      "季度资料整理",
+      "去年第四季度回顾"
+    ]
+  },
+  {
+    "filter": "共享",
+    "names": [
+      "门店共用资料"
+    ]
+  },
+  {
+    "filter": "归档",
+    "names": [
+      "去年第四季度回顾"
+    ]
+  },
+  {
+    "filter": "全部",
+    "names": [
+      "华东会员增长实验",
+      "会员数据口径校准",
+      "职业访谈与小试",
+      "季度资料整理",
+      "门店共用资料",
+      "去年第四季度回顾"
+    ]
+  },
+  {
+    "check": "explicit-return",
+    "detail": "门店共用资料"
+  },
+  {
+    "check": "return-detail-back-label",
+    "value": "←\n返回来源位置"
+  },
+  {
+    "check": "back-from-original-project",
+    "caseVisible": false,
+    "projectListVisible": true
+  },
+  {
+    "check": "filters-preserved",
+    "query": "门店",
+    "selected": "共享\n1",
+    "names": [
+      "门店共用资料"
+    ]
+  }
+]

@@ -1,0 +1,39 @@
+✖ g-focus independent: loading/error/empty/closed/multiple-entry and selected form carry the same caller returnFocusId (107.783235ms)
+✔ g-focus independent: compact, read-restricted, legacy and UNKNOWN forms forward through real FeedbackDialog and BoardDialog (29.516273ms)
+✖ g-focus independent: already-saved receipt branch retains return target without a second business POST (14.592194ms)
+✔ g-focus independent: ordinary Board without a returnFocusId leaves original CaseDialog captured-trigger behavior selected (5.411127ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 2
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 362.587677
+
+✖ failing tests:
+
+test at .local/ui-conformance/backend-independent/g-focus-delta/focus-propagation.test.ts:103:1
+✖ g-focus independent: loading/error/empty/closed/multiple-entry and selected form carry the same caller returnFocusId (107.783235ms)
+  TypeError [Error]: Cannot read properties of undefined (reading 'props')
+      at TestContext.<anonymous> (file:///workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/backend-independent/g-focus-delta/focus-propagation.test.ts:104:641)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+
+test at .local/ui-conformance/backend-independent/g-focus-delta/focus-propagation.test.ts:109:1
+✖ g-focus independent: already-saved receipt branch retains return target without a second business POST (14.592194ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert.ok(success)
+  
+      at TestContext.<anonymous> (file:///workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/backend-independent/g-focus-delta/focus-propagation.test.ts:110:875)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

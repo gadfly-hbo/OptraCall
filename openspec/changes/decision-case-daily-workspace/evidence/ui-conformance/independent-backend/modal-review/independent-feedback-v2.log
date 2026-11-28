@@ -1,0 +1,11 @@
+✔ independent original FeedbackDialog: fixed explicit request rejects a different restored context and permits cancel (170.495552ms)
+✔ independent original FeedbackDialog: read-only draft disables saving without locking cancellation (18.269704ms)
+✔ independent original FeedbackDialog: exact request uses original authorization and baseline; moved baseline blocks (14.836195ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 526.666303

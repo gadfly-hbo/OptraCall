@@ -1,0 +1,21 @@
+{
+  "status": "ready",
+  "studio": {
+    "semanticEngineConfigured": false
+  },
+  "sdkVersion": "1.4.0",
+  "transportVersion": "1",
+  "chatMode": "live",
+  "credentials": "host-persistent",
+  "filePolicy": "soft-prompt-no-sensitive-data-isolation",
+  "runtime": {
+    "instanceId": "5b8dc9fa-1b23-45fe-9fdd-0e004b23832e",
+    "pid": 276337,
+    "codeRoot": "/workspace/OptraCall-issue149-ui-conformance",
+    "version": "0.1.0-mvp.4",
+    "commit": "5dd59909227ab46f3d989ade8b2847e077636855",
+    "tree": "1078a6e2359a29e82631ab59f56a8d6dd9492d73",
+    "builtAt": "2026-11-28T02:05:43.009Z",
+    "dirty": true
+  }
+}

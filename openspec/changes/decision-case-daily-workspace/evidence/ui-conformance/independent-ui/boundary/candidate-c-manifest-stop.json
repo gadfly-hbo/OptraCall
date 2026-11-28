@@ -1,0 +1,33 @@
+{
+  "at": "2026-11-28T01:29:12.913155+00:00",
+  "manifest": "0ce32e72bcc742a3b29e6727ad54f5f346a3380719d6ba5cee4ecebccdb2c597",
+  "checked": 2412,
+  "changes": [
+    {
+      "path": "src/host/ui/CaseIssuePanel.tsx",
+      "expected": "8935307d7c75331ea59130a3a5743cc5a9a9c6fde8f5626dad866fdd64080b49",
+      "actual": "6695efaae7ad131604d1c3eedc9f4025b06e257045cfd5d1b419fea304468e45"
+    },
+    {
+      "path": "src/host/ui/case-action-draft.ts",
+      "expected": "ccaa2f17161041e853f6c8967c7a3a0ba400be959122e9f8860cf2c3719eb1c7",
+      "actual": "b1dae4e8a0ba136dbda2380c8aa3acd46d996173679f252ae3395b68c0621f18"
+    },
+    {
+      "path": "src/host/ui/useCaseActionDraft.ts",
+      "expected": "9b2a6080983263848bc09feb996eeb6c6441e9c46fbcd32830c07c15422f9bf5",
+      "actual": "ed9af6a673d3d1321906e27cbe05b21f55bf6f1e9def4b4083cf1c18f1295581"
+    },
+    {
+      "path": "tests/browser-case-board-navigation.mjs",
+      "expected": "160d9702538cb69e406155e6b83c172950fe26a6be30db83b53f623cb07bc3e4",
+      "actual": "fff649ad732d73ed3eb6f947c3b2aeed51cb0cb4441349a303c7cad4848ad7ae"
+    },
+    {
+      "path": "tests/case-request-response-ui.test.ts",
+      "expected": "a23617c8606d53cf032dcb660ba9b7f4590b195eedb375624ad863f66d1d9bc1",
+      "actual": "a2968e5be0502721efafb7ce136107dbf909530f9cf2f3fdae6dbb35b69b638e"
+    }
+  ],
+  "status": "NONFINAL; candidate c withdrawn per parent due B2"
+}

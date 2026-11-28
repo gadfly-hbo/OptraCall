@@ -1,0 +1,23 @@
+{
+  "out": "/workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/home-request-navigation/candidate-f",
+  "checks": [
+    {
+      "name": "choose exact Case/issue/request dialog, cancel focus and reopen 1",
+      "ok": true
+    },
+    {
+      "name": "choose exact Case/issue/request dialog, cancel focus and reopen 2",
+      "ok": true
+    },
+    {
+      "name": "observe exact Case/issue/request dialog, cancel focus and reopen 1",
+      "ok": true
+    },
+    {
+      "name": "observe exact Case/issue/request dialog, cancel focus and reopen 2",
+      "ok": true
+    }
+  ],
+  "errors": [],
+  "businessWrites": []
+}

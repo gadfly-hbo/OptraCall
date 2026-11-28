@@ -1,0 +1,10 @@
+[
+  {
+    "path": "src/host/ui/case-action-draft.ts",
+    "sha256": "b1dae4e8a0ba136dbda2380c8aa3acd46d996173679f252ae3395b68c0621f18"
+  },
+  {
+    "path": "src/host/ui/useCaseActionDraft.ts",
+    "sha256": "ed9af6a673d3d1321906e27cbe05b21f55bf6f1e9def4b4083cf1c18f1295581"
+  }
+]

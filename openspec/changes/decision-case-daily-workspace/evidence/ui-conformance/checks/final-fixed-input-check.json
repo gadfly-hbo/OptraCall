@@ -1,0 +1,9 @@
+{
+  "checkedAt": "2026-11-28T02:38:52.100074+00:00",
+  "fixedManifestSha256": "d38d54e580de9d59e64021599b3ab4ebb2cc65701bb829737b267d764883f386",
+  "productSourceManifestHash": "2f8ee75d4da2c5aca3240e9b26abc4ab7c6a5f798ae6ea650def9195db436f16",
+  "checkedFiles": 1296,
+  "drift": [],
+  "mainReadback": "85ab2395d8e78a3d1570850a98fdc87a43e48c40",
+  "status": "PASS"
+}

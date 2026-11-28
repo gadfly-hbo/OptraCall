@@ -1,0 +1,16 @@
+✔ DW13: saves serialize, drain edits made during pending acknowledgement, and retain operation identities (19.237164ms)
+✔ DW13: failed flush blocks navigation without clearing input and exact retry remains possible (0.502464ms)
+✔ DW13/DW14: lost response reads original write before retry and never writes it twice (0.290312ms)
+✔ DW13: newer readback rebases receipt state while retaining all local dirty fields (0.649436ms)
+✔ DW13: accepting late creation receipt preserves newer input and rejects another draft owner (0.941032ms)
+✔ DW13: a late conflicting recovery read retains both writers and blocks navigation (0.397956ms)
+✔ DW10: every new preparation has fresh operation identities; exact draft reopen retains identities and source metadata (1.583396ms)
+✔ DW13: another window editing the same field is an explicit conflict, never silently overwritten (0.354329ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 361.149932

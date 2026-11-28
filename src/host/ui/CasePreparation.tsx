@@ -77,7 +77,7 @@ export function CasePreparation({ onOpenCase, onCreateCase, onOpenAllProjects, o
     });
     if (initial) { sessionRef.current.update(initial); void sessionRef.current.flush(); }
     directoryGeneration.current++; setNextCaseOffset(null); setLoadingDirectory(null); setSearching(false);
-    setResult(null); setMatches(null); setAgentOpen(false); setManualOpen(Boolean(record?.payload.goalDraft || record?.payload.goalAttempt)); notify();
+    setResult(null); setMatches(null); setAgentOpen(false); setManualOpen(expanded || Boolean(record?.payload.goalDraft || record?.payload.goalAttempt)); notify();
   };
   useEffect(() => {
     let alive = true;
@@ -128,14 +128,17 @@ export function CasePreparation({ onOpenCase, onCreateCase, onOpenAllProjects, o
   const navigate = async (action: () => void) => { if (await flush()) action(); };
   const chosen = payload.selectedGoal;
   const activeGoal = goals.find(g => chosen && keyOf(g) === keyOf(chosen)) ?? (payload.candidateGoal && chosen && keyOf(payload.candidateGoal) === keyOf(chosen) ? payload.candidateGoal : null);
-  const scope = payload.scope ?? payload.goalDraft?.scope ?? activeGoal?.scope ?? null;
-  const goalDraft = payload.goalDraft ?? (scope ? blankGoal(scope) : null);
+  const scope = payload.scope ?? (payload.goalDraft?.scope.id.trim() && payload.goalDraft.scope.name.trim() ? payload.goalDraft.scope : null) ?? activeGoal?.scope ?? null;
+  // Reuse the existing persisted Goal draft fields before ownership is chosen.
+  // Empty identity is never treated as a selected scope or submitted as a Goal.
+  const goalDraft = payload.goalDraft ?? blankGoal(scope ?? { kind: 'personal', id: '', name: '' });
   const pending = Boolean(payload.goalAttempt || payload.createAttempt && payload.creationState !== 'completed');
   const lockedGoal = Boolean(payload.adoptionReceipt || pending || payload.candidateGoal);
   const patchGoal = (patch: Partial<GoalDraftInput>) => { if (goalDraft) update({ goalDraft: { ...goalDraft, ...patch } }); };
   const chooseScope = (next: GoalScope | null) => {
     if (goalDraft?.roleSuggestion && next && !sameScope(goalDraft.scope, next)) { setError('该 Agent 候选属于原明确范围；请开始另一份准备或先清除候选，不能改写来源归属。'); return; }
-    update({ scope: next, ...(next && goalDraft ? { goalDraft: { ...goalDraft, scope: next, perspective: next.kind === 'personal' ? 'personal' : goalDraft.perspective === 'personal' ? 'profit' : goalDraft.perspective } } : {}) });
+    if (!next && goalDraft?.roleSuggestion) { setError('该 Agent 候选的归属随原建议保留；请开始另一份准备来更改归属。'); return; }
+    update({ scope: next, goalDraft: { ...goalDraft, scope: next ?? { kind: 'personal', id: '', name: '' }, perspective: next?.kind === 'personal' ? 'personal' : goalDraft.perspective === 'personal' ? 'profit' : goalDraft.perspective } });
   };
   const useSuggestion = (draft: GoalDraftInput, source: GoalRoleSuggestionRef) => {
     if (source.owner.role !== 'goal-draft' || source.owner.draftId !== draftId || !scope || !sameScope(scope, source.owner.scope) || !sameScope(scope, draft.scope)) { setError('候选来源与当前准备身份或归属不一致，未带入。'); return; }
@@ -144,7 +147,7 @@ export function CasePreparation({ onOpenCase, onCreateCase, onOpenAllProjects, o
     if (chosen || payload.goalDraft && (payload.goalDraft.title || payload.goalDraft.outcome || payload.goalDraft.strategies?.some(s => s))) update({ pendingSuggestion: proposal });
     else update({ goalDraft: proposal });
   };
-  const newPreparation = async () => { if (await flush()) { install(); setManualOpen(false); setPrepOpen(true); setNotice('已开始另一份独立准备；原草稿及已保存结果保留。'); } };
+  const newPreparation = async () => { if (await flush()) { install(); setPrepOpen(true); setNotice('已开始另一份独立准备；原草稿及已保存结果保留。'); } };
   const directoryFailure = (failure: unknown) => {
     if (failure instanceof goalsApi.CaseRequestError && failure.status === 403) { directoryGeneration.current++; setMatches(null); setNextCaseOffset(null); setLoadingDirectory(null); setSearching(false); }
     setError(`目录读取未完成，准备输入仍保留。${caseError(failure)}`);
@@ -157,7 +160,7 @@ export function CasePreparation({ onOpenCase, onCreateCase, onOpenAllProjects, o
       const directory = await readCaseDirectory(undefined, 20, { issueLimit: 5 });
       if (generation !== directoryGeneration.current) return;
       setMatches(directory.items); setNextCaseOffset(directory.nextOffset ?? null);
-      setNotice(directory.truncated ? '已读取部分获准 Case 或事项，可按需读取更多；这里未作语义推荐。' : '以下为获准 Case 目录，可明确选择原事项；需要推荐时可主动请 Agent 整理。');
+      setNotice(directory.truncated ? '已找到部分可以继续的 Case，可按需查看更多。请明确选择这段输入所属的事项。' : '找到可以继续的 Case。请选择这段输入属于哪件事，也可以请 Agent 帮你整理。');
     } catch (failure) { if (generation === directoryGeneration.current) directoryFailure(failure); }
     finally { if (generation === directoryGeneration.current) setSearching(false); }
   };
@@ -309,41 +312,52 @@ export function CasePreparation({ onOpenCase, onCreateCase, onOpenAllProjects, o
     catch (failure) { setError(caseError(failure)); }
   };
 
-  return <div className="home-daily-quick-input" role="region" aria-label="轻输入与准备">
-    <div className="home-daily-row"><label htmlFor={inputId}><strong>先记下一句话、找归属或准备新 Case</strong></label><div className="home-daily-actions">
-      {onOpenAllProjects && <button type="button" className="text-button" onClick={() => { void navigate(onOpenAllProjects); }}>全部项目</button>}
-      <button type="button" className="secondary-button" disabled={!ready} onClick={() => { setPrepOpen(v => !v); if (!payload.title && payload.rawInput.trim()) update({ title: payload.rawInput.trim().slice(0, 80), ...(!payload.description ? { description: payload.rawInput } : {}) }); }}>{prepOpen ? '收起统一准备' : '准备新 Case'}</button>
-    </div></div>
+  const openPreparation = () => {
+    if (!payload.title && payload.rawInput.trim()) update({ title: payload.rawInput.trim().slice(0, 80), ...(!payload.description ? { description: payload.rawInput } : {}) });
+    if (onCreateCase && !expanded) { void navigate(onCreateCase); return; }
+    setPrepOpen(true); setManualOpen(true);
+  };
+  return <div className={`home-daily-quick-input ${expanded ? 'case-preparation-page' : 'case-intake-panel'}`} role="region" aria-label="轻输入与准备">
+    {expanded ? <header className="case-prepare-heading"><div className="case-prepare-status">Case 准备草稿 · 关闭与返回都会保留</div><h1>先把这件事说清楚</h1><p>从一句话出发，先准备可编辑的 G/S。明确采纳并创建后，才会成为新的 Case。</p></header> : <div className="case-intake-heading"><span className="case-intake-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"><path d="m13 2-8 12h6l-1 8 9-13h-6z" /></svg></span><label htmlFor={inputId}>有什么想推进的？</label><small>先说一句话，不必先填完整计划</small></div>}
     {!ready && <p className="case-help">正在恢复准备草稿…<button type="button" className="text-button" onClick={() => { void listWorkspaceDrafts<PreparationDraftPayload>('prepare').then(({ drafts }) => { setSaved(drafts); install(drafts.find(unfinished)); setReady(true); setError(''); }, failure => setError(caseError(failure))); }}>重新读取</button></p>}
-    <textarea id={inputId} rows={2} value={payload.rawInput} disabled={!ready || creating || payload.creationState === 'completed'} onChange={e => update({ rawInput: e.target.value, carryFragmentId: null, carryTarget: null })} placeholder="例如：华东三家门店首周复购波动，想核对是否继续扩围…" />
-    <div className="home-daily-actions">
-      <button type="button" className="primary-button" disabled={!ready || searching || Boolean(loadingDirectory) || !payload.rawInput.trim()} onClick={() => { void organize(); }}>{searching ? '正在查找获准 Case…' : '查找获准 Case'}</button>
-      <button type="button" className="secondary-button" disabled={!ready || creating} onClick={() => { setAgentOpen(v => !v); setPrepOpen(true); }}>{agentOpen ? '收起整理 Agent' : '请 Agent 整理与推荐（可选）'}</button>
-      <button type="button" className="text-button" disabled={!ready || creating} onClick={() => { void flush().then(ok => { if (ok) setNotice('准备内容已保存。'); }); }}>重试保存</button>
-      {snapshot && (snapshot.revision > 0 || snapshot.dirty) && <button type="button" className="text-button" disabled={creating} onClick={() => { void discard(); }}>放弃这份草稿</button>}
-      {payload.creationState === 'completed' && <button type="button" className="secondary-button" onClick={() => { void newPreparation(); }}>准备另一件 Case</button>}
+    <div className={expanded ? 'case-prepare-original' : 'case-intake-editor'}>
+      {expanded && <label htmlFor={inputId}>保留的输入</label>}
+      <textarea id={inputId} rows={2} aria-label="描述想新建或继续的工作" value={payload.rawInput} disabled={!ready || creating || payload.creationState === 'completed'} onChange={e => update({ rawInput: e.target.value, carryFragmentId: null, carryTarget: null })} placeholder="说说你想解决的问题，或给已有工作补充一个新想法…" />
+      {!expanded && <div className="home-daily-actions case-intake-controls">
+        <button type="button" className="primary-button" disabled={!ready || searching || Boolean(loadingDirectory) || !payload.rawInput.trim()} onClick={() => { void organize(); }}>{searching ? '正在整理与查找…' : '整理与查找'}</button>
+        <button type="button" className="secondary-button" disabled={!ready || creating} onClick={openPreparation}>直接准备新 Case</button>
+        <span className="case-intake-save">输入会保留，切换页面不用重填{snapshot && (snapshot.revision > 0 || snapshot.dirty) && <button type="button" className="text-button" disabled={creating} onClick={() => { void discard(); }}>放弃这段草稿</button>}</span>
+      </div>}
+      {expanded && <small>这段输入尚未发送到任何已有对话；新建后将作为待带入片段保留。</small>}
     </div>
+    {!expanded && <div className="case-intake-foot"><span>新想法、已有工作的进展，都可以先写在这里。</span><button type="button" className="text-button" disabled={!ready || creating} onClick={() => { setAgentOpen(v => !v); setPrepOpen(true); }}>{agentOpen ? '收起整理 Agent' : '请 Agent 整理与推荐（可选）'}</button>{onOpenAllProjects && <button type="button" className="text-button" onClick={() => { void navigate(onOpenAllProjects); }}>全部项目</button>}</div>}
+    {payload.creationState === 'completed' && <button type="button" className="secondary-button" onClick={() => { void newPreparation(); }}>准备另一件 Case</button>}
     {snapshot?.conflict && <div className="case-message" role="alert"><p>准备草稿已在另一窗口修改。当前输入与远端输入均保留，未覆盖。</p><button type="button" className="secondary-button" onClick={() => { void preserveConflictingCopy(); }}>将当前输入另存为独立准备</button></div>}
-    {notice && <p className="case-notice" role="status">{notice}</p>}{error && <p className="case-error" role="alert">{error}</p>}
+    {notice && <p className="case-notice" role="status">{notice}</p>}{error && <div className="case-error" role="alert"><p>{error}</p><button type="button" className="text-button" disabled={!ready || creating} onClick={() => { void flush().then(ok => { if (ok) setNotice('准备内容已保存。'); }); }}>重试保存</button></div>}
     {prepOpen && <div className="home-daily-prepare-box" role="region" aria-label="三分支 Case 准备">
-      <label>这件事的名字<input maxLength={80} value={payload.title} disabled={!ready || creating || payload.creationState === 'completed'} onChange={e => update({ title: e.target.value })} /></label>
-      <label>问题背景<textarea rows={2} value={payload.description} disabled={!ready || creating || payload.creationState === 'completed'} onChange={e => update({ description: e.target.value })} /></label>
-      <label>或使用已有 G/S<select value={chosen ? keyOf(chosen) : ''} disabled={!ready || creating || lockedGoal || payload.creationState === 'completed'} onChange={e => { const goal = goals.find(g => keyOf(g) === e.target.value); update({ selectedGoal: goal ? { goalId: goal.goalId, version: goal.version, strategy: '' } : null }); }}><option value="">选择已采纳目标版本，或在下方手填</option>{goals.filter(g => g.status === 'adopted').map(g => <option key={keyOf(g)} value={keyOf(g)}>{g.title} · v{g.version} · {g.scope.name}</option>)}</select></label>
+      <div className="case-prepare-mode"><span>{lockedGoal ? 'G/S 及原保存结果已保留' : chosen ? '沿用已采纳目标版本' : '人工填写 · 无模型依赖'}</span><button type="button" className="text-button" disabled={!ready || creating} onClick={() => { setAgentOpen(v => !v); setManualOpen(true); }}>{agentOpen ? '收起整理 Agent' : '请 Agent 协助整理'}</button></div>
+      <label className="case-prepare-existing">或使用已有 G/S<select value={chosen ? keyOf(chosen) : ''} disabled={!ready || creating || lockedGoal || payload.creationState === 'completed'} onChange={e => { const goal = goals.find(g => keyOf(g) === e.target.value); update({ selectedGoal: goal ? { goalId: goal.goalId, version: goal.version, strategy: '' } : null }); }}><option value="">选择已采纳目标版本，或在下方手填</option>{goals.filter(g => g.status === 'adopted').map(g => <option key={keyOf(g)} value={keyOf(g)}>{g.title} · v{g.version} · {g.scope.name}</option>)}</select></label>
       {activeGoal && <label>该版具体策略<select value={chosen?.strategy ?? ''} disabled={creating || lockedGoal} onChange={e => update({ selectedGoal: { goalId: activeGoal.goalId, version: activeGoal.version, strategy: e.target.value } })}><option value="">请选择具体策略</option>{activeGoal.strategies?.map((s, i) => <option key={i} value={s}>{s}</option>)}</select></label>}
-      {!chosen && <button type="button" className="text-button" disabled={!ready || creating} onClick={() => setManualOpen(v => !v)}>{manualOpen ? '收起目标编辑' : '手动填写或修改 G/S（无需模型）'}</button>}
-      {(!chosen && (manualOpen || agentOpen)) && <fieldset disabled={creating || lockedGoal} className="case-reference-picker"><legend>明确目标归属</legend>
-        <label>已有企业或个人<select value={scope?.kind === 'personal' ? 'personal' : scope?.id ?? ''} onChange={e => { const enterprise = enterprises.find(x => x.id === e.target.value); chooseScope(e.target.value === 'personal' ? { kind: 'personal', id: '', name: '' } : enterprise ? { kind: 'enterprise', id: enterprise.id, name: enterprise.name } : null); }}><option value="">请选择已有企业或个人</option>{enterprises.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}<option value="personal">个人目标</option></select></label>
-        {scope?.kind === 'personal' && <label>个人归属名称<input maxLength={200} value={scope.name} onChange={e => chooseScope({ kind: 'personal', id: `personal:${e.target.value.trim()}`, name: e.target.value })} /></label>}
-        {scope && !scope.id && <p className="case-help">请明确个人归属名称后使用整理 Agent。</p>}
-        {manualOpen && goalDraft && <>
+      <label>这件事的名字<input maxLength={80} value={payload.title} disabled={!ready || creating || payload.creationState === 'completed'} onChange={e => update({ title: e.target.value })} /></label>
+      <details className="case-prepare-background"><summary>补充问题背景</summary><label>问题背景<textarea rows={2} value={payload.description} disabled={!ready || creating || payload.creationState === 'completed'} onChange={e => update({ description: e.target.value })} /></label></details>
+
+      {!chosen && !expanded && <button type="button" className="text-button" disabled={!ready || creating} onClick={() => setManualOpen(v => !v)}>{manualOpen ? '收起目标编辑' : '手动填写或修改 G/S（无需模型）'}</button>}
+      {!chosen && <>
+        {manualOpen && <fieldset className="case-prepare-goal-fields" disabled={creating || lockedGoal}><legend className="sr-only">准备目标与策略</legend>
           <label>G · 目标名称<input maxLength={200} value={goalDraft.title} onChange={e => patchGoal({ title: e.target.value })} /></label>
           <label>想看到什么结果<textarea rows={2} maxLength={4000} value={goalDraft.outcome} onChange={e => patchGoal({ outcome: e.target.value })} /></label>
           <label>S · 这次先怎么推进<textarea rows={2} maxLength={2000} value={goalDraft.strategies?.[0] ?? ''} onChange={e => patchGoal({ strategies: [e.target.value, ...(goalDraft.strategies?.slice(1) ?? [])] })} /></label>
           {goalDraft.measurement.kind === 'deliverable' ? <label>可核成果<input maxLength={4000} value={goalDraft.measurement.criterion} onChange={e => patchGoal({ measurement: { kind: 'deliverable', criterion: e.target.value } })} /></label> : <p className="case-help">沿候选保留 SAP 指标 {goalDraft.measurement.sapMetric.id} v{goalDraft.measurement.sapMetric.version}。</p>}
           <label>责任角色／承担人<input maxLength={300} value={goalDraft.responsible} onChange={e => patchGoal({ responsible: e.target.value })} /></label>
-          {scope?.kind !== 'personal' && <label>目标视角<select value={goalDraft.perspective} onChange={e => patchGoal({ perspective: e.target.value as 'profit' | 'nonprofit' })}><option value="profit">营利组织</option><option value="nonprofit">非营利组织</option></select></label>}
+          {scope && scope.kind !== 'personal' && <label>目标视角<select value={goalDraft.perspective} onChange={e => patchGoal({ perspective: e.target.value as 'profit' | 'nonprofit' })}><option value="profit">营利组织</option><option value="nonprofit">非营利组织</option></select></label>}
           {goalDraft.roleSuggestion && <p className="case-help">已保留原 Agent 建议引用；保存时由原目标服务核对来源与归属。</p>}
-        </>}
+        </fieldset>}
+      </>}
+      {(!chosen && (manualOpen || agentOpen)) && <fieldset disabled={creating || lockedGoal} className="case-reference-picker"><legend>明确目标归属</legend>
+        <label>已有企业或个人<select value={scope?.kind === 'personal' ? 'personal' : scope?.id ?? ''} onChange={e => { const enterprise = enterprises.find(x => x.id === e.target.value); chooseScope(e.target.value === 'personal' ? { kind: 'personal', id: '', name: '' } : enterprise ? { kind: 'enterprise', id: enterprise.id, name: enterprise.name } : null); }}><option value="">请选择已有企业或个人</option>{enterprises.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}<option value="personal">个人目标</option></select></label>
+        {scope?.kind === 'personal' && <label>个人归属名称<input maxLength={200} value={scope.name} onChange={e => chooseScope({ kind: 'personal', id: `personal:${e.target.value.trim()}`, name: e.target.value })} /></label>}
+        {scope && !scope.id && <p className="case-help">请明确个人归属名称后使用整理 Agent。</p>}
+
       </fieldset>}
       {payload.pendingSuggestion && <div className="case-message"><strong>已保留 Agent 候选：{payload.pendingSuggestion.title}</strong><p>当前编辑内容继续保留。使用候选会另存当前编辑稿，再填入建议。</p><button type="button" className="secondary-button" disabled={lockedGoal} onClick={() => update({ previousGoalDrafts: [...(payload.previousGoalDrafts ?? []), ...(payload.goalDraft ? [payload.goalDraft] : [])], goalDraft: payload.pendingSuggestion, pendingSuggestion: null, previousSelectedGoal: chosen, selectedGoal: null, candidateGoal: null })}>保留当前编辑稿并使用候选</button></div>}
       {payload.previousGoalDrafts?.length ? <details><summary>此前保留的目标编辑稿</summary>{payload.previousGoalDrafts.map((d, i) => <article key={i}><strong>{d.title}</strong><p>{d.outcome}</p><p>{d.strategies?.join('；')}</p></article>)}</details> : null}
@@ -355,13 +369,15 @@ export function CasePreparation({ onOpenCase, onCreateCase, onOpenAllProjects, o
       {result?.branch === 'continue' && <button type="button" className="secondary-button" onClick={() => { void navigate(() => onOpenCase(result.existingCase.id)); }}>查看原 Case「{result.existingCase.title}」{result.isClosed ? '（已结束）' : ''}</button>}
       {payload.creationReceipt && !result && <button type="button" className="secondary-button" onClick={() => { void navigate(() => onOpenCase(payload.creationReceipt!.caseId, payload.firstIssueReceipt?.issueId)); }}>查看已创建 Case</button>}
     </div>}
-    {matches && <div className="home-daily-matches" aria-label="获准 Case 候选">
-      {matches.length ? matches.map(entry => <div key={entry.caseId} className="home-daily-match-row"><div><strong>{entry.title}</strong>
+    {matches && <div className="home-daily-matches" aria-label="获准 Case 候选"><div className="case-match-heading"><h3>已找到的 Case</h3><span>由你选择继续哪件事</span></div><p className="case-match-original">保留的原输入：{payload.rawInput}</p>
+      {matches.length ? matches.map(entry => <div key={entry.caseId} className="home-daily-match-row"><div><span className="case-match-badge">{entry.status === 'closed' ? '已结束 · 只读查看' : '可继续的原 Case'}</span><strong>{entry.title}</strong>{entry.goalBinding && <p className="case-match-goal">{goals.find(goal => keyOf(goal) === keyOf(entry.goalBinding!))?.title || '原目标版本'} · v{entry.goalBinding.version} · {entry.goalBinding.strategy}</p>}
         {entry.issues.length ? <label>目标事项<select aria-label={`选择 ${entry.title} 的目标事项`} value={selectedIssues[entry.caseId] ?? ''} onChange={e => setSelectedIssues(old => ({ ...old, [entry.caseId]: e.target.value }))}><option value="">请选择原事项</option>{entry.issues.map(i => <option key={i.issueId} value={i.issueId}>{i.title}</option>)}</select></label> : <p className="case-help">{entry.totalIssues > 0 || entry.issuesTruncated ? '事项尚未读完，可继续读取。' : '暂无独立事项，进入后可明确建立事项。'}</p>}
         {entry.issuesTruncated && <div className="case-help">已读取 {entry.issues.length} / {entry.totalIssues} 件事项。<button type="button" className="text-button" aria-label={`读取 ${entry.title} 的更多事项`} disabled={searching || Boolean(loadingDirectory)} onClick={() => { void readMoreIssues(entry); }}>{loadingDirectory === entry.caseId ? '正在读取事项…' : '读取更多事项'}</button></div>}
       </div><div className="home-daily-actions"><button type="button" className="secondary-button" disabled={!payload.rawInput.trim() || !selectedIssues[entry.caseId]} onClick={() => { void carry(entry); }}>带入所选事项</button><button type="button" className="text-button" onClick={() => { void navigate(() => onOpenCase(entry.caseId, selectedIssues[entry.caseId] || undefined)); }}>直接继续</button></div></div>) : <p className="case-help">当前已读目录无适用 Case，可继续查找或人工准备新 G/S。</p>}
+      <div className="case-match-footer"><button type="button" className="text-button" onClick={openPreparation}>仍然准备新 Case</button><span>浏览与整理不创建、不采纳、不写入既有对话。</span></div>
       {nextCaseOffset !== null && <button type="button" className="text-button" disabled={searching || Boolean(loadingDirectory)} onClick={() => { void readMoreCases(); }}>{loadingDirectory === 'cases' ? '正在读取 Case…' : '读取更多 Case'}</button>}
     </div>}
+    {expanded && <div className="case-prepare-links"><button type="button" className="text-button" disabled={!ready || searching || Boolean(loadingDirectory)} onClick={() => { void organize(); }}>查找已有 Case</button><button type="button" className="text-button" disabled={!ready || creating} onClick={() => { void discard(); }}>明确放弃这份准备草稿</button>{onOpenAllProjects && <button type="button" className="text-button" onClick={() => { void navigate(onOpenAllProjects); }}>查看全部项目</button>}</div>}
     {saved.some(d => d.id !== draftId && unfinished(d)) && <details><summary>继续其他准备草稿</summary>{saved.filter(d => d.id !== draftId && unfinished(d)).map(d => <div key={d.id} className="case-message"><strong>{d.payload.title || d.payload.rawInput.slice(0, 60) || '未命名准备'}</strong><button type="button" className="text-button" onClick={() => { void flush().then(ok => { if (ok) { install(d); setPrepOpen(true); } }); }}>恢复这份准备{d.payload.creationState.startsWith('partial') ? '并核对原操作' : ''}</button></div>)}</details>}
   </div>;
 }

@@ -1,0 +1,10 @@
+✔ independent D14 legacy input: reopened pre-date UNKNOWN and long observation query then retry exact old intent (316.849284ms)
+✔ independent D14 actual compact form: unknown execution saves exact observation metadata and request once, without guessing execution (46.176511ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 671.815392

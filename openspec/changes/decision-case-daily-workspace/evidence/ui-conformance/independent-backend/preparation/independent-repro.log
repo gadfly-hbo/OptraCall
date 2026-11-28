@@ -1,0 +1,26 @@
+{"afterNewPreparation":{"manualGoal":false,"manualScope":false,"manualToggle":false,"buttons":["请 Agent 协助整理","保存候选、明确采纳 G/S 并创建 Case","查找已有 Case","明确放弃这份准备草稿","恢复这份准备"]}}
+✖ INDEPENDENT DW10: expanded new preparation keeps manual G/S and ownership fields reachable (294.290676ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 862.217975
+
+✖ failing tests:
+
+test at .local/ui-conformance/backend-independent/preparation/independent-repro.test.ts:93:1
+✖ INDEPENDENT DW10: expanded new preparation keeps manual G/S and ownership fields reachable (294.290676ms)
+  AssertionError [ERR_ASSERTION]: new expanded preparation must expose manual G/S and scope without clicking the optional Agent entry
+      at TestContext.<anonymous> (file:///workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/backend-independent/preparation/independent-repro.test.ts:105:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

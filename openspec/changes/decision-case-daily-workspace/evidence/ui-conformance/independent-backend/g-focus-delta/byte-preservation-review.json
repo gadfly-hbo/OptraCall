@@ -1,0 +1,85 @@
+{
+  "recordedAt": "2026-11-28T02:26:32.824914+00:00",
+  "reviewer": "/root/ui149_correction_backend_review",
+  "verdict": "LIMITED PASS: evidence Git attribute byte preservation, effective scope and final README terminology. No product revalidation.",
+  "reviewedFiles": [
+    {
+      "path": ".gitattributes",
+      "sha256": "a0a0c09f8449a0f413a196a97f5a44ce50764b1a125611b020bf54ccfb28d182"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/.gitattributes",
+      "sha256": "6ddf2c1902cbe0702e9852ba45b806fb637c48eeb2db8837b573e226f770d7ba"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/README.md",
+      "sha256": "b35d300ae5369269fe46e191025916aa3949cc4587f3c449cc81fd9c1ab6d114"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product-g/README.md",
+      "sha256": "8ea3c3c1e3c43fe8bf5c50916cf70eccaa9eae7eb371f80017b4efdb840371c9"
+    }
+  ],
+  "mechanism": {
+    "text": "Evidence subtree * -text disables Git text conversion even though inherited eol=lf remains visible. Raw CRLF evidence stays unchanged in blobs.",
+    "whitespace": "*.log, *.diff and independent-backend/http-home-headers.txt set -whitespace only within this evidence subtree. This suppresses Git whitespace-error checks, not text rewriting. Other documentation whitespace checks remain unspecified/default.",
+    "productionScope": "Root .gitattributes exactly equals HEAD. Actual production and formal-test samples retain text=auto,eol=lf,whitespace unspecified. No root formatting rule changes."
+  },
+  "initialStagedSnapshot": {
+    "checkedFiles": 612,
+    "rawGitBlobHashVsWorktreeDrift": [],
+    "meaning": "All 612 staged evidence blobs at first independent check matched raw working-tree bytes before README terminology/link clarifications."
+  },
+  "latestStagedSnapshot": {
+    "checkedFiles": 612,
+    "drift": [
+      {
+        "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/README.md",
+        "stage": "0",
+        "indexOid": "da716ae8d08d4e6477d28f38dce7d6861fb8363b",
+        "rawOid": "8674f0f5f65eddf5777ba7d8194eeddf9a6b7c68"
+      },
+      {
+        "path": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product-g/README.md",
+        "stage": "0",
+        "indexOid": "bff7ba7c8d5a2797f461e92df7c2cd72c8570bcb",
+        "rawOid": "053c42b5c4eaf9bda7a08dfd6f4bd7fb186f71fe"
+      }
+    ],
+    "workingTreeDocumentDelta": "diff --git a/openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/README.md b/openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/README.md\nindex da716ae..8674f0f 100644\n--- a/openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/README.md\n+++ b/openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/README.md\n@@ -24,4 +24,4 @@\n \n 截图归档、作者测试和独立复核均不等于用户确认。PR创建（含draft）前，PM须实际展示本候选真实截图并取得用户明确确认。Git任务分支提交/推送允许先行；PR/CI/main合并/设备采用分别记录。\n \n-原始证据的换行和空白按字节保留：本目录 `.gitattributes` 禁止文本换行转换，仅原始日志、diff及HTTP头原件免空白格式改写。生产代码、测试和说明文档仍做通常格式检查；这不是调整原失败或修改证据。\n+原始证据的换行和空白按字节保留：本目录 `.gitattributes` 禁止文本换行转换，仅原始日志、diff及HTTP头原件豁免 Git 空白错误检查。生产代码、测试和说明文档仍做通常格式检查；这不是调整原失败或修改证据。\ndiff --git a/openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product-g/README.md b/openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product-g/README.md\nindex bff7ba7..053c42b 100644\n--- a/openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product-g/README.md\n+++ b/openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/product-g/README.md\n@@ -1,5 +1,7 @@\n # 候选 g：实际产品截图（待用户确认）\n \n+[并排查看冻结参考与真实产品](comparison.md)。\n+\n 这些是实际 OptraCall Host 与产品组件的截图，使用隔离合成数据。不是冻结 Demo，也没有注入展示用 DOM 或样式。首次 fixture 中一段 Teach 回复来自官方 Pi 1.4.0 与本地合成 Provider；本轮截图没有调用真实模型。\n \n 候选源码摘要：`2f8ee75d4da2c5aca3240e9b26abc4ab7c6a5f798ae6ea650def9195db436f16`。实际 Host 构建于 `2026-11-28T02:05:43.009Z`，完整运行身份、页面/视口、截图时间和数据边界见 [主页面回执](receipt.json)、[弹窗与窄屏回执](extra-receipt.json)及[逐图 SHA256](image-manifest.json)。源码见 [g 构建输入](../source-manifest-g.json)，含未提交及新增文件的检查起始候选见 [完整清单](../candidate-g-complete-manifest.json)。运行时 HEAD 是规范提交 5dd5990、dirty=true；实际修正以所列源码字节为准，不能把 HEAD 当成完整产品候选。\n",
+    "meaning": "At most two known root-owned documentation changes await final staging: top README terminology and product-g README added comparison link. Original logs/headers/receipts unchanged. This is disclosed index/worktree difference, not historical evidence mutation."
+  },
+  "publishedIndependentSubset": {
+    "manifest": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/evidence-publish-list.json",
+    "files": 156,
+    "sha256Mismatch": [],
+    "newReviewNotYetIncludedInPublishedCopy": true
+  },
+  "httpHeader": {
+    "published": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/http-home-headers.txt",
+    "original": ".local/ui-conformance/backend-independent/http-home-headers.txt",
+    "sha256": "2321b0d12fdfcdb9d085ba63d562f7dc335e91544b01847a497bec922ab76f47",
+    "originalExact": true,
+    "crlfCount": 9,
+    "lineFeedCount": 9
+  },
+  "effectiveCachedAttributes": "src/host/ui/CaseFeedbackDialog.tsx: text: auto\nsrc/host/ui/CaseFeedbackDialog.tsx: eol: lf\nsrc/host/ui/CaseFeedbackDialog.tsx: whitespace: unspecified\ntests/case-feedback-dialog-ui.test.ts: text: auto\ntests/case-feedback-dialog-ui.test.ts: eol: lf\ntests/case-feedback-dialog-ui.test.ts: whitespace: unspecified\nopenspec/changes/decision-case-daily-workspace/evidence/ui-conformance/README.md: text: unset\nopenspec/changes/decision-case-daily-workspace/evidence/ui-conformance/README.md: eol: lf\nopenspec/changes/decision-case-daily-workspace/evidence/ui-conformance/README.md: whitespace: unspecified\nopenspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/g-focus-delta/form-regression.log: text: unset\nopenspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/g-focus-delta/form-regression.log: eol: lf\nopenspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/g-focus-delta/form-regression.log: whitespace: unset\nopenspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/g-focus-delta/CaseFeedbackDialog.tsx.diff: text: unset\nopenspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/g-focus-delta/CaseFeedbackDialog.tsx.diff: eol: lf\nopenspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/g-focus-delta/CaseFeedbackDialog.tsx.diff: whitespace: unset\nopenspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/http-home-headers.txt: text: unset\nopenspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/http-home-headers.txt: eol: lf\nopenspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-backend/http-home-headers.txt: whitespace: unset\n",
+  "cachedDiffCheck": {
+    "command": "git diff --cached --check",
+    "exitCode": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  "readmeReview": {
+    "initialTerminology": "免空白格式改写",
+    "rootCorrection": "豁免 Git 空白错误检查",
+    "status": "resolved; latest working-tree README checked",
+    "finding": "Describes the separate no-conversion and narrow whitespace-check rules accurately; does not erase historical failures or claim product/test exemption."
+  },
+  "limits": [
+    "Existing logs/patch context bytes were preserved rather than edited to satisfy formatting. This is not a product PASS or a claim that raw logs contain no whitespace errors.",
+    "Full g checks and final candidate/commit mapping remain parent-owned; this receipt records a point-in-time index/working-tree check. New evidence receipts/documentation require fresh root staging and identity recording.",
+    "Original doc-review.json remains a historical exact-byte review before the added comparison link; this receipt records the additive link only, without claiming a fresh visual comparison audit.",
+    "No source/test/spec/Git/index/Issue or original evidence mutation by this reviewer. Only this new local audit receipt and curated publication list are written."
+  ]
+}

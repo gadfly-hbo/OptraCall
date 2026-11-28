@@ -1,0 +1,77 @@
+{
+  "issue": {
+    "id": "84c6d002-0a8c-45f8-aa41-8a2b2201a116",
+    "caseId": "05614875-fbc1-4b45-9560-73bc46393e78",
+    "title": "扩大试点范围",
+    "createdAt": "2026-11-28T00:42:54.147Z"
+  },
+  "rounds": [
+    {
+      "choice": {
+        "choiceId": "8829d60f-8c28-4bff-897d-f77c3d69016a",
+        "caseId": "05614875-fbc1-4b45-9560-73bc46393e78",
+        "issueId": "84c6d002-0a8c-45f8-aa41-8a2b2201a116",
+        "goalBinding": {
+          "primary": {
+            "goalId": "23305563-ddd7-40e1-a2a5-cf2f048d3db7",
+            "version": 1
+          },
+          "related": [],
+          "strategy": "先验证缺货治理",
+          "caseId": "05614875-fbc1-4b45-9560-73bc46393e78",
+          "caseRevision": 1,
+          "confirmedAt": "2026-11-28T00:42:54.095Z",
+          "operationId": "89292286-10c3-411a-b222-cb704566d33e"
+        },
+        "strategyRef": {
+          "type": "case-decision",
+          "caseStoreId": "d1d0a757-74ee-4219-a299-e54af5dda51b",
+          "caseId": "05614875-fbc1-4b45-9560-73bc46393e78",
+          "recordId": "5f64a9dd-6c02-4aca-9afa-d36530ef62e2",
+          "revision": 1
+        },
+        "choice": "trial",
+        "reason": "先在现有三店核对，保持样本范围。",
+        "previousChoiceId": null,
+        "operationId": "19d60d9f-6478-43a4-9071-2e7c48f2de5b",
+        "occurredAt": "2026-11-28T00:42:54.328Z",
+        "actorKind": "user"
+      },
+      "reviewSaved": false,
+      "historyLimited": false,
+      "reviewObservationLimited": false,
+      "strategy": {
+        "operationId": "00fb070b-c8bc-44fe-94c5-02e684475d5c",
+        "caseStoreId": "d1d0a757-74ee-4219-a299-e54af5dda51b",
+        "caseId": "05614875-fbc1-4b45-9560-73bc46393e78",
+        "recordId": "5f64a9dd-6c02-4aca-9afa-d36530ef62e2",
+        "kind": "strategy",
+        "payload": {
+          "title": "先完成三店试点",
+          "proposal": "先用三家门店观察缺货治理与复购表现，再决定扩围。",
+          "goal": null,
+          "mechanism": null,
+          "conditions": null,
+          "limitations": null,
+          "plan": null
+        },
+        "references": [],
+        "impactNotes": [],
+        "changeReason": null,
+        "revision": 1,
+        "lifecycle": "active",
+        "origin": {
+          "actorKind": "agent",
+          "projectId": "faa7d49f-07da-4d4f-a552-a2aeacc44a58",
+          "taskId": "4422122c-c51d-4f85-8f7e-b5e506de30d9",
+          "requestId": "cb2e4fb8-0d2e-491d-8e58-040a29a783cd",
+          "sessionId": "synthetic-fixture-no-provider",
+          "toolCallId": "synthetic-fixture-plan"
+        },
+        "createdAt": "2026-11-28T00:42:54.321Z"
+      },
+      "review": null,
+      "actions": []
+    }
+  ]
+}

@@ -1,0 +1,110 @@
+✘ [ERROR] Cannot import "src/host/ui/feedback.css" into a JavaScript file without an output path configured
+
+    src/host/ui/FeedbackReview.tsx:7:7:
+      7 │ import './feedback.css';
+        ╵        ~~~~~~~~~~~~~~~~
+
+✖ independent original FeedbackDialog: fixed explicit request rejects a different restored context and permits cancel (96.39083ms)
+✘ [ERROR] Cannot import "src/host/ui/feedback.css" into a JavaScript file without an output path configured
+
+    src/host/ui/FeedbackReview.tsx:7:7:
+      7 │ import './feedback.css';
+        ╵        ~~~~~~~~~~~~~~~~
+
+✖ independent original FeedbackDialog: read-only draft disables saving without locking cancellation (60.381163ms)
+✘ [ERROR] Cannot import "src/host/ui/feedback.css" into a JavaScript file without an output path configured
+
+    src/host/ui/FeedbackReview.tsx:7:7:
+      7 │ import './feedback.css';
+        ╵        ~~~~~~~~~~~~~~~~
+
+✖ independent original FeedbackDialog: exact request uses original authorization and baseline; moved baseline blocks (52.382122ms)
+✔ D14: writable actions are the exact issue/Board/active-project intersection, with no first request match (149.425267ms)
+✔ D14: an explicitly opened request chooses its exact action and request rather than the first available action (20.892806ms)
+✔ D14: no writable action or a closed Case offers the original source without inventing observations (5.385669ms)
+✔ D14/DW13: cancel and full component recreation retain the original feedback input and save intention (13.218285ms)
+✔ D14/DW09: uncertain feedback saves query the exact original operation and preserve its ID across reopen and explicit retry (18.883286ms)
+✔ D14: querying an already-saved feedback acknowledges that revision without posting another one (11.727173ms)
+✔ D14: a changed authorization or archived project is rechecked immediately before any feedback write (15.603633ms)
+✔ D14: leaving the feedback owner during source recheck prevents a late business write (4.959195ms)
+✔ D14/DW09: two explicitly clicked requests for the same action retain separate inputs and exact request identities (9.30972ms)
+✔ D14: an untouched unavailable draft remains read-only but can cancel without a save (5.758381ms)
+✔ DW09/FUI-02: a selected open historical request loads its exact strategy revision and requires explicit historical confirmation (190.113572ms)
+✔ DW09/FUI-03: explicitly switching from request A to issue B restores B single-request matching (20.848694ms)
+✔ DW09/FUI-02: denied exact historical read never silently substitutes the latest version for the original request (9.343405ms)
+✔ DW09: current-version choices retain the normal one-request path without historical opt-in (14.152837ms)
+✔ DW09/FUI-02: unauthorized, archived or owner-mismatched original revisions cannot be used for a new choice (17.437828ms)
+✔ D13: recording a choice opens a same-page dialog; cancellation preserves its unsaved reason (11.229046ms)
+✔ D13/DW13: an untouched editor can cancel after draft GET 503 while business save stays disabled (5.818465ms)
+✔ D13/DW09: a cancelled choice reopens for a fresh entry sequence without replacing the original draft (5.587973ms)
+✔ D13: an unknown choice keeps its exact operation and resolves through the original timeline without a second write (9.059866ms)
+✔ DW08/09 observation picker preserves two distinct requests and binds the explicitly selected second revision (3.985ms)
+✔ DW09 request revision, target baseline and clicked owner cannot silently switch to a newer or different request (0.392486ms)
+✔ DW09 actual current Case authorization, issue and source store must match; work, revoke and another round never answer (0.428221ms)
+✔ DW09 original request baseline and current feedback CAS both apply without changing the draft (0.250848ms)
+✔ DW08/09 only genuinely open observe requests are offered; source text remains exact (0.931964ms)
+✔ DW09 original feedback HTTP save carries exact selected reference; ordinary and lost-ack saves never gain inferred requests or retries (29.34218ms)
+ℹ tests 28
+ℹ suites 0
+ℹ pass 25
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 613.730611
+
+✖ failing tests:
+
+test at .local/ui-conformance/backend-independent/modal-review/independent-feedback-contract.test.ts:31:1
+✖ independent original FeedbackDialog: fixed explicit request rejects a different restored context and permits cancel (96.39083ms)
+  Error: Build failed with 1 error:
+  src/host/ui/FeedbackReview.tsx:7:7: ERROR: Cannot import "src/host/ui/feedback.css" into a JavaScript file without an output path configured
+      at failureErrorWithLog (/workspace/OptraCall-issue149-ui-conformance/node_modules/esbuild/lib/main.js:1752:15)
+      at /workspace/OptraCall-issue149-ui-conformance/node_modules/esbuild/lib/main.js:1211:25
+      at runOnEndCallbacks (/workspace/OptraCall-issue149-ui-conformance/node_modules/esbuild/lib/main.js:1592:45)
+      at buildResponseToResult (/workspace/OptraCall-issue149-ui-conformance/node_modules/esbuild/lib/main.js:1209:7)
+      at /workspace/OptraCall-issue149-ui-conformance/node_modules/esbuild/lib/main.js:1236:16
+      at responseCallbacks.<computed> (/workspace/OptraCall-issue149-ui-conformance/node_modules/esbuild/lib/main.js:886:9)
+      at handleIncomingPacket (/workspace/OptraCall-issue149-ui-conformance/node_modules/esbuild/lib/main.js:941:12)
+      at Socket.readFromStdout (/workspace/OptraCall-issue149-ui-conformance/node_modules/esbuild/lib/main.js:864:7)
+      at Socket.emit (node:events:514:28)
+      at addChunk (node:internal/streams/readable:569:12) {
+    errors: [ { detail: undefined, id: '', location: [Object], notes: [], pluginName: '', text: 'Cannot import "src/host/ui/feedback.css" into a JavaScript file without an output path configured' } ],
+    warnings: []
+  }
+
+test at .local/ui-conformance/backend-independent/modal-review/independent-feedback-contract.test.ts:38:1
+✖ independent original FeedbackDialog: read-only draft disables saving without locking cancellation (60.381163ms)
+  Error: Build failed with 1 error:
+  src/host/ui/FeedbackReview.tsx:7:7: ERROR: Cannot import "src/host/ui/feedback.css" into a JavaScript file without an output path configured
+      at failureErrorWithLog (/workspace/OptraCall-issue149-ui-conformance/node_modules/esbuild/lib/main.js:1752:15)
+      at /workspace/OptraCall-issue149-ui-conformance/node_modules/esbuild/lib/main.js:1211:25
+      at runOnEndCallbacks (/workspace/OptraCall-issue149-ui-conformance/node_modules/esbuild/lib/main.js:1592:45)
+      at buildResponseToResult (/workspace/OptraCall-issue149-ui-conformance/node_modules/esbuild/lib/main.js:1209:7)
+      at /workspace/OptraCall-issue149-ui-conformance/node_modules/esbuild/lib/main.js:1236:16
+      at responseCallbacks.<computed> (/workspace/OptraCall-issue149-ui-conformance/node_modules/esbuild/lib/main.js:886:9)
+      at handleIncomingPacket (/workspace/OptraCall-issue149-ui-conformance/node_modules/esbuild/lib/main.js:941:12)
+      at Socket.readFromStdout (/workspace/OptraCall-issue149-ui-conformance/node_modules/esbuild/lib/main.js:864:7)
+      at Socket.emit (node:events:514:28)
+      at addChunk (node:internal/streams/readable:569:12) {
+    errors: [ { detail: undefined, id: '', location: [Object], notes: [], pluginName: '', text: 'Cannot import "src/host/ui/feedback.css" into a JavaScript file without an output path configured' } ],
+    warnings: []
+  }
+
+test at .local/ui-conformance/backend-independent/modal-review/independent-feedback-contract.test.ts:43:1
+✖ independent original FeedbackDialog: exact request uses original authorization and baseline; moved baseline blocks (52.382122ms)
+  Error: Build failed with 1 error:
+  src/host/ui/FeedbackReview.tsx:7:7: ERROR: Cannot import "src/host/ui/feedback.css" into a JavaScript file without an output path configured
+      at failureErrorWithLog (/workspace/OptraCall-issue149-ui-conformance/node_modules/esbuild/lib/main.js:1752:15)
+      at /workspace/OptraCall-issue149-ui-conformance/node_modules/esbuild/lib/main.js:1211:25
+      at runOnEndCallbacks (/workspace/OptraCall-issue149-ui-conformance/node_modules/esbuild/lib/main.js:1592:45)
+      at buildResponseToResult (/workspace/OptraCall-issue149-ui-conformance/node_modules/esbuild/lib/main.js:1209:7)
+      at /workspace/OptraCall-issue149-ui-conformance/node_modules/esbuild/lib/main.js:1236:16
+      at responseCallbacks.<computed> (/workspace/OptraCall-issue149-ui-conformance/node_modules/esbuild/lib/main.js:886:9)
+      at handleIncomingPacket (/workspace/OptraCall-issue149-ui-conformance/node_modules/esbuild/lib/main.js:941:12)
+      at Socket.readFromStdout (/workspace/OptraCall-issue149-ui-conformance/node_modules/esbuild/lib/main.js:864:7)
+      at Socket.emit (node:events:514:28)
+      at addChunk (node:internal/streams/readable:569:12) {
+    errors: [ { detail: undefined, id: '', location: [Object], notes: [], pluginName: '', text: 'Cannot import "src/host/ui/feedback.css" into a JavaScript file without an output path configured' } ],
+    warnings: []
+  }

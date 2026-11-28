@@ -1,0 +1,49 @@
+{
+  "recordedAt": "2026-11-28T01:44:18.554346+00:00",
+  "manifestSha256": "4482bb1cc630ba8b36731cef028b797eb6ac91c7a917739a5b80c1ba6782cd58",
+  "unchanged": true,
+  "files": [
+    {
+      "path": "extensions/business-plugins/decision-board/types.ts",
+      "sha256": "14d445d76560bae4edd3efc60dae9698082967a4cb934a48b8f8a0a7a9d354ad",
+      "currentSha256": "14d445d76560bae4edd3efc60dae9698082967a4cb934a48b8f8a0a7a9d354ad",
+      "unchanged": true
+    },
+    {
+      "path": "extensions/business-plugins/decision-board/storage/store.ts",
+      "sha256": "bb660b03ac1a6f4ae8da60a6ed24aa3619e50455ab97c199975c4a848aeedd00",
+      "currentSha256": "bb660b03ac1a6f4ae8da60a6ed24aa3619e50455ab97c199975c4a848aeedd00",
+      "unchanged": true
+    },
+    {
+      "path": "extensions/business-plugins/decision-board/api/routes.ts",
+      "sha256": "bb211f5104a3d21cc1b8ce9169a69064818b8f774d24d1aabab8da42509c48f4",
+      "currentSha256": "bb211f5104a3d21cc1b8ce9169a69064818b8f774d24d1aabab8da42509c48f4",
+      "unchanged": true
+    },
+    {
+      "path": "extensions/business-plugins/decision-board/ui/ActionAuthorityHistory.tsx",
+      "sha256": "f2f66032d2fe804f8f39a5e981e07d0f760bb69a4fadba2a407c4f11031b68ad",
+      "currentSha256": "f2f66032d2fe804f8f39a5e981e07d0f760bb69a4fadba2a407c4f11031b68ad",
+      "unchanged": true
+    },
+    {
+      "path": "src/host/ui/CaseDecisionsPanel.tsx",
+      "sha256": "6b2955e583afb5b68c930b8cb080f93e8234ff5565ca860adcd6c300167782ca",
+      "currentSha256": "6b2955e583afb5b68c930b8cb080f93e8234ff5565ca860adcd6c300167782ca",
+      "unchanged": true
+    },
+    {
+      "path": "src/host/case-issues.ts",
+      "sha256": "395eb271097626860c8f43667a2cf7caea65754eda2f706b51ebc1b22b0e1b8f",
+      "currentSha256": "395eb271097626860c8f43667a2cf7caea65754eda2f706b51ebc1b22b0e1b8f",
+      "unchanged": true
+    },
+    {
+      "path": "tests/feedback-observation-contract.test.ts",
+      "sha256": "afb83d35022030a6d26e2efc5e70b28bfa22c559881256cd59a431ee57878e7f",
+      "currentSha256": "afb83d35022030a6d26e2efc5e70b28bfa22c559881256cd59a431ee57878e7f",
+      "unchanged": true
+    }
+  ]
+}

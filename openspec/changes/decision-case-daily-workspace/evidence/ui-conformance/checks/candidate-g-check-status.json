@@ -1,0 +1,10 @@
+{
+  "status": "PASS",
+  "startedAt": "2026-11-28T02:11:24.729203+00:00",
+  "sourceManifestHash": "2f8ee75d4da2c5aca3240e9b26abc4ab7c6a5f798ae6ea650def9195db436f16",
+  "completeManifestSha256": "d38d54e580de9d59e64021599b3ab4ebb2cc65701bb829737b267d764883f386",
+  "command": "npm run check:agent-sessions && node --test --test-concurrency=4 tests/*.test.ts && npm run build && npm audit --audit-level=high",
+  "note": "Runs all npm check components; test file concurrency capped at 4 for this environment. No test filtering.",
+  "exitCode": 0,
+  "finishedAt": "2026-11-28T02:37:56.638229+00:00"
+}

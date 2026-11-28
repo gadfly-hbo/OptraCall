@@ -1,0 +1,41 @@
+{"check":"v7-cross-version","oldVersion":4,"root":"/workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/backend-independent/feedback-contract/tmp/board-BJE2wM","oldOperation":"408d2dfe-46e3-4f00-a83f-12b999d3865f","newOperation":"42c71b07-e097-4ab9-9272-5fb3c3fb17f3","oldRowsPreserved":true,"oldReaderRejectedWithoutByteChange":true}
+▶ independent D14: true old v4/v6 feedback hashes, fields and receipts survive nullable v7; old reader fails without touching bytes
+  ✔ schema 4 (180.028063ms)
+{"check":"v7-cross-version","oldVersion":6,"root":"/workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/backend-independent/feedback-contract/tmp/board-AtrPR0","oldOperation":"1100f277-5884-4189-846f-137e335a8bcd","newOperation":"e8b8afd2-acf1-4814-aa00-32b4c526a27e","oldRowsPreserved":true,"oldReaderRejectedWithoutByteChange":true}
+  ✔ schema 6 (85.155236ms)
+✔ independent D14: true old v4/v6 feedback hashes, fields and receipts survive nullable v7; old reader fails without touching bytes (266.605742ms)
+✔ independent D14: failed commit rolls back nullable migration, revision and operation together (59.100494ms)
+✔ independent D14: original schema1 legacy-current bytes and original timestamps survive later nullable append (52.412258ms)
+✔ independent D14: invalid date/scope/adoption do not append or migrate; null remains distinct from false (50.319139ms)
+✔ independent D14: actual isolated Host HTTP persists nullable/date/scope and old original receipt, rejects stale/invalid writes (2478.752466ms)
+✔ independent D14: declared observation date stays separate from exact request, authorization and immutable saved time (86.810759ms)
+✔ DW08/DW09-REQ-01: explicit choose request is only resolved by exact respondsToRequest choice, never by viewing or unrelated choices (158.279149ms)
+✔ DW08/DW09-REQ-02: observe request is only resolved by saveFeedback carrying exact requestId, revision, real Case authorizationId, and baseRevisionId (109.717466ms)
+✔ DW08/DW09-HOME-03: home projection separates pending, continue, externalWaiting, pendingOperations; never fabricates pending from awaiting_confirmation or missing assignee (85.267287ms)
+✔ report registration updates observation on change but keeps identity (69.884608ms)
+✔ only one running extraction per report; other reports unaffected (40.487535ms)
+✔ completed extraction rebuilds only suggested extracted items (26.720848ms)
+✔ decision state machine keeps dismiss reasons and blocks direct re-adoption (21.383138ms)
+✔ tasks require adoption; status and feedback round-trip (23.629188ms)
+✔ reopening the store marks running extractions interrupted without touching items (15.417555ms)
+✔ failed extraction records the error and preserves previous items (12.133953ms)
+✔ FC02/FC03: null score, immutable revisions, canonical intent retries and latest CAS (17.101947ms)
+✔ FC04/FC18: schema1 upgrade preserves original DDL/rows and one honest known baseline across reopen (35.421524ms)
+✔ FC18: unknown schema objects fail before migration and close the failed connection (35.136331ms)
+✔ FC18: a failed migration rolls back new objects/version and preserves all legacy rows (28.993415ms)
+✔ FC02/FC16: UTF-16 limits, task ownership and intent uniqueness never create partial feedback (18.05997ms)
+✔ FC18: unknown schema versions and unsafe linked storage preserve their original data (24.472817ms)
+✔ D14: raw observation uses original feedback revisions; lazy v7 keeps old payload hashes and records exact (42.465534ms)
+✔ D14: rejected write rolls lazy schema migration back together with all original feedback (27.940206ms)
+✔ D14: unknown execution requires a dated observation; invalid dates and malformed metadata never migrate or save (33.124127ms)
+✔ D14: HTTP observation save/read/retry retains unknown execution, accurate request reference and CAS (2863.317988ms)
+✔ D14: original action authority display does not describe unknown execution as non-execution (31.122649ms)
+✔ D14: exact feedback source displays its original observation date and source scope without inferring execution (35.508246ms)
+ℹ tests 30
+ℹ suites 0
+ℹ pass 30
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4443.368033

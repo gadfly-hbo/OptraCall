@@ -1,7 +1,7 @@
-import { projectHomePending } from './home-pending.ts';
+import { projectHomePending, homeRequestRoundNumber } from './home-pending.ts';
 import { listVisibleCaseDirectory } from './case-directory.ts';
 import { executeThreeBranchCaseCreate, type AdoptGoalFn, type CreateCaseFn, type ReadGoalFn } from './case-creation-orchestrator.ts';
-import { chooseRequestStatus, observationRequestStatus } from './case-issues.ts';
+import { chooseRequestStatus, observationRequestStatus, observationAuthorizationMatches } from './case-issues.ts';
 import { WorkspaceDraftError, type WorkspaceDraftKind, type WorkspaceDraftStore } from './workspace-draft-store.ts';
 import type { CaseStore } from './case-store.ts';
 import type { createDecisionBoardStore } from '../../extensions/business-plugins/decision-board/storage/store.ts';
@@ -38,9 +38,51 @@ export function createWorkspaceDailyRoutes(deps: WorkspaceDailyRoutesDeps) {
         const pendingOperations = deps.cases.listPendingProjectOperations(record.id);
         const requestStatuses = Object.fromEntries(await Promise.all(requests
           .map(async request => [request.requestId, request.kind === 'observe' ? await observationRequestStatus(deps.cases, deps.board, request, deps.assertBoardItemReadable, deps.assertActiveProject) : await chooseRequestStatus(deps.cases, request, choices, deps.checkPlan)])));
-        return { record, issues, requests, choices, requestStatuses, pendingOperations };
+        const requestRoundNumbers = Object.fromEntries(await Promise.all(requests.map(async request => {
+          const unknown = [request.requestId, null] as const;
+          if (requestStatuses[request.requestId] === 'unverifiable') return unknown;
+          if (request.target.kind === 'choose') return [request.requestId, homeRequestRoundNumber(request, choices, null, status.storeId)] as const;
+          try {
+            const board = deps.board, target = request.target;
+            if (!board || !deps.cases.listProjectLinks(record.id).some(link => link.projectId === target.projectId)) return unknown;
+            const task = board.getTask(target.taskId), item = board.getItem(task.itemId);
+            if (item.id !== target.itemId || item.projectId !== target.projectId) return unknown;
+            if (item.sourceKind === 'report-confirmation') {
+              if (!deps.assertBoardItemReadable) return unknown;
+              await deps.assertBoardItemReadable(item);
+            }
+            const exact = board.listActionAuthorizations(task.id).filter(auth => auth.authorizationId === target.authorizationId);
+            const authorization = exact.length === 1 ? exact[0] : undefined;
+            if (!authorization || authorization.projectId !== target.projectId || authorization.itemId !== target.itemId || authorization.taskId !== target.taskId
+              || 'kind' in authorization.source || !observationAuthorizationMatches(deps.cases, request, authorization)) return unknown;
+            return [request.requestId, homeRequestRoundNumber(request, choices, authorization.source.choiceId, status.storeId)] as const;
+          } catch { return unknown; }
+        })));
+        return { record, issues, requests, choices, requestStatuses, requestRoundNumbers, pendingOperations };
       }));
-      return { body: projectHomePending({ storeState: 'ready', cases: entries }) };
+      // Waiting is an explicit project-work state, not a guessed consequence of
+      // Case status, missing feedback, issue order, or a still-running action.
+      const linkedCases = new Map<string, string[]>();
+      const readableCases = new Set(entries.map(entry => entry.record.id));
+      for (const link of deps.cases.listProjectLinks()) {
+        if (!readableCases.has(link.caseId)) continue;
+        linkedCases.set(link.projectId, [...(linkedCases.get(link.projectId) ?? []), link.caseId]);
+      }
+      let externalWaitingLimited = false;
+      const projectWaiting = (await Promise.all([...linkedCases].map(async ([projectId, caseIds]) => {
+        try {
+          if (!deps.assertActiveProject) { externalWaitingLimited = true; return []; }
+          await deps.assertActiveProject(projectId);
+          const work = deps.cases.getProjectWork(projectId);
+          return work.workStatus === 'awaiting_feedback' ? [{ work, caseIds }] : [];
+        } catch (error) {
+          // An archived project is intentionally absent from current waiting.
+          // Other unreadable sources are omitted without hiding readable peers.
+          if ((error as { code?: string })?.code !== 'project_archived') externalWaitingLimited = true;
+          return [];
+        }
+      }))).flat();
+      return { body: projectHomePending({ storeState: 'ready', cases: entries, projectWaiting, externalWaitingLimited }) };
     }
 
     if (pathname === '/api/workspace/case-directory' && method === 'GET') {

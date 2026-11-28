@@ -1,0 +1,11 @@
+--- candidate-f/src/host/ui/CaseIssuePanel.tsx
++++ stopped-g/src/host/ui/CaseIssuePanel.tsx
+@@ -332,7 +332,7 @@
+   const write = (action:'plans'|'authorize'|'review', fields:Record<string,unknown>) => save(action, fields, operationId => writeCaseIssue(record.id,issueId,action,{ ...fields, operationId }));
+   const task = (type:'plan'|'teach') => { if (project) onCreate(project,{ type, caseId: record.id, issueId, ...(type === 'teach' && current ? { choiceId: current.choice.choiceId, ...(selectedFeedback ? { feedbackRevisionId:selectedFeedback } : {}) } : {}) }); };
+   return <div className="case-issue-work">
+-    {feedbackOpen && <CaseFeedbackDialog record={record} issueId={issueId} projects={projects} requests={openRequests} requested={feedbackRequest} onClose={() => setFeedbackOpen(false)} onSaved={() => { setFeedbackOpen(false); setRefresh(value => value+1); onChange(); }} onBoard={onBoard} />}
++    {feedbackOpen && <CaseFeedbackDialog returnFocusId={actionFocusIds?.feedback} record={record} issueId={issueId} projects={projects} requests={openRequests} requested={feedbackRequest} onClose={() => setFeedbackOpen(false)} onSaved={() => { setFeedbackOpen(false); setRefresh(value => value+1); onChange(); }} onBoard={onBoard} />}
+     {openRequests.filter(r=>r.issueId===issueId&&r.target.kind==='observe').map(r=><div className="case-message" key={r.requestId}><p>补原始观察：{r.text} · {r.assignee.label??'承担人未声明'}</p><button type="button" className="secondary-button" disabled={record.status==='closed'} onClick={()=>{setFeedbackRequest(r);setFeedbackOpen(true);}}>回录这条请求的原观察</button></div>)}
+     <details ref={feedbackSection} className="case-round-history"><summary>历次取舍与实际反馈</summary>
+       {timeline && !timeline.rounds.length && <p>尚无取舍。已有项目的原行动与观察仍可从原行动看板回读；这里不会补造行动或反馈。</p>}

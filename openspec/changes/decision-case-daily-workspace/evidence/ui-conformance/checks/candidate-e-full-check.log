@@ -1,0 +1,352 @@
+
+> optracall@0.1.0-mvp.4 check:agent-sessions
+> node scripts/check-agent-session-boundary.mjs
+
+Agent session integration boundary and pinned SDK materials: PASS (official archive check is separate)
+✔ an explicit bookmark verifies the exact native target and survives reopening without a body copy (102.789404ms)
+✔ an old ACK replay returns its original event before native checks and preserves the latest state (54.867654ms)
+✔ exact known targets can be unbookmarked, excluded and restored while unreadable, but new bookmarks and notes cannot (61.967668ms)
+✔ concurrent notes append independently, target set conflicts are explicit, and unrelated targets do not conflict (84.285179ms)
+✔ unknown first targets and invalid requests leave an untouched root unchanged (28.029585ms)
+✔ missing or invalid existing governance records are never rebuilt as an empty log (75.863854ms)
+✔ the 2 MiB UTF-8 budget refuses one new event and preserves all existing readable notes (821.263601ms)
+✔ file and parent links are refused without following them, and an external writer lock fails explicitly (17.415364ms)
+✔ M31 native candidate discovery is a read-only personal-page query and never initializes human controls (2755.644523ms)
+✔ M31 saved candidate survives parent cancellation, has exact origin, fork deduplication and optional human controls (3288.490197ms)
+✔ M31 parent failure or unknown do not hide valid saved candidates; malformed/error/call-mismatch remain abnormal (3459.395086ms)
+✔ M31 capacity errors are precise and neither create nor rebuild missing M3 manual history (5240.975972ms)
+✔ custom body bytes without an exact same-run native save confirmation remain UNKNOWN (405.415153ms)
+✔ a save confirmation found only in a fork does not upgrade its unconfirmed original occurrence (41.776416ms)
+✔ direct and nested custom candidates share the authority record and do not duplicate their minimal receipt (62.594153ms)
+✔ custom candidate envelopes still reject invalid versions, ownership and run binding (84.963901ms)
+✔ legacy and custom candidates retain their exact controls and changed custom bodies cannot rebind them (162.410086ms)
+✔ custom fork copies deduplicate exact occurrences while independent calls with the same body remain distinct (141.944711ms)
+✔ reader processes at most 20 files per query and resumes explicitly, while rejecting changed or invalid cursors (161.449321ms)
+✔ one native file uses default 50-row pages and allows an explicit 100-row maximum without losing occurrences (381.554346ms)
+✔ reader enforces aggregate 50 MiB through a continuation and reports an oversized single file explicitly (2139.648346ms)
+✔ invalid native files also consume the aggregate read budget instead of allowing repeated full-size reads (440.017503ms)
+✔ all saved paths are found, fork copies keep one origin, and canonical branch labels are independent of parent running (126.816663ms)
+✔ owner, origin, tool call and run mismatches remain anomalous and never become discovered candidates (82.525735ms)
+✔ an existing exact human target becomes UNKNOWN after native hash change and cannot silently rebind (77.145599ms)
+✔ fork and origin across file batches preserve current-path filtering and emit each original occurrence once (315.290681ms)
+✔ a conflicting fork body cannot leave an apparently available original or admit first human bookmark (59.867833ms)
+✔ a file growing between discovery stat and snapshot guard cannot evade the aggregate byte budget (1510.597153ms)
+✔ a saved canonical file missing on first read is file-level UNKNOWN without guessed candidate identities (29.078319ms)
+✔ M31 AC01/AC08: declared candidate tool is available only to an actual ordinary unmanaged project task (9187.392487ms)
+▶ R1 AC01/AC02/AC06: native custom is the candidate authority, survives parent failure/cancellation and reopen; zero is valid
+  ✔ completed (3823.734408ms)
+  ✔ failed (3787.994217ms)
+  ✔ cancelled (4337.562085ms)
+  ✔ zero (2275.71767ms)
+✔ R1 AC01/AC02/AC06: native custom is the candidate authority, survives parent failure/cancellation and reopen; zero is valid (14227.330354ms)
+✔ M31 AC03: native command turns cannot mint valid candidates even when a Provider calls the declared tool (4102.689326ms)
+✔ R1: nested codemode candidate is saved without an independent transcript toolResult (6207.509148ms)
+✔ M31 AC01/AC03: malformed declarations return native tool errors and Agent may correct them in the same run (5827.720173ms)
+✔ M31 D02: exact details parser rejects incompatible claims/defaults/keys and canonical SHA preserves text and array order (1.579533ms)
+✔ M31 D02: omitted aliases/sourceRefs default empty but explicit null is invalid (0.239773ms)
+﹣ M31 AC08: native managed ordinary/protected resources never gain the candidate capability (0.130359ms) # SKIP
+✔ M31 AC08: candidate and existing simulation tools coexist and survive native reload (4613.947744ms)
+▶ R1 AC06: abort while direct or nested native pre-tool hook is in flight cannot save a late candidate
+  ✔ direct (4611.160467ms)
+  ✔ nested (9789.886644ms)
+✔ R1 AC06: abort while direct or nested native pre-tool hook is in flight cannot save a late candidate (14402.430801ms)
+✔ M31 integrated public Host: ordinary send → same Pi tool call → native save → personal lookup/control/restart, with no extra model calls (19234.325922ms)
+✔ M31 AC06: native fork rebinds future candidate calls to the new session and keeps copied origin untouched (3612.645291ms)
+▶ R1: candidate-only capability rejects completed parent and previous-run ctx, including reused IDs and replacement signals
+  ✔ same-run=true,new-signal=false (3504.122861ms)
+  ✔ same-run=true,new-signal=true (3154.753517ms)
+  ✔ same-run=false,new-signal=false (2678.216265ms)
+  ✔ same-run=false,new-signal=true (3070.261719ms)
+✔ R1: candidate-only capability rejects completed parent and previous-run ctx, including reused IDs and replacement signals (12408.526168ms)
+✔ R1: product multi-level parallel candidates survive incomplete nested arguments and native compaction/reopen (5889.547105ms)
+▶ R1: append without a safe persistence proof returns UNKNOWN and never automatically appends again
+  ✔ direct (2417.774118ms)
+  ✔ nested (3242.708592ms)
+✔ R1: append without a safe persistence proof returns UNKNOWN and never automatically appends again (5661.520275ms)
+✔ R1: a child paused before execution cannot save after its launching parent has completed (2596.50189ms)
+▶ R1 SDK proof: direct and nested custom candidates survive safe read and actual SDK close/reopen
+  ✔ direct (404.317232ms)
+  ℹ sdk-proof evidence: /workspace/OptraCall-issue149-ui-conformance/.local/memory-candidate-nested/sdk-proof/fccef3e9-95ac-496b-ac12-df51b2fa606c
+  ✔ nested (69.39693ms)
+  ℹ sdk-proof evidence: /workspace/OptraCall-issue149-ui-conformance/.local/memory-candidate-nested/sdk-proof/3d4771e1-6038-4f72-b538-ed1398e42b34
+✔ R1 SDK proof: direct and nested custom candidates survive safe read and actual SDK close/reopen (475.094899ms)
+✔ R1 SDK proof: multilevel and parallel candidates retain distinct native occurrences when nested arguments are omitted (67.662854ms)
+ℹ sdk-proof evidence: /workspace/OptraCall-issue149-ui-conformance/.local/memory-candidate-nested/sdk-proof/8774dae1-411d-40c2-b6d1-d084751e31fc
+✔ R1 SDK proof: candidates beyond the SDK nestedCalls count budget remain independently saved (430.844103ms)
+ℹ sdk-proof evidence: /workspace/OptraCall-issue149-ui-conformance/.local/memory-candidate-nested/sdk-proof/d30ddcf5-fb0a-4738-a1a3-d8ac3fc463c5
+✔ R1 SDK proof: actual SDK compaction, reopen and fork preserve custom candidates without merging a new identical call (163.925154ms)
+ℹ sdk-proof evidence: /workspace/OptraCall-issue149-ui-conformance/.local/memory-candidate-nested/sdk-proof/346e48b1-92f4-4dd6-a651-4b1215b9d781
+✔ AC04 public personal page offers saved candidates and human materials by default, without an approval queue (89.222015ms)
+✔ AC03/06 saved cancelled/other-path candidates retain original declaration, independent parent label and exact origin (22.353306ms)
+✔ AC05 original declaration and newest-first independent human opinions remain distinct (1.435252ms)
+✔ AC07 native unread never leaks cached payload/time/parent/path, while governed exact refs allow limited controls (2.861286ms)
+✔ AC07 first unread only reports file-level UNKNOWN without guessing identities or empty-library truth (0.789019ms)
+✔ AC07 human intent survives reopening and exact request errors never trigger a transport retry (19.18927ms)
+✔ AC07 unreadable browser original-intent bytes remain preserved and block rather than reset (0.499574ms)
+✔ AC04/07 API preserves explicit filters, exact read identity, correction without CAS, and original operation lookup (38.303124ms)
+✔ AC07 old receipts refresh current governance first; unread native keeps latest flags/revision and no cached body (0.783953ms)
+context canceled
+context canceled
+context canceled
+context canceled
+context canceled
+context canceled
+context canceled
+✔ GG public native MCP surface allows only reviewed client symbols and exact consumers (280.439898ms)
+✔ SDK private installed paths remain confined to the sole reviewed SDK surface (77.595493ms)
+✔ R4: fixed SDK surface rejects unreviewed internal paths, early loading and direct Pi dependency imports (355.219509ms)
+✔ R4: known SDK definition writes fail while new Host-owned definitions remain legal (172.817548ms)
+✔ R4 review regression: expression wrappers cannot hide a known SDK definition write (232.947935ms)
+✔ R4 review regression: SDK provenance respects function/block/parameter shadowing and follows a real outer alias (141.034914ms)
+✔ SAM11: the reviewed SAP Host registrar can bind a public domain but cannot own an SDK runtime (59.69812ms)
+✔ a feature uses injected session types without importing a runtime or constructing a manager (19.114128ms)
+✔ SDK imports, reexports, require and dynamic imports cannot bypass the shared port (232.684955ms)
+✔ parser handles JSX, nested templates and regexes without treating their text as imports (32.112423ms)
+✔ ProjectAgent aliases, namespaces and unbound construction remain prohibited in features (79.01137ms)
+✔ reviewed low-level paths are limited to their assigned capability (65.99081ms)
+✔ R1 SDK candidate probe grants only exact public test symbols, without widening other test owners (49.323573ms)
+✔ unparseable source fails closed instead of silently passing the boundary check (14.136546ms)
+✔ simulation tool exception permits defineTool alone, without runtime capabilities (78.174043ms)
+✔ protected execution utilities may use native tools but cannot become another SDK session owner (98.885157ms)
+✔ MP06 value-only model executor can import its encoded data module but no arbitrary module (117.98756ms)
+✔ S4 exact synthetic SDK fixtures and engineering Store loader are reviewed without widening product runtime imports (104.040765ms)
+✔ an unmanaged resource cannot acquire a managed transition merely because its driver close succeeds (7.093292ms)
+✔ fresh registration and execution state are Host-only facts and cannot reset prior unmanaged execution (0.841486ms)
+✔ default managed resources remain occupied while background work drains and close only after it settles (0.876578ms)
+✔ user stop interrupts a managed background drain and does not release occupancy before cleanup (0.974074ms)
+✔ turning managed execution off retires its resource before opening the ordinary unrestricted profile (0.909002ms)
+✔ v2 switches execution under the same occupied owner and canonical session, then retires protected resources (2.260628ms)
+✔ execution permits cannot cross domains or owners and cannot be supplied by business JSON (0.891409ms)
+✔ parent stop revokes dispatch before awaiting its child cancellation and keeps the lease occupied (0.816133ms)
+✔ a failed managed-resource close never opens a protected replacement or advertises idle (1.855411ms)
+✔ finishing a phase gap waits for the actual child cancellation before releasing occupancy (13.68788ms)
+✔ failed child stop quarantines its owner and explicit close retries only failed handlers (0.925762ms)
+✔ a callback failure without an in-flight parent turn still cleans children and quarantines failed cleanup (0.698021ms)
+✔ closing one Provider never waits for another Providers child cancellation (1.580292ms)
+✔ a protected close failure stays occupied until an explicit close establishes termination (0.631938ms)
+✔ only a finished, quarantined request exposes its identity for explicit task cleanup (1.489571ms)
+✔ execution permits cannot cross owners or replace an in-flight turn (0.764222ms)
+✔ quiesce waits for ordinary termination and a stop in that gap prevents protected reopening (0.561873ms)
+✔ one unknown managed cleanup is quarantined without an implicit second close (0.503713ms)
+✔ a failed quiesce is not retried by the abandoned callback finalizer (0.499153ms)
+✔ managed stop failure and finalization share one cleanup result until explicit close (0.673363ms)
+✔ automatic child cleanup cannot acquire an explicit retry through its parent finalizer (0.877284ms)
+✔ managed retirement carries its existing explicit retry authority down to the runtime (0.835307ms)
+✔ read and subscribe do not construct resources; refs are restricted to their domain (4.581614ms)
+✔ Host scope busy reads the existing operation through preparation and finalization without opening or blocking other scopes (2.493522ms)
+✔ Host scope busy includes matching resource retirement until actual close completion (17.107877ms)
+✔ accepted preserves busy until completion; newer operation invalidates captured callbacks (1.695276ms)
+✔ three profiles use one implementation with separate owners, events and cancellation (1.52762ms)
+✔ a domain waiting for startup UI does not block unrelated domains (2.984078ms)
+✔ concurrent explicit opens share transport and startup cancellation prevents a prompt (0.864697ms)
+✔ provider close can cancel ownership waiting behind the Host mutation gate (1.390799ms)
+✔ lease fixes configuration across turns, owns the gap and cannot escape its callback (1.776169ms)
+✔ one lease rejects concurrent turns and preserves its first run identity (1.084512ms)
+✔ gap cancellation prevents a second turn without releasing somebody else’s operation (4.109283ms)
+✔ abandoned in-flight lease drains before becoming idle and preserves callback failure (1.567448ms)
+✔ return during native opening closes the opening and never dispatches the abandoned run (1.27332ms)
+✔ closing old provider A keeps replacement B opening and late A callbacks isolated (3.59894ms)
+✔ explicit close permits replacement while its old generation is still draining (0.643419ms)
+✔ closing an accepted run retains busy until its resource has safely closed (0.715811ms)
+✔ failed resource close remains busy and is available to a later explicit close (0.976025ms)
+✔ R2: an MCP loader opening failure releases its owner only after actual cleanup succeeds (2.992754ms)
+▶ R2: failed or unknown cleanup after an MCP loader opening failure quarantines only the original owner
+  ✔ synthetic_cleanup_failed (1.16372ms)
+  ✔ protected_cleanup_unknown (0.49042ms)
+✔ R2: failed or unknown cleanup after an MCP loader opening failure quarantines only the original owner (2.189489ms)
+✔ failed close of idle A preserves an already admitted replacement B and retries only A (0.601907ms)
+✔ UI works during opening, expired answers reject, and commands need declared capabilities (3.780094ms)
+✔ configuration identity includes model and thinking settings even with unchanged credentials (0.372425ms)
+✔ business-only lease preflight can return without creating a worker (0.3075ms)
+✔ explicit open rechecks business admission even when reusing an idle transport (0.329799ms)
+✔ one close failure does not skip other resources and is not reported as success (0.339937ms)
+✔ ER01: owner cancellation overrides stale failure diagnostics while preserving native retry count (3.614741ms)
+✔ V020 exact stop observes the original request atomically; a stale preparation id cannot cancel a newer owned run (1.051713ms)
+✔ V020 automatic receipt uses the original idle lease and cannot append after cancellation (1.524465ms)
+✔ memberPackExecutionScope drains and retires Turn 1 resource so Turn 2 spawns a fresh executor without protected_executor_draining (1.469273ms)
+✔ policyFingerprint change retires cached idle session and spawns a fresh session with updated permissions (R2 Round-6) (0.833191ms)
+✔ A23/A24: an explicit Agent delivery is kept in the same native session; default-off optional saving does not cancel self-checks (5527.762155ms)
+✔ A13/A21: optional saving reads the current global node and uses the Agent filename and original bound-report receipt (6789.88185ms)
+✔ A14/A22: the global review node reviews the exact saved draft and automatically returns its opinion to the original author session (15699.667616ms)
+✔ A17/A24: IR reads the fixed original source only after explicit normal delivery; an ordinary completed turn does not trigger it (21412.404826ms)
+✔ A22: stopping during the original Task automatic review cancels that review and prevents IR without rewriting the completed author run (19463.135891ms)
+✔ A13: repeated saving of the same bound filename and content reuses its exact original report without another file or invented authorship (9656.778003ms)
+✔ A14: automatic review uses only declared exact basis versions and never silently changes to a newer file (11303.729066ms)
+✔ actual Pi direct short declaration retains the exact original receipt and dispatches one original IR follow-up (8866.514046ms)
+ℹ /workspace/OptraCall-issue149-ui-conformance/.local/overall-architecture-upgrade/development/delivery-native-repair/direct-short-5xC20i
+✖ actual Pi nested short declaration retains the exact original receipt and dispatches one original IR follow-up (11999.628903ms)
+ℹ /workspace/OptraCall-issue149-ui-conformance/.local/overall-architecture-upgrade/development/delivery-native-repair/nested-short-V971Tt
+✖ actual Pi direct 11KB declaration retains the exact original receipt and dispatches one original IR follow-up (18105.097127ms)
+ℹ /workspace/OptraCall-issue149-ui-conformance/.local/overall-architecture-upgrade/development/delivery-native-repair/direct-long-IXfMtR
+✖ actual Pi nested 11KB declaration retains the exact original receipt and dispatches one original IR follow-up (10023.443224ms)
+✔ a schema-valid over-budget declaration is rejected before saving; repeated rejection and a corrected same-request save leave one bound reusable original (12918.26521ms)
+ℹ /workspace/OptraCall-issue149-ui-conformance/.local/overall-architecture-upgrade/development/delivery-native-repair/payload-budget-FIaHnK
+✔ reviewBasis referencing a nonexistent file returns a safe locatable error; corrected declaration succeeds (9845.987734ms)
+ℹ /workspace/OptraCall-issue149-ui-conformance/.local/overall-architecture-upgrade/development/delivery-native-repair/basis-unavailable-EqUCXB
+✔ an unrecognized portable lock cannot fall back to legacy identity or continue to an executable (51.139038ms)
+ℹ retained refusal fixture: /workspace/OptraCall-issue149-ui-conformance/.local/private-python-portable/runtime/refusal-dMt0wI
+▶ portable identity must describe the same supported private runtime, not a different interpreter or host
+  ✔ foreign Python (7.285095ms)
+  ℹ retained refusal fixture: /workspace/OptraCall-issue149-ui-conformance/.local/private-python-portable/runtime/refusal-ZZJcgE
+  ✔ foreign architecture (26.593599ms)
+  ℹ retained refusal fixture: /workspace/OptraCall-issue149-ui-conformance/.local/private-python-portable/runtime/refusal-tHRf1Y
+  ✔ unrecognized schema (5.265346ms)
+  ℹ retained refusal fixture: /workspace/OptraCall-issue149-ui-conformance/.local/private-python-portable/runtime/refusal-GMfIm0
+  ✔ unrecognized provider (9.063309ms)
+  ℹ retained refusal fixture: /workspace/OptraCall-issue149-ui-conformance/.local/private-python-portable/runtime/refusal-JYZeSo
+  ✔ escaping interpreter path (8.4989ms)
+  ℹ retained refusal fixture: /workspace/OptraCall-issue149-ui-conformance/.local/private-python-portable/runtime/refusal-5mtuWP
+  ✔ unlocked interpreter (19.26137ms)
+  ℹ retained refusal fixture: /workspace/OptraCall-issue149-ui-conformance/.local/private-python-portable/runtime/refusal-mDMpju
+  ✔ non-string interpreter identity (4.236922ms)
+  ℹ retained refusal fixture: /workspace/OptraCall-issue149-ui-conformance/.local/private-python-portable/runtime/refusal-zL1Ur0
+  ✔ a standalone distribution cannot borrow a global base prefix (17.146623ms)
+  ℹ retained refusal fixture: /workspace/OptraCall-issue149-ui-conformance/.local/private-python-portable/runtime/refusal-VBgeba
+✔ portable identity must describe the same supported private runtime, not a different interpreter or host (100.576618ms)
+▶ portable marker presence is strict and a missing distribution lock is drift, not legacy fallback
+  ✔ invalid marker null (7.695821ms)
+  ℹ retained refusal fixture: /workspace/OptraCall-issue149-ui-conformance/.local/private-python-portable/runtime/refusal-5u57cA
+  ✔ invalid marker "" (11.265515ms)
+  ℹ retained refusal fixture: /workspace/OptraCall-issue149-ui-conformance/.local/private-python-portable/runtime/refusal-4W1HuU
+  ✔ invalid marker false (6.224004ms)
+  ℹ retained refusal fixture: /workspace/OptraCall-issue149-ui-conformance/.local/private-python-portable/runtime/refusal-TWtMl1
+  ✔ invalid marker 1 (7.225087ms)
+  ℹ retained refusal fixture: /workspace/OptraCall-issue149-ui-conformance/.local/private-python-portable/runtime/refusal-95oDN4
+  ✔ invalid marker {} (6.7117ms)
+  ℹ retained refusal fixture: /workspace/OptraCall-issue149-ui-conformance/.local/private-python-portable/runtime/refusal-CESy0k
+  ✔ missing portable lock (5.948856ms)
+  ℹ retained refusal fixture: /workspace/OptraCall-issue149-ui-conformance/.local/private-python-portable/runtime/refusal-wvBZIM
+✔ portable marker presence is strict and a missing distribution lock is drift, not legacy fallback (47.213657ms)
+▶ an incompletely sealed portable installation is unavailable before it can run
+  ✔ writable root (7.781163ms)
+  ℹ retained refusal fixture: /workspace/OptraCall-issue149-ui-conformance/.local/private-python-portable/runtime/refusal-ymgEXz
+  ✔ writable ready.json (19.205669ms)
+  ℹ retained refusal fixture: /workspace/OptraCall-issue149-ui-conformance/.local/private-python-portable/runtime/refusal-EqkKY7
+✔ an incompletely sealed portable installation is unavailable before it can run (27.518533ms)
+﹣ an existing original locked Homebrew environment remains available without a portable marker (0.061761ms) # explicit original legacy integration material not provisioned
+﹣ the installed portable distribution is genuinely private and reports its real prefix (0.044741ms) # portable integration environment not provisioned
+﹣ a real portable copy remains verifiable after relocation, and changed library bytes fail closed (0.032699ms) # portable integration environment not provisioned
+﹣ a bounded managed calculation actually spills inside its unique owner temp and finishes correctly (1.227165ms) # macOS private integration environment not provisioned
+﹣ a bounded memory-limited sort returns an actual engine failure without replay (0.194834ms) # macOS private integration environment not provisioned
+﹣ an engine spill to original read-only material is a real permission failure with original bytes preserved (0.266183ms) # macOS private integration environment not provisioned
+✔ private Python setup refuses an existing environment before touching dependencies or its bytes (136.583406ms)
+﹣ portable setup rejects a corrupt cached distribution before creating an environment or needing global Python (0.349317ms) # SKIP
+﹣ portable setup rejects an aliased private parent without writing into its target (0.103148ms) # SKIP
+✔ locked portable archive extraction materializes contained interpreter aliases as regular files (280.340563ms)
+✔ portable archive extraction rejects checksum drift before it creates a root (66.661904ms)
+▶ portable archive extraction refuses unsafe members before writing any environment
+  ✔ traversal (164.58588ms)
+  ✔ special (184.833306ms)
+  ✔ outside-link (187.693159ms)
+✔ portable archive extraction refuses unsafe members before writing any environment (538.807044ms)
+✔ portable extraction never replaces a preexisting destination (133.862922ms)
+﹣ real private installation ignores an isolated pip.conf target and never writes outside its environment (0.481062ms) # macOS arm64 locked distribution cache not provisioned
+﹣ managed Python uses the available application-private locked calculation libraries (2.079622ms) # macOS private integration environment not provisioned
+﹣ an eligible ordinary task can choose its private Python through the real Pi bash tool (0.145748ms) # macOS private integration environment not provisioned
+﹣ ordinary retains its original permissions while the real Pi uses private libraries (0.126733ms) # macOS private integration environment not provisioned
+﹣ protected retains its original permissions while the real Pi uses private libraries (0.079298ms) # macOS private integration environment not provisioned
+﹣ cold retains its original permissions while the real Pi uses private libraries (0.184021ms) # macOS private integration environment not provisioned
+﹣ managed-cold retains its original permissions while the real Pi uses private libraries (0.065859ms) # macOS private integration environment not provisioned
+﹣ fixed-draft cannot acquire calculation execution even when private dependencies exist (0.143262ms) # macOS private integration environment not provisioned
+﹣ text-only cannot acquire calculation execution even when private dependencies exist (0.067354ms) # macOS private integration environment not provisioned
+﹣ a plugin workspace does not automatically receive private Python (0.740047ms) # macOS private integration environment not provisioned
+﹣ missing optional dependencies are reported while an ordinary task can explicitly use its original Python (0.256315ms) # macOS private integration environment not provisioned
+﹣ the real Pi may choose pure Python without a Host method branch (0.07606ms) # macOS private integration environment not provisioned
+﹣ the real Pi may choose mixed Python and DuckDB without a Host method branch (0.099527ms) # macOS private integration environment not provisioned
+﹣ a protected Agent selects an XLSX sheet and retains absent formula cache and original Markdown (0.045897ms) # macOS private integration environment not provisioned
+﹣ drifted private engineering material is unavailable rather than silently adopted (0.50929ms) # macOS private integration environment not provisioned
+﹣ private dependencies and fixed data remain read-only through actual protected Python and SQL (0.055406ms) # macOS private integration environment not provisioned
+﹣ cancelling one real DuckDB execution preserves another owner and partial files (0.038758ms) # macOS private integration environment not provisioned
+﹣ the documented DuckDB settings reject an absent extra extension without installing it (0.029757ms) # macOS private integration environment not provisioned
+﹣ ProjectAgent stop cancels an actual private DuckDB query and preserves its partial evidence (0.027258ms) # macOS private integration environment not provisioned
+﹣ normal ProjectAgent drain allows a private DuckDB background calculation to finish (0.048294ms) # macOS private integration environment not provisioned
+✔ an ordinary task preserves original Python and isolated user-site computation (2678.921889ms)
+✔ an unmanaged cold workspace preserves original Python and isolated user-site computation (2778.413093ms)
+✔ ADOPT-FILE: explicit version save copies current stable bytes to a new ordinary report and keeps the source independent (371.855513ms)
+✔ ADOPT-FILE: reject links, oversized sources, invalid identity and archived writes without changing originals (436.155752ms)
+✔ ADOPT-HTTP: save a selected version with provenance, keep dynamic refs, replay only its immutable receipt and detect changed copies (9489.260309ms)
+✔ ADOPT-DOWNLOAD: expected hash verifies actual bytes, changed copies are rejected, legacy downloads still read current files (8802.027989ms)
+✔ ADOPT-ADMISSION: invalid task, stale/closed Case, unlinked or archived project never creates an adopted copy (10417.891439ms)
+✔ ADOPT-INTERRUPTION: preserved prepared copy is shown for review after restart and the same command never recopies or adopts it (16678.974768ms)
+✔ ADOPT-FAILURE: unreadable source retains a safe review reason and never claims adoption or creates a replacement (6267.53218ms)
+✔ ADOPT-VERSIONS: later adoption of the same source keeps distinct versions and unlinking preserves the earlier copy and provenance (5941.024373ms)
+✔ ADOPT-INTEGRITY: ordinary relinking cannot refresh an adopted version hash or silently replace its chosen provenance (4659.697129ms)
+✔ M4 attached review waits for saved result; manual busy remains and stopped parent cannot dispatch another review (2869.527348ms)
+ℹ /workspace/OptraCall-issue149-ui-conformance/.local/overall-architecture-upgrade/development/attached-postprocessing/synthetic-oJyarf
+✔ M4 stopForTask revokes only matching review and leaves the other Task in flight (3195.689263ms)
+ℹ /workspace/OptraCall-issue149-ui-conformance/.local/overall-architecture-upgrade/development/attached-postprocessing/synthetic-8rXvm6
+✔ M4 parent cancellation during preparation does not create or dispatch a late review (17.766323ms)
+ℹ /workspace/OptraCall-issue149-ui-conformance/.local/overall-architecture-upgrade/development/attached-postprocessing/synthetic-v4atvg
+✔ M4 parent cancellation drains the attached review while an unrelated Task stays running (5905.035527ms)
+ℹ /workspace/OptraCall-issue149-ui-conformance/.local/overall-architecture-upgrade/development/attached-postprocessing/synthetic-teDU8H
+✔ M4 attached receipt waits for its original in-progress cancellation to reach the real store (2941.15801ms)
+ℹ /workspace/OptraCall-issue149-ui-conformance/.local/overall-architecture-upgrade/development/attached-postprocessing/synthetic-08DIpZ
+✔ M4 public parent explicit close retries only the failed original cancellation while automatic cleanup preserves it (2776.032288ms)
+ℹ /workspace/OptraCall-issue149-ui-conformance/.local/overall-architecture-upgrade/development/attached-postprocessing/synthetic-hJikoT
+✔ M5 attached IR awaits its original receipt, preserves manual busy and cannot run after parent stop (2469.483508ms)
+ℹ /workspace/OptraCall-issue149-ui-conformance/.local/overall-architecture-upgrade/development/attached-postprocessing/synthetic-FVjEe3
+✔ M5 parent stop cancels attached IR and exact Task stop leaves unrelated IR running (4290.967004ms)
+ℹ /workspace/OptraCall-issue149-ui-conformance/.local/overall-architecture-upgrade/development/attached-postprocessing/synthetic-8TpDVE
+✔ M5 parent qualification cannot bypass an unsettled original run or arrive through HTTP input (15.556516ms)
+ℹ /workspace/OptraCall-issue149-ui-conformance/.local/overall-architecture-upgrade/development/attached-postprocessing/synthetic-PDGIEp
+✔ M5 receipt replay cannot acquire cancellation ownership of an already running extraction (2580.476932ms)
+ℹ /workspace/OptraCall-issue149-ui-conformance/.local/overall-architecture-upgrade/development/attached-postprocessing/synthetic-NLsjCb
+✔ new global automatic settings start with all five nodes off (12.360282ms)
+✔ one global value is saved and read after reopening the settings store (19.10562ms)
+✔ an outdated page cannot overwrite a newer global choice (21.330942ms)
+✔ repeating an accepted operation preserves the later choice and reports its original revision (30.9356ms)
+✔ each pending action reads the current global choice across tasks instead of a startup snapshot (31.97301ms)
+✔ enabled preferences never override cancellation, authorization or applicability (9.06724ms)
+✔ two stale local controls cannot both commit a change to the global settings (26.367173ms)
+✔ global settings reject project-scoped or malformed writes instead of creating a separate preference (2.06824ms)
+✔ unknown or corrupt persisted settings are not silently reset or overwritten (29.752149ms)
+✔ a symlink cannot redirect the global settings file to another authority (14.409363ms)
+✔ an unknown settings acknowledgement can read its exact original operation without writing or reverting a later setting (21.61867ms)
+✔ A13/A18/A23 actual SDK Case continuation links the exact report and saves an Agent draft without a human choice (8047.988988ms)
+ℹ /workspace/OptraCall-issue149-ui-conformance/.local/overall-architecture-upgrade/development/automatic-business-feedback/sdk-7bH9lR
+✔ A18/A19/J09 actual SDK assets with IR off report only a suspected issue on the original published method (8430.298888ms)
+ℹ /workspace/OptraCall-issue149-ui-conformance/.local/overall-architecture-upgrade/development/automatic-business-feedback/sdk-8aYDge
+✔ A04/A15 changing the accepted Case goal during author completion preserves the report and prevents automatic feedback into the new goal (6917.240511ms)
+ℹ /workspace/OptraCall-issue149-ui-conformance/.local/overall-architecture-upgrade/development/automatic-business-feedback/sdk-Bw5ODm
+✔ A21/A22 closing assets before its action starts blocks the continuation and reopening does not wake the ended Task (10476.594775ms)
+ℹ /workspace/OptraCall-issue149-ui-conformance/.local/overall-architecture-upgrade/development/automatic-business-feedback/sdk-1ptTKk
+✔ A22 stopping the original Task during its assets turn preserves the initial completion and prevents issue writes (11703.237682ms)
+ℹ /workspace/OptraCall-issue149-ui-conformance/.local/overall-architecture-upgrade/development/automatic-business-feedback/sdk-Ismugv
+✔ normal completion with the exact Agent declaration dispatches enabled callbacks inside the original live lease (51.28761ms)
+✔ ordinary completion, cancellation, failed runs, other requests and unbound declarations cannot trigger actions (2.188121ms)
+✔ settings are reread before each action; disabling never cancels the callback already in progress and IR-off cannot be bypassed by assets (21.102653ms)
+✔ stopping the original parent prevents later dispatch and any native write after revocation while preserving the child receipt (24.270544ms)
+✔ a native observation failure is not rewritten as another action result and never invokes a second action callback (20.073666ms)
+✔ repeated dispatch uses stable IDs and the original business receipt for deduplication, retaining UNKNOWN as an original result (97.790762ms)
+✔ one global change affects another running Task only at its corresponding not-yet-started action (27.486064ms)
+✔ revocation while awaiting a current setting prevents dispatch and neither authorization nor applicability can be inferred from an enabled switch (15.328418ms)
+✔ a callback exception preserves UNKNOWN without guessing professional success and only exact declared references reach the next callback (8.375339ms)
+✔ the original action ID stays stable across report order and process collation, and changes for another bound report version (17.676348ms)
+✔ A22 actual SDK closing review during an in-flight reviewer blocks its not-yet-started author return (11865.185318ms)
+ℹ /workspace/OptraCall-issue149-ui-conformance/.local/overall-architecture-upgrade/development/automatic-review-handoff/sdk-sv5N1I
+✔ A14/A15/A18 actual SDK Case and asset handoff use the explicitly retained v2 delivery and exact new sources (16739.964641ms)
+ℹ /workspace/OptraCall-issue149-ui-conformance/.local/overall-architecture-upgrade/development/automatic-review-handoff/sdk-aPyH6v
+✔ A05/A07/J02 ordinary followup retains its confirmed Plan after automatic report linking, but explicit stale or changed goals still conflict (14314.589215ms)
+ℹ /workspace/OptraCall-issue149-ui-conformance/.local/overall-architecture-upgrade/development/automatic-review-handoff/sdk-FdscSw
+✔ A14/A22 actual SDK author failed cannot fall back to an old delivery for automatic Case or assets (13863.289133ms)
+ℹ /workspace/OptraCall-issue149-ui-conformance/.local/overall-architecture-upgrade/development/automatic-review-handoff/sdk-JSe2yo
+
+Interrupted while running:
+
+⚠ tests/automatic-review-handoff-v020.test.ts (tests/automatic-review-handoff-v020.test.ts:1:1)
+⚠ tests/automatic-verification-context.test.ts (tests/automatic-verification-context.test.ts:1:1)
+⚠ tests/automatic-verification-flow.test.ts (tests/automatic-verification-flow.test.ts:1:1)
+⚠ tests/automatic-verification-host.test.ts (tests/automatic-verification-host.test.ts:1:1)
+⚠ tests/automatic-verification-stop.test.ts (tests/automatic-verification-stop.test.ts:1:1)
+⚠ tests/automatic-verification-store.test.ts (tests/automatic-verification-store.test.ts:1:1)
+⚠ tests/automatic-verification-ui.test.ts (tests/automatic-verification-ui.test.ts:1:1)
+⚠ tests/board-authorization-history-v020.test.ts (tests/board-authorization-history-v020.test.ts:1:1)
+⚠ tests/business-role-sessions.test.ts (tests/business-role-sessions.test.ts:1:1)
+⚠ tests/capability-navigation-v020.test.ts (tests/capability-navigation-v020.test.ts:1:1)
+⚠ tests/case-action-draft-recovery-ui.test.ts (tests/case-action-draft-recovery-ui.test.ts:1:1)
+⚠ tests/case-action-draft.test.ts (tests/case-action-draft.test.ts:1:1)
+⚠ tests/case-agent-entry-ui.test.ts (tests/case-agent-entry-ui.test.ts:1:1)
+⚠ tests/case-backup.test.ts (tests/case-backup.test.ts:1:1)
+⚠ tests/case-board-navigation-model.test.ts (tests/case-board-navigation-model.test.ts:1:1)
+⚠ tests/case-composer-draft.test.ts (tests/case-composer-draft.test.ts:1:1)
+⚠ tests/case-context-host.test.ts (tests/case-context-host.test.ts:1:1)

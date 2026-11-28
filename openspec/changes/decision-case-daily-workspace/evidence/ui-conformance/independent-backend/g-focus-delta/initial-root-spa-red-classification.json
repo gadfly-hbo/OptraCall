@@ -1,0 +1,43 @@
+{
+  "recordedAt": "2026-11-28T02:07:18.599671+00:00",
+  "rootEvidencePath": ".local/ui-conformance/home-request-navigation/candidate-f-spa-red/receipt.json",
+  "rootEvidenceSha256": "6b1ae1eb3351d0150b03646c587c1c6826be446459dd7968988eb4d5a0975801",
+  "runtime": {
+    "instanceId": "0217e393-69f2-4bb3-b421-e3ab3ebb99ae",
+    "pid": 260218,
+    "codeRoot": "/workspace/OptraCall-issue149-ui-conformance",
+    "version": "0.1.0-mvp.4",
+    "commit": "5dd59909227ab46f3d989ade8b2847e077636855",
+    "tree": "1078a6e2359a29e82631ab59f56a8d6dd9492d73",
+    "builtAt": "2026-11-28T01:53:17.113Z",
+    "dirty": true
+  },
+  "checks": [
+    {
+      "name": "choose exact Case/issue/request dialog, cancel focus and SPA reopen 1",
+      "ok": true,
+      "firstErrorLine": ""
+    },
+    {
+      "name": "choose exact Case/issue/request dialog, cancel focus and SPA reopen 2",
+      "ok": true,
+      "firstErrorLine": ""
+    },
+    {
+      "name": "choose exact Case/issue/request dialog, cancel focus and SPA reopen 3",
+      "ok": true,
+      "firstErrorLine": ""
+    },
+    {
+      "name": "observe home request navigation",
+      "ok": false,
+      "firstErrorLine": "locator.click: Error: strict mode violation: getByRole('dialog', { name: '回录实际反馈', exact: true }).locator('details').filter({ hasText: /原请求与来源/ }).first().locator('summary') resolved to 3 elements:"
+    }
+  ],
+  "classification": "This root browser attempt failed during nested summary locator strict mode before observation Escape focus assertion. It is fixture/test-selection failure, not evidence that this script reproduced the product focus bug. Root was notified; the independently observed actual BODY focus issue remains separate evidence.",
+  "unchangedBusinessState": {
+    "errors": [],
+    "businessWrites": []
+  },
+  "requestedNext": "Keep this initial failure; use direct-child summary targeting and rerun old f/new g under root browser responsibility."
+}

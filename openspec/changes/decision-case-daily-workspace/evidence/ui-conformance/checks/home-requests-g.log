@@ -1,0 +1,31 @@
+{
+  "out": "/workspace/OptraCall-issue149-ui-conformance/.local/ui-conformance/home-request-navigation/candidate-g",
+  "checks": [
+    {
+      "name": "choose exact Case/issue/request dialog, cancel focus and SPA reopen 1",
+      "ok": true
+    },
+    {
+      "name": "choose exact Case/issue/request dialog, cancel focus and SPA reopen 2",
+      "ok": true
+    },
+    {
+      "name": "choose exact Case/issue/request dialog, cancel focus and SPA reopen 3",
+      "ok": true
+    },
+    {
+      "name": "observe exact Case/issue/request dialog, cancel focus and SPA reopen 1",
+      "ok": true
+    },
+    {
+      "name": "observe exact Case/issue/request dialog, cancel focus and SPA reopen 2",
+      "ok": true
+    },
+    {
+      "name": "observe exact Case/issue/request dialog, cancel focus and SPA reopen 3",
+      "ok": true
+    }
+  ],
+  "errors": [],
+  "businessWrites": []
+}

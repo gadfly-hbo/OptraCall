@@ -1,0 +1,24 @@
+{
+  "recordedAt": "2026-11-28T01:50:04.960424+00:00",
+  "runtime": {
+    "instanceId": "74b5ea0f-30d9-4872-9f53-1a515107bd53",
+    "pid": 254230,
+    "codeRoot": "/workspace/OptraCall-issue149-ui-conformance",
+    "version": "0.1.0-mvp.4",
+    "commit": "5dd59909227ab46f3d989ade8b2847e077636855",
+    "tree": "1078a6e2359a29e82631ab59f56a8d6dd9492d73",
+    "builtAt": "2026-11-28T01:49:00.388Z",
+    "dirty": true
+  },
+  "sourceManifestHashFromParent": "4a8d747b1129393cae452d31d218312a77bb0954a80baafb4f6d268242d7f985",
+  "completeManifestSha256": "194d05d777a9fb2e29d7ee62745f22afed394f6ad871d3971d4b03fa81595d47",
+  "checks": {
+    "exactOriginalRequestsIdentityTargetTimeRound": true,
+    "originalProjectWaitingSourceRevisionAssigneeTime": true,
+    "repeatedGetNoChange": true
+  },
+  "methods": [
+    "GET"
+  ],
+  "scope": "Actual synthetic Host homepage/read identity only; no business write, provider call or screenshot claim"
+}

@@ -1,0 +1,15 @@
+✔ independent D14 daily history: each source button opens its exact feedback revision and date/scope, never latest (129.357774ms)
+✔ independent D14 daily history: legacy absent metadata stays unrecorded in list/detail; saved time is never used as observation date (9.801875ms)
+✔ DW02/D18: history uses the exact issue choice chain and pending request, never strategy revision as round number (122.236252ms)
+✔ DW02/D12: returning from a historical round only navigates; it never accesses composer or draft endpoints (8.979681ms)
+✔ DW16: switching to denied history clears old issue contents and an open source before another read completes (5.877866ms)
+✔ DW16: a late response from a previous issue cannot overwrite the selected issue history (4.275397ms)
+✔ D14: historical observation date and source stay distinct from recording time; legacy dates remain unknown (5.000744ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 469.00955

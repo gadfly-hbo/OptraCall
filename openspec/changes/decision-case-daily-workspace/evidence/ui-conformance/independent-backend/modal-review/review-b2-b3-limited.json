@@ -1,0 +1,145 @@
+{
+  "recordedAt": "2026-11-28T01:39:37.949155+00:00",
+  "conclusion": "LIMITED PASS for fixed B2/B3 corrections and reachable keyed modal/controller behavior; NOT overall D14 or frozen UI acceptance",
+  "candidateSource": "current-modal-b3-handoff.json plus unchanged other modal files and B2 controller hash",
+  "files": [
+    {
+      "path": "src/host/ui/CaseIssuePanel.tsx",
+      "sha256": "ebb80cb124c0553aa6ce147021dc45f4c65155e72062a3bf6468ab096db99839",
+      "postSha256": "ebb80cb124c0553aa6ce147021dc45f4c65155e72062a3bf6468ab096db99839",
+      "unchanged": true
+    },
+    {
+      "path": "src/host/ui/CaseFeedbackDialog.tsx",
+      "sha256": "048cc6e25ae0bea7163d2a8ccdfa4cac2eab6a6662d45b2fe826c5e9d19a4f0f",
+      "postSha256": "048cc6e25ae0bea7163d2a8ccdfa4cac2eab6a6662d45b2fe826c5e9d19a4f0f",
+      "unchanged": true
+    },
+    {
+      "path": "src/host/ui/CaseActionDraftRecovery.tsx",
+      "sha256": "6b734ca4b1427833d68e9730c4dd4a87d667211f3aefbe5b665c928098eb93af",
+      "postSha256": "6b734ca4b1427833d68e9730c4dd4a87d667211f3aefbe5b665c928098eb93af",
+      "unchanged": true
+    },
+    {
+      "path": "src/host/ui/case-action-dialog.css",
+      "sha256": "46e04a4f7107fdcda779abdc9eb945d01c5f746e6c75abedc821c654d3cfc070",
+      "postSha256": "46e04a4f7107fdcda779abdc9eb945d01c5f746e6c75abedc821c654d3cfc070",
+      "unchanged": true
+    },
+    {
+      "path": "src/host/ui/case-action-draft.ts",
+      "sha256": "b1dae4e8a0ba136dbda2380c8aa3acd46d996173679f252ae3395b68c0621f18",
+      "postSha256": "b1dae4e8a0ba136dbda2380c8aa3acd46d996173679f252ae3395b68c0621f18",
+      "unchanged": true
+    },
+    {
+      "path": "src/host/ui/useCaseActionDraft.ts",
+      "sha256": "6733c7b4ca34f11d564812301f01989b33d59dcf1c01e97103ffae2f46348378",
+      "postSha256": "6733c7b4ca34f11d564812301f01989b33d59dcf1c01e97103ffae2f46348378",
+      "unchanged": true
+    },
+    {
+      "path": "extensions/business-plugins/decision-board/ui/DecisionBoardPage.tsx",
+      "sha256": "dcdf1310468037a4ae03cde2658dd9b7243204e6b803e507cd7ee07773ddc80c",
+      "postSha256": "e3d9d336e39d35f66c5f1a89cb339d30bda747e4b52046e74f07b22cd9412074",
+      "unchanged": false
+    },
+    {
+      "path": "tests/case-request-response-ui.test.ts",
+      "sha256": "2712e5f5d14c46d24939c93b20d9a2e061cb9530e7e355b1c2ece2008e11121b",
+      "postSha256": "2712e5f5d14c46d24939c93b20d9a2e061cb9530e7e355b1c2ece2008e11121b",
+      "unchanged": true
+    },
+    {
+      "path": "tests/case-feedback-dialog-ui.test.ts",
+      "sha256": "f521c317219e98a585c2ab5f0db82ad726782b1f377f32c49a453ad5c8a3b29b",
+      "postSha256": "f521c317219e98a585c2ab5f0db82ad726782b1f377f32c49a453ad5c8a3b29b",
+      "unchanged": true
+    },
+    {
+      "path": "tests/case-action-draft.test.ts",
+      "sha256": "c6fd50f4787ffe78192ed4fd4e27f8eeb640c9b7dc4849205ee46ec9d545bed9",
+      "postSha256": "c6fd50f4787ffe78192ed4fd4e27f8eeb640c9b7dc4849205ee46ec9d545bed9",
+      "unchanged": true
+    },
+    {
+      "path": "tests/case-action-draft-recovery-ui.test.ts",
+      "sha256": "e795365280aadc76d9299280a02ff569e6521e82bcf4b2f4d691ff802149e6e2",
+      "postSha256": "e795365280aadc76d9299280a02ff569e6521e82bcf4b2f4d691ff802149e6e2",
+      "unchanged": true
+    }
+  ],
+  "checks": [
+    {
+      "log": "b3-choice-recheck.log",
+      "pass": 16,
+      "fail": 0,
+      "coverage": "Unmodified original B2 and B3 failure probes; historical/current plan qualification; normal fresh default; full remount explicit changed/empty/unlinked restored inputs; UNKNOWN original operation; initial503 cancel; closed no new PUT/POST; closed existing intent read-only; auto entry target focus component check"
+    },
+    {
+      "log": "b3-feedback-hook-recheck.log",
+      "pass": 15,
+      "fail": 0,
+      "coverage": "Same hook normal/negative feedback regression plus actual original FeedbackDialog exact selected request/auth/baseline, readOnly cancel, request isolation, late receipt and mismatched receipt defenses"
+    },
+    {
+      "log": "../modal-controller/b3/formal-tests.log",
+      "pass": 20,
+      "fail": 0
+    },
+    {
+      "log": "../modal-controller/b3/independent-tests.log",
+      "pass": 11,
+      "fail": 0,
+      "coverage": "Original controller negative probes, restored semantics and actual owner-key remount readOnly boundary"
+    },
+    {
+      "log": "../modal-controller/b3/generic-owner-risk.log",
+      "pass": 0,
+      "fail": 1,
+      "classification": "Known helper limitation outside current keyed modal path: in-place same-hook A closed+dirty to B open shares readOnly ref and old cleanup PUTs A. Reported to root; not claimed covered/pass. Actual keyed remount boundary separately passes."
+    }
+  ],
+  "closedFindings": [
+    {
+      "id": "B2",
+      "originalFail": "independent-choice-reopen.log",
+      "recheck": "b3-choice-recheck.log",
+      "result": "Restored explicit selection including empty/non-response outranks original request default; new absent draft still receives accurate default"
+    },
+    {
+      "id": "B3",
+      "originalFail": "independent-choice-closed.log",
+      "recheck": "b3-choice-recheck.log",
+      "result": "Closed pure view no draft write; current consumer readOnly blocks edits/save/backup/autosave while retaining original fields/UNKNOWN"
+    }
+  ],
+  "preservedEvidence": [
+    "review-candidate-c.json BLOCKED B2 retained",
+    "b3-closed-review.json B3 FAIL retained",
+    "B1 initial FAIL and initial37PASS retained",
+    "Independent CSS bundler fixture failure retained in targeted-v1.log; only local harness fixed"
+  ],
+  "fourPrinciples": {
+    "HostEnvironment": "Original source/permission/CAS/immutable operations preserved; no professional inference",
+    "AgentAutonomy": "No new execution scheduling, rule gate or provider call",
+    "PiReuse": "Original Board feedback form/business API and workspace issue-draft CAS reused; no parallel SDK lifecycle",
+    "ReduceOperations": "Same-page action and durable input restore; clear cancel path; conflict preservation only on actual CAS conflicts"
+  },
+  "limitations": [
+    "New D14 nullable adopted/date/sourceScope and compact presentation are active implementation and are outside this report; prior PASS does not apply.",
+    "No overall frozen UI, screenshot, keyboard/focus/browser or user confirmation claim.",
+    "Shared Host runtime GET evidence refers to candidate c original homepage projection only; B2/B3 updated UI source requires root final build/browser evidence.",
+    "Only isolated evidence/probes written; no product source/formal test/spec/Git/Issue modifications."
+  ],
+  "priorScopeHashes": "prior-reviewed-scope-hash-recheck.json (19 previously reviewed entries unchanged)",
+  "controllerReview": "../modal-controller/b3/delta-review.json",
+  "scopeTransition": {
+    "changedFile": "extensions/business-plugins/decision-board/ui/DecisionBoardPage.tsx",
+    "reason": "D14 author started the separately authorized compact presentation while this bounded report was being sealed. Earlier original-form regression applies only to dcdf131…7ddc80c. New e3d9d336… pending independent D14 review.",
+    "feedbackRunLogMtime": "2026-11-28T01:33:50.495540+00:00",
+    "fileMtime": "2026-11-28T01:39:03.659803+00:00"
+  },
+  "b2b3ProductionStable": true
+}

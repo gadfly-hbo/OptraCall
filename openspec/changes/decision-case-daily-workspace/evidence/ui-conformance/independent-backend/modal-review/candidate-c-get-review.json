@@ -1,0 +1,24 @@
+{
+  "checkedAt": "2026-11-28T01:28:00.065468+00:00",
+  "scope": "Read-only synthetic actual Host candidate c unchanged original request and waiting projection",
+  "runtime": {
+    "instanceId": "90c2ac19-b31c-4ecb-8674-62aaa3fe4345",
+    "pid": 246595,
+    "codeRoot": "/workspace/OptraCall-issue149-ui-conformance",
+    "version": "0.1.0-mvp.4",
+    "commit": "5dd59909227ab46f3d989ade8b2847e077636855",
+    "tree": "1078a6e2359a29e82631ab59f56a8d6dd9492d73",
+    "builtAt": "2026-11-28T01:26:28.567Z",
+    "dirty": true
+  },
+  "sourceManifestHashFromParent": "c170745b53d259b58b22d3afacc9b671c638ec3b8d495ac0e75db7d9ea9f8adf",
+  "methods": [
+    "GET"
+  ],
+  "checks": {
+    "pendingOriginalIdentityAndRound": true,
+    "waitingOriginalProjectSourceRevisionAssigneeTime": true,
+    "repeatedGetUnchanged": true
+  },
+  "doesNotResolve": "B2 explicit-choice draft restore blocker; product screenshot and user acceptance separate"
+}

@@ -1,0 +1,24 @@
+✔ independent closed Case: opening original request is read-only and must not persist a new choice draft (555.36674ms)
+✔ independent DW13: reopening explicit historical-request editor preserves consciously selected current plan and original response association (167.779466ms)
+✔ DW09/FUI-02: a selected open historical request loads its exact strategy revision and requires explicit historical confirmation (155.57352ms)
+✔ DW09/FUI-03: explicitly switching from request A to issue B restores B single-request matching (10.028972ms)
+✔ DW09/FUI-02: denied exact historical read never silently substitutes the latest version for the original request (4.506231ms)
+✔ DW09: current-version choices retain the normal one-request path without historical opt-in (9.771063ms)
+✔ DW09/FUI-02: unauthorized, archived or owner-mismatched original revisions cannot be used for a new choice (18.096216ms)
+✔ D13: recording a choice opens a same-page dialog; cancellation preserves its unsaved reason (11.392566ms)
+✔ D13/DW13: an untouched editor can cancel after draft GET 503 while business save stays disabled (2.684347ms)
+✔ D13/DW09: a cancelled choice reopens for a fresh entry sequence without replacing the original draft (3.577315ms)
+✔ D13: an unknown choice keeps its exact operation and resolves through the original timeline without a second write (5.666629ms)
+✔ DW13/B2: full remount preserves an explicitly changed or cleared plan instead of reapplying the historical-request default (15.918379ms)
+✔ DW13/B2: an explicitly unlinked request association stays unlinked after full remount (12.548947ms)
+✔ DW13/B3: viewing a closed Case original request cannot initialize or autosave a new choice draft (357.791805ms)
+✔ DW13/B3: a closed Case can restore its existing uncertain choice input without changing that draft or replaying its operation (358.900134ms)
+✔ D13/D14: automatic request entry captures the current-work action as the shared dialog return focus (7.294855ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1302.018746

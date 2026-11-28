@@ -1,6 +1,6 @@
 import type { CaseDecisionIssue, CaseDecisionRequest, CaseDecisionRequestStatus, CaseFeedbackResponse, CaseStrategyChoice } from './case-decision-types.ts';
 import { requestStatus } from './case-decision-types.ts';
-import type { CaseRecord, OperationReceipt } from './case-types.ts';
+import type { CaseRecord, OperationReceipt, ProjectWorkRecord } from './case-types.ts';
 
 export type HomePendingItem = {
   requestId: string;
@@ -9,6 +9,8 @@ export type HomePendingItem = {
   caseTitle: string;
   issueId: string;
   issueTitle: string;
+  /** Ordinal in this request's original issue choice chain, never strategy revision. */
+  roundNumber: number | null;
   kind: 'choose' | 'observe';
   actionLabel: '作取舍' | '补原始观察';
   text: string;
@@ -28,6 +30,7 @@ export type HomeContinueItem = {
   issueId: string | null;
   issueTitle: string | null;
   nextStep: string;
+  issueCount?: number;
 };
 
 export type HomeExternalWaitingItem = {
@@ -37,6 +40,9 @@ export type HomeExternalWaitingItem = {
   issueTitle: string | null;
   reason: string;
   updatedAt: string;
+  source?: { kind: 'project-work'; projectId: string; revision: number };
+  assignee?: string | null;
+  relatedCases?: { caseId: string; caseTitle: string }[];
 };
 
 export type HomeOperationToVerify = {
@@ -63,6 +69,7 @@ export type HomePendingProjection = {
   unresolvedRequests: HomePendingItem[];
   continueWork: HomeContinueItem[];
   externalWaiting: HomeExternalWaitingItem[];
+  externalWaitingLimited?: boolean;
   pendingOperations: HomeOperationToVerify[];
   foundationReminders: HomeFoundationReminder[];
 };
@@ -82,8 +89,40 @@ export type HomePendingCaseInput = {
   feedbackResponses?: CaseFeedbackResponse[] | null;
   /** Qualified per request; one unavailable action must not hide other requests. */
   requestStatuses?: Readonly<Record<string, CaseDecisionRequestStatus>>;
+  requestRoundNumbers?: Readonly<Record<string, number | null>>;
   pendingOperations?: OperationReceipt[];
 };
+
+/** Count only a complete, unambiguous predecessor chain for the original owner. */
+export function homeRequestRoundNumber(request: CaseDecisionRequest, choices: readonly CaseStrategyChoice[] | null | undefined,
+  observationChoiceId?: string | null, expectedStoreId?: string): number | null {
+  if (request.kind !== request.target.kind || !request.issueId) return null;
+  const storeId = expectedStoreId ?? (request.target.kind === 'choose' ? request.target.strategyRef.caseStoreId : undefined);
+  if (!storeId) return null;
+  let cursor: string | null, ordinal: number;
+  if (request.target.kind === 'choose') {
+    const ref = request.target.strategyRef;
+    if (ref.caseId !== request.caseId || ref.caseStoreId !== storeId) return null;
+    cursor = request.target.expectedPreviousChoiceId; ordinal = 1;
+  } else {
+    if (!observationChoiceId) return null;
+    cursor = observationChoiceId; ordinal = 0;
+  }
+  const byId = new Map<string, CaseStrategyChoice>(), duplicates = new Set<string>(), visited = new Set<string>();
+  for (const choice of choices ?? []) {
+    if (byId.has(choice.choiceId)) duplicates.add(choice.choiceId);
+    byId.set(choice.choiceId, choice);
+  }
+  while (cursor !== null) {
+    if (typeof cursor !== 'string' || visited.has(cursor) || duplicates.has(cursor)) return null;
+    visited.add(cursor);
+    const choice = byId.get(cursor);
+    if (!choice || choice.caseId !== request.caseId || choice.issueId !== request.issueId
+      || choice.strategyRef.caseId !== request.caseId || choice.strategyRef.caseStoreId !== storeId) return null;
+    ordinal++; cursor = choice.previousChoiceId;
+  }
+  return ordinal;
+}
 
 /**
  * Pure projection of the workspace home sections from authoritative records.
@@ -94,6 +133,8 @@ export type HomePendingCaseInput = {
 export function projectHomePending(input: {
   storeState: HomePendingProjection['storeState'];
   cases: HomePendingCaseInput[];
+  projectWaiting?: { work: ProjectWorkRecord; caseIds: string[] }[];
+  externalWaitingLimited?: boolean;
 }): HomePendingProjection {
   if (input.storeState !== 'ready') {
     return {
@@ -138,6 +179,9 @@ export function projectHomePending(input: {
         caseTitle: record.title,
         issueId: req.issueId,
         issueTitle: issueMap.get(req.issueId)?.title ?? '原事项暂不可读',
+        roundNumber: req.caseId !== record.id || issueMap.get(req.issueId)?.caseId !== record.id ? null
+          : entry.requestRoundNumbers && Object.hasOwn(entry.requestRoundNumbers, req.requestId) ? entry.requestRoundNumbers[req.requestId]!
+          : homeRequestRoundNumber(req, choices),
         kind: req.kind,
         actionLabel: req.kind === 'choose' ? '作取舍' : '补原始观察',
         text: req.text,
@@ -161,28 +205,42 @@ export function projectHomePending(input: {
         unresolvedRequests.push(item);
       }
     }
-    if (record.status === 'observing') {
-      const latestIssue = issues.at(-1) ?? null;
-      externalWaiting.push({
-        caseId: record.id,
-        caseTitle: record.title,
-        issueId: latestIssue?.id ?? null,
-        issueTitle: latestIssue?.title ?? null,
-        reason: record.nextStep || '正在等待外部执行或观察结果',
-        updatedAt: record.updatedAt,
-      });
-    } else if (record.status !== 'closed') {
-      const latestIssue = issues.at(-1) ?? null;
+    if (record.status !== 'closed') {
       continueWork.push({
         caseId: record.id,
         caseTitle: record.title,
         status: record.status,
         updatedAt: record.updatedAt,
-        issueId: latestIssue?.id ?? null,
-        issueTitle: latestIssue?.title ?? null,
+        // Creation order is not the user's selected issue. Open the Case and let
+        // its retained navigation state choose the current issue.
+        issueId: null,
+        issueTitle: null,
+        issueCount: issues.length,
         nextStep: record.nextStep,
       });
     }
+  }
+
+  const caseMap = new Map(input.cases.map(entry => [entry.record.id, entry.record]));
+  const includedProjects = new Set<string>();
+  for (const { work, caseIds } of input.projectWaiting ?? []) {
+    if (work.workStatus !== 'awaiting_feedback' || !work.updatedAt || includedProjects.has(work.projectId)) continue;
+    const relatedCases = [...new Set(caseIds)].flatMap(caseId => {
+      const record = caseMap.get(caseId);
+      return record ? [{ caseId: record.id, caseTitle: record.title }] : [];
+    });
+    if (!relatedCases.length) continue;
+    includedProjects.add(work.projectId);
+    externalWaiting.push({
+      ...relatedCases[0]!, relatedCases,
+      // Project work is shared; it is not proof that one particular issue or
+      // every action in that project is waiting. Keep its original authority.
+      issueId: null, issueTitle: null,
+      source: { kind: 'project-work', projectId: work.projectId, revision: work.revision },
+      assignee: work.assignee,
+      reason: work.nextStep || work.statusReason || '原项目已记录等待反馈。',
+      updatedAt: work.updatedAt,
+    });
   }
 
   pending.sort((a, b) => Date.parse(b.requestedAt) - Date.parse(a.requestedAt));
@@ -196,6 +254,7 @@ export function projectHomePending(input: {
     unresolvedRequests,
     continueWork,
     externalWaiting,
+    externalWaitingLimited: input.externalWaitingLimited ?? false,
     pendingOperations,
     foundationReminders: FOUNDATION_REMINDERS,
   };

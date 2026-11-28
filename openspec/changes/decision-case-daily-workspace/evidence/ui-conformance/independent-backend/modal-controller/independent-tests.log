@@ -1,0 +1,14 @@
+✔ independent: malformed backup receipts cannot authorize original overwrite (41.051314ms)
+✔ independent: prior conversation draft survives real store conflict recovery and reopen untouched (55.543184ms)
+✔ independent: permission loss while saving clears remote fields and never retries after local discard (1.058086ms)
+✔ independent: late first load plus local edits requires exact conflict preservation before write (0.827608ms)
+✔ independent recovery: exact source revision mismatch never appears (137.087888ms)
+✔ independent recovery: switching owner hides cached text immediately and rejects late previous owner (2.725999ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 417.526399

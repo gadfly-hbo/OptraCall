@@ -1,0 +1,48 @@
+{"baseline":"5dd59909227ab46f3d989ade8b2847e077636855","legacyOperationId":"5dc5b194-c30d-49a3-8a2c-f41cc1da3ea8","legacyChoiceId":"19967b56-cdc3-42ef-8b48-99339518c3dd","originalRowsPreserved":true,"schemaVersion":2,"optionalFieldExact":"精确原话 <script>仅文本</script>，并不授权行动。"}
+✔ independent: true pre-change operation/event replay survives new optional field and rollback reads (235.023412ms)
+✖ independent: actual Host HTTP preserves exact optional nextStep, legacy replay and closed-case write gate (2144.294741ms)
+✔ independent: summary prioritizes exact original review over choice nextStep and keeps unknown explicit (2.719661ms)
+✔ explicit selection resets a manual auxiliary scope while restoration and ordinary redraw retain it (3.096519ms)
+✔ an empty Case or a removed issue cannot retain another Case issue scope (0.364947ms)
+✔ all current Case requires an exact task binding and never absorbs foreign or independent project tasks (0.71303ms)
+✔ the latest original round alone supplies judgement, next step and exact source identities (1.659018ms)
+✔ missing reviews and limited action history remain unknown instead of borrowing older conclusions (0.637616ms)
+✔ action progress preserves the exact current authorization and observation identities (0.699894ms)
+✔ M5-STORE-01: Agent can append an independently versioned Case draft and read its exact prior revision (71.122368ms)
+✔ M5-STORE-02: a human choice is exact, cross-revision CAS protected and never inherited by a new Agent draft (69.439384ms)
+✔ M5-STORE-03: human associations and archive/restore append revisions without changing the original body, choice or action (74.286306ms)
+✔ M5-STORE-04: completed original operation bypasses today write checks while cancellation before commit leaves no draft (28.452995ms)
+✔ M5-STORE-05: dependencies refer only to exact hypotheses of the same Case; forged identity and stale drafts do not save (48.766927ms)
+✔ M5-STORE-06: directory/history pages remain bounded and bound to the exact Case, with old versions independently readable (47.4829ms)
+▶ M5-STORE-07: a changed directory requires an explicit fresh read instead of silently skipping or repeating rows
+  ✔ card archived between pages (36.044215ms)
+  ✔ history appended between pages (44.117832ms)
+✔ M5-STORE-07: a changed directory requires an explicit fresh read instead of silently skipping or repeating rows (81.095014ms)
+✔ M5-STORE-08: new human choices invalidate the Case directory cursor while another Case does not (68.11178ms)
+✔ D13 frozen optional next step is immutable choice evidence, preserves old replay and never updates the whole Case plan (50.723092ms)
+✔ DW02/D18: history uses the exact issue choice chain and pending request, never strategy revision as round number (123.877604ms)
+✔ DW02/D12: returning from a historical round only navigates; it never accesses composer or draft endpoints (11.134847ms)
+✔ DW16: switching to denied history clears old issue contents and an open source before another read completes (7.160458ms)
+✔ DW16: a late response from a previous issue cannot overwrite the selected issue history (5.177497ms)
+ℹ tests 24
+ℹ suites 0
+ℹ pass 23
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2919.862231
+
+✖ failing tests:
+
+test at .local/ui-conformance/backend-independent/choice-nextstep/independent.test.ts:71:1
+✖ independent: actual Host HTTP preserves exact optional nextStep, legacy replay and closed-case write gate (2144.294741ms)
+  Error: Test Host exited during startup (1): {"kind":"host-startup-failed","at":"2026-11-28T01:20:41.928Z","pid":244409,"errorName":"Error","errorCode":"overlapping_data_roots"}
+  OptraCall Host could not start. Check runtime and port availability.
+  Startup code: overlapping_data_roots
+  {"kind":"host-process-exit","at":"2026-11-28T01:20:41.929Z","pid":244409,"exitCode":1,"reason":"normal"}
+  
+      at ChildProcess.<anonymous> (file:///workspace/OptraCall-issue149-ui-conformance/tests/fixtures/host-process.ts:26:62)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:324:12)

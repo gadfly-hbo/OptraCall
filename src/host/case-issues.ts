@@ -210,7 +210,7 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
       const review = reviews.find(r => r.choiceId === choice.choiceId) ?? null;
       return { choice, reviewSaved: Boolean(review), historyLimited:false, reviewObservationLimited:false, strategy: cases.getDecision(caseId, choice.strategyRef.recordId, choice.strategyRef.revision), review,
       actions: [] as { projectId: string; itemId: string; taskId: string; title: string; status: string; currentAuthorizationId?: string; authorizations: { id: string; scope: string; decision: string; time: string }[]; observationTimeLimited?: boolean; quotedFeedbackLimited?: boolean;
-        feedback: { revisionId: string; observedAt: string; authorizationId: string; actionTitle: string; effect: string; outcome: string; metricDelta: string; review: string }[] }[] };
+        feedback: { revisionId: string; observedAt: string; authorizationId: string; actionTitle: string; effect: string; outcome: string; metricDelta: string; review: string; observationDate?: string | null; sourceScope?: string | null }[] }[] };
     });
     if (board && rounds.length) {
       const matchesOriginalCall = quotedFeedbackMatches(deps.projects);
@@ -244,6 +244,7 @@ export function createCaseIssueService(deps: CaseDecisionServiceDependencies) {
           const feedback = observations.flatMap(({ feedback:f, match }) => match && ours(match.authority) ? [{
             revisionId:f.revisionId, observedAt:match.observedAt, authorizationId:match.authority.authorizationId,
             actionTitle:match.authority.taskSnapshot?.title ?? task.id, effect:f.effect, outcome:f.outcome, metricDelta:f.metricDelta, review:f.review,
+            ...(f.observationDate == null ? {} : { observationDate: f.observationDate }), ...(f.sourceScope == null ? {} : { sourceScope: f.sourceScope }),
           }] : []);
           round.actions.push({ currentAuthorizationId, projectId: item.projectId, itemId: item.id, taskId: task.id, title: task.title, status: task.status,
             ...(quotedFeedbackLimited ? {quotedFeedbackLimited:true} : {}),

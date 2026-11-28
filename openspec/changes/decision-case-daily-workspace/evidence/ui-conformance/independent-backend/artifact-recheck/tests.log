@@ -1,0 +1,12 @@
+✔ independent artifact: switching original reference rejects late old content even when transport ignores abort (127.108738ms)
+✔ artifact source reads the original project/path/hash and never substitutes current content after conflict or denial (126.502968ms)
+✔ unavailable, binary and oversized source references do not request or invent a text preview (6.796626ms)
+✔ closing a source ignores a late original-file response (10.885312ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 392.017135

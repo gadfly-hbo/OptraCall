@@ -1,0 +1,138 @@
+{
+  "recordedAt": "2026-11-28T01:34:10.682874+00:00",
+  "files": [
+    {
+      "scopeManifest": "round-recheck/input-manifest.json",
+      "path": "src/host/home-pending.ts",
+      "expectedSha256": "1ae5414d896cb3818989f5c2c84e39517243d462a80afc53eaf2b93806e63e47",
+      "sha256": "1ae5414d896cb3818989f5c2c84e39517243d462a80afc53eaf2b93806e63e47",
+      "unchanged": true
+    },
+    {
+      "scopeManifest": "round-recheck/input-manifest.json",
+      "path": "src/host/workspace-daily-routes.ts",
+      "expectedSha256": "21015f8a6b5c595d22e8e5c4c0f2bb6fbd502c3316b628fa837cc6fb283ffad6",
+      "sha256": "21015f8a6b5c595d22e8e5c4c0f2bb6fbd502c3316b628fa837cc6fb283ffad6",
+      "unchanged": true
+    },
+    {
+      "scopeManifest": "round-recheck/input-manifest.json",
+      "path": "tests/home-request-rounds.test.ts",
+      "expectedSha256": "25da16602662851f530fc5654fe87d6123314ca79e83cbd0a8f2bf6bd648d5e7",
+      "sha256": "25da16602662851f530fc5654fe87d6123314ca79e83cbd0a8f2bf6bd648d5e7",
+      "unchanged": true
+    },
+    {
+      "scopeManifest": "round-recheck/input-manifest.json",
+      "path": "src/host/ui/CasePreparation.tsx",
+      "expectedSha256": "af5018164c477806a0b50ec788840abdaf06512fd111a82d420718678606f759",
+      "sha256": "af5018164c477806a0b50ec788840abdaf06512fd111a82d420718678606f759",
+      "unchanged": true
+    },
+    {
+      "scopeManifest": "round-recheck/input-manifest.json",
+      "path": "tests/case-preparation-ui.test.ts",
+      "expectedSha256": "372441a843163408754c68cb2903ca4f30a0c901bd7f7534836129193744e44f",
+      "sha256": "372441a843163408754c68cb2903ca4f30a0c901bd7f7534836129193744e44f",
+      "unchanged": true
+    },
+    {
+      "scopeManifest": "round-recheck/input-manifest.json",
+      "path": "src/host/ui/HomeDailyQuickPanel.tsx",
+      "expectedSha256": "950501dff243f3c98bd57480071b5cdb5a4e7570054b8287a32ac9279207b014",
+      "sha256": "950501dff243f3c98bd57480071b5cdb5a4e7570054b8287a32ac9279207b014",
+      "unchanged": true
+    },
+    {
+      "scopeManifest": "round-recheck/input-manifest.json",
+      "path": "src/host/case-issues.ts",
+      "expectedSha256": "3db7cf0cd2fd5a1894d08ef2a2a7a77289304ffde72717bd8599fb53cd69d627",
+      "sha256": "3db7cf0cd2fd5a1894d08ef2a2a7a77289304ffde72717bd8599fb53cd69d627",
+      "unchanged": true
+    },
+    {
+      "scopeManifest": "preparation/recheck/review.json",
+      "path": "src/host/ui/CasePreparation.tsx",
+      "expectedSha256": "af5018164c477806a0b50ec788840abdaf06512fd111a82d420718678606f759",
+      "sha256": "af5018164c477806a0b50ec788840abdaf06512fd111a82d420718678606f759",
+      "unchanged": true
+    },
+    {
+      "scopeManifest": "preparation/recheck/review.json",
+      "path": "tests/case-preparation-ui.test.ts",
+      "expectedSha256": "372441a843163408754c68cb2903ca4f30a0c901bd7f7534836129193744e44f",
+      "sha256": "372441a843163408754c68cb2903ca4f30a0c901bd7f7534836129193744e44f",
+      "unchanged": true
+    },
+    {
+      "scopeManifest": "artifact-recheck/input-manifest.json",
+      "path": "src/host/ui/DailyArtifactPreview.tsx",
+      "expectedSha256": "e13ab5eebd2ee4b130e10272ffce63cc04d5b864ead30f559eba4c764f1633fb",
+      "sha256": "e13ab5eebd2ee4b130e10272ffce63cc04d5b864ead30f559eba4c764f1633fb",
+      "unchanged": true
+    },
+    {
+      "scopeManifest": "artifact-recheck/input-manifest.json",
+      "path": "src/host/ui/runtime-client.ts",
+      "expectedSha256": "62cbe1cbf00f0b9cbcfd468aee4635ba6f674061466744bf89200ba5d2d42657",
+      "sha256": "62cbe1cbf00f0b9cbcfd468aee4635ba6f674061466744bf89200ba5d2d42657",
+      "unchanged": true
+    },
+    {
+      "scopeManifest": "artifact-recheck/input-manifest.json",
+      "path": "tests/daily-artifact-preview-ui.test.ts",
+      "expectedSha256": "a0d075a6ab5fd6db0b9f90362a2b7ce7234fdc92211018b8552429208caab466",
+      "sha256": "a0d075a6ab5fd6db0b9f90362a2b7ce7234fdc92211018b8552429208caab466",
+      "unchanged": true
+    },
+    {
+      "scopeManifest": "choice-nextstep/post-run-manifest.json",
+      "path": "src/host/case-decision-types.ts",
+      "expectedSha256": "8c53d30a8e172b51e2a26ad689221d7f8b20b07b9c68cb6080dc7710b2cacfd8",
+      "sha256": "8c53d30a8e172b51e2a26ad689221d7f8b20b07b9c68cb6080dc7710b2cacfd8",
+      "unchanged": true
+    },
+    {
+      "scopeManifest": "choice-nextstep/post-run-manifest.json",
+      "path": "src/host/case-decision-validation.ts",
+      "expectedSha256": "e67e930759f336f78ba807a3572058730c0ad1ac4552788c932dbfbc297a8033",
+      "sha256": "e67e930759f336f78ba807a3572058730c0ad1ac4552788c932dbfbc297a8033",
+      "unchanged": true
+    },
+    {
+      "scopeManifest": "choice-nextstep/post-run-manifest.json",
+      "path": "src/host/case-decision-service.ts",
+      "expectedSha256": "6eb882a44ae08ba89a2ade4ca4c7f3a8461443946b12aae4a6d8bab8d5b2201a",
+      "sha256": "6eb882a44ae08ba89a2ade4ca4c7f3a8461443946b12aae4a6d8bab8d5b2201a",
+      "unchanged": true
+    },
+    {
+      "scopeManifest": "choice-nextstep/post-run-manifest.json",
+      "path": "src/host/case-store.ts",
+      "expectedSha256": "6fad3d3599ac3426f782f45fb216f635443f6924fbf717f99bf8d3e7bac38b3e",
+      "sha256": "6fad3d3599ac3426f782f45fb216f635443f6924fbf717f99bf8d3e7bac38b3e",
+      "unchanged": true
+    },
+    {
+      "scopeManifest": "choice-nextstep/post-run-manifest.json",
+      "path": "tests/case-decision-store.test.ts",
+      "expectedSha256": "8cb1c1710dbe17ca1c0f111cde51f2a60ff51a197bff2d66ac65bc7eac624e89",
+      "sha256": "8cb1c1710dbe17ca1c0f111cde51f2a60ff51a197bff2d66ac65bc7eac624e89",
+      "unchanged": true
+    },
+    {
+      "scopeManifest": "choice-nextstep/post-run-manifest.json",
+      "path": "src/host/ui/case-board-navigation-model.ts",
+      "expectedSha256": "18b455a5157fe8d1fb5c1774d0e5a81916baceaa2c3c87889c2a4cf94017e0f6",
+      "sha256": "18b455a5157fe8d1fb5c1774d0e5a81916baceaa2c3c87889c2a4cf94017e0f6",
+      "unchanged": true
+    },
+    {
+      "scopeManifest": "choice-nextstep/post-run-manifest.json",
+      "path": "src/host/ui/DailyCaseHistory.tsx",
+      "expectedSha256": "1f2efe34a6201142ef68a0ed12dc1ff3aca8686ce4e027e5ffbd462072781a58",
+      "sha256": "1f2efe34a6201142ef68a0ed12dc1ff3aca8686ce4e027e5ffbd462072781a58",
+      "unchanged": true
+    }
+  ]
+}

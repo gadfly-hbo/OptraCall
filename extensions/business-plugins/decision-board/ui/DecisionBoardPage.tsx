@@ -17,16 +17,16 @@ const PRIORITY_LABEL: Record<string, string> = { high: '高优', medium: '中优
 const TASK_STATUS_LABEL: Record<string, string> = { todo: '待办', doing: '进行中', done: '已完成' };
 const kb = (bytes: number) => bytes >= 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${bytes} B`;
 
-function BoardDialog({ title, error, children, onClose, busy = false }: { title: string; error?: string | null; children: React.ReactNode; onClose: () => void; busy?: boolean }) {
-  return <CaseDialog title={title} className="board-dialog" onClose={onClose} busy={busy}>
+function BoardDialog({ title, subtitle, className = '', error, children, onClose, busy = false, returnFocusId }: { title: string; subtitle?: string; className?: string; error?: string | null; children: React.ReactNode; onClose: () => void; busy?: boolean; returnFocusId?: string }) {
+  return <CaseDialog title={title} subtitle={subtitle} returnFocusId={returnFocusId} className={`board-dialog ${className}`} onClose={onClose} busy={busy}>
     {error && <p className="board-error" role="alert">{error}</p>}
     {children}
   </CaseDialog>;
 }
 
-type FeedbackDraft = { executed: 'unknown' | 'yes' | 'no'; outcome: string; metricDelta: string; review: string; score: string; effect: FeedbackInput['effect']; expectedLatestRevisionId: string | null; operationId: string; requestContext?: ObservationRequestContext };
+export type FeedbackDraft = { executed: 'unknown' | 'yes' | 'no'; outcome: string; metricDelta: string; review: string; score: string; effect: FeedbackInput['effect']; expectedLatestRevisionId: string | null; operationId: string; requestContext?: ObservationRequestContext; observationDate?: string | null; sourceScope?: string | null };
 const effectLabel = (effect: string) => ({ unknown: '效果未知', positive: '用户认为有改善', negative: '用户认为变差', none: '用户未观察到改善' })[effect] ?? '效果未知';
-const feedbackDraft = (task: BoardTaskView): FeedbackDraft => ({ executed: task.feedback ? task.feedback.adopted ? 'yes' : 'no' : 'unknown', outcome: task.feedback?.outcome ?? '', metricDelta: task.feedback?.metricDelta ?? '', review: task.feedback?.review ?? '', score: task.feedback?.score == null ? '' : String(task.feedback.score), effect: task.feedback?.effect ?? 'unknown', expectedLatestRevisionId: task.feedback?.revisionId ?? null, operationId: crypto.randomUUID() });
+export const feedbackDraft = (task: BoardTaskView): FeedbackDraft => ({ executed: task.feedback?.adopted === true ? 'yes' : task.feedback?.adopted === false ? 'no' : 'unknown', outcome: task.feedback?.outcome ?? '', metricDelta: task.feedback?.metricDelta ?? '', review: task.feedback?.review ?? '', score: task.feedback?.score == null ? '' : String(task.feedback.score), effect: task.feedback?.effect ?? 'unknown', expectedLatestRevisionId: task.feedback?.revisionId ?? null, operationId: crypto.randomUUID(), ...(task.feedback && Object.hasOwn(task.feedback, 'observationDate') ? { observationDate: task.feedback.observationDate } : {}), ...(task.feedback && Object.hasOwn(task.feedback, 'sourceScope') ? { sourceScope: task.feedback.sourceScope } : {}) });
 
 export function DecisionBoardPage({ onOpenFeedbackTask, initialReview, initialReport, onOrganize }: { initialReport?: { projectId: string; relativePath: string; reportSha256: string }; initialReview?: FeedbackReviewStart; onOrganize?: (entry: PersonalRetentionEntry) => void; onOpenFeedbackTask: (target: { projectId: string; taskId: string; handoffId: string }) => Promise<void> }) {
   const [board, setBoard] = useState<BoardView | null>(null);
@@ -202,7 +202,7 @@ export function DecisionBoardPage({ onOpenFeedbackTask, initialReview, initialRe
             <ActionAuthorityHistory task={task} />
             <p className="card-source">所属：{item.title} · {projectName(item.projectId)}{task.owner ? ` · 负责人 ${task.owner}` : ''}{task.dueDate ? ` · 截止 ${task.dueDate}` : ''}</p>
             {task.feedback ? <div className="board-task-feedback">
-              <p>用户回录：{task.feedback.adopted ? '按建议执行' : '未按原建议执行'}{task.feedback.outcome ? ` · ${task.feedback.outcome}` : ''}{task.feedback.metricDelta ? ` · 指标变化 ${task.feedback.metricDelta}` : ''}</p>
+              <p>用户回录：{task.feedback.adopted === true ? '按建议执行' : task.feedback.adopted === false ? '未按原建议执行' : '执行情况未知'}{task.feedback.outcome ? ` · ${task.feedback.outcome}` : ''}{task.feedback.metricDelta ? ` · 指标变化 ${task.feedback.metricDelta}` : ''}</p>
               <p>{effectLabel(task.feedback.effect)} · 未经独立验证</p>{task.feedback.review && <p>复盘：{task.feedback.review}</p>}
             </div> : <p className="card-source">尚未回录反馈。</p>}
             <footer className="card-actions"><button disabled={pending !== null || projectArchived(item.projectId)} onClick={() => editFeedback(task, item)}>{task.feedback ? '更新反馈' : '回录反馈'}</button><button disabled={pending !== null || projectArchived(item.projectId)} onClick={() => review(task)}>基于此反馈复盘</button>{task.feedback && <button onClick={() => setHistoryTask(task)}>反馈历史</button>}{task.feedback && onOrganize && <><button type="button" onClick={() => onOrganize({ ref: { type: 'feedback', sourceProjectId: item.projectId, boardTaskId: task.id, feedbackRevisionId: task.feedback!.revisionId }, kind: 'knowledge' })}>整理为知识</button><button type="button" onClick={() => onOrganize({ ref: { type: 'feedback', sourceProjectId: item.projectId, boardTaskId: task.id, feedbackRevisionId: task.feedback!.revisionId }, kind: 'experience' })}>整理为经验</button></>}</footer>
@@ -371,11 +371,13 @@ function TaskDialog({ item, error, onClose, onSubmit }: { item: BoardItemView; e
   </BoardDialog>;
 }
 
-function FeedbackDialog({ task, subject, draft, error, busy, unknownOperation, onChange, onClose, onAsk, onSubmit, onQuery }: { task: BoardTaskView; subject: ObservationSubject; draft: FeedbackDraft; busy: boolean; error?: string | null; unknownOperation: string | null; onChange: (draft: FeedbackDraft) => void; onClose: () => void; onAsk: () => void; onSubmit: (input: FeedbackInput) => Promise<void>; onQuery: () => Promise<void> }) {
+export function FeedbackDialog({ presentation = 'board', contextLabel, returnFocusId, task, subject, draft, error, busy, readOnly = false, requestScope, draftControls, unknownOperation, onChange, onClose, onAsk, onSubmit, onQuery }: { presentation?: 'board' | 'case'; contextLabel?: string; returnFocusId?: string; task: BoardTaskView; subject: ObservationSubject; draft: FeedbackDraft; busy: boolean; readOnly?: boolean; requestScope?: ObservationRequestContext; draftControls?: React.ReactNode; error?: string | null; unknownOperation: string | null; onChange: (draft: FeedbackDraft) => void; onClose: () => void; onAsk: () => void; onSubmit: (input: FeedbackInput) => Promise<void>; onQuery: () => Promise<void> }) {
   const [latestForComparison, setLatestForComparison] = useState<TaskFeedbackRevision | null>(null), [comparisonError, setComparisonError] = useState('');
   const [snapshot, setSnapshot] = useState<ObservationRequestSnapshot | null>(null), [requestError, setRequestError] = useState('');
   const [readState, setReadState] = useState<'loading' | 'ready' | 'restricted' | 'stale' | 'unavailable'>('loading'), [checking, setChecking] = useState(false);
-  const readSerial = useRef(0), mounted = useRef(true), submitting = useRef(false);
+  const readSerial = useRef(0), mounted = useRef(true), submitting = useRef(false), observationInput = useRef<HTMLTextAreaElement>(null);
+  const compact = presentation === 'case';
+  useEffect(() => { if (compact && !readOnly) observationInput.current?.focus({ preventScroll: true }); }, [compact, readOnly]);
   const reloadRequests = useCallback(async () => {
     const serial = ++readSerial.current; setReadState('loading'); setRequestError('');
     try {
@@ -397,31 +399,32 @@ function FeedbackDialog({ task, subject, draft, error, busy, unknownOperation, o
   useEffect(() => { mounted.current = true; void reloadRequests(); return () => { mounted.current = false; readSerial.current++; }; }, [reloadRequests]);
   const change = (patch: Partial<FeedbackDraft>) => onChange({ ...draft, ...patch, operationId: crypto.randomUUID() });
   const selected = draft.requestContext;
-  const choices = snapshot ? availableObservationRequests(subject, draft.expectedLatestRevisionId, snapshot) : [];
+  const choices = snapshot ? availableObservationRequests(subject, draft.expectedLatestRevisionId, snapshot).filter(request => !requestScope || request.requestId === requestScope.requestId && request.revision === requestScope.revision && request.caseId === requestScope.caseId && request.issueId === requestScope.issueId) : [];
   const selectedKey = selected ? observationRequestKey(selected) : '';
   const selectedRequest = readState !== 'restricted' ? snapshot?.requests.find(row => row.requestId === selected?.requestId && row.revision === selected.revision) : undefined;
-  const selectedProblem = selected && snapshot ? validateObservationRequest(selected, subject, draft.expectedLatestRevisionId, snapshot).problem : null;
-  const locked = busy || checking || Boolean(unknownOperation);
+  const selectedProblem = selected && requestScope && (selected.requestId !== requestScope.requestId || selected.revision !== requestScope.revision || selected.caseId !== requestScope.caseId || selected.issueId !== requestScope.issueId) ? '原草稿的请求与本次入口不同，不能代替当前请求回应。请核对准确原请求。' : selected && snapshot ? validateObservationRequest(selected, subject, draft.expectedLatestRevisionId, snapshot).problem : null;
+  const locked = busy || checking || readOnly || Boolean(unknownOperation);
+  const validDate = typeof draft.observationDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(draft.observationDate) && !Number.isNaN(Date.parse(`${draft.observationDate}T00:00:00.000Z`)) && new Date(`${draft.observationDate}T00:00:00.000Z`).toISOString().slice(0,10) === draft.observationDate;
+  const invalidObservation = (compact || draft.executed === 'unknown') && (!validDate || !draft.outcome.trim()) || compact && (draft.outcome.length > 1000 || (draft.sourceScope?.length ?? 0) > 300);
   const submit = async () => {
-    if (locked || submitting.current || draft.executed === 'unknown') return;
+    if (locked || submitting.current || selectedProblem || invalidObservation || compact && readState !== 'ready') return;
     submitting.current = true; setChecking(true);
     try {
       let respondsToRequest: FeedbackInput['respondsToRequest'];
-      if (selected) {
+      if (selected || compact) {
         const current = await reloadRequests();
         if (!current) return;
-        const verified = validateObservationRequest(selected, subject, draft.expectedLatestRevisionId, current);
-        if (!verified.ref) { setRequestError(verified.problem!); return; }
-        respondsToRequest = verified.ref;
+        if (selected) {
+          const verified = validateObservationRequest(selected, subject, draft.expectedLatestRevisionId, current);
+          if (!verified.ref) { setRequestError(verified.problem!); return; }
+          respondsToRequest = verified.ref;
+        }
       }
       if (!mounted.current) return;
-      await onSubmit({ operationId: draft.operationId, expectedLatestRevisionId: draft.expectedLatestRevisionId, adopted: draft.executed === 'yes', outcome: draft.outcome, metricDelta: draft.metricDelta, review: draft.review, score: draft.score === '' ? null : Number(draft.score), effect: draft.effect, ...(respondsToRequest ? { respondsToRequest } : {}) });
+      await onSubmit({ operationId: draft.operationId, expectedLatestRevisionId: draft.expectedLatestRevisionId, adopted: draft.executed === 'unknown' ? null : draft.executed === 'yes', ...(Object.hasOwn(draft, 'observationDate') ? { observationDate: draft.observationDate } : {}), ...(Object.hasOwn(draft, 'sourceScope') ? { sourceScope: draft.sourceScope } : {}), outcome: draft.outcome, metricDelta: draft.metricDelta, review: draft.review, score: draft.score === '' ? null : Number(draft.score), effect: draft.effect, ...(respondsToRequest ? { respondsToRequest } : {}) });
     } finally { submitting.current = false; if (mounted.current) setChecking(false); }
   };
-  return <BoardDialog title={task.feedback ? '更新反馈' : '回录反馈'} error={error} onClose={onClose} busy={busy || checking}>
-    <p className="card-source">任务：{task.title} · 保存会新增一版，旧版保留。取消或 Esc 保留未保存输入。</p>
-    <form className="board-form" onSubmit={event => { event.preventDefault(); void submit(); }}>
-      <section aria-label="回应明确观察请求">
+  const requestFields = <section aria-label="回应明确观察请求">
         {readState !== 'restricted' && <><label htmlFor="feedback-request">本次反馈回应的明确请求</label><select id="feedback-request" value={selectedKey} disabled={locked || readState !== 'ready'} onChange={event => { const request = choices.find(row => observationRequestKey(row) === event.target.value); change({ requestContext: request ? observationRequestContext(request)! : undefined }); }}>
           <option value="">普通反馈 · 不回应明确请求</option>
           {selected && !choices.some(row => observationRequestKey(row) === selectedKey) && <option value={selectedKey} disabled>原请求 v{selected.revision} · 需重新核对</option>}
@@ -429,22 +432,35 @@ function FeedbackDialog({ task, subject, draft, error, busy, unknownOperation, o
         </select></>}
         {readState === 'loading' && <p role="status">正在核对原请求、实际授权与反馈基线…</p>}
         {readState === 'ready' && !choices.length && !selected && <p className="board-context-note">当前没有与本行动、实际授权和反馈基线准确匹配的待回应请求。可保存普通反馈。</p>}
-        {requestError && <p role="alert">{requestError}</p>}{selectedProblem && <p role="alert">{selectedProblem}</p>}
+        {!compact && <>{requestError && <p role="alert">{requestError}</p>}{selectedProblem && <p role="alert">{selectedProblem}</p>}</>}
         {selectedRequest && <div className="feedback-help"><strong>正在回应原请求 · v{selectedRequest.revision}</strong><blockquote>{selectedRequest.text}</blockquote><p>实际承担人：{selectedRequest.assignee.label || '未声明'} · 声明来源：{selectedRequest.assignee.source || '未知'}</p><p>提出时间：{selectedRequest.requestedAt}{selectedRequest.dueDate ? ` · 原期限：${selectedRequest.dueDate}` : ''}</p><details><summary>请求的准确引用与原文来源</summary><p>Case {selectedRequest.caseId} · 事项 {selectedRequest.issueId}<br />请求 {selectedRequest.requestId} · 修订 {selectedRequest.revision}<br />原文来源：{selectedRequest.source.ref || '未知'}</p>{selectedRequest.target.kind === 'observe' && <p>项目 {selectedRequest.target.projectId}<br />建议 {selectedRequest.target.itemId} · 行动 {selectedRequest.target.taskId}<br />授权 {selectedRequest.target.authorizationId}<br />原反馈基线 {selectedRequest.target.feedbackBaseRevisionId || '尚无反馈'}</p>}</details></div>}
         {selected && <button type="button" className="secondary-button" disabled={locked} onClick={() => change({ requestContext: undefined })}>改为普通反馈 · 保留输入</button>}
         <button type="button" className="secondary-button" disabled={locked || readState === 'loading'} onClick={() => { void reloadRequests(); }}>重新读取原请求与授权</button>
-      </section>
-      <label htmlFor="feedback-adopted">是否按建议执行</label>
+      </section>;
+  const extraFields = <><label htmlFor="feedback-adopted">是否按建议执行</label>
       <select id="feedback-adopted" disabled={locked} value={draft.executed} onChange={event => change({ executed: event.target.value as FeedbackDraft['executed'] })}><option value="unknown">未取得明确反馈（不存为否）</option><option value="yes">按建议执行</option><option value="no">未按原建议执行</option></select>
-      <label htmlFor="feedback-outcome">执行记录（选填）</label><textarea id="feedback-outcome" disabled={locked} maxLength={4000} value={draft.outcome} onChange={event => change({ outcome: event.target.value })} />
+      {!compact && <><label htmlFor="feedback-outcome">执行记录（选填）</label><textarea id="feedback-outcome" disabled={locked} maxLength={4000} value={draft.outcome} onChange={event => change({ outcome: event.target.value })} /></>}
       <label htmlFor="feedback-metric">指标变化 · 用户回录（选填）</label><textarea id="feedback-metric" disabled={locked} maxLength={1000} value={draft.metricDelta} onChange={event => change({ metricDelta: event.target.value })} />
       <label htmlFor="feedback-effect">效果判断</label><select id="feedback-effect" disabled={locked} value={draft.effect} onChange={event => change({ effect: event.target.value as FeedbackDraft['effect'] })}>{(['unknown', 'positive', 'negative', 'none'] as const).map(value => <option key={value} value={value}>{effectLabel(value)}</option>)}</select>
-      <label htmlFor="feedback-review">复盘说明与仍未知的内容（选填）</label><textarea id="feedback-review" disabled={locked} maxLength={4000} value={draft.review} onChange={event => change({ review: event.target.value })} />
+      <label htmlFor="feedback-review">原判断怎样修订／仍未知的内容（选填）</label><textarea id="feedback-review" disabled={locked} maxLength={4000} value={draft.review} onChange={event => change({ review: event.target.value })} />
       <label htmlFor="feedback-score">主观评分（选填）</label><select id="feedback-score" disabled={locked} value={draft.score} onChange={event => change({ score: event.target.value })}><option value="">未填写</option>{[1, 2, 3, 4, 5].map(value => <option key={value} value={value}>{value} / 5</option>)}</select>
-      <p className="board-context-note">效果和评分均是用户陈述，不代表独立核算或效果验证。未执行、负效果、观察不足均可记录；没有反馈也能直接提问。</p>
-      <details className="feedback-next"><summary>保存冲突时：对照最新反馈，保留我的输入</summary><button type="button" className="secondary-button" disabled={locked} onClick={async () => { try { const result = await feedbackHistory(task.id); setLatestForComparison(result.revisions.at(-1) ?? null); setComparisonError(result.revisions.length ? '' : '当前尚无已保存反馈。'); } catch (fault) { setComparisonError(fault instanceof Error ? fault.message : '最新反馈未读回。'); } }}>读取最新反馈供对照</button>{comparisonError && <p role="status">{comparisonError}</p>}{latestForComparison && <><p className="feedback-help">已读最新 v{latestForComparison.revisionNumber} · {latestForComparison.savedAt} · {latestForComparison.adopted ? '按建议执行' : '未按建议执行'} · {effectLabel(latestForComparison.effect)}</p><pre className="feedback-text">{`${latestForComparison.outcome}\n${latestForComparison.metricDelta}\n${latestForComparison.review}`}</pre><button type="button" className="secondary-button" disabled={locked} onClick={() => { onChange({ ...draft, expectedLatestRevisionId: latestForComparison.revisionId, operationId: crypto.randomUUID() }); setComparisonError(`已明确选用v${latestForComparison.revisionNumber}作为保存基线，以上编辑正文保持原样。提交会追加新版本，不覆盖旧版。`); }}>按已查看最新版继续保存 · 保留我的输入</button></>}</details>
+      <p className="board-context-note">效果和评分均是用户陈述，不代表独立核算或效果验证。未执行、负效果、观察不足均可记录；没有反馈也能直接提问。</p></>;
+  const comparison = <details className="feedback-next"><summary>保存冲突时：对照最新反馈，保留我的输入</summary><button type="button" className="secondary-button" disabled={locked} onClick={async () => { try { const result = await feedbackHistory(task.id); setLatestForComparison(result.revisions.at(-1) ?? null); setComparisonError(result.revisions.length ? '' : '当前尚无已保存反馈。'); } catch (fault) { setComparisonError(fault instanceof Error ? fault.message : '最新反馈未读回。'); } }}>读取最新反馈供对照</button>{comparisonError && <p role="status">{comparisonError}</p>}{latestForComparison && <><p className="feedback-help">已读最新 v{latestForComparison.revisionNumber} · {latestForComparison.savedAt} · {latestForComparison.adopted === true ? '按建议执行' : latestForComparison.adopted === false ? '未按建议执行' : '执行情况未知'} · {effectLabel(latestForComparison.effect)}</p><p>{latestForComparison.observationDate ? `观察日期：${latestForComparison.observationDate}` : ''}{latestForComparison.sourceScope ? ` · 来源与范围：${latestForComparison.sourceScope}` : ''}</p><pre className="feedback-text">{`${latestForComparison.outcome}\n${latestForComparison.metricDelta}\n${latestForComparison.review}`}</pre><button type="button" className="secondary-button" disabled={locked} onClick={() => { onChange({ ...draft, expectedLatestRevisionId: latestForComparison.revisionId, operationId: crypto.randomUUID() }); setComparisonError(`已明确选用v${latestForComparison.revisionNumber}作为保存基线，以上编辑正文保持原样。提交会追加新版本，不覆盖旧版。`); }}>按已查看最新版继续保存 · 保留我的输入</button></>}</details>;
+  const observationMetadata = <><div className="case-feedback-field"><label htmlFor="feedback-observation-date">观察日期</label><input id="feedback-observation-date" type="date" required={compact} disabled={locked} value={draft.observationDate ?? ''} onChange={event => change({ observationDate: event.target.value || null })}/></div></>;
+  return <BoardDialog returnFocusId={returnFocusId} title={compact ? '回录实际反馈' : task.feedback ? '更新反馈' : '回录反馈'} subtitle={compact ? contextLabel ?? task.title : undefined} className={compact ? 'case-feedback-compact-dialog' : ''} error={error} onClose={onClose} busy={busy || checking}>
+    {!compact && <p className="card-source">任务：{task.title} · 保存会新增一版，旧版保留。取消或 Esc 保留未保存输入。</p>}{draftControls}
+    {compact && <>{requestError && <p className="board-error" role="alert">{requestError}</p>}{selectedProblem && <p className="board-error" role="alert">{selectedProblem}</p>}</>}
+    <form className={compact ? 'case-feedback-compact-form' : 'board-form'} onSubmit={event => { event.preventDefault(); void submit(); }}>
+      {compact ? <>
+        {observationMetadata}
+        <div className="case-feedback-field"><label htmlFor="feedback-outcome">实际观察到什么</label><textarea id="feedback-outcome" ref={observationInput} required disabled={locked} rows={3} maxLength={1000} value={draft.outcome} placeholder="写具体发生了什么，包括与预期不一致的情况…" onChange={event => change({ outcome: event.target.value })}/></div>
+        <div className="case-feedback-field"><label htmlFor="feedback-source-scope">来源与范围 <small>可选</small></label><input id="feedback-source-scope" disabled={locked} maxLength={300} value={draft.sourceScope ?? ''} placeholder="注明观察来源、适用范围与仍缺少的信息" onChange={event => change({ sourceScope: event.target.value })}/></div>
+        <p className="case-feedback-compact-note">这里先保存原始观察。是否产生效果、变化由什么导致，以及对目标的贡献，留在讨论与复盘中判断；不会自动完成行动。</p>
+        <div className="case-feedback-disclosures"><details open={requestError || selectedProblem ? true : undefined}><summary>原请求与来源{readState === 'loading' ? ' · 正在核对' : selected ? ' · 回应已选请求' : ' · 普通观察'}</summary><p className="card-source">原行动：{task.title}</p>{requestFields}{comparison}</details>
+          <details><summary>补充记录（可选）</summary><div className="board-form">{extraFields}<button type="button" className="text-button" disabled={busy || checking} onClick={onAsk}>不保存反馈，回原行动继续讨论</button></div></details></div>
+      </> : <>{requestFields}{extraFields}{Object.hasOwn(draft,'observationDate') && observationMetadata}{Object.hasOwn(draft,'sourceScope') && <><label htmlFor="feedback-source-scope">观察来源与范围</label><input id="feedback-source-scope" disabled={locked} value={draft.sourceScope ?? ''} maxLength={300} onChange={event=>change({sourceScope:event.target.value})}/></>}{comparison}</>}
       {unknownOperation && <p className="board-context-note">原保存意图：{unknownOperation} · 结果待确认，先查询，不盲目重发。</p>}
-      <div className="board-dialog-actions"><button type="button" className="secondary-button" disabled={busy || checking} onClick={onClose}>取消 · 保留输入</button>{unknownOperation ? <button type="button" className="primary-button" onClick={() => { void onQuery(); }}>查询原保存结果</button> : <><button type="button" className="secondary-button" disabled={busy || checking} onClick={onAsk}>不保存反馈，直接提问</button><button className="primary-button" type="submit" disabled={locked || draft.executed === 'unknown' || Boolean(selected && (readState !== 'ready' || selectedProblem))}>{busy || checking ? '正在保存…' : selected ? '保存反馈并回应原请求' : '另存为新版本'}</button></>}</div>
+      <div className="board-dialog-actions"><button type="button" className={compact ? 'text-button' : 'secondary-button'} disabled={busy || checking} onClick={onClose}>{compact ? '取消' : '取消 · 保留输入'}</button>{unknownOperation ? <button type="button" className="primary-button" disabled={busy || checking} onClick={() => { void onQuery(); }}>查询原保存结果</button> : <>{!compact && <button type="button" className="secondary-button" disabled={busy || checking} onClick={onAsk}>不保存反馈，直接提问</button>}<button className="primary-button" type="submit" disabled={locked || invalidObservation || compact && readState !== 'ready' || Boolean(selected && (readState !== 'ready' || selectedProblem))}>{busy || checking ? '正在保存…' : compact ? '保存反馈' : selected ? '保存反馈并回应原请求' : '另存为新版本'}</button></>}</div>
     </form>
   </BoardDialog>;
 }
@@ -455,7 +471,7 @@ function FeedbackHistory({ task, originalRevision, disabled, onClose, onReview, 
     const rows = originalRevision ? value.revisions.filter(r => r.revisionId === originalRevision) : value.revisions;
     setRevisions(rows); if (originalRevision && !rows.length) setError('原反馈版本当前不可读。');
   } }, fault => { if (live) setError(fault instanceof Error ? fault.message : '反馈历史暂未读取。'); }); return () => { live = false; }; }, [task.id, originalRevision]);
-  return <BoardDialog title="已保存反馈历史" error={error} onClose={onClose}><p className="board-context-note">{task.title} · 旧覆盖内容不可恢复；首个已知版本不能证明更早没有反馈。</p><div className="feedback-history">{!revisions.length && !error && <p role="status">正在读取反馈历史…</p>}{[...revisions].reverse().map(value => <article key={value.revisionId} className="feedback-history-item"><h3>反馈 v{value.revisionNumber} · {value.adopted ? '按建议执行' : '未按原建议执行'}</h3><p className="board-context-note">{value.savedAt} · {effectLabel(value.effect)} · 主观评分 {value.score == null ? '未填' : `${value.score}/5`}（不代表验证）</p><p className="feedback-text">{value.outcome || '执行记录未提供'}</p><p className="feedback-text">{value.metricDelta || '指标变化未提供'}</p><p className="feedback-text">{value.review || '说明未提供'}</p>{value.origin === 'legacy-current' && <p className="board-context-note">旧系统首个已知版本。首次记录与当前正文时间可能不同，更早修订未知。</p>}<button type="button" className="secondary-button" disabled={disabled} onClick={() => onReview(value.revisionId)}>用此版本准备复盘</button>{onOrganize && <><button type="button" className="text-button" onClick={() => onOrganize(value.revisionId, 'knowledge')}>将此版本整理为知识</button><button type="button" className="text-button" onClick={() => onOrganize(value.revisionId, 'experience')}>将此版本整理为经验</button></>}</article>)}</div></BoardDialog>;
+  return <BoardDialog title="已保存反馈历史" error={error} onClose={onClose}><p className="board-context-note">{task.title} · 旧覆盖内容不可恢复；首个已知版本不能证明更早没有反馈。</p><div className="feedback-history">{!revisions.length && !error && <p role="status">正在读取反馈历史…</p>}{[...revisions].reverse().map(value => <article key={value.revisionId} className="feedback-history-item"><h3>反馈 v{value.revisionNumber} · {value.adopted === true ? '按建议执行' : value.adopted === false ? '未按原建议执行' : '执行情况未知'}</h3><p className="board-context-note">{value.savedAt} · {effectLabel(value.effect)} · 主观评分 {value.score == null ? '未填' : `${value.score}/5`}（不代表验证）</p><>{value.observationDate && <p className="board-context-note">观察日期：{value.observationDate}</p>}{value.sourceScope && <p className="feedback-text">来源与范围：{value.sourceScope}</p>}</><p className="feedback-text">{value.outcome || '执行记录未提供'}</p><p className="feedback-text">{value.metricDelta || '指标变化未提供'}</p><p className="feedback-text">{value.review || '说明未提供'}</p>{value.origin === 'legacy-current' && <p className="board-context-note">旧系统首个已知版本。首次记录与当前正文时间可能不同，更早修订未知。</p>}<button type="button" className="secondary-button" disabled={disabled} onClick={() => onReview(value.revisionId)}>用此版本准备复盘</button>{onOrganize && <><button type="button" className="text-button" onClick={() => onOrganize(value.revisionId, 'knowledge')}>将此版本整理为知识</button><button type="button" className="text-button" onClick={() => onOrganize(value.revisionId, 'experience')}>将此版本整理为经验</button></>}</article>)}</div></BoardDialog>;
 }
 
 function ManualDialog({ projects, error, onClose, onSubmit }: { projects: { id: string; name: string }[]; error?: string | null; onClose: () => void; onSubmit: (input: { projectId: string; title: string; rationale: string; expectedImpact?: string; priority?: string }) => void }) {

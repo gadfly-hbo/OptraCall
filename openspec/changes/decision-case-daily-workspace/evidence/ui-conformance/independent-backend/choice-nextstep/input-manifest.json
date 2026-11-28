@@ -1,0 +1,34 @@
+{
+  "recordedAt": "2026-11-28T01:19:06.496793+00:00",
+  "base": "5dd59909227ab46f3d989ade8b2847e077636855",
+  "files": [
+    {
+      "path": "src/host/case-decision-types.ts",
+      "sha256": "8c53d30a8e172b51e2a26ad689221d7f8b20b07b9c68cb6080dc7710b2cacfd8"
+    },
+    {
+      "path": "src/host/case-decision-validation.ts",
+      "sha256": "e67e930759f336f78ba807a3572058730c0ad1ac4552788c932dbfbc297a8033"
+    },
+    {
+      "path": "src/host/case-decision-service.ts",
+      "sha256": "6eb882a44ae08ba89a2ade4ca4c7f3a8461443946b12aae4a6d8bab8d5b2201a"
+    },
+    {
+      "path": "src/host/case-store.ts",
+      "sha256": "6fad3d3599ac3426f782f45fb216f635443f6924fbf717f99bf8d3e7bac38b3e"
+    },
+    {
+      "path": "tests/case-decision-store.test.ts",
+      "sha256": "8cb1c1710dbe17ca1c0f111cde51f2a60ff51a197bff2d66ac65bc7eac624e89"
+    },
+    {
+      "path": "src/host/ui/case-board-navigation-model.ts",
+      "sha256": "18b455a5157fe8d1fb5c1774d0e5a81916baceaa2c3c87889c2a4cf94017e0f6"
+    },
+    {
+      "path": "src/host/ui/DailyCaseHistory.tsx",
+      "sha256": "1f2efe34a6201142ef68a0ed12dc1ff3aca8686ce4e027e5ffbd462072781a58"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+✔ ARCHIVE-01: rename keeps identity and paths, archive retains readable contents and blocks every write until restore (455.692176ms)
+✔ TASK-02: same-project tasks run concurrently with their own routes, request ledger, events and stop (15099.034196ms)
+✔ ARCHIVE-01: archive is read-only and reversible without moving files, losing task state or starting SDK workers (19253.113976ms)
+✔ TASK-03: archive refuses opening tasks and stop cancels only its own startup interaction (7531.739988ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 43234.21961

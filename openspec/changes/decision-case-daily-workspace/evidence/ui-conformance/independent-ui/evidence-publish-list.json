@@ -1,0 +1,1766 @@
+{
+  "createdAt": "2026-11-28T02:40:03.729091+00:00",
+  "sourceRoot": ".local/ui-conformance/independent-review",
+  "destinationRoot": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/independent-ui",
+  "entrypoint": "final-review.md",
+  "fileCount": 289,
+  "totalBytes": 21896293,
+  "evidenceBoundary": "Original frozen HTTP Demo, real React/Host captures, isolated synthetic writes and readbacks, real Host/Store/Pi synthetic tests, component HTTP simulations are distinguished in report. Old FAIL preserved. No fixture database, service config, keys, installed dependencies or bundles. This manifest does not hash itself.",
+  "files": [
+    {
+      "path": "acceptance-matrix.md",
+      "bytes": 26016,
+      "sha256": "c99fc46ebd3f5b14ef892763cab1fd88cb8c04a01f6288c0e83ba48f9fa6e290",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "boundary/candidate-c-boundary.md",
+      "bytes": 8235,
+      "sha256": "4dc31a0f9e7f0b9744b34a02be607b21f1fd43df4b990435553008618ad92349",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "boundary/candidate-c-dialog-tests.log",
+      "bytes": 2412,
+      "sha256": "99959d757a463038f1482c14ebc708b70299bbdddf3031413d3a4ad9026affb4",
+      "reason": "plain filename reference in retained original boundary review"
+    },
+    {
+      "path": "boundary/candidate-c-draft-tests.log",
+      "bytes": 2276,
+      "sha256": "83f3988cbbc233835778e53255a438ddade3360fcf4e5cb33e39b35b550d3e15",
+      "reason": "plain filename reference in retained original boundary review"
+    },
+    {
+      "path": "boundary/candidate-c-feedback-request-probe.json",
+      "bytes": 774,
+      "sha256": "d5e6e2cbcaf2806223e5792c9782c9e85e2c12419e9201ba666761c7b1a477f7",
+      "reason": "plain filename reference in retained original boundary review"
+    },
+    {
+      "path": "boundary/candidate-c-manifest-before.json",
+      "bytes": 512,
+      "sha256": "882a11d1caf29ecbe2d679f7f4d0cfb76fca55c8dcf8b32a729873c6c13bf870",
+      "reason": "plain filename reference in retained original boundary review"
+    },
+    {
+      "path": "boundary/candidate-c-manifest-stop.json",
+      "bytes": 1404,
+      "sha256": "25020d7493413906bed7fa637c03f05bd8450a5aae6c6ffe54f036b5650eab7f",
+      "reason": "plain filename reference in retained original boundary review"
+    },
+    {
+      "path": "boundary/candidate-c-next-step-tests.log",
+      "bytes": 252,
+      "sha256": "9f651aea06031f475d29eb77c38023596c8f6fcd954c9335630fd17adda568d3",
+      "reason": "plain filename reference in retained original boundary review"
+    },
+    {
+      "path": "boundary/feedback-request-switch-probe.ts",
+      "bytes": 10926,
+      "sha256": "ac59ef5c67e0925eec914923bbf8655cc29647c7580014eb549b927411bba2ce",
+      "reason": "original failure receipt/probe context, no rewriting of FAIL"
+    },
+    {
+      "path": "boundary/feedback-request-switch-recheck-result.json",
+      "bytes": 774,
+      "sha256": "d5e6e2cbcaf2806223e5792c9782c9e85e2c12419e9201ba666761c7b1a477f7",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "boundary/feedback-request-switch-recheck.ts",
+      "bytes": 11455,
+      "sha256": "0b9bad436bc24e61bfb96711efc7579f6377b060b8d0f4fc54c007b755690703",
+      "reason": "original failure receipt/probe context, no rewriting of FAIL; plain filename reference in retained original boundary review"
+    },
+    {
+      "path": "boundary/feedback-request-switch-result.json",
+      "bytes": 1095,
+      "sha256": "71c806814ac275eef56e787f08197aee3756d718b6b71a9e9332aafcb9efeefc",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-a/product-artifact-source.png",
+      "bytes": 169118,
+      "sha256": "70cdf84b43e6dddbf8ca8eb8e2ebc7352b209adb01d01e66d569b556324814b7",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-a/product-case-history-1440.png",
+      "bytes": 153356,
+      "sha256": "0ee97359428a118854ec787c7fc5831c8ebdbe62a17e2b7d2b3e1fbc1cacc1c1",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-a/product-case-projects-1440.png",
+      "bytes": 177930,
+      "sha256": "9078e5d58d2461237bace8ef580d7ef97d906e46c1c03f1745cddddc8079a2d8",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-a/product-choice-entry-1440.json",
+      "bytes": 3404,
+      "sha256": "526749f8e52eef6ff31982991961be45158f35212dad8d59c4433b376a3453db",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-a/product-current-back-1440.png",
+      "bytes": 123076,
+      "sha256": "e736225457eaa058128d8645598b846146d3a081511cbe0c1ae950ffc581d275",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-a/product-current-list-1440.png",
+      "bytes": 97940,
+      "sha256": "6d3fe3fa03ca346c94a3639ffae179ed92f2c772ffeed8db198aa41d642a7dd3",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-a/product-current-tree-1440.png",
+      "bytes": 181737,
+      "sha256": "417ec3141d751a694420642af67bafd9f24528b26f752d171a388bf6bb868425",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-a/product-feedback-entry-1440.json",
+      "bytes": 3591,
+      "sha256": "037ebbb471320e35b848bd4386476fb85fc7c24767a8df6133ad9b0e7b9e2d05",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-a/product-home-1440.png",
+      "bytes": 216184,
+      "sha256": "ac7a8b945fa82e5f2a33e7863316e6ac4b2896324722fd8a2d09310c824af50d",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-a/product-overview-1440.png",
+      "bytes": 201442,
+      "sha256": "442cd924ead16f319ead8a18aed4d2d9b5f2d1d83f43e6d80b61f1ccb0174f27",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-a/product-preparation-result.json",
+      "bytes": 2081,
+      "sha256": "9bc7374a39a6e7fed108fc5e5982545082ba6d9f777ea77f1563ca681da3d929",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-a/product-prepare-another.png",
+      "bytes": 118166,
+      "sha256": "ac85892f1c3d610085572ed3a974ab2ff2d30d41b2d32356f2d6496ecaf6af34",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-a/product-project-to-case-return.png",
+      "bytes": 125194,
+      "sha256": "1148b2b68a33d0f92bf32d68d735abfae66e29c5aaa020f8f6ec9a6e46051298",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-a/product-tree-expanded-390.png",
+      "bytes": 70986,
+      "sha256": "3badfb9c771c9c4375d62c0f68a2ba6f98e545ecd0e4aedbb09058c3e95635c8",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-b/product-artifact-injected-403-b.png",
+      "bytes": 165304,
+      "sha256": "8b5f6c5b31c2caa62afed5c3587d948b47a865cac273fefd11f65a963ccbab82",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-b/product-artifact-injected-503-b.png",
+      "bytes": 166221,
+      "sha256": "362289b5d7f0646d5ef3cb71251f656eaf9b9e355632fd39bd6ca603efc0b488",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-b/product-failures-b-recheck.json",
+      "bytes": 7198,
+      "sha256": "4dbb6cda0d17858cd9d128a50bb65ff3b5eaeda2d310332184ca27401f2bd9b0",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-c/choice-draft-restored.json",
+      "bytes": 222,
+      "sha256": "b778ea702bd1c30e5e5e2380cad22b93b05d55f74c44202a23488293440dc783",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-e/complete-manifest-at-start.json",
+      "bytes": 397440,
+      "sha256": "294710a84777fbfd779c414196a16d6651b81ddc7fe240455c4edd3432f9d034",
+      "reason": "original candidate code/build identity"
+    },
+    {
+      "path": "candidate-e/independent-real-integration.log",
+      "bytes": 1670,
+      "sha256": "3e26f994fba536ddb84a31d17f08c3b9250e0fa8cf845bb485ccd69247a8dfef",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-e/manifest-start-check.json",
+      "bytes": 1969,
+      "sha256": "a25a60caa5b49a7c3329e0f811d6345b01b289f5f747e1f1e7b7d1f57656d6d6",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-e/product-case-assets-1024.json",
+      "bytes": 2802,
+      "sha256": "187a982ab68e57b4cad948871749ed82720f83a55775f333125ed7af47560e81",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-case-assets-1024.png",
+      "bytes": 127372,
+      "sha256": "2273f9945f92c89eebb5f71c990e5062e78148f7bc003f7662f80be3d13c8840",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-case-assets-1440.json",
+      "bytes": 2831,
+      "sha256": "79f7e830708369bdb4e0bf711a14e9544490423a264ca13f93cd705ea715a96b",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-case-assets-1440.png",
+      "bytes": 133154,
+      "sha256": "0fe19ee6322d7ac3f71792198197b940bce1f0b4d1a7e8be4b3ec685f9a00f53",
+      "reason": "direct or recursive Markdown reference; real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-case-assets-390.json",
+      "bytes": 1979,
+      "sha256": "970a3febcfbdf53d5b6534cdcaeedf181c4c49b17b61504c2fa0eb25d6c3fe0c",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-case-assets-390.png",
+      "bytes": 78639,
+      "sha256": "4b52727a1676c52eb3caef65435ddb031269d593766361219e103af673d8cd38",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-case-history-1024.json",
+      "bytes": 2649,
+      "sha256": "0001e3e1ef0c0b69e88b19afe8633c58b95b4184721eb9a3d7fe91623e0e4026",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-case-history-1024.png",
+      "bytes": 120549,
+      "sha256": "68ff7cbe5b582a29967ee4ab3dc5cfd5fabbbf705111f6bc3902759b0d7fb956",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-case-history-1440.json",
+      "bytes": 2678,
+      "sha256": "8a268f9f2bb8dfacad23e2a2eee2f62a2ae90e0154d6ecf654fe9a0516d0ef50",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-case-history-1440.png",
+      "bytes": 125922,
+      "sha256": "62024e48471ecbf77e8f3edd4f0ba82600c2efcb491242d88ff4ebe0d407702d",
+      "reason": "direct or recursive Markdown reference; real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-case-history-390.json",
+      "bytes": 1826,
+      "sha256": "5032d8720bc1d36bc42b0abff291681dc85dfaa10be2b974341531b12ab3ee5e",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-case-history-390.png",
+      "bytes": 70371,
+      "sha256": "a3a36521d0bcccb71f6a26d40cb6a377e8126fd5a377ff8eae2d9e0bcccced40",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-case-projects-1024.json",
+      "bytes": 3416,
+      "sha256": "a36f5a64a9b8cbde1c56cd74ddd32a10d067d929c3bd54c26653a63b8785efa9",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-case-projects-1024.png",
+      "bytes": 152580,
+      "sha256": "4db7d1f01632b7a0f31cfc3219ea8dcde87dcbb3a00863bfe446e7934d1a538d",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-case-projects-1440.json",
+      "bytes": 3445,
+      "sha256": "7e0caca7889560a0cf7181242936e13176dae3049c5485bbb0445296c63bd674",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-case-projects-1440.png",
+      "bytes": 158591,
+      "sha256": "b95b81d05dbdfe31f1a56e9095b5885e468f1561b596466bdba1a008895aea29",
+      "reason": "direct or recursive Markdown reference; real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-case-projects-390.json",
+      "bytes": 2595,
+      "sha256": "14b6ec31348396225634cc0dd5eee4e5369da8daf5d0fecf8972f9c529485321",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-case-projects-390.png",
+      "bytes": 78166,
+      "sha256": "66e3a5d25f70c8cf5be74887ab5ad426a01e481a7290541896dbd93fc4e5f540",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-current-1024.json",
+      "bytes": 4947,
+      "sha256": "aedd49a450ecf5283b9844833bbf571a0b98577356332a1ed28dfedfaa20cfc3",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-current-1024.png",
+      "bytes": 179227,
+      "sha256": "5dd9a6e441fa94eeede1aff773da0352e351d20a0eaa74ce900828833f517452",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-current-390.json",
+      "bytes": 4190,
+      "sha256": "dd637e78b176679344d4686235198309ede17153237b026f7e303240e007f29d",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-current-390.png",
+      "bytes": 73298,
+      "sha256": "cfd2a1ac93b1e7c6956708b0b8ff8581dca8da59a68c19c9e6a09300837572ba",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-current-back-1024.json",
+      "bytes": 4947,
+      "sha256": "aedd49a450ecf5283b9844833bbf571a0b98577356332a1ed28dfedfaa20cfc3",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-current-back-1024.png",
+      "bytes": 179227,
+      "sha256": "5dd9a6e441fa94eeede1aff773da0352e351d20a0eaa74ce900828833f517452",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-current-back-1440.json",
+      "bytes": 5005,
+      "sha256": "e7947cf53d727e4e20732d81111fc67efca8dc4822d72b01b5b83e20d402c12f",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-current-back-1440.png",
+      "bytes": 185323,
+      "sha256": "a2a1d26e4f7c9d2dd33b8433fe04516fbe69dc4d05e13f4bc8b7eac078b126b9",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-current-back-390.json",
+      "bytes": 4190,
+      "sha256": "dd637e78b176679344d4686235198309ede17153237b026f7e303240e007f29d",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-current-back-390.png",
+      "bytes": 73298,
+      "sha256": "cfd2a1ac93b1e7c6956708b0b8ff8581dca8da59a68c19c9e6a09300837572ba",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-current-list-1024.json",
+      "bytes": 4517,
+      "sha256": "fc656d8e5321403665884bd6ae4fcaf3a982f509ac04686538a007ceecea94be",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-current-list-1024.png",
+      "bytes": 170958,
+      "sha256": "2542269939961f8a9073f14ebf9614abed7bc21d767fdac89ad3fc5df618f937",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-current-list-1440.json",
+      "bytes": 4575,
+      "sha256": "d548edbb424e7892e3154dfcaacfd897abb27dd21a645f659ddd84a7322baf2e",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-current-list-1440.png",
+      "bytes": 175789,
+      "sha256": "e2bec1d79427747e4fb47e56d0390a034dcec7030e938e74725e062d8c23cb86",
+      "reason": "direct or recursive Markdown reference; real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-current-list-390.json",
+      "bytes": 3761,
+      "sha256": "af26c6b1304e8e1ddaa745062f87da83b4b1d692c6df885dd77a5a393f086fbe",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-current-list-390.png",
+      "bytes": 69174,
+      "sha256": "8481c79bda1857813f3c63082ec24f3c93f370a4b67c6687bd0abb1cc980c3c7",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-current-tree-1024.json",
+      "bytes": 4947,
+      "sha256": "aedd49a450ecf5283b9844833bbf571a0b98577356332a1ed28dfedfaa20cfc3",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-current-tree-1024.png",
+      "bytes": 179227,
+      "sha256": "5dd9a6e441fa94eeede1aff773da0352e351d20a0eaa74ce900828833f517452",
+      "reason": "direct or recursive Markdown reference; real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-current-tree-1440.json",
+      "bytes": 5005,
+      "sha256": "e7947cf53d727e4e20732d81111fc67efca8dc4822d72b01b5b83e20d402c12f",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-current-tree-1440.png",
+      "bytes": 185323,
+      "sha256": "a2a1d26e4f7c9d2dd33b8433fe04516fbe69dc4d05e13f4bc8b7eac078b126b9",
+      "reason": "direct or recursive Markdown reference; real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-current-tree-390.json",
+      "bytes": 4190,
+      "sha256": "dd637e78b176679344d4686235198309ede17153237b026f7e303240e007f29d",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-current-tree-390.png",
+      "bytes": 73298,
+      "sha256": "cfd2a1ac93b1e7c6956708b0b8ff8581dca8da59a68c19c9e6a09300837572ba",
+      "reason": "direct or recursive Markdown reference; real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-dark-assets.png",
+      "bytes": 136041,
+      "sha256": "712858d74fe7c76ae4e8db5858f85e6659e78fa70c246f853569e3e76ff8820b",
+      "reason": "actual dark-mode receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-dark-current-1440.png",
+      "bytes": 177151,
+      "sha256": "58bfd3104c6665b853d875c33abb50aa2cf09548dde0d64d35322570342ffc4f",
+      "reason": "actual dark-mode receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-dark-current-390.png",
+      "bytes": 71041,
+      "sha256": "10c097da80595fe07d3dae1961b73ebfed2dda1a7e5962684135b37d66dc9cef",
+      "reason": "actual dark-mode receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-dark-global-projects.png",
+      "bytes": 147694,
+      "sha256": "e632012ec98629ad6ca2e8ea9a422148abac885e7c77b3b9bd7c10e79df96048",
+      "reason": "actual dark-mode receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-dark-history.png",
+      "bytes": 127202,
+      "sha256": "d7c70c1726b7ee16e9a53c42315d704e376f5e154c9af593fb0bc83fee358a6c",
+      "reason": "actual dark-mode receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-dark-home.png",
+      "bytes": 186642,
+      "sha256": "a9b30dc533f1d7ea1a4721bc0efa2f8290ac7477afc5abe726e49eeb24385ca6",
+      "reason": "actual dark-mode receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-dark-overview.png",
+      "bytes": 176037,
+      "sha256": "460c68ad684b5be9723724d38657104de7d17f1b2cbbb02981c42960f93d7a9f",
+      "reason": "actual dark-mode receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-dark-preparation.png",
+      "bytes": 129440,
+      "sha256": "023ac2263d08cfc82bba643d47af467aff8054e756ab47fd729b9bdfe3f981a7",
+      "reason": "actual dark-mode receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-dark-projects.png",
+      "bytes": 161528,
+      "sha256": "8f6ea666cacd5c96c6c276f71478338410f98836e45efa88f3d13fb46c87fddd",
+      "reason": "actual dark-mode receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-dark-source.png",
+      "bytes": 167307,
+      "sha256": "92cc85dcc66728eefe4776ae5404cb95947971538057cf944d97278a48a6a934",
+      "reason": "actual dark-mode receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-dark.json",
+      "bytes": 24180,
+      "sha256": "fe151ed89d9c07c01f069d29e55f19e82e061f6eb2d11e44ca6b70e947c9b958",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-e/product-global-projects-1024.json",
+      "bytes": 2728,
+      "sha256": "a52d0f833a7ca801ea565163c4a1094ba19bbe1ad5cf4b5bcbfc8eb2ebdc2e76",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-global-projects-1024.png",
+      "bytes": 143588,
+      "sha256": "31c9d467b209d4ca8e488aeab5c166aaf3ed6972cbc7553731998caed55c6da3",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-global-projects-1440.json",
+      "bytes": 2730,
+      "sha256": "c277389bbac0b0826eb23dfd7d621ae089a0c08d2c70662af0e35e1956e63328",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-global-projects-1440.png",
+      "bytes": 144615,
+      "sha256": "4da461c170ffcc17efbeab5a6229199aa7bb78d5eb3e28c3c042c6613974158c",
+      "reason": "direct or recursive Markdown reference; real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-global-projects-390.json",
+      "bytes": 1760,
+      "sha256": "22c925a2a4d02e24e2bee94c87f6213bd00ceb25ebb6e6542d9cbcc025cfd4a8",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-global-projects-390.png",
+      "bytes": 58915,
+      "sha256": "ce729bf103c101006edc4bcf64e5f8aba12f84290a58e7841e74da3ca4f74a99",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-home-1024.json",
+      "bytes": 3243,
+      "sha256": "2a907e95772fd5620ac8ad0fe717c4a44e6040f393af5b0a29a124f952b43951",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-home-1024.png",
+      "bytes": 172158,
+      "sha256": "325794bb1f91a43ae8da988f50c3ecde20033ac47dd8a9f69fd9ffd1df7819f7",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-home-1440.json",
+      "bytes": 3272,
+      "sha256": "f78f1c92dbb4a82b6a552bf1a6267a182a168b9d64a9891c68cfd988a453266a",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-home-1440.png",
+      "bytes": 218900,
+      "sha256": "e5011d846bb4f9e6e7e9edfc79dae5364321742bb296e2b4973a9318036fb982",
+      "reason": "direct or recursive Markdown reference; real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-home-390.json",
+      "bytes": 2379,
+      "sha256": "e6cc9949c109e7f904467f1b0a097fba26a6d8eb984e258b77002a7aea65838f",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-home-390.png",
+      "bytes": 97892,
+      "sha256": "6e2bff997465d73dd14753c9537f0b7db4286e1257c43a0ad1c95ab4b1315f23",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-overview-1024.json",
+      "bytes": 2738,
+      "sha256": "38de0a31b5cf02cf4ab43a8665e1b941f884904af7774ba75271a7df5918bd31",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-overview-1024.png",
+      "bytes": 186138,
+      "sha256": "2e9ff758142e3293c4dcdd9775ee3ade7d8a56bad9e09570ee2a3ce65ed33b3a",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-overview-1440.json",
+      "bytes": 2740,
+      "sha256": "f83bfe26da54d9818caaab7f43c3f13ddbede7f6350d30eebe4c668c7bdd0f25",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-overview-1440.png",
+      "bytes": 197156,
+      "sha256": "d862c5440af8548a3f2a905f9be6539a1d4e4f2ec70104149346b9a276533d9f",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-overview-390.json",
+      "bytes": 1915,
+      "sha256": "1673518b77cf05808f5b2aada8d61e431c5871a98c28a1fe2de2317c870969a5",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-overview-390.png",
+      "bytes": 89823,
+      "sha256": "822007f2df9e4f909ca5809317fb6d22b47707fda110209b56033a8d58acb565",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-prepare-1024.json",
+      "bytes": 2754,
+      "sha256": "8b3964b58c6bce54c10e0bf3e8d66e04b74fa84e5885d89d2ccffbfb0b80f6f3",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-prepare-1024.png",
+      "bytes": 122414,
+      "sha256": "4a8fc46213373066514421b01ba254d7443f88c6cfd7d36ae1d17ea1216cf87e",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-prepare-1440.json",
+      "bytes": 2756,
+      "sha256": "0e0133e500ac234681c7847a574e2b31f712d524ba9e95926b06ba4842882100",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-prepare-1440.png",
+      "bytes": 126430,
+      "sha256": "710693bd998878e9995059dc959bffb2dd14396311ba625e2d1214a975e7461c",
+      "reason": "direct or recursive Markdown reference; real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-prepare-390.json",
+      "bytes": 1927,
+      "sha256": "e24258bbd9c5df5351eab18b91c3cf17fa5802e9f0113150dddc32c974389e18",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-prepare-390.png",
+      "bytes": 74303,
+      "sha256": "5d2004933771f633ce148c5cc14a3dd57e41206f5ef589098eeed1d79345c49b",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-project-detail-1024.json",
+      "bytes": 3822,
+      "sha256": "7fce2620186a5ac2d2006b2cebf0ba0ad2d92ddfdb2a70c1712721e3f2ce3e13",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-project-detail-1024.png",
+      "bytes": 156717,
+      "sha256": "3ef3b3384643af75f612d591b6c7383387d5f0325e8a3a2b855e05849c85837c",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-project-detail-1440.json",
+      "bytes": 3825,
+      "sha256": "466bc77a69a1d382bddffa9c2c83f070e308824a75282b14a90b41a9e9cac4c5",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-project-detail-1440.png",
+      "bytes": 161192,
+      "sha256": "84546e61fd492bb2bb1f0c9dc48c4414f759d9537f5561376bc2493592ede192",
+      "reason": "direct or recursive Markdown reference; real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-project-detail-390.json",
+      "bytes": 2997,
+      "sha256": "7e0d04b5f288073ad10c9f426885eb40e63c958cd2fde35a7ec67bf82e5397b2",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-project-detail-390.png",
+      "bytes": 78249,
+      "sha256": "c0eb86f59da63dcd3477c48fe03c15d0b544664c1a8f33750efbe0188d6648dc",
+      "reason": "real page/viewport receipt original capture"
+    },
+    {
+      "path": "candidate-e/product-raw-observation.json",
+      "bytes": 11015,
+      "sha256": "9a92f7ba67a6f4a6bc819dc32f8732dac55374b88e1cfffafe0a09a084d0ac3f",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-e/product-responsive.json",
+      "bytes": 75275,
+      "sha256": "3134a8249670933e16edbc93792c293adb86f0b542861cc4cf7ce6c7c2c2686c",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-e/product-walk.json",
+      "bytes": 65635,
+      "sha256": "ce62ca930b17a8dcaa6a8547f7cd5441dc9cca4878aabf04db6ab8f9f0c8e8e2",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-e/raw-after-readonly.json",
+      "bytes": 15752,
+      "sha256": "f1a094dc6db2ac71c172d187e0964eb7d3baa5b2df6cd82c256af8ed31d82ead",
+      "reason": "direct or recursive Markdown reference; real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-e/raw-before.json",
+      "bytes": 14015,
+      "sha256": "f8a00a7a4988354af220deb33a05ae295db739a4e101784ad8ce4554e020a77f",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-e/raw-feedback-accurate-request-1440.json",
+      "bytes": 4483,
+      "sha256": "090eaab4f9ad18ac77352ec3e968f8696487d4fb1ca89d9482a4cbd87040543b",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-e/raw-feedback-accurate-request-1440.png",
+      "bytes": 215801,
+      "sha256": "3db7b0f7da5298be7cc935fc4aa16628869e87b3ad2dcecc4e93968d148ace90",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-e/raw-feedback-default-1024.json",
+      "bytes": 3176,
+      "sha256": "db7b5d81e4c7c0906e73fba854943a135024a881052a78f3075c423ad4b08c39",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-e/raw-feedback-default-1024.png",
+      "bytes": 144821,
+      "sha256": "17781f76b9b8ab2584ce7357dceddbd1228bfe28225f12e5a2013d56b5a51252",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-e/raw-feedback-default-1440.json",
+      "bytes": 3199,
+      "sha256": "6893cba2575fc8671a0a07ac3f74a02c4751c12c7be6da09794487724bc5bf7f",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-e/raw-feedback-default-1440.png",
+      "bytes": 163654,
+      "sha256": "7ed19d65bfbab9067a1d9312577c6ce0715284850c790f5c6510635e7f31ca7d",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-e/raw-feedback-default-390.json",
+      "bytes": 2708,
+      "sha256": "d9aca3ae04d877e991e6f27fc5e33519f7145b15eb8be89a30404ecb240ca11b",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-e/raw-feedback-default-390.png",
+      "bytes": 82521,
+      "sha256": "6c8ed3e5e87b9f9cd7feb1f5b5daa695f845b40e41432e020ac4f17f1546ec9f",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-e/raw-feedback-filled-1440.json",
+      "bytes": 3414,
+      "sha256": "e773bce7fc378e4356880c055211fd47d35d8248d5cbe61f1b4dcb9a9d02a029",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-e/raw-feedback-filled-1440.png",
+      "bytes": 174303,
+      "sha256": "e432fc5c00451e91683a47f26d673d18d9c45e360d465866fb4b88fd185681cb",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-e/raw-probe-second-cause.txt",
+      "bytes": 300,
+      "sha256": "a09f60bce51a58a5d06971c32ce0efcfaa7f9bfec56834d5ee170cbf1d96e3a0",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-e/source-manifest.json",
+      "bytes": 101530,
+      "sha256": "7aba6ba9128c55720c9e553cc6377ed09b4c13b74959ba8170f72b94020bd941",
+      "reason": "original candidate code/build identity"
+    },
+    {
+      "path": "candidate-f/complete-manifest-at-start.json",
+      "bytes": 397472,
+      "sha256": "48320f9946ff62c62a030dcc52a3dd8878e20aa743f3eacbc3403dcdfe960707",
+      "reason": "original candidate code/build identity"
+    },
+    {
+      "path": "candidate-f/feedback-focus-attempt-1.png",
+      "bytes": 185980,
+      "sha256": "708c7a555c3fcfc798b3786df9859b1c8f5684ce9f5a6272f8daa0019ca89344",
+      "reason": "original failure receipt/probe context, no rewriting of FAIL"
+    },
+    {
+      "path": "candidate-f/feedback-focus-attempt-2.png",
+      "bytes": 185235,
+      "sha256": "5bcf99368b49504696283b05c61e925060c8dcefb4f63ce9bcaeafee92480ad7",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-f/feedback-focus-attempt-3.png",
+      "bytes": 185235,
+      "sha256": "ccd63290530c6d28882193fd312404fd051c5bb469aa92627ae8413cd9ad53ad",
+      "reason": "original failure receipt/probe context, no rewriting of FAIL"
+    },
+    {
+      "path": "candidate-f/feedback-focus-repro.json",
+      "bytes": 1920,
+      "sha256": "4bc5f109d935ed5f5ca46f113c791b9f3af9c92638f075f31786680513a793a4",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-f/independent-archive.log",
+      "bytes": 614,
+      "sha256": "658981ad9f0009af0e17bc0e272295f222f035c59f0d42fc57a75e9d6f42eaa5",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-f/independent-contracts.log",
+      "bytes": 2309,
+      "sha256": "f109d75ded3409381ff8be69b1911e71ee9bca62f04e932e1766a71f74273ede",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-f/independent-real-integration.log",
+      "bytes": 1145,
+      "sha256": "89b4a0de3f7be26ba8dd375501b22078012813df78753a7be9261b89a8968622",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-f/manifest-start-check.json",
+      "bytes": 2333,
+      "sha256": "abf43f6010a89a5f6261161097fc5a3fbed027b8ae6cde1e6866922f23267eaf",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-f/product-adopted-branch-b.json",
+      "bytes": 3561,
+      "sha256": "76cd86e5a5e59bc41bf7d18a7c7daba3b7b756db1e95c64f2fda80916b67abc0",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-f/product-adopted-create-b.png",
+      "bytes": 134993,
+      "sha256": "b6bcd7416f06bb1956e6cafb725fa52519f256c10d50f34c5d48ab74c44bad8e",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/product-artifact-injected-403-b.png",
+      "bytes": 156367,
+      "sha256": "ceaf39230acb8c5268e2f1e6522b0aa24ab60e74219e6045ba1153f154491b0d",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/product-artifact-injected-409-b.png",
+      "bytes": 166423,
+      "sha256": "168fe84a96dc213cceab61d0980bb55eff05a0e1c622d3b244e341e8f5b271d2",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/product-artifact-injected-503-b.png",
+      "bytes": 167311,
+      "sha256": "df5601c0a6a3f1944d7dd19e3b538b2b1a11bebd12f28a819e61b2469c30e7f4",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/product-artifact-recovered-b.png",
+      "bytes": 178643,
+      "sha256": "f6e17bc610035981eb27ae96e877d2daaffb442be018cf68188787dd3280a09f",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/product-carry-appended-b.png",
+      "bytes": 198543,
+      "sha256": "bb004b7c9ed9b9851dba01d10fae8dd7f67e8e64b4534d1ddd0404d5259067c9",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/product-carry-b.json",
+      "bytes": 9120,
+      "sha256": "56ba7490752ffedcc131b34f2444d88664b83b7541b412cd76abf0ffead086a5",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-f/product-carry-reopened-b.png",
+      "bytes": 193253,
+      "sha256": "ed4108f2888b90a08fa4e7ea8129e344db91275f3cbf59b9e14d8e47a2f97b2b",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/product-continue-existing-b.png",
+      "bytes": 134569,
+      "sha256": "1e6c4520b59cb8468ac84ff54d2a332dc951ed698f2c1ee212662daf924e2c12",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/product-empty-case-1024.png",
+      "bytes": 114497,
+      "sha256": "d2b4324d53aeb646602d978d7486ae24f92f862aec0ae6eaaf384e412a2a5b28",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/product-empty-case-1440.png",
+      "bytes": 119800,
+      "sha256": "20d8bc4af1bc01a0d49ae4b9fde0274d5dca03325b716dde4db8899420259142",
+      "reason": "direct or recursive Markdown reference; real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/product-empty-case-390.png",
+      "bytes": 59214,
+      "sha256": "092acb1406e5ec648fe70590cc81aaa82e1eddbd0306a7bc7b93ba885d330a8f",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/product-empty.json",
+      "bytes": 3205,
+      "sha256": "98b4ee0bfab7cacae2c431cc5e23b00df56375e224c9fcc05ebb0a85204481e0",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-f/product-failures-settled.json",
+      "bytes": 9107,
+      "sha256": "d37a8c5f28e4f1c35d50ffa7a5c36ccf96cda54754dc8cd9c2d9d4f0debbfecb",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-f/product-history-injected-403-b.png",
+      "bytes": 98875,
+      "sha256": "094f8d8c2d82638175b675ef14fae9c9e2edcd3683d4d42336be7e7ed4a6377d",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/product-preparation-result.json",
+      "bytes": 2849,
+      "sha256": "a26691847758b4b49f54a9e3a82eed94fc7822b013022e9e49b7a812f2c8637d",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-f/product-prepare-another.png",
+      "bytes": 107486,
+      "sha256": "7445ebae5d12ea90f01f351f5a9e6885fe848fd1565de08729618eb948ccc68b",
+      "reason": "direct or recursive Markdown reference; real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/product-prepare-complete-input.png",
+      "bytes": 103048,
+      "sha256": "862fa71877bffdfb17dc7082640b05dffdd8364d71c64cc767a2577322e436dc",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/product-prepare-created.png",
+      "bytes": 137229,
+      "sha256": "28bf50f76756d007ab18b9f187a159e6b96e7cb0deb574be3a96de2d99b5d9ac",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/product-project-filters-b-settled.json",
+      "bytes": 944,
+      "sha256": "c028811322735d2207ce8b270429445ec753e70b700922788d195caff4f6ef23",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-f/product-project-return-detail-b.png",
+      "bytes": 142819,
+      "sha256": "8cab4db8ad755ae4f5091719501b77f6dc35a129adf0e26b1834b97afd6d000a",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/product-project-return-filter-b.png",
+      "bytes": 96212,
+      "sha256": "89d44bd54e3ab4228a56d9f55e81def0bc261b889b341c40537fc6a29a15e3da",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/raw-after-restart.json",
+      "bytes": 15752,
+      "sha256": "2135591d8d863c39b8fb20c06f20bf8e7010c20434758a8b6a20c24ed8796d40",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/raw-feedback-default-1024.json",
+      "bytes": 2772,
+      "sha256": "6ef8d06ef1aa8d878b2b738d80c637429fee1581703dcc64ee0be47903fed6d5",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/raw-feedback-default-1024.png",
+      "bytes": 143513,
+      "sha256": "ad0606f7161ef8cd0dad7a9f5662f61010e1891e2d90102861dd467a66b70de4",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/raw-feedback-default-1440.json",
+      "bytes": 2795,
+      "sha256": "497a0ce356493a97ac1746460326944af0c28298a2f8e67fd04d67679f911f05",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/raw-feedback-default-1440.png",
+      "bytes": 161093,
+      "sha256": "720242391b56f00839f5469cda132305cb94123d78f8abd520a58767ab1118ad",
+      "reason": "direct or recursive Markdown reference; real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/raw-feedback-default-390.json",
+      "bytes": 2324,
+      "sha256": "c6f4dcffdd56d9fc66a863b17643a57492bfc18ab8bbee88efd7c675820fc0d8",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/raw-feedback-default-390.png",
+      "bytes": 79307,
+      "sha256": "7af8a53b73faacacd662b104413d11a9f221c10ce8d498d552333d76d919d10c",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/raw-history-dated-1440.json",
+      "bytes": 1833,
+      "sha256": "5710d070e5d85cffa621f29bafb67c8743fbc66236f1173149c2388402dba020",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/raw-history-dated-1440.png",
+      "bytes": 141866,
+      "sha256": "59fadfaafa502985df267d4d14e4bab5104dc7d60a5786e1457ff2de61ba21d9",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/raw-history-dated-source-1440.json",
+      "bytes": 2442,
+      "sha256": "93dde91681eceaa1918d0980690102d20e3ec191fbec9854195810c2f406596e",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/raw-history-dated-source-1440.png",
+      "bytes": 162038,
+      "sha256": "d376e2827651838536ed5ce7603b17214c3a3be32463fee6c2c2af3438e835a3",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/raw-readback-failure.json",
+      "bytes": 2442,
+      "sha256": "93dde91681eceaa1918d0980690102d20e3ec191fbec9854195810c2f406596e",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/raw-readback-failure.png",
+      "bytes": 162038,
+      "sha256": "d376e2827651838536ed5ce7603b17214c3a3be32463fee6c2c2af3438e835a3",
+      "reason": "real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/raw-readback.json",
+      "bytes": 1869,
+      "sha256": "2fbc4c5461e2f4c8fef938d38ef71c6f157ce75e65849a8695575e43083ebcf1",
+      "reason": "direct or recursive Markdown reference; real isolated save/branch/readback/fault receipt corresponding capture"
+    },
+    {
+      "path": "candidate-f/source-manifest.json",
+      "bytes": 101562,
+      "sha256": "0da9ed87bf4fc752215e51adfe97abc148db90b8cee5f66b6f7180d18c46f278",
+      "reason": "original candidate code/build identity"
+    },
+    {
+      "path": "candidate-g/complete-manifest-fixed.json",
+      "bytes": 441402,
+      "sha256": "d38d54e580de9d59e64021599b3ab4ebb2cc65701bb829737b267d764883f386",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-g/evidence-scope-map.json",
+      "bytes": 2509,
+      "sha256": "5246f7dfe4ccb642f5faa7830f7e10206c73b57da09efe53b109ba95d11c9503",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-g/feedback-focus-attempt-1.png",
+      "bytes": 185980,
+      "sha256": "708c7a555c3fcfc798b3786df9859b1c8f5684ce9f5a6272f8daa0019ca89344",
+      "reason": "final candidate affected-path original evidence"
+    },
+    {
+      "path": "candidate-g/feedback-focus-attempt-2.png",
+      "bytes": 185981,
+      "sha256": "9aa7ba782335a9a0831ee88696592924c92db7ba60905ade7b3cc7d6c369031a",
+      "reason": "final candidate affected-path original evidence"
+    },
+    {
+      "path": "candidate-g/feedback-focus-attempt-3.png",
+      "bytes": 185981,
+      "sha256": "9aa7ba782335a9a0831ee88696592924c92db7ba60905ade7b3cc7d6c369031a",
+      "reason": "final candidate affected-path original evidence"
+    },
+    {
+      "path": "candidate-g/feedback-focus-repro.json",
+      "bytes": 1082,
+      "sha256": "72d4657226da6a4cce4f71cd7f350dff809eb8faa44b5eb0622967f89001297f",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-g/feedback-focus-repro.log",
+      "bytes": 1047,
+      "sha256": "4447ec486e8deddbf52226bdb9d3a2d149c5fd26b7324d56f6a02e314799e030",
+      "reason": "final candidate affected-path original evidence"
+    },
+    {
+      "path": "candidate-g/full-check-review.json",
+      "bytes": 2373,
+      "sha256": "71dd5f013c67ffca8b7cd25907a7c8b23a3f82ce8b0a7f1b75cb2a72e9419102",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-g/history.log",
+      "bytes": 398,
+      "sha256": "85bfcfdfe98c733375c3ca6de04ea235b78aa73b1f7f48a6f835803ca96bdff5",
+      "reason": "final candidate affected-path original evidence"
+    },
+    {
+      "path": "candidate-g/home-modals.log",
+      "bytes": 6514,
+      "sha256": "c10bbbdb8277e87db64bd73cf2134d86b1b4ad57a8fd412b7c9d6d2b947ac23f",
+      "reason": "final candidate affected-path original evidence"
+    },
+    {
+      "path": "candidate-g/home-probe-first/cause.txt",
+      "bytes": 323,
+      "sha256": "80d05244ee09911b82d9c4543113266e1efd850d968a5195213541c874db081e",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-g/home-probe-first/home-modals.log",
+      "bytes": 6738,
+      "sha256": "fc8ced0e0f3954a2ab02d27ce919f8a71e1a876d518c32580d70469c8164dd9f",
+      "reason": "original failure receipt/probe context, no rewriting of FAIL"
+    },
+    {
+      "path": "candidate-g/home-probe-first/product-home-modal-error.json",
+      "bytes": 2502,
+      "sha256": "eca0f00d27d17a6232bfc2c386245d2e041a1c6f2c1c62cae1d74e0d07fe0a0e",
+      "reason": "original failure receipt/probe context, no rewriting of FAIL"
+    },
+    {
+      "path": "candidate-g/home-probe-first/product-home-modal-error.png",
+      "bytes": 185235,
+      "sha256": "5bcf99368b49504696283b05c61e925060c8dcefb4f63ce9bcaeafee92480ad7",
+      "reason": "original failure receipt/probe context, no rewriting of FAIL"
+    },
+    {
+      "path": "candidate-g/home-probe-first/product-home-modals.json",
+      "bytes": 31932,
+      "sha256": "92a78b55e25361f5b682874285ba2f343106bf49a33de0f63d0d988d28ca6e5d",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-g/independent-ui-contracts.log",
+      "bytes": 7116,
+      "sha256": "663cba5ad9f754d1fa8dbc7095a77257f4dac7c0b691e956c231c91903420a61",
+      "reason": "direct or recursive Markdown reference; final candidate affected-path original evidence"
+    },
+    {
+      "path": "candidate-g/interactions.log",
+      "bytes": 6561,
+      "sha256": "6ad2bd45a50dcb95ea6fce49d02bb19a209e35b8a4a860744cf6968b8ee878fc",
+      "reason": "final candidate affected-path original evidence"
+    },
+    {
+      "path": "candidate-g/manifest-fixed-check.json",
+      "bytes": 307,
+      "sha256": "43826ca0bac1404335930c0c4e63205a3de83df856bd938be19384a0d4fefed0",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-g/manifest-start-check.json",
+      "bytes": 49245,
+      "sha256": "a5c89bf30ce3bbb7320343402c083a98877e92c409763e67931e50fe7a88c221",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-g/manifest-stop-check.json",
+      "bytes": 987,
+      "sha256": "1f2145d98bc4915d658455f6be590b3f2097348c7fe19d1d0bd63f1dffc809ba",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "candidate-g/overview-settled-receipt.json",
+      "bytes": 8466,
+      "sha256": "4030f753c714a4087c61a05c5bdd91fc8bc45e490bd8ef7eaf55f9126e7908f8",
+      "reason": "direct or recursive Markdown reference; settled final overview receipt"
+    },
+    {
+      "path": "candidate-g/overview-settled.log",
+      "bytes": 8059,
+      "sha256": "7f0425d93de53eb9aed10ace361da21047ca95761ba050d15ca5d5bd034c4046",
+      "reason": "final candidate affected-path original evidence; settled final overview receipt"
+    },
+    {
+      "path": "candidate-g/product-artifact-source.png",
+      "bytes": 177810,
+      "sha256": "799d597cf493f16a9a8d55bb0e7cf09d27eb2715d75568398cc00982c10aa07c",
+      "reason": "direct or recursive Markdown reference; final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-artifact-source.txt",
+      "bytes": 2642,
+      "sha256": "34080c735772368f9d522cd3dffd2c312eea87f936128aa192e15281c08f55e8",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-choose-modal-1024.json",
+      "bytes": 3891,
+      "sha256": "6f4825102dbcd1039504d8ea759625c97cf1e333954dda13db8fb6d5e9e7f432",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-choose-modal-1024.png",
+      "bytes": 131841,
+      "sha256": "06ce588ed5a9f103eacc93f017dc5592ed4fa3dc52b7324ce28a52938927fb60",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-choose-modal-1440.json",
+      "bytes": 3914,
+      "sha256": "a084e116c3645cb785645a0d0085e209086075f95d1991c608a706690f69684c",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-choose-modal-1440.png",
+      "bytes": 169176,
+      "sha256": "febe63019172c271f71b64e3d5ec3d37205094c29714e447224895a222f89fe9",
+      "reason": "direct or recursive Markdown reference; final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-choose-modal-390.json",
+      "bytes": 3353,
+      "sha256": "abd86b8de899fa4b1e016540d27c087e787ce3c1c40b7bea4116dd724c873bb1",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-choose-modal-390.png",
+      "bytes": 62300,
+      "sha256": "70d8177b1c263f3fa6d095f9bc3d036dd990966a19c03d24a9ac6697d7eff29a",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-goal-source.png",
+      "bytes": 180759,
+      "sha256": "eae3ace6bb29e34b0570aa47c55db99a7812d53c795a09a40a738854765d2cc6",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-goal-source.txt",
+      "bytes": 2618,
+      "sha256": "c1da0990930d301737c5c6c202e760189231fc3299086eba79b5a8a98f6bb96b",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-history-b.json",
+      "bytes": 7355,
+      "sha256": "fd12ef8be46dfb3bf28c69048a45d40392a8994ec0e9cec3e599facf08d43f64",
+      "reason": "direct or recursive Markdown reference; final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-history-choice-source-b.json",
+      "bytes": 2186,
+      "sha256": "d6107c3d5ba82a59b46a444661b383cce8ae151a5572f425c89836b07563a156",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-history-choice-source-b.png",
+      "bytes": 152379,
+      "sha256": "aded8dde22eadb01164d9715fd84312522a81303072d39dedcd7fea83a5a6d92",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-history-readonly-b.json",
+      "bytes": 1834,
+      "sha256": "579eface7d02600c217391fbf0ae650163ba85b4ee6089c127965ce6df3e497e",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-history-readonly-b.png",
+      "bytes": 128348,
+      "sha256": "62d94527ceb044e50905db71e9d13fb40a3a6c342ed49b6bc75875990541c8e8",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-history-review-source-b.json",
+      "bytes": 2669,
+      "sha256": "1c6150ea685dc813f90a04242ccef2619a8646971d09b3a9b381565ec058ef80",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-history-review-source-b.png",
+      "bytes": 160786,
+      "sha256": "b0cc4e6ffa7bdc6107904fbc59c483d0079c8077c84cbec26f11951eba47219c",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-home-modals.json",
+      "bytes": 40093,
+      "sha256": "85e2fa795ea05aa87c23f358f3fc5fd3db350684b0954a6c3ce6c17b99ae8e9a",
+      "reason": "direct or recursive Markdown reference; final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-interactions-b.json",
+      "bytes": 6560,
+      "sha256": "fda075304f02f04411fa0e8c47523e208f91e3d6305f7f4293b5efcee6ac4470",
+      "reason": "direct or recursive Markdown reference; final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-observe-modal-1024.json",
+      "bytes": 3558,
+      "sha256": "68d393a7aabb3414f14209a50c9b1f49221c8725c4acaaef46919948d146edbc",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-observe-modal-1024.png",
+      "bytes": 152394,
+      "sha256": "3fd27a6ef5cb62bf19028e8470542922a25e5464e0f4193a00d8e7af6a9dcce6",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-observe-modal-1440.json",
+      "bytes": 3581,
+      "sha256": "58769f23c14c901925cb6f93b5a3af513581a90cc17967d842783b5effc59015",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-observe-modal-1440.png",
+      "bytes": 168465,
+      "sha256": "1a42e3703e2b6380b7c601ad2b7d5d5757f36571d07b1ebaff9ca54408a87b65",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-observe-modal-390.json",
+      "bytes": 2992,
+      "sha256": "52bd7fc0f94c715e6ec7bb0c3034391b76367ff5b0b2cc589d5e4f9959fd0625",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-observe-modal-390.png",
+      "bytes": 79763,
+      "sha256": "77c4b74c161b147b3e606011baa427ce3e4dd9546b42380a677232ca049f23e4",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-overview-settled-1024.json",
+      "bytes": 2760,
+      "sha256": "d9cf341f396812dc952b134e976f8e0cdcacc8374cd6d5fbe86464fcc9ba90c7",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-overview-settled-1024.png",
+      "bytes": 186007,
+      "sha256": "1e3cca1f36cf9b87febb3dc40468a739ff26e40db1c20b62fc62f6f6b4344435",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-overview-settled-1440.json",
+      "bytes": 2760,
+      "sha256": "e210c33651f1590ade6e14adee230740da7a72153bc2efd280164099f33586a2",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-overview-settled-1440.png",
+      "bytes": 201634,
+      "sha256": "209e0eb8cd6055c9177bee2dcd8a68131122fc19d7aad0a9b4f59adfb370b510",
+      "reason": "direct or recursive Markdown reference; final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-overview-settled-390.json",
+      "bytes": 2178,
+      "sha256": "b9b1967bc7a56de9c538009f39577ca89934655e23d162726ebcc321746a72b2",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-overview-settled-390.png",
+      "bytes": 89823,
+      "sha256": "822007f2df9e4f909ca5809317fb6d22b47707fda110209b56033a8d58acb565",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-project-to-case-return.png",
+      "bytes": 137110,
+      "sha256": "44a2f96a1317b40cef4777f8548b9f7630e443f10d59c1603a928cef6398e816",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-project-to-case-return.txt",
+      "bytes": 1656,
+      "sha256": "a9a700369c14b53b05dc39d540483badac137230de2bec8bdfa3773d4f876a1c",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-project-zero-tasks.png",
+      "bytes": 144415,
+      "sha256": "efe8300f011c30f4cf7f7a3fb9ed40b22d2ae31a2d03c5ba4428aa548e23dda3",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-project-zero-tasks.txt",
+      "bytes": 1879,
+      "sha256": "17566a5a12c7137ccd9b3a6f3fbdfdcd32934fad66d467f89b580f9e6d577d89",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-scope-stock.png",
+      "bytes": 137106,
+      "sha256": "585fcbab13c5c8c147c0e267727fc712c598f471d0f8d2f94d417dd928742116",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-scope-stock.txt",
+      "bytes": 1706,
+      "sha256": "857698f696a53cc9e8f4bd0faf8ea38c5740946964c9e22a66f5b243ebf3cb90",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-stock-feedback-modal-1024.json",
+      "bytes": 3568,
+      "sha256": "7d1e7cd89bba1175f0a8937f37a3bd1058076f72fa334e9bf9f233a3d12e3c83",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-stock-feedback-modal-1024.png",
+      "bytes": 153878,
+      "sha256": "765575ec5ddf65f9c7f99bcf86b7ce32fbd4dd7bf0ad2aedb28b3cba85301fae",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-stock-feedback-modal-1440.json",
+      "bytes": 3591,
+      "sha256": "95089ac4c3c6d25b595d4c86223fe3d742aa946cc52d6776c0c7451e9143fe0c",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-stock-feedback-modal-1440.png",
+      "bytes": 179449,
+      "sha256": "2baa65afd5734f882906e7a21ac9e010c571fab7171949f572173d17bbe23b4e",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-stock-feedback-modal-390.json",
+      "bytes": 3030,
+      "sha256": "826d104da36c8229b06dfefcd74363284eeec7101226f1911b78768d044be157",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/product-stock-feedback-modal-390.png",
+      "bytes": 71576,
+      "sha256": "156f5e7432a43fd099ed4e404c777b2686b8c28b5b1f4f3cad9dfc5727a43755",
+      "reason": "final candidate receipt corresponding actual capture"
+    },
+    {
+      "path": "candidate-g/source-manifest.json",
+      "bytes": 101623,
+      "sha256": "989e6a551887b354d7fce943d9ec3c2d6412119a50d83b04b874e0606551e8d6",
+      "reason": "final candidate affected-path original evidence"
+    },
+    {
+      "path": "cross-review/backend-independent/feedback-consumers/review-candidate-e.json",
+      "bytes": 7852,
+      "sha256": "8c6e12fa509ad4f875cca8c91ffb01b8acbfac2bcfccafa79bf1ea4fdbfc6c89",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "cross-review/backend-independent/modal-controller/b3/delta-review.json",
+      "bytes": 3764,
+      "sha256": "69c9625ef25cb165218e78ee14237833d9068a6a2f79f53be4debb34050c169b",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "cross-review/backend-independent/modal-controller/b3/generic-owner-risk.log",
+      "bytes": 1124,
+      "sha256": "e72ea12f2d16db077124e2b801610333e64c0005678bbcaded8fc8e8f9076009",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "demo-case-assets-1440.png",
+      "bytes": 126983,
+      "sha256": "9d2550884e3e1a8c90983fc57bce1acc15ff9582b79e74b36aeb4d0391a57717",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "demo-case-history-1440.png",
+      "bytes": 116446,
+      "sha256": "1f05e6e76f4180adede73122d7f90af501dab87cc3e74b42168fbc90129552d9",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "demo-case-projects-1440.png",
+      "bytes": 133552,
+      "sha256": "2d8dfe72cd43f37f3df021c786794e4f85215342f83357069335a923d5cd91bb",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "demo-choice-dialog-1440.png",
+      "bytes": 253202,
+      "sha256": "d8c2d03ff2a69cc92a8b631aaea43e9a848732956aded6810543bb64f4b0b4fa",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "demo-current-list-1440.png",
+      "bytes": 210465,
+      "sha256": "cadbb2fafc8e5cfd6a713f57322050a103522571e5612393b8ab166a856cfeb1",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "demo-current-tree-1024.png",
+      "bytes": 185507,
+      "sha256": "7b4715e1d2aea015444a6e6ab79af9c8a9329eb9be53d9b4040deb425fb556fb",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "demo-current-tree-1440.png",
+      "bytes": 218727,
+      "sha256": "01e6a89eed477e800a45b9a6cc4dc73e9fd0417a6cca9797f7d71edd353f37bb",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "demo-current-tree-390.png",
+      "bytes": 67502,
+      "sha256": "53d5cb1f74f07cd91fff12864650402f32654fd1a699517063117909f8b482cf",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "demo-empty-case-1440.png",
+      "bytes": 115155,
+      "sha256": "e7ea81d27225d41b698e7f824ad3db293edaf2b5f06513424b333f2892767b97",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "demo-feedback-dialog-1440.png",
+      "bytes": 253169,
+      "sha256": "3dae0b732ddb70c3bc6c76d84ddf4080f0f76ae6076a06fd73220c508517bc9e",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "demo-global-projects-1440.png",
+      "bytes": 141158,
+      "sha256": "c29ae5e0e7fff2490ab3743daf890d3671e1ea86006813a3ad1a4715285d6e63",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "demo-home-1440.png",
+      "bytes": 232546,
+      "sha256": "e54cfcbf4ec5374a4ca9c0ea365709c54266da64a886ff1a7e7a85560c13a3be",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "demo-overview-1440.png",
+      "bytes": 210525,
+      "sha256": "f500b4a3cac98ba8abd7680734da8796313390c68d3435d8a0488ef15d78bf91",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "demo-prepare-1440.png",
+      "bytes": 124940,
+      "sha256": "6b044ad1ef37264d123d34f90ced787a91cb2dfb36cf8fc88705a387cefccfcf",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "demo-project-detail-1440.png",
+      "bytes": 148728,
+      "sha256": "d8d5f53b5a0ea4c745bbb08bb894827ac0db68acc874085ce7dbd7b4b7189ca5",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "demo-source-dialog-1440.png",
+      "bytes": 270405,
+      "sha256": "d88c66c1bab9bbbaa871b5d288bde58a04331e3ab824ce5ea458792e39fbc334",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "e-product-dark.cjs",
+      "bytes": 2769,
+      "sha256": "f880c999bb2ddef69d3a9ce80a56ab6760b27a21ad4701fd7cc8a924a8e75bdd",
+      "reason": "independent reproducible probe; not a product file or bundle"
+    },
+    {
+      "path": "e-product-raw-observation.cjs",
+      "bytes": 8062,
+      "sha256": "67ddb4e39dcfc983e1b0f956dd20e5903c94b1ef156ca1f4339a2edbd6c513d3",
+      "reason": "independent reproducible probe; not a product file or bundle"
+    },
+    {
+      "path": "e-product-responsive.cjs",
+      "bytes": 4522,
+      "sha256": "73d8b7a92541ef27bb7597bd89b42fcc2909a106eca7c0944743cd2f0b6826b7",
+      "reason": "independent reproducible probe; not a product file or bundle"
+    },
+    {
+      "path": "e-product-walk.cjs",
+      "bytes": 4635,
+      "sha256": "f6e2add7c4571f953dc45b596442f526bd67ad31fa7e94e3f0dfa7101dcea0c8",
+      "reason": "independent reproducible probe; not a product file or bundle"
+    },
+    {
+      "path": "f-feedback-focus-repro.cjs",
+      "bytes": 2369,
+      "sha256": "726343b231e66655fe2445cc163c5cce295ab08150ffe7700d8055361c21da8e",
+      "reason": "independent reproducible probe; not a product file or bundle"
+    },
+    {
+      "path": "f-product-adopted-branch.cjs",
+      "bytes": 3423,
+      "sha256": "2cb56bcee5d645e19c9cb85425814298ce3c98ea2181105805757475ceb3b4bf",
+      "reason": "independent reproducible probe; not a product file or bundle"
+    },
+    {
+      "path": "f-product-carry-b.cjs",
+      "bytes": 4324,
+      "sha256": "b049abb8b88e7675b7d04d0a8fc6c8d9d10c95d36acfa38484e17f970002c227",
+      "reason": "independent reproducible probe; not a product file or bundle"
+    },
+    {
+      "path": "f-product-empty.cjs",
+      "bytes": 2177,
+      "sha256": "909c0e27934f159497dab1c10489a282803fee57d8c7d37b25fcb56309b622d3",
+      "reason": "independent reproducible probe; not a product file or bundle"
+    },
+    {
+      "path": "f-product-failures.cjs",
+      "bytes": 3314,
+      "sha256": "f5c4b01321efc079847824124dfd6dfd5c651331da8d6e3bdc19a33c196f4776",
+      "reason": "independent reproducible probe; not a product file or bundle"
+    },
+    {
+      "path": "f-product-preparation.cjs",
+      "bytes": 2792,
+      "sha256": "b6e3afe605ba22d8b570dbfdf85f0703b9092d2ee4670074242c80e69317bfe0",
+      "reason": "independent reproducible probe; not a product file or bundle"
+    },
+    {
+      "path": "f-product-project-filters-b-settled.cjs",
+      "bytes": 2756,
+      "sha256": "584db7f37cbe50b00fee2f3095c8c7ee00265fcec823139f6caeb0c98be79b5c",
+      "reason": "independent reproducible probe; not a product file or bundle"
+    },
+    {
+      "path": "f-product-raw-readback.cjs",
+      "bytes": 5309,
+      "sha256": "ef614a3432cd4690e7a8c362b5c34dc9dcbf7583be2a4a5a42c7add7437f15e3",
+      "reason": "independent reproducible probe; not a product file or bundle"
+    },
+    {
+      "path": "final-review.md",
+      "bytes": 44896,
+      "sha256": "555a4cb989334f578e85244c46be96c69dc1524f3c94645cb697eb39f61d8d49",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "frozen-manifest.json",
+      "bytes": 494,
+      "sha256": "e2e86d6945e6dd30b5839f71819b450726a17b1106603c67957af5a5db042223",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "frozen/demo.html",
+      "bytes": 208858,
+      "sha256": "adff576ba604b35b95806ab6a5c0f7bf93de5f0124c1ce0540e14577572bf911",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "frozen/spec.md",
+      "bytes": 23201,
+      "sha256": "834399d514fd9093d6dc93e5a897381d7ed83605499a16827e4dbac57468cc9f",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "frozen/tasks.md",
+      "bytes": 4785,
+      "sha256": "6ed1d3865d7312599b321b95a4dfb08868dbe2f2b2a1dd68ba52b8fa63fc71e7",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "g-feedback-focus-repro.cjs",
+      "bytes": 2369,
+      "sha256": "a54deea0b78d2e81cfb16ab6f12aed0d399249fc2a6d1428904290c20b88f7d5",
+      "reason": "independent reproducible probe; not a product file or bundle"
+    },
+    {
+      "path": "g-product-history-b.cjs",
+      "bytes": 3335,
+      "sha256": "ff48489f125e68f50387ea1f0f4ce5f60e85a70eff1aaebd80e2b2b2e219bb4d",
+      "reason": "independent reproducible probe; not a product file or bundle"
+    },
+    {
+      "path": "g-product-home-modals.cjs",
+      "bytes": 5606,
+      "sha256": "3fdd7ce22aeb3d7642a6567c1d68db34c0d72a73a2173afea54d6bf0f6d58f44",
+      "reason": "independent reproducible probe; not a product file or bundle"
+    },
+    {
+      "path": "g-product-interactions.cjs",
+      "bytes": 4406,
+      "sha256": "c9477465a77ad58c4a8a67729b46b7c2c455dcc3ac0f98909c5e233a62fdec84",
+      "reason": "independent reproducible probe; not a product file or bundle"
+    },
+    {
+      "path": "g-settled-overview.cjs",
+      "bytes": 2279,
+      "sha256": "110eecf5e6b8ad8e7c7fb6c802379e8d272326e4e76cbe648d7ab01c88f608cf",
+      "reason": "independent reproducible probe; not a product file or bundle"
+    },
+    {
+      "path": "intermediate-d14/feedback-1440.png",
+      "bytes": 194178,
+      "sha256": "1eecf95cda7d87e0f8b7a8d734cf0c795cdf6e1c3768b0609dbbd7067bfe25d9",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "intermediate-d14/feedback-390.png",
+      "bytes": 71304,
+      "sha256": "462ff0e5109e450ebd69696c4b915b3e7ba01a6d3d1d04a18f23f47abe04a591",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "intermediate-d14/receipt.json",
+      "bytes": 4014,
+      "sha256": "ca6932265e89905316cbaa63d030bd8e50febb8eb269bd34af74ec13cf7b3aaa",
+      "reason": "direct or recursive Markdown reference"
+    },
+    {
+      "path": "review-history.md",
+      "bytes": 6373,
+      "sha256": "fea79de390cdd89cb83e3bb75b38e560a0fb56b800fc80b5e1c328a3bf419746",
+      "reason": "direct or recursive Markdown reference"
+    }
+  ],
+  "externalEvidence": [
+    {
+      "relativeReference": "../checks/candidate-g-check-status.json",
+      "source": ".local/ui-conformance/candidate-g-check-status.json",
+      "destination": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/checks/candidate-g-check-status.json",
+      "bytes": 596,
+      "sha256": "939a75807f5602a7634638b8eb9fd57ce52c778e80a04146e84b786b30c44dfc",
+      "publicationOwner": "PM",
+      "reviewed": true
+    },
+    {
+      "relativeReference": "../checks/candidate-g-full-check.log",
+      "source": ".local/ui-conformance/candidate-g-full-check.log",
+      "destination": "openspec/changes/decision-case-daily-workspace/evidence/ui-conformance/checks/candidate-g-full-check.log",
+      "bytes": 467981,
+      "sha256": "629ee260bd128e2995056163a0ab98b10e137de6f5eeafd37870624f83541f33",
+      "publicationOwner": "PM",
+      "reviewed": true
+    }
+  ],
+  "externalRule": "These two PM-owned ../checks references are already published and byte-verified; do not copy them under independent-ui. Preserve relative links."
+}

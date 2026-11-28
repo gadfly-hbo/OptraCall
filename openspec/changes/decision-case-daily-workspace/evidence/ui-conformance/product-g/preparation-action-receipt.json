@@ -1,0 +1,36 @@
+{
+  "runtime": {
+    "instanceId": "5b8dc9fa-1b23-45fe-9fdd-0e004b23832e",
+    "pid": 276337,
+    "codeRoot": "/workspace/OptraCall-issue149-ui-conformance",
+    "version": "0.1.0-mvp.4",
+    "commit": "5dd59909227ab46f3d989ade8b2847e077636855",
+    "tree": "1078a6e2359a29e82631ab59f56a8d6dd9492d73",
+    "builtAt": "2026-11-28T02:05:43.009Z",
+    "dirty": true
+  },
+  "sourceManifestHash": "2f8ee75d4da2c5aca3240e9b26abc4ab7c6a5f798ae6ea650def9195db436f16",
+  "shots": [
+    {
+      "name": "25-case-prepare-action-1440",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "url": "http://127.0.0.1:43150/",
+      "capturedAt": "2026-11-28T02:15:54.506Z"
+    },
+    {
+      "name": "26-case-prepare-action-390",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "url": "http://127.0.0.1:43150/",
+      "capturedAt": "2026-11-28T02:15:54.695Z"
+    }
+  ],
+  "errors": [],
+  "writes": [],
+  "boundary": "Actual product existing preparation draft, scrolling only; did not adopt or create."
+}

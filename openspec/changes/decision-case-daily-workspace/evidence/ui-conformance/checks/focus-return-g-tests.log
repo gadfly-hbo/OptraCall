@@ -1,0 +1,48 @@
+✔ a Case detail exposes its collaboration entry before any independent issue has been selected (77.532941ms)
+✔ DW02: overview current round includes only the exact open choice request that follows the latest saved choice (462.06612ms)
+✔ DW04: a restored selected issue beyond the directory first 20 is read by exact ID, never replaced by the first issue (11.163983ms)
+✔ DW16: an unreadable restored issue is not silently replaced by the first readable issue (24.081852ms)
+✔ DW03: tree mode survives tab unmount/remount and remains isolated by Case identity (42.56273ms)
+✔ DW02: other owners, answered requests and nonmatching previous choices never create a pending round on the overview (113.039083ms)
+✔ DW16: unreadable request projection remains unknown instead of claiming the latest saved round is the current round (7.668818ms)
+✔ D14: writable actions are the exact issue/Board/active-project intersection, with no first request match (176.261594ms)
+✔ D14: an explicitly opened request chooses its exact action and request rather than the first available action (23.729414ms)
+✔ D14: no writable action or a closed Case offers the original source without inventing observations (8.613349ms)
+✔ D14/DW13: cancel and full component recreation retain the original feedback input and save intention (24.035723ms)
+✔ D14/DW09: uncertain feedback saves query the exact original operation and preserve its ID across reopen and explicit retry (60.791408ms)
+✔ D14: querying an already-saved feedback acknowledges that revision without posting another one (28.887529ms)
+✔ D14: a changed authorization or archived project is rechecked immediately before any feedback write (24.187123ms)
+✔ D14: leaving the feedback owner during source recheck prevents a late business write (39.363589ms)
+✔ D14/DW09: two explicitly clicked requests for the same action retain separate inputs and exact request identities (63.611048ms)
+✔ D14: an untouched unavailable draft remains read-only but can cancel without a save (20.777351ms)
+✔ D14/DW13: a fully reopened legacy UNKNOWN feedback retries its original full body and operation without adding a date (254.88321ms)
+✔ D14: a new Case observation keeps only the real feedback baseline and never copies prior execution or causal judgement (6.120511ms)
+✔ D14/DW09: the real compact form and durable Case wrapper preserve the clicked observation request, metadata and UNKNOWN intent together (49.623297ms)
+✔ D14: Case presentation exposes the three frozen observation fields and folds original request and optional judgement controls (370.295926ms)
+✔ D14: a date and actual observation can save unknown execution as null without inventing effect, rating or request (71.034017ms)
+✔ D14: a failed source read blocks even ordinary compact observation without erasing its text (22.259556ms)
+✔ D14: compact rejects missing/invalid observation dates and preserves explicit original judgement edits only (45.31005ms)
+✔ D14: compact exact request saves recheck authorization and feedback baseline without substituting a later request (61.182443ms)
+✔ D14: original Board forms preserve boolean payloads without new metadata and read unknown execution accurately (13.934611ms)
+✔ DW09/FUI-02: a selected open historical request loads its exact strategy revision and requires explicit historical confirmation (362.305151ms)
+✔ DW09/FUI-03: explicitly switching from request A to issue B restores B single-request matching (84.406508ms)
+✔ DW09/FUI-02: denied exact historical read never silently substitutes the latest version for the original request (13.575361ms)
+✔ DW09: current-version choices retain the normal one-request path without historical opt-in (18.88686ms)
+✔ DW09/FUI-02: unauthorized, archived or owner-mismatched original revisions cannot be used for a new choice (33.361313ms)
+✔ D13: recording a choice opens a same-page dialog; cancellation preserves its unsaved reason (34.897973ms)
+✔ D13/DW13: an untouched editor can cancel after draft GET 503 while business save stays disabled (12.537958ms)
+✔ D13/DW09: a cancelled choice reopens for a fresh entry sequence without replacing the original draft (12.636884ms)
+✔ D13: an unknown choice keeps its exact operation and resolves through the original timeline without a second write (16.793061ms)
+✔ DW13/B2: full remount preserves an explicitly changed or cleared plan instead of reapplying the historical-request default (35.226514ms)
+✔ DW13/B2: an explicitly unlinked request association stays unlinked after full remount (50.924327ms)
+✔ DW13/B3: viewing a closed Case original request cannot initialize or autosave a new choice draft (357.169219ms)
+✔ DW13/B3: a closed Case can restore its existing uncertain choice input without changing that draft or replaying its operation (381.603697ms)
+✔ D13/D14: automatic request entry captures the current-work action as the shared dialog return focus (28.585174ms)
+ℹ tests 40
+ℹ suites 0
+ℹ pass 40
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3359.131332

@@ -1,0 +1,272 @@
+{
+  "reviewer": "/root/ui149_correction_backend_review",
+  "recordedAt": "2026-11-28T00:51:57.837567+00:00",
+  "conclusion": "FAIL: B1 blocks manual preparation after completing a previous Case",
+  "scope": "Independent read-only review of current uncommitted waiting projection and preparation input/scope order; not overall UI conformance or user acceptance",
+  "head": "5dd59909227ab46f3d989ade8b2847e077636855",
+  "priorProductBase": "85ab2395d8e78a3d1570850a98fdc87a43e48c40",
+  "baselines": [
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/demo.html",
+      "commit": "5f15cf3b677c743bda0b5b2c3ee0e4b4f57e1af2",
+      "sha256": "adff576ba604b35b95806ab6a5c0f7bf93de5f0124c1ce0540e14577572bf911"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/spec.md",
+      "commit": "5f15cf3b677c743bda0b5b2c3ee0e4b4f57e1af2",
+      "sha256": "834399d514fd9093d6dc93e5a897381d7ed83605499a16827e4dbac57468cc9f"
+    },
+    {
+      "path": "openspec/changes/decision-case-daily-workspace/tasks.md",
+      "commit": "5f15cf3b677c743bda0b5b2c3ee0e4b4f57e1af2",
+      "sha256": "6ed1d3865d7312599b321b95a4dfb08868dbe2f2b2a1dd68ba52b8fa63fc71e7"
+    }
+  ],
+  "files": [
+    {
+      "path": "src/host/home-pending.ts",
+      "sha256": "4625b5fa117896f4acab6ded9508d1804a5f554381dc158bae302a88b2265fe7",
+      "matchesFrozenManifest": true
+    },
+    {
+      "path": "src/host/workspace-daily-routes.ts",
+      "sha256": "ccc943dfc9c2c73cb75073e053d94dc3efa479ae01ad33905c1c2961f0871e59",
+      "matchesFrozenManifest": true
+    },
+    {
+      "path": "src/host/ui/CasePreparation.tsx",
+      "sha256": "0e2c3c824117c248f7f84f5461b82ef9e568507f78699a80b0851c8e3b01d02c",
+      "matchesFrozenManifest": true
+    },
+    {
+      "path": "src/host/ui/HomeDailyQuickPanel.tsx",
+      "sha256": "b9b236bfbf065c77e180cc2c502d2912fe3245b34aa3b804d3c6ca382061744d",
+      "matchesFrozenManifest": true
+    },
+    {
+      "path": "tests/home-external-waiting.test.ts",
+      "sha256": "81c99c15d3dd7d5e784fae5d64ad4d0091a629430c097236a89aebda1a942e84",
+      "matchesFrozenManifest": true
+    },
+    {
+      "path": "tests/case-preparation-ui.test.ts",
+      "sha256": "4040057b4a0446f4266c8f633c4c826ff87917692ea3167b13cee1e5bc16dec5",
+      "matchesFrozenManifest": true
+    },
+    {
+      "path": "src/host/ui/case-preparation-model.ts",
+      "sha256": "6fcf3578b56766ecad2d08a74d743c2bd8c333bb7f165c07447418735d42740c",
+      "matchesFrozenManifest": true
+    }
+  ],
+  "finding": {
+    "id": "PREP-01",
+    "priority": "P2",
+    "requirement": "DW10, T10, spec 4.4 manual path available without model",
+    "locations": [
+      "src/host/ui/CasePreparation.tsx:150",
+      "src/host/ui/CasePreparation.tsx:344",
+      "src/host/ui/CasePreparation.tsx:346",
+      "src/host/ui/CasePreparation.tsx:356"
+    ],
+    "description": "After clicking Prepare another Case in expanded mode, newPreparation calls install (which sets manualOpen=true) then overrides it to false. Expanded mode hides the manual edit toggle. Goal and scope fields are absent; the user must click optional Agent assistance to reveal manual inputs, or leave/reopen.",
+    "reproduction": "Seed a completed recoverable preparation, render the actual bundled component with expanded:true, click Prepare another Case, inspect editable fields. manualGoal=false, manualScope=false, manualToggle=false.",
+    "testFile": ".local/ui-conformance/backend-independent/preparation/independent-repro.test.ts",
+    "output": ".local/ui-conformance/backend-independent/preparation/independent-repro.log"
+  },
+  "checks": [
+    {
+      "command": "TMPDIR=<isolated> node --test tests/home-external-waiting.test.ts tests/workspace-daily-backend.test.ts tests/workspace-daily-http-pi.test.ts tests/home-pending.test.ts",
+      "pass": 10,
+      "fail": 0,
+      "output": "targeted.log",
+      "note": "Only the first three paths exist; Node discovery ran their 10 cases. No test is claimed for absent home-pending.test.ts."
+    },
+    {
+      "command": "TMPDIR=<isolated> node --test tests/case-decision-requests.test.ts tests/observation-request-model.test.ts tests/case-request-plan-qualification.test.ts",
+      "pass": 10,
+      "fail": 0,
+      "output": "request-regressions.log"
+    },
+    {
+      "command": "TMPDIR=<isolated> node --test tests/case-preparation-model.test.ts",
+      "pass": 8,
+      "fail": 0,
+      "output": "preparation-model.log"
+    },
+    {
+      "command": "node --test tests/case-preparation-ui.test.ts",
+      "pass": 9,
+      "fail": 0,
+      "output": "preparation/original-tests.log"
+    },
+    {
+      "command": "node --test .local/ui-conformance/backend-independent/preparation/independent-repro.test.ts",
+      "pass": 0,
+      "fail": 1,
+      "output": "preparation/independent-repro.log"
+    },
+    {
+      "command": "GET /api/workspace/home-pending, GET /api/projects/:id/work, GET /api/projects/:id/work/events on 127.0.0.1:43150 with x-optracall-client:1",
+      "result": "7 exact source and read-only checks passed",
+      "output": "http-readonly-verification.json"
+    },
+    {
+      "command": "git diff --check",
+      "result": "exit 0"
+    }
+  ],
+  "matrix": [
+    {
+      "ids": [
+        "DW08",
+        "T08",
+        "T09"
+      ],
+      "expected": "Only explicit original requests and project waiting sources; no Case status/last issue/missing-feedback inference",
+      "actual": "home-pending.ts:139–205 and workspace-daily-routes.ts:43–65; explicit awaiting_feedback with project/revision/time/assignee, related Case list deduplicated; continuing Cases do not guess last issue",
+      "evidence": [
+        "targeted.log",
+        "request-regressions.log",
+        "http-readonly-verification.json"
+      ],
+      "result": "PASS in reviewed backend scope"
+    },
+    {
+      "ids": [
+        "DW09",
+        "T08"
+      ],
+      "expected": "Opening does not resolve requests; only exact response owner/revision/round/action resolves",
+      "actual": "Original request logic unchanged; isolated real Host requests->choice->home update exercised; unrelated/other-round/other-authority negative tests passed; source events unchanged on read",
+      "evidence": [
+        "targeted.log",
+        "request-regressions.log",
+        "http-readonly-verification.json"
+      ],
+      "result": "PASS"
+    },
+    {
+      "ids": [
+        "DW10",
+        "T10",
+        "T11"
+      ],
+      "expected": "No-model manual preparation remains available; chosen ownership is explicit; optional Agent remains optional",
+      "actual": "Unchosen scope data persistence and write guard passed; expanded newPreparation removes manual fields and toggle",
+      "evidence": [
+        "preparation/original-tests.log",
+        "preparation/independent-repro.log"
+      ],
+      "result": "FAIL B1; actual Pi runtime not rerun in this subreview"
+    },
+    {
+      "ids": [
+        "DW11",
+        "T10"
+      ],
+      "expected": "Three branches, exact adopted versions, continued old Case preserves new input and no automatic reopening",
+      "actual": "Original orchestrator unchanged; real Host and Store branches exercised; closed Case remains closed",
+      "evidence": [
+        "targeted.log"
+      ],
+      "result": "PASS in backend scope"
+    },
+    {
+      "ids": [
+        "DW12",
+        "T12"
+      ],
+      "expected": "Explicit idempotent append retains original text/provenance and protects nonempty draft",
+      "actual": "Store and real Host append/read/reopen tests passed; UI browser sequence not run here",
+      "evidence": [
+        "targeted.log"
+      ],
+      "result": "PASS in backend scope"
+    },
+    {
+      "ids": [
+        "DW13",
+        "T12"
+      ],
+      "expected": "Persistent editable preparation before scope selection; navigation/conflicts/double writes/late owner updates retain fields",
+      "actual": "UI scoped edits/reopen passed; model serialization/lost replies/late receipts/other owner/conflicts passed; B1 affects reachability of new manual form",
+      "evidence": [
+        "preparation/original-tests.log",
+        "preparation-model.log"
+      ],
+      "result": "PASS for data preservation; B1 separate"
+    },
+    {
+      "ids": [
+        "DW14",
+        "T10",
+        "T12"
+      ],
+      "expected": "Adoption and Case creation outcomes remain separate; original operation restored without re-adoption",
+      "actual": "Partial unknown then retry and exact continuation tested; lost first-issue receipt UI recovery retained",
+      "evidence": [
+        "targeted.log",
+        "preparation/original-tests.log",
+        "preparation-model.log"
+      ],
+      "result": "PASS"
+    },
+    {
+      "ids": [
+        "DW15",
+        "T09"
+      ],
+      "expected": "Goal result/versions remain original authority without inferred attainment",
+      "actual": "Reviewed diff does not change Goal evidence/result authority or add calculations",
+      "evidence": [
+        "read-only source review"
+      ],
+      "result": "No changed-path violation found; complete goal-result UI acceptance not claimed"
+    },
+    {
+      "ids": [
+        "DW16",
+        "T09",
+        "T11",
+        "T14"
+      ],
+      "expected": "Revocation removes unreadable source; partial reads retain readable peers; late reads do not overwrite newer owner; read recovery has no replay",
+      "actual": "403/unqualified/archive and one unreadable project tested, valid reads recover without events; directory 403/503 tested in prep suite; late receipt owner isolation tested in model; product browser 403/503 and late waiting-refresh sequence not run here",
+      "evidence": [
+        "targeted.log",
+        "preparation/original-tests.log",
+        "preparation-model.log"
+      ],
+      "result": "PASS in tested scope; browser completion belongs to root audit"
+    },
+    {
+      "ids": [
+        "T13",
+        "T14"
+      ],
+      "expected": "Fixed-candidate targeted Store/Host/UI/Pi evidence and actual product browser behavior",
+      "actual": "Isolated Store and actual Host passed; bundled actual preparation component exposed B1; no screenshot/Pi conversation acceptance claim",
+      "evidence": [
+        "targeted.log",
+        "preparation/independent-repro.log"
+      ],
+      "result": "PARTIAL, not complete delivery approval"
+    }
+  ],
+  "fourPrinciples": {
+    "HostManagesEnvironment": "PASS: projection only, permissions through existing qualifier, no business computation",
+    "AgentAutonomy": "PASS: no new inference loop or forced internal method",
+    "ReusePi": "PASS in diff: no SDK/runtime/dependency modification; actual Pi runtime not repeated",
+    "ReduceHumanOperations": "FAIL B1: extra optional Agent entry or reopen needed to regain required manual fields"
+  },
+  "limitations": [
+    "No old Issue149 PASS inherited.",
+    "Actual Host43150 is synthetic; no real business data, external models, production or user device acceptance.",
+    "Initial direct curl without product client header got client_rejected403; it is not a revocation test. Subsequent GETs used existing public product client header.",
+    "No product browser screenshot or user confirmation performed by this reviewer; PR gate remains unresolved.",
+    "New waiting per-source failures are represented by partial-read boolean; no claim of detailed per-source error reason display.",
+    "Report applies only to recorded source hashes; post-review changes require affected-path recheck."
+  ],
+  "writes": "Only .local/ui-conformance/backend-independent evidence and isolated temporary fixture outputs. No source/tests/spec/AGENTS/engineering/Git/Issue writes."
+}

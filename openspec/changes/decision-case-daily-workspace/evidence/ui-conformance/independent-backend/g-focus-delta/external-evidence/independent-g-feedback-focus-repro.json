@@ -1,0 +1,55 @@
+{
+  "at": "2026-11-28T02:10:02.284Z",
+  "r": [
+    {
+      "attempt": 1,
+      "immediate": {
+        "tag": "BUTTON",
+        "id": "_r_4_-feedback",
+        "text": "回录反馈",
+        "buttons": []
+      },
+      "settled": true,
+      "after": {
+        "tag": "BUTTON",
+        "id": "_r_4_-feedback",
+        "text": "回录反馈",
+        "buttons": []
+      }
+    },
+    {
+      "attempt": 2,
+      "immediate": {
+        "tag": "BUTTON",
+        "id": "_r_4_-feedback",
+        "text": "回录反馈",
+        "buttons": []
+      },
+      "settled": true,
+      "after": {
+        "tag": "BUTTON",
+        "id": "_r_4_-feedback",
+        "text": "回录反馈",
+        "buttons": []
+      }
+    },
+    {
+      "attempt": 3,
+      "immediate": {
+        "tag": "BUTTON",
+        "id": "_r_4_-feedback",
+        "text": "回录反馈",
+        "buttons": []
+      },
+      "settled": true,
+      "after": {
+        "tag": "BUTTON",
+        "id": "_r_4_-feedback",
+        "text": "回录反馈",
+        "buttons": []
+      }
+    }
+  ],
+  "errors": [],
+  "writes": []
+}

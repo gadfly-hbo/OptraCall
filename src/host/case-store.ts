@@ -915,10 +915,10 @@ export class CaseStore {
   private strategyChoiceEvent(caseId: string, event: WorkEvent): CaseStrategyChoice {
       try {
         const after = event.changes.choice?.after as Record<string, unknown>, before = event.changes.choice?.before as Record<string, unknown> | null;
-        const parsed = parseCaseStrategyChoice({ operationId: event.operationId, caseStoreId: this.decisionStoreId(), caseId, strategyRef: after.strategyRef, choice: after.choice, reason: after.reason, issueId: after.issueId, respondsToRequest: after.respondsToRequest, expectedPreviousChoiceId: before?.choiceId ?? null });
+        const parsed = parseCaseStrategyChoice({ operationId: event.operationId, caseStoreId: this.decisionStoreId(), caseId, strategyRef: after.strategyRef, choice: after.choice, reason: after.reason, ...(after.nextStep === undefined ? {} : { nextStep: after.nextStep }), issueId: after.issueId, respondsToRequest: after.respondsToRequest, expectedPreviousChoiceId: before?.choiceId ?? null });
         if (event.actorKind !== 'user' || parsed.strategyRef.caseId !== caseId || parsed.strategyRef.caseStoreId !== parsed.caseStoreId) fail('corrupt_case_choice', 503);
         const quoteProvenance = after.quoteProvenance === undefined ? undefined : parseUserQuoteProvenance(after.quoteProvenance);
-        return { choiceId: event.id, caseId, ...(parsed.issueId ? { issueId: parsed.issueId, goalBinding: after.goalBinding as CaseGoalBinding | null } : {}), ...(parsed.respondsToRequest ? { respondsToRequest: parsed.respondsToRequest } : {}), strategyRef: parsed.strategyRef, choice: parsed.choice, reason: parsed.reason, previousChoiceId: parsed.expectedPreviousChoiceId, operationId: event.operationId, occurredAt: event.occurredAt, actorKind: 'user', ...(quoteProvenance ? { quoteProvenance } : {}) };
+        return { choiceId: event.id, caseId, ...(parsed.issueId ? { issueId: parsed.issueId, goalBinding: after.goalBinding as CaseGoalBinding | null } : {}), ...(parsed.respondsToRequest ? { respondsToRequest: parsed.respondsToRequest } : {}), strategyRef: parsed.strategyRef, choice: parsed.choice, reason: parsed.reason, ...(parsed.nextStep === undefined ? {} : { nextStep: parsed.nextStep }), previousChoiceId: parsed.expectedPreviousChoiceId, operationId: event.operationId, occurredAt: event.occurredAt, actorKind: 'user', ...(quoteProvenance ? { quoteProvenance } : {}) };
       } catch { return fail('corrupt_case_choice', 503); }
   }
   getStrategyChoices(caseId: string): CaseStrategyChoice[] {
@@ -949,9 +949,9 @@ export class CaseStore {
       this.put('cases', 'id', core);
       const choiceId = this.event('case', core.id, core.revision, 'case_strategy_choice', clean.operationId, {
         choice: { before: previous ? { choiceId: previous.choiceId, strategyRef: previous.strategyRef, choice: previous.choice, reason: previous.reason } : null,
-          after: { ...ownership, strategyRef: target, choice: clean.choice, reason: clean.reason, ...(clean.respondsToRequest ? { respondsToRequest: clean.respondsToRequest } : {}), ...(quoteProvenance ? { quoteProvenance } : {}) } },
+          after: { ...ownership, strategyRef: target, choice: clean.choice, reason: clean.reason, ...(clean.nextStep === undefined ? {} : { nextStep: clean.nextStep }), ...(clean.respondsToRequest ? { respondsToRequest: clean.respondsToRequest } : {}), ...(quoteProvenance ? { quoteProvenance } : {}) } },
       }, time);
-      return { choiceId, caseId: core.id, ...ownership, strategyRef: target, choice: clean.choice, reason: clean.reason, previousChoiceId: previous?.choiceId ?? null, ...(clean.respondsToRequest ? { respondsToRequest: clean.respondsToRequest } : {}), operationId: clean.operationId, occurredAt: time, actorKind: 'user', ...(quoteProvenance ? { quoteProvenance } : {}) };
+      return { choiceId, caseId: core.id, ...ownership, strategyRef: target, choice: clean.choice, reason: clean.reason, ...(clean.nextStep === undefined ? {} : { nextStep: clean.nextStep }), previousChoiceId: previous?.choiceId ?? null, ...(clean.respondsToRequest ? { respondsToRequest: clean.respondsToRequest } : {}), operationId: clean.operationId, occurredAt: time, actorKind: 'user', ...(quoteProvenance ? { quoteProvenance } : {}) };
     }, { ...options, decisions: true });
   }
   private event(subjectType: 'case' | 'project', subjectId: string, revisionNumber: number, eventType: WorkEventType, operationId: string, delta: WorkEvent['changes'], time: string, note: Note | null = null, originCaseId: string | null = null) {

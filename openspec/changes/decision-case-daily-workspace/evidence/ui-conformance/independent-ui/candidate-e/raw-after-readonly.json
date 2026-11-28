@@ -1,0 +1,462 @@
+{
+  "health": {
+    "status": "ready",
+    "studio": {
+      "semanticEngineConfigured": false
+    },
+    "sdkVersion": "1.4.0",
+    "transportVersion": "1",
+    "chatMode": "live",
+    "credentials": "host-persistent",
+    "filePolicy": "soft-prompt-no-sensitive-data-isolation",
+    "runtime": {
+      "instanceId": "e7a7a70c-4d77-429d-82b9-ded73b547c3a",
+      "pid": 256817,
+      "codeRoot": "/workspace/OptraCall-issue149-ui-conformance",
+      "version": "0.1.0-mvp.4",
+      "commit": "5dd59909227ab46f3d989ade8b2847e077636855",
+      "tree": "1078a6e2359a29e82631ab59f56a8d6dd9492d73",
+      "builtAt": "2026-11-28T01:49:00.388Z",
+      "dirty": true
+    }
+  },
+  "history": {
+    "revisions": [
+      {
+        "revisionId": "8cec4b31-0bca-4cdb-a400-1b6e104f42ee",
+        "taskId": "c07ac8c8-24c1-45e3-b75e-1ed11f72fb5d",
+        "revisionNumber": 1,
+        "operationId": "93e1ca67-cd52-4ad6-92ab-d2f93aba52ba",
+        "requestSha256": "347fe2ebb763b4a7809ee4b7a7dd76501c524e2c58c1683dfd14676651110963",
+        "adopted": null,
+        "outcome": "独立原观察：两份合成回执中有一份记录缺货。<script>window.__rawAudit=1</script> 仅为字面合成材料；未确认行动是否执行。",
+        "metricDelta": "",
+        "review": "",
+        "score": null,
+        "effect": "unknown",
+        "savedAt": "2026-11-28T01:51:12.858Z",
+        "origin": "user-save",
+        "legacyCreatedAt": null,
+        "legacyUpdatedAt": null,
+        "createdAt": "2026-11-28T01:51:12.858Z",
+        "updatedAt": "2026-11-28T01:51:12.858Z",
+        "observationDate": "2026-11-26",
+        "sourceScope": "仅本隔离合成资料与原请求；样本两份，其他门店未知。",
+        "respondsToRequest": {
+          "requestId": "1b7b4d10-60b6-4998-b828-ae5a3d5f5468",
+          "revision": 1,
+          "authorizationId": "a8963940-c1fa-4f58-ae3f-44bfd385ee1d"
+        }
+      }
+    ]
+  },
+  "board": {
+    "projects": [
+      {
+        "id": "96e5ff36-be97-4660-b644-ed98b1ab1bf7",
+        "name": "独立原始观察验证项目",
+        "archivedAt": null
+      }
+    ],
+    "reports": [],
+    "items": [
+      {
+        "id": "55cf6c04-8a6b-4d31-89e3-a8644daca87d",
+        "projectId": "96e5ff36-be97-4660-b644-ed98b1ab1bf7",
+        "reportId": null,
+        "extractionId": null,
+        "sourceKind": "manual",
+        "title": "独立合成原行动",
+        "rationale": "只核对隔离测试资料，不执行任何真实经营行动。",
+        "expectedImpact": "",
+        "priority": "medium",
+        "effort": null,
+        "confidence": 0.35,
+        "evidenceLevel": "经验假设",
+        "status": "adopted",
+        "dismissedReason": null,
+        "decidedAt": "2026-11-28T01:50:09.056Z",
+        "createdAt": "2026-11-28T01:50:09.054Z",
+        "updatedAt": "2026-11-28T01:50:09.056Z",
+        "evidence": null,
+        "tasks": [
+          {
+            "id": "c07ac8c8-24c1-45e3-b75e-1ed11f72fb5d",
+            "itemId": "55cf6c04-8a6b-4d31-89e3-a8644daca87d",
+            "title": "独立合成原行动",
+            "owner": null,
+            "dueDate": null,
+            "note": "",
+            "status": "doing",
+            "priority": "medium",
+            "createdAt": "2026-11-28T01:50:09.056Z",
+            "updatedAt": "2026-11-28T01:50:09.122Z",
+            "feedback": {
+              "revisionId": "8cec4b31-0bca-4cdb-a400-1b6e104f42ee",
+              "taskId": "c07ac8c8-24c1-45e3-b75e-1ed11f72fb5d",
+              "revisionNumber": 1,
+              "operationId": "93e1ca67-cd52-4ad6-92ab-d2f93aba52ba",
+              "requestSha256": "347fe2ebb763b4a7809ee4b7a7dd76501c524e2c58c1683dfd14676651110963",
+              "adopted": null,
+              "outcome": "独立原观察：两份合成回执中有一份记录缺货。<script>window.__rawAudit=1</script> 仅为字面合成材料；未确认行动是否执行。",
+              "metricDelta": "",
+              "review": "",
+              "score": null,
+              "effect": "unknown",
+              "savedAt": "2026-11-28T01:51:12.858Z",
+              "origin": "user-save",
+              "legacyCreatedAt": null,
+              "legacyUpdatedAt": null,
+              "createdAt": "2026-11-28T01:51:12.858Z",
+              "updatedAt": "2026-11-28T01:51:12.858Z",
+              "observationDate": "2026-11-26",
+              "sourceScope": "仅本隔离合成资料与原请求；样本两份，其他门店未知。",
+              "respondsToRequest": {
+                "requestId": "1b7b4d10-60b6-4998-b828-ae5a3d5f5468",
+                "revision": 1,
+                "authorizationId": "a8963940-c1fa-4f58-ae3f-44bfd385ee1d"
+              }
+            },
+            "authorization": {
+              "authorizationId": "a8963940-c1fa-4f58-ae3f-44bfd385ee1d",
+              "revision": 1,
+              "decision": "authorize",
+              "scope": "只核对隔离测试资料，不执行任何真实经营行动。",
+              "source": {
+                "caseStoreId": "a6945efa-9d8e-4c5b-8325-71efac838ccc",
+                "caseId": "d7efb884-08be-40d2-988d-f5d6e0c7c07b",
+                "choiceId": "80ef4804-bd70-4d9c-88a6-1b103f7c0326",
+                "strategyRef": {
+                  "type": "case-decision",
+                  "caseStoreId": "a6945efa-9d8e-4c5b-8325-71efac838ccc",
+                  "caseId": "d7efb884-08be-40d2-988d-f5d6e0c7c07b",
+                  "recordId": "b6b4b22e-dbfa-4a84-b93c-1e0e0f4d56f0",
+                  "revision": 1
+                }
+              },
+              "createdAt": "2026-11-28T01:50:09.060Z"
+            }
+          }
+        ]
+      }
+    ],
+    "stats": {
+      "reports": 0,
+      "suggested": 0,
+      "adopted": 1,
+      "dismissed": 0,
+      "manual": 1,
+      "highPrioritySuggested": 0,
+      "runningExtractions": 0
+    }
+  },
+  "home": {
+    "pendingHeading": "待处理事项",
+    "storeState": "ready",
+    "pending": [],
+    "unresolvedRequests": [],
+    "continueWork": [
+      {
+        "caseId": "d7efb884-08be-40d2-988d-f5d6e0c7c07b",
+        "caseTitle": "独立原始反馈保存路径",
+        "status": "pending",
+        "updatedAt": "2026-11-28T01:50:09.275Z",
+        "issueId": null,
+        "issueTitle": null,
+        "issueCount": 1,
+        "nextStep": ""
+      },
+      {
+        "caseId": "f87de296-aa83-44a4-8064-0614773621aa",
+        "caseTitle": "独立已采纳目标创建路径",
+        "status": "pending",
+        "updatedAt": "2026-11-28T01:10:04.030Z",
+        "issueId": null,
+        "issueTitle": null,
+        "issueCount": 1,
+        "nextStep": ""
+      },
+      {
+        "caseId": "f5df51a9-e1f1-4ce1-8957-7a0d1ecfe365",
+        "caseTitle": "独立复核连续创建路径",
+        "status": "pending",
+        "updatedAt": "2026-11-28T01:03:42.973Z",
+        "issueId": null,
+        "issueTitle": null,
+        "issueCount": 1,
+        "nextStep": ""
+      },
+      {
+        "caseId": "1c3d33b2-86fc-4cce-9d5c-3dfd7189cfb3",
+        "caseTitle": "独立复核连续创建路径",
+        "status": "pending",
+        "updatedAt": "2026-11-28T00:53:47.125Z",
+        "issueId": null,
+        "issueTitle": null,
+        "issueCount": 1,
+        "nextStep": ""
+      }
+    ],
+    "externalWaiting": [],
+    "externalWaitingLimited": false,
+    "pendingOperations": [],
+    "foundationReminders": [
+      {
+        "key": "strategy",
+        "label": "战略选择",
+        "gating": false
+      },
+      {
+        "key": "goals",
+        "label": "目标管理",
+        "gating": false
+      },
+      {
+        "key": "semantic",
+        "label": "语义资产",
+        "gating": false
+      },
+      {
+        "key": "analytics",
+        "label": "分析资产",
+        "gating": false
+      }
+    ]
+  },
+  "case": {
+    "case": {
+      "id": "d7efb884-08be-40d2-988d-f5d6e0c7c07b",
+      "title": "独立原始反馈保存路径",
+      "description": "用于验证紧凑Case观察保存，不代表真实经营行动。",
+      "judgement": "",
+      "nextStep": "",
+      "status": "pending",
+      "closeReason": null,
+      "closedAt": null,
+      "revision": 5,
+      "createdAt": "2026-11-28T01:50:08.727Z",
+      "updatedAt": "2026-11-28T01:50:09.275Z"
+    },
+    "goalBinding": {
+      "primary": {
+        "goalId": "800eeba4-07d9-4a4f-83ee-8ccd948ca457",
+        "version": 1
+      },
+      "related": [],
+      "strategy": "先核对一条原始观察",
+      "caseId": "d7efb884-08be-40d2-988d-f5d6e0c7c07b",
+      "caseRevision": 1,
+      "confirmedAt": "2026-11-28T01:50:08.727Z",
+      "operationId": "2059ea71-9f11-42f2-b971-d2369d7c49c4"
+    },
+    "projectLinks": [
+      {
+        "caseId": "d7efb884-08be-40d2-988d-f5d6e0c7c07b",
+        "projectId": "96e5ff36-be97-4660-b644-ed98b1ab1bf7",
+        "linkedAt": "2026-11-28T01:50:08.817Z"
+      }
+    ],
+    "artifacts": [],
+    "pendingOperations": [],
+    "events": [
+      {
+        "id": "477ea238-9eba-410c-affe-d7c65283f2e4",
+        "subjectType": "case",
+        "subjectId": "d7efb884-08be-40d2-988d-f5d6e0c7c07b",
+        "revision": 1,
+        "eventType": "case_created",
+        "operationId": "2059ea71-9f11-42f2-b971-d2369d7c49c4",
+        "actorKind": "user",
+        "originCaseId": null,
+        "note": null,
+        "feedbackSource": null,
+        "occurredAt": "2026-11-28T01:50:08.727Z",
+        "changes": {
+          "id": {
+            "before": null,
+            "after": "d7efb884-08be-40d2-988d-f5d6e0c7c07b"
+          },
+          "title": {
+            "before": null,
+            "after": "独立原始反馈保存路径"
+          },
+          "description": {
+            "before": null,
+            "after": "用于验证紧凑Case观察保存，不代表真实经营行动。"
+          },
+          "judgement": {
+            "before": null,
+            "after": ""
+          },
+          "nextStep": {
+            "before": null,
+            "after": ""
+          },
+          "status": {
+            "before": null,
+            "after": "pending"
+          },
+          "revision": {
+            "before": null,
+            "after": 1
+          },
+          "createdAt": {
+            "before": null,
+            "after": "2026-11-28T01:50:08.727Z"
+          },
+          "updatedAt": {
+            "before": null,
+            "after": "2026-11-28T01:50:08.727Z"
+          },
+          "goalBinding": {
+            "before": null,
+            "after": {
+              "primary": {
+                "goalId": "800eeba4-07d9-4a4f-83ee-8ccd948ca457",
+                "version": 1
+              },
+              "related": [],
+              "strategy": "先核对一条原始观察"
+            }
+          }
+        }
+      },
+      {
+        "id": "735dee1f-9b5a-40dc-a192-ade2dbef8b4b",
+        "subjectType": "case",
+        "subjectId": "d7efb884-08be-40d2-988d-f5d6e0c7c07b",
+        "revision": 2,
+        "eventType": "project_linked",
+        "operationId": "fe042c30-b35f-47f0-9833-4ab74a594b70",
+        "actorKind": "user",
+        "originCaseId": null,
+        "note": null,
+        "feedbackSource": null,
+        "occurredAt": "2026-11-28T01:50:08.817Z",
+        "changes": {
+          "projectLink": {
+            "before": null,
+            "after": {
+              "caseId": "d7efb884-08be-40d2-988d-f5d6e0c7c07b",
+              "projectId": "96e5ff36-be97-4660-b644-ed98b1ab1bf7",
+              "linkedAt": "2026-11-28T01:50:08.817Z"
+            }
+          }
+        }
+      },
+      {
+        "id": "9689f511-61da-4397-abbd-f35b15bf2d47",
+        "subjectType": "case",
+        "subjectId": "d7efb884-08be-40d2-988d-f5d6e0c7c07b",
+        "revision": 3,
+        "eventType": "case_updated",
+        "operationId": "0a5ab7a9-39f2-4409-a61d-740c07b4bc7e",
+        "actorKind": "user",
+        "originCaseId": null,
+        "note": null,
+        "feedbackSource": null,
+        "occurredAt": "2026-11-28T01:50:08.881Z",
+        "changes": {
+          "decisionIssue": {
+            "before": null,
+            "after": {
+              "id": "76d04376-8420-4f40-b1e7-5df56cab4658",
+              "caseId": "d7efb884-08be-40d2-988d-f5d6e0c7c07b",
+              "title": "回录独立合成观察",
+              "createdAt": "2026-11-28T01:50:08.881Z"
+            }
+          }
+        }
+      },
+      {
+        "id": "80ef4804-bd70-4d9c-88a6-1b103f7c0326",
+        "subjectType": "case",
+        "subjectId": "d7efb884-08be-40d2-988d-f5d6e0c7c07b",
+        "revision": 4,
+        "eventType": "case_strategy_choice",
+        "operationId": "7f00909f-5cf2-4731-a174-99547bab7f41",
+        "actorKind": "user",
+        "originCaseId": null,
+        "note": null,
+        "feedbackSource": null,
+        "occurredAt": "2026-11-28T01:50:09.016Z",
+        "changes": {
+          "choice": {
+            "before": null,
+            "after": {
+              "issueId": "76d04376-8420-4f40-b1e7-5df56cab4658",
+              "goalBinding": {
+                "primary": {
+                  "goalId": "800eeba4-07d9-4a4f-83ee-8ccd948ca457",
+                  "version": 1
+                },
+                "related": [],
+                "strategy": "先核对一条原始观察",
+                "caseId": "d7efb884-08be-40d2-988d-f5d6e0c7c07b",
+                "caseRevision": 1,
+                "confirmedAt": "2026-11-28T01:50:08.727Z",
+                "operationId": "2059ea71-9f11-42f2-b971-d2369d7c49c4"
+              },
+              "strategyRef": {
+                "type": "case-decision",
+                "caseStoreId": "a6945efa-9d8e-4c5b-8325-71efac838ccc",
+                "caseId": "d7efb884-08be-40d2-988d-f5d6e0c7c07b",
+                "recordId": "b6b4b22e-dbfa-4a84-b93c-1e0e0f4d56f0",
+                "revision": 1
+              },
+              "choice": "trial",
+              "reason": "仅授权隔离合成观察记录的验收前提。"
+            }
+          }
+        }
+      },
+      {
+        "id": "74d41f5d-baa4-4a0e-ada3-966268b4d706",
+        "subjectType": "case",
+        "subjectId": "d7efb884-08be-40d2-988d-f5d6e0c7c07b",
+        "revision": 5,
+        "eventType": "case_updated",
+        "operationId": "4e0baf46-7831-4ebe-937b-3000a5a65052",
+        "actorKind": "user",
+        "originCaseId": null,
+        "note": null,
+        "feedbackSource": null,
+        "occurredAt": "2026-11-28T01:50:09.275Z",
+        "changes": {
+          "decisionRequest": {
+            "before": null,
+            "after": {
+              "requestId": "1b7b4d10-60b6-4998-b828-ae5a3d5f5468",
+              "revision": 1,
+              "caseId": "d7efb884-08be-40d2-988d-f5d6e0c7c07b",
+              "issueId": "76d04376-8420-4f40-b1e7-5df56cab4658",
+              "kind": "observe",
+              "text": "独立回录原始观察",
+              "source": {
+                "kind": "user-declaration",
+                "ref": "independent-fixture:explicit-observation-request"
+              },
+              "assignee": {
+                "label": "独立合成审查人",
+                "source": "本隔离验收明确声明"
+              },
+              "requestedAt": "2026-11-27T02:00:00.000Z",
+              "target": {
+                "kind": "observe",
+                "projectId": "96e5ff36-be97-4660-b644-ed98b1ab1bf7",
+                "itemId": "55cf6c04-8a6b-4d31-89e3-a8644daca87d",
+                "taskId": "c07ac8c8-24c1-45e3-b75e-1ed11f72fb5d",
+                "authorizationId": "a8963940-c1fa-4f58-ae3f-44bfd385ee1d",
+                "feedbackBaseRevisionId": null
+              },
+              "lifecycle": "open",
+              "operationId": "4e0baf46-7831-4ebe-937b-3000a5a65052",
+              "createdAt": "2026-11-28T01:50:09.275Z"
+            }
+          }
+        }
+      }
+    ],
+    "projectEvents": []
+  }
+}

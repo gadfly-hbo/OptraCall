@@ -1,0 +1,151 @@
+{
+  "reviewer": "/root/ui149_correction_backend_review/prep_scope_readonly",
+  "recordedAt": "2026-11-28T01:27:23.846642+00:00",
+  "candidate": ".local/ui-conformance/current-modal-handoff.json",
+  "basis": {
+    "frozenSpec": "5f15cf3b677c743bda0b5b2c3ee0e4b4f57e1af2",
+    "clauses": [
+      "DW13",
+      "DW14",
+      "DW16",
+      "T12",
+      "T13"
+    ],
+    "engineering": "v1.16"
+  },
+  "conclusion": "PASS within fixed modal draft controller/hook/recovery scope; no confirmed remaining blocker in reviewed paths. Initial pre-review findings were not acceptance and remain in parent preliminary evidence.",
+  "files": [
+    {
+      "path": "src/host/ui/CaseActionDraftRecovery.tsx",
+      "sha256": "6b734ca4b1427833d68e9730c4dd4a87d667211f3aefbe5b665c928098eb93af",
+      "matches": true,
+      "sha256After": "6b734ca4b1427833d68e9730c4dd4a87d667211f3aefbe5b665c928098eb93af",
+      "unchangedDuringReview": true
+    },
+    {
+      "path": "src/host/ui/case-action-draft.ts",
+      "sha256": "ccaa2f17161041e853f6c8967c7a3a0ba400be959122e9f8860cf2c3719eb1c7",
+      "matches": true,
+      "sha256After": "ccaa2f17161041e853f6c8967c7a3a0ba400be959122e9f8860cf2c3719eb1c7",
+      "unchangedDuringReview": true
+    },
+    {
+      "path": "src/host/ui/useCaseActionDraft.ts",
+      "sha256": "9b2a6080983263848bc09feb996eeb6c6441e9c46fbcd32830c07c15422f9bf5",
+      "matches": true,
+      "sha256After": "9b2a6080983263848bc09feb996eeb6c6441e9c46fbcd32830c07c15422f9bf5",
+      "unchangedDuringReview": true
+    },
+    {
+      "path": "tests/case-action-draft.test.ts",
+      "sha256": "d8bbdd72571e4fbe02aec1513d118ba5f6d98c424b87960e6930ab744d0e2957",
+      "matches": true,
+      "sha256After": "d8bbdd72571e4fbe02aec1513d118ba5f6d98c424b87960e6930ab744d0e2957",
+      "unchangedDuringReview": true
+    },
+    {
+      "path": "tests/case-action-draft-recovery-ui.test.ts",
+      "sha256": "e795365280aadc76d9299280a02ff569e6521e82bcf4b2f4d691ff802149e6e2",
+      "matches": true,
+      "sha256After": "e795365280aadc76d9299280a02ff569e6521e82bcf4b2f4d691ff802149e6e2",
+      "unchangedDuringReview": true
+    }
+  ],
+  "commands": [
+    {
+      "command": "node --test tests/case-action-draft.test.ts tests/case-action-draft-recovery-ui.test.ts",
+      "exit": 0,
+      "pass": 19,
+      "fail": 0,
+      "skip": 0,
+      "output": "formal-tests.log"
+    },
+    {
+      "command": "node --test .local/ui-conformance/backend-independent/modal-controller/independent-controller.test.ts .local/ui-conformance/backend-independent/modal-controller/independent-recovery.test.ts",
+      "exit": 0,
+      "pass": 6,
+      "fail": 0,
+      "skip": 0,
+      "output": "independent-tests.log"
+    }
+  ],
+  "coverage": [
+    {
+      "item": "Normal save/reopen and no business write on mere viewing",
+      "evidence": "formal-tests.log",
+      "result": "PASS"
+    },
+    {
+      "item": "Overlapping edits and shared flush; early edits before read use explicit conflict preservation",
+      "evidence": [
+        "formal-tests.log",
+        "independent-tests.log"
+      ],
+      "result": "PASS"
+    },
+    {
+      "item": "CAS conflict preserves current input and remote draft; wrong backup owner/content/revision cannot authorize original overwrite; concurrent later remote update still fails CAS",
+      "evidence": [
+        "formal-tests.log",
+        "independent-tests.log"
+      ],
+      "result": "PASS"
+    },
+    {
+      "item": "Lost acknowledgement recovers only exact original owner/payload and stable backup ID; explicit save persists backup reference for reopen",
+      "evidence": "formal-tests.log",
+      "result": "PASS"
+    },
+    {
+      "item": "403 at initial read, save or lost-ack readback removes loaded fields, retains only session-edited fields separately, prevents further remote access, local discard does not delete saved draft",
+      "evidence": [
+        "formal-tests.log",
+        "independent-tests.log"
+      ],
+      "result": "PASS"
+    },
+    {
+      "item": "Initial 503 with no edits does not block navigation or trigger unused-editor unmount retry",
+      "evidence": "formal-tests.log",
+      "result": "PASS"
+    },
+    {
+      "item": "Recovery source mismatch and exact sourceRevision mismatch never display content; old owner/backup late reads do not replace new content",
+      "evidence": [
+        "formal-tests.log",
+        "independent-tests.log"
+      ],
+      "result": "PASS"
+    },
+    {
+      "item": "Real workspace Store keeps original issue: conversation draft unchanged while choice: draft resolves conflict and reopens",
+      "evidence": "independent-tests.log / store-probe/workspace-drafts",
+      "result": "PASS"
+    }
+  ],
+  "staticClosure": [
+    {
+      "finding": "Empty modal initial 503 could not cancel",
+      "change": "Choice and feedback close now short-circuit !draft.dirty; feedback readOnly is separated from busy. Actual modal cancellation behavior assigned to parent choice/feedback review."
+    },
+    {
+      "finding": "403 retained remote content and had no recovery state",
+      "change": "Restricted owner is sticky; loaded value and backup refs cleared, only session localEdits projected into retainedInput; explicit local discard allows safe leave."
+    },
+    {
+      "finding": "CAS/early-load conflict had no recovery path",
+      "change": "Exact displayed revision is backed up first; receipt validated before accepting CAS baseline; explicit save required; local discard available."
+    },
+    {
+      "finding": "Recovery stale owner/backup content",
+      "change": "Key includes owner.id, recoveryDraftId and expected sourceRevision; generation checks suppress stale reads; response owner/source metadata validated."
+    }
+  ],
+  "limitations": [
+    "Bundled component/hook tests use deterministic React-hook harness and mocked HTTP. No actual browser screenshots or user acceptance performed by this reviewer.",
+    "Parent independently covers full choice/feedback dialogs, original business APIs, initial-503 actual modal cancellation and request-entry isolation.",
+    "Real workspace Store probe uses isolated synthetic files only. No actual business data, Provider, runtime session, Git, Issue or PR writes.",
+    "No full-suite rerun requested; root owns full npm run check and frozen product screenshot gate."
+  ],
+  "writes": "Only independent probes, synthetic Store records and reports in .local/ui-conformance/backend-independent/modal-controller/; no production/source/tests/spec modifications."
+}

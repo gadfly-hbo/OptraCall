@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-28T01:26:34.949622+00:00",
+  "embeddedManifestSha256": "0ce32e72bcc742a3b29e6727ad54f5f346a3380719d6ba5cee4ecebccdb2c597",
+  "manifestFileSha256": "2a16f0e029d24043db3e8807af89e5a8608ad15e33e22eaa43db27151f1d8096",
+  "checked": 2412,
+  "changes": [
+    {
+      "path": "tests/browser-case-board-navigation.mjs",
+      "expected": "160d9702538cb69e406155e6b83c172950fe26a6be30db83b53f623cb07bc3e4",
+      "actual": "fff649ad732d73ed3eb6f947c3b2aeed51cb0cb4441349a303c7cad4848ad7ae"
+    }
+  ]
+}
