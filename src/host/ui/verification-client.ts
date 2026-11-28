@@ -1,4 +1,4 @@
-import type { BrowserUIRequest, FileNode } from './project-types.ts';
+import type { BrowserUIRequest } from './project-types.ts';
 import type { VerificationAuthorPreview, VerificationContextEvidence, VerificationSelectedMaterials } from '../verification-context.ts';
 export type { VerificationAuthorPreview, VerificationContextEvidence, VerificationMaterialPreview } from '../verification-context.ts';
 
@@ -80,37 +80,12 @@ export async function startVerification(projectId: string, taskId: string, input
     catch { throw new VerificationSubmissionUnknown(input.verificationId); }
   }
 }
-/** Read-only preview: a POST carries selection data but creates no intent or runtime. */
-export function previewVerification(projectId: string, taskId: string, input: VerificationInput, signal?: AbortSignal): Promise<VerificationPreview> {
-  const invalid = verificationInputError(input);
-  if (invalid) return Promise.reject(new VerificationRequestError('invalid_verification_selection', 400, invalid));
-  return request<VerificationPreview>(`${scopePath(projectId, taskId)}/preview`, 'POST', input, signal);
-}
-export async function verificationAction(projectId: string, taskId: string, id: string, action: 'stop' | 'recheck' | 'author-revision' | 'export', input: Record<string, unknown> = {}): Promise<VerificationRecord> {
-  try {
-    return checked((await request<{ verification: VerificationRecord }>(`${scopePath(projectId, taskId)}/${encodeURIComponent(id)}/${action}`, 'POST', input, AbortSignal.timeout(30000))).verification, projectId, taskId, id);
-  } catch (error) {
-    if (error instanceof VerificationRequestError && error.status < 500) throw error;
-    try {
-      const value = await readVerification(projectId, taskId, id, AbortSignal.timeout(10000));
-      const observed = action === 'export' ? Boolean(value.exportedFile) : action === 'author-revision' ? Boolean(value.revision) : action === 'recheck' ? value.phase === 'recheck' || Boolean(value.recheckResult) : ['completed', 'cancelled', 'failed'].includes(value.status);
-      if (observed) return value;
-    } catch { /* The original intent remains unresolved; never replay the action. */ }
-    throw new VerificationSubmissionUnknown(id);
-  }
-}
 export async function downloadVerificationAuthorFile(projectId: string, taskId: string, id: string, relativePath: string): Promise<void> {
   const response = await fetch(`/api/${scopePath(projectId, taskId)}/${encodeURIComponent(id)}/author-file?path=${encodeURIComponent(relativePath)}`, { credentials: 'omit', mode: 'same-origin', cache: 'no-store', headers: { 'x-optracall-client': '1' } });
   if (!response.ok) throw new VerificationRequestError('verification_fixed_file_unavailable', response.status, '固定作者副本暂不可下载或身份已变化；未改取当前同名文件，请重新读取本记录。');
   const url = URL.createObjectURL(await response.blob()), anchor = document.createElement('a');
   anchor.href = url; anchor.download = relativePath.split('/').at(-1) ?? '核算固定材料'; anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-export function verificationFiles(tree: readonly FileNode[]): { data: FileNode[]; authors: FileNode[] } {
-  const all: FileNode[] = [];
-  const visit = (nodes: readonly FileNode[]) => { for (const node of nodes) { if (node.kind === 'directory') visit(node.children ?? []); else all.push(node); } };
-  visit(tree);
-  return { data: all.filter(file => file.path.startsWith('020_clean/')), authors: all.filter(file => /^(020_clean|060_reports)\//.test(file.path)) };
 }
 export const verificationStatusLabel: Record<VerificationRecord['status'], string> = { preparing: '正在固定输入', ready: '输入已准备', running: '核算中', completed: '核算已结束', failed: '核算失败', cancelled: '已停止', interrupted: '核算中断', unknown: '结果未知' };
 export const verificationPhaseLabel: Record<NonNullable<VerificationRecord['phase']>, string> = { cold: '独立计算', comparison: '对照作者产物', recheck: '修订后复查' };

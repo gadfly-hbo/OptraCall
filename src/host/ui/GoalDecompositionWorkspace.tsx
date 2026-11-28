@@ -7,13 +7,12 @@ import { hasGsaCheckpoint } from '../strategy-goal-decomposition-types.ts';
 import { allocatedTarget } from '../strategy-goal-allocation.ts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BusinessRoleOwner } from '../business-role-types.ts';
-import type { GoalDraftInput, GoalRef, GoalRoleSuggestionRef, GoalScope, GoalVersion, StrategyGoalRecord } from '../strategy-goals-types.ts';
+import type { GoalDraftInput, GoalRef, GoalRoleSuggestionRef, GoalVersion, StrategyGoalRecord } from '../strategy-goals-types.ts';
 import type {
   DecompositionDraftInput,
   DecompositionThresholdConfig,
   DecompositionGapStrategy,
   DecompositionPublication,
-  DecompositionPublishOperationRecord,
   DecompositionPublishPreview,
   DecompositionReserve,
   DecompositionRow,
