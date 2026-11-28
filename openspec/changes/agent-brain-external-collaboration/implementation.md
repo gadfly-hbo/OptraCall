@@ -243,7 +243,20 @@
 - 组件与冻结映射对应：交付核验表/manifest/实际引用/Agent 结论/旧交付 ↔ Demo #delivery（08/22/25/23 号截图状态）；资产表/版本详情/读取记录/入口可用性/失败保留 ↔ Demo #assets（09 号）；设置基础路径/可选适配分区 ↔ Demo #setup（10/13 号；模拟按钮不入生产）；Case 行浅紫 inset ↔ Demo 30 号截图；入口链接 ↔ Demo #work 工作卡 actions。production 令牌沿 daily-workspace 体系；表格容器滚动（min-width＋overflow-x）无页面横溢；亮暗沿用既有 token 变体。
 - 未验证/留后续：真实产品同视口对照（主会话亲自，G01 门禁）；真实读取回执落库（S3b 回执在 MCP 工具结果内，台账尚无持久读取记录，页面以交付声明引用＋固定免责陈述呈现，不伪造读取记录）；原文预览（需原实例读取装配，属 E07，页 face 展示准确版本/hash 定位而非正文副本）；资产候选提交后端（沿原任务流程，本页仅导航）；设置分区无 WorkBuddy 联测发起入口（工程合同由 Host 侧执行，E08 实号另核）。
 
+### S7（E07，2026-11-29）：端到端核心闭环＋main 整合
+
+**候选 `e099c775129aabdd831ce02957683b9633a4cc60`**（主会话亲自实现，实现子代理因账户 5h 配额 429 暂不可用）。
+
+- `tests/external-e2e-closed-loop.test.ts`（2 用例）：通用外部 MCP 客户端经真实自签 TLS＋OAuth/PKCE＋预注册 Bearer 完成完整闭环——`work.claim`（认证 principal 原子单领取）→ `asset.read`（交集下准确版本/hash）→ `delivery.begin/upload-chunk/commit`（分块保全 manifest/hash，preserved）→ 模拟只读收件 recordInboxEvent → `createExternalResumeCoordinator.notifyEvent` 同 Task 续接（断言仅一次 turn、`origin.userText:false`、externalContext 含准确 workId/revision/deliveryId/hash/grantVersion、重复 notify 不重跑）→ `recordReview accept`（独立 ReviewDecision）→ 断言 ExternalDeliveryRef 不含 sessionId/toolCallId（不伪 native ProjectTaskResultBinding）。负例：未领取 principal 读资产拒绝、manifest hash 不符不标保全。
+- 结果：2/2 PASS；`npm run build` PASS。集成中修正测试自身三处形状假设（denial 载荷经 isError＋message 而非 structuredContent、read.sha256 直取、delivery 无 kind 字段），产品零回改。
+- **main 整合**：合并 origin/main `418a8f8`（merge commit `baeed726`），含 #156 Decision Case 观察/日常工作流恢复（修复既有 CNR-A4）、#157 连接存储竞态修复（正是 S2 范围外记录的锁竞态）、#159 工程规范 v1.18。冲突仅 ServiceConnections.tsx import 行（main 移除未用 `serviceScopeLabels`，我侧同未用），按 main＋保留 ExternalDispatchSettings 导入解决；App.tsx/server.ts/project-session.ts 自动合并。重读 v1.18 确认现行领取/独立复核/PR 门禁与 v1.17 一致（停用旧 Qoder→Codex 移交模式不影响本会话直接领取实施）。
+- 全量 `npm run check`：见后续记录（含 CNR-A4 已随 main 修复、闭环新增）。
+
 ## 范围外发现（记录并继续原任务）
 - `conclusion-review-handoff` CNR-A4 在干净基线 `7decc3b`（未含本变更）即失败（隔离 9/10），判定为既有问题，与 Issue #155 无关。按工程规范第3节范围管理记录于此，不在本单修复；建议另开返工项核实。`service-connection-manager` 一例隔离复跑 29/29，属全量负载抖动。两者均保留原结论，不改写为通过。
 - `ServiceConnectionStore.#locked`（`service-connection-store.ts`）在锁 EEXIST→`#regular(this.lockPath)` 检查窗口未允许锁恰被释放（未传 allowMissing），并发争用时以 `unsafe_service_storage` 瞬态失败——与 S1 已在 `external-work-store.ts` 修复的同一竞态模式。S2 并发派发测试实际复现（60 轮扫描定位，A/B 双方均可能误判 rejected/unknown）。该文件不在本单允许修改路径内，本切片仅在外派派发侧加有界瞬态重试容错，未改 store；前台 `#call` 在高并发下理论上同样可触发。建议另开返工项对齐 S1 的锁窗口语义后再移除派发侧重试。
+
+## main 整合对范围外发现的消解（2026-11-29）
+- CNR-A4：经合并 main `418a8f8`（#156）后随 main 修复，不再阻断全量 check；原基线失败事实保留于上文，不追溯改写。
+- 连接存储竞态：经合并 main `418a8f8`（#157）官方修复，S2 派发侧的有界瞬态重试容错保留为兼容防御（不改变既有前台行为）；原范围外记录保留，不再建议另开返工项（已由 main 处理）。
 
