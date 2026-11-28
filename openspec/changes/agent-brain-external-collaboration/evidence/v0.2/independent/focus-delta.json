@@ -1,0 +1,16 @@
+{
+  "passed": true,
+  "result": {
+    "hash": "#case/projects",
+    "focus": "case-project-original",
+    "caseUi": {
+      "tab": "projects",
+      "issue": "choice",
+      "scope": "all",
+      "mode": "list",
+      "historyIssue": "choice"
+    },
+    "scope": "all"
+  },
+  "explanation": "Initial aggregate check read focus before render/requestAnimationFrame settled; this probe waits for the actual returned focus, with no source change."
+}

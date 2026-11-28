@@ -1,0 +1,303 @@
+{
+  "htmlSha256": "6946bc7744365bdf19f41bb135248693372a4e1be5152bd9a7c0065984cfe060",
+  "startedAt": "2026-11-28T09:21:24.125Z",
+  "checks": [
+    {
+      "id": "scene-unknown",
+      "pass": true,
+      "detail": {
+        "status": "unknown",
+        "history": [
+          "已确认本次授权",
+          "Host 已建立外派工作台账",
+          "Agent 已准备工单",
+          "发布 API 超时 · UNKNOWN"
+        ]
+      }
+    },
+    {
+      "id": "scene-executorbusy",
+      "pass": true,
+      "detail": {
+        "status": "waiting",
+        "history": [
+          "已确认本次授权",
+          "Host 已建立外派工作台账",
+          "Agent 已准备工单",
+          "发布回执已核对",
+          "等待执行者，尚未 API 触发"
+        ]
+      }
+    },
+    {
+      "id": "executorbusy-no-trigger",
+      "pass": true,
+      "detail": "waiting while existing work active"
+    },
+    {
+      "id": "unknown-no-republish",
+      "pass": true,
+      "detail": "only exact original receipt query"
+    },
+    {
+      "id": "scene-duplicate",
+      "pass": true,
+      "detail": {
+        "status": "accepted",
+        "history": [
+          "已确认本次授权",
+          "Host 已建立外派工作台账",
+          "Agent 已准备工单",
+          "发布回执已核对",
+          "执行者 API 触发已占额",
+          "触发指定本机助手",
+          "指定执行者领取有效",
+          "重复领取已拒绝",
+          "执行者按需读取获准版本",
+          "有效领取已续租",
+          "附件已登记，等待模拟本机保全",
+          "收到交付，GitHub 已关闭",
+          "附件模拟字节保全与摘要核对通过",
+          "附件模拟字节保全与摘要核对通过",
+          "Agent 已核验并接受这一片段",
+          "Agent 已沿原保存工具形成本任务成果"
+        ]
+      }
+    },
+    {
+      "id": "duplicate-claim",
+      "pass": true,
+      "detail": "second claim rejected"
+    },
+    {
+      "id": "scene-expired",
+      "pass": true,
+      "detail": {
+        "status": "blocked",
+        "history": [
+          "已确认本次授权",
+          "Host 已建立外派工作台账",
+          "Agent 已准备工单",
+          "发布回执已核对",
+          "执行者 API 触发已占额",
+          "触发指定本机助手",
+          "指定执行者领取有效",
+          "新读取已暂停"
+        ]
+      }
+    },
+    {
+      "id": "scene-offline",
+      "pass": true,
+      "detail": {
+        "status": "blocked",
+        "history": [
+          "已确认本次授权",
+          "Host 已建立外派工作台账",
+          "Agent 已准备工单",
+          "发布回执已核对",
+          "执行者 API 触发已占额",
+          "触发指定本机助手",
+          "指定执行者领取有效",
+          "新读取已暂停"
+        ]
+      }
+    },
+    {
+      "id": "scene-identity",
+      "pass": true,
+      "detail": {
+        "status": "blocked",
+        "history": [
+          "已确认本次授权",
+          "Host 已建立外派工作台账",
+          "Agent 已准备工单",
+          "发布回执已核对",
+          "执行者 API 触发已占额",
+          "触发指定本机助手",
+          "指定执行者领取有效",
+          "新读取已暂停"
+        ]
+      }
+    },
+    {
+      "id": "offline-read-denied",
+      "pass": true,
+      "detail": "INSTANCE_OFFLINE：资产所在实际运行实例不可用。\n原结果与原引用保持不变。"
+    },
+    {
+      "id": "expired-read-denied",
+      "pass": true,
+      "detail": "AUTH_EXPIRED：本工作读取授权已到期。\n原结果与原引用保持不变。"
+    },
+    {
+      "id": "identity-read-denied",
+      "pass": true,
+      "detail": "EXECUTOR_CHANGED：可信执行者身份变化，原资格已暂停。\n原结果与原引用保持不变。"
+    },
+    {
+      "id": "scene-late",
+      "pass": true,
+      "detail": {
+        "status": "stopped",
+        "history": [
+          "已确认本次授权",
+          "Host 已建立外派工作台账",
+          "Agent 已准备工单",
+          "发布回执已核对",
+          "执行者 API 触发已占额",
+          "触发指定本机助手",
+          "指定执行者领取有效",
+          "执行者按需读取获准版本",
+          "有效领取已续租",
+          "已取消外派并撤回后续访问",
+          "停止后收到迟到回传"
+        ]
+      }
+    },
+    {
+      "id": "late-quarantined",
+      "pass": true,
+      "detail": "late evidence not accepted"
+    },
+    {
+      "id": "scene-failed",
+      "pass": true,
+      "detail": {
+        "status": "failed",
+        "history": [
+          "已确认本次授权",
+          "Host 已建立外派工作台账",
+          "Agent 已准备工单",
+          "发布回执已核对",
+          "执行者 API 触发已占额",
+          "触发指定本机助手",
+          "指定执行者领取有效",
+          "执行者按需读取获准版本",
+          "有效领取已续租",
+          "回传清单未通过校验"
+        ]
+      }
+    },
+    {
+      "id": "missing-and-link-not-accepted",
+      "pass": true,
+      "detail": "incomplete files remain rejected"
+    },
+    {
+      "id": "scene-human",
+      "pass": true,
+      "detail": {
+        "status": "intervention",
+        "history": [
+          "已确认本次授权",
+          "Host 已建立外派工作台账",
+          "Agent 已准备工单",
+          "发布回执已核对",
+          "执行者 API 触发已占额",
+          "触发指定本机助手",
+          "指定执行者领取有效",
+          "执行者按需读取获准版本",
+          "有效领取已续租",
+          "出现超出授权的请求"
+        ]
+      }
+    },
+    {
+      "id": "scope-unchanged-after-human",
+      "pass": true,
+      "detail": "keep original scope then resume"
+    },
+    {
+      "id": "scene-busy",
+      "pass": true,
+      "detail": {
+        "status": "pending",
+        "history": [
+          "已确认本次授权",
+          "Host 已建立外派工作台账",
+          "Agent 已准备工单",
+          "发布回执已核对",
+          "执行者 API 触发已占额",
+          "触发指定本机助手",
+          "指定执行者领取有效",
+          "执行者按需读取获准版本",
+          "有效领取已续租",
+          "附件已登记，等待模拟本机保全",
+          "外部交付已进入 Host 台账待处理"
+        ]
+      }
+    },
+    {
+      "id": "busy-paused-idle-stays-pending",
+      "pass": true,
+      "detail": "idle alone does not bypass pause"
+    },
+    {
+      "id": "pause-after-reload",
+      "pass": true,
+      "detail": "pause survives reload"
+    },
+    {
+      "id": "scene-supplement",
+      "pass": true,
+      "detail": {
+        "status": "supplement",
+        "history": [
+          "已确认本次授权",
+          "Host 已建立外派工作台账",
+          "Agent 已准备工单",
+          "发布回执已核对",
+          "执行者 API 触发已占额",
+          "触发指定本机助手",
+          "指定执行者领取有效",
+          "执行者按需读取获准版本",
+          "有效领取已续租",
+          "附件已登记，等待模拟本机保全",
+          "收到交付，GitHub 已关闭",
+          "附件模拟字节保全与摘要核对通过",
+          "附件模拟字节保全与摘要核对通过",
+          "首次核验需补充",
+          "Host 已建立同工作新 revision",
+          "执行者 API 触发已占额",
+          "补充 revision 的新领取有效"
+        ]
+      }
+    },
+    {
+      "id": "resume-same-task",
+      "pass": true,
+      "detail": "same task accepted"
+    },
+    {
+      "id": "supplement-v1-v2",
+      "pass": true,
+      "detail": "old v1 preserved/new revision"
+    },
+    {
+      "id": "old-delivery-readable",
+      "pass": true,
+      "detail": "old failure readable"
+    }
+  ],
+  "screens": [
+    "scenario-unknown",
+    "scenario-executorbusy",
+    "scenario-duplicate",
+    "scenario-expired",
+    "scenario-offline",
+    "scenario-identity",
+    "asset-denied-expired",
+    "asset-denied-offline",
+    "asset-denied-identity",
+    "scenario-late",
+    "scenario-failed",
+    "scenario-human",
+    "failed-delivery-390",
+    "scenario-busy",
+    "scenario-supplement",
+    "supplement-old-delivery"
+  ],
+  "errors": [],
+  "network": []
+}

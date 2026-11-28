@@ -1,0 +1,235 @@
+{
+  "hash": "6946bc7744365bdf19f41bb135248693372a4e1be5152bd9a7c0065984cfe060",
+  "role": "rendered static synthetic Demo, not product",
+  "observations": [
+    {
+      "route": "#home",
+      "headings": [
+        "今天，先推进一件重要的事",
+        "ϟ 有什么想推进的？",
+        "待处理事项 2",
+        "继续工作",
+        "进展关注",
+        "基础建设提醒"
+      ],
+      "nav": [
+        {
+          "label": "▦\n工作台首页",
+          "href": "#home"
+        },
+        {
+          "label": "◫\nDecision Case",
+          "href": "#cases"
+        },
+        {
+          "label": "▱\n四店会员资料核查",
+          "href": "#project"
+        },
+        {
+          "label": "◉\n四店资料一致性核查",
+          "href": "#task/analysis"
+        }
+      ],
+      "main": "<div class=\"daily-page home-page\"><header class=\"daily-heading\"><div><div class=\"eyebrow\">YOUR WORK · OPTRACALL</div><h1>今天，先推进一件重要的事</h1><p>云杉零售 · 合成工作区 / 1 个 Case 正在推进 · 已有待回应 2 项</p></div><div class=\"row\"><span class=\"small muted\">11 月 28 日 · 星期六</span><button class=\"btn \" data-action=\"home-refresh\">刷新</button></div></header><section class=\"daily-intake\"><div class=\"row between wrap\"><h2>ϟ 有什么想推进的？</h2><span class=\"small muted\">先说一句话，不必先填完整计划</span></div><div class=\"intake-editor\"><label class=\"sr-only\" for=\"home-intake\">日常工作草稿</label><textarea id=\"home-intake\" data-testid=\"home-intake\" placeholder=\"说说你想解决的问题，或给已有工作补充一个新想法…\"></textarea><div class=\"row between wrap\"><div class=\"row wrap\"><button class=\"btn primary\" data-action=\"home-match\">整理与查找</button><button class=\"btn \" data-action=\"prepare-case\">直接准备新 Case</button></div><small class=\"muted\">输入保留，切换页面不用重填 <button class=\"btn \" data-action=\"home-clear\">放弃这段草稿</button></small></div></div><div class=\"row between small muted\"><span>新想法与已有进展都可先写下；整理不自动新建 Case。</span><a href=\"#projects\">全部项目 →</a></div></section><div class=\"home-daily-grid\"><div><section aria-label=\"待处理事项\"><div class=\"daily-section-head\"><h2>待处理事项 <span class=\"notice-count\" data-testid=\"pending-count\">2</span></h2><span>有明确来源的回应请求</span></div><article class=\"daily-request\" data-testid=\"request-choose\"><div><h3>作取舍 · 核定资料修订范围</h3><small>会员资料治理 / 核定资料修订范围 · 第 2 轮 · 策略 v1</small><p>记录本轮资料修订范围的取舍</p><small>原请求 · 2026-11-27 · 承担人 业务负责人</small></div><button class=\"btn\" data-action=\"request-choice\" data-testid=\"pending-choose\">去记录取舍</button></article><article class=\"daily-request\" data-testid=\"request-observe\"><div><h3>补原始观察 · 修订后资料观察</h3><small>会员资料治理 / 修订后资料观察 · 第 1 轮</small><p>补记四店反馈的实际观察与来源</p><small>原请求 · 2026-11-26 · 承担人 业务负责人</small></div><button class=\"btn\" data-action=\"request-observe\" data-testid=\"pending-observe\">去回录观察</button></article></section><section class=\"home-continue\"><div class=\"daily-section-head\"><h2>继续工作</h2><a href=\"#cases\">全部 Case</a></div><article class=\"daily-continue-row\"><span>▱</span><div><a href=\"#case/current\" data-testid=\"home-continue-case\">会员资料治理</a><p>当前事项：资料一致性核查 · 打开 Case 继续原工作</p></div></article><article class=\"daily-continue-row\"><span>▱</span><div><a href=\"#project\" data-project-independent=\"\" data-testid=\"home-continue-project\">四店会员资料核查</a><p>原共享项目 · 6 个原任务 · 可独立打开</p></div></article></section></div><aside><section aria-label=\"外部等待\"><div class=\"daily-section-head\"><h2>进展关注</h2><span>外部等待</span></div><article class=\"daily-progress\" data-testid=\"original-project-wait\"><h3>四店会员资料核查</h3><p>等待门店补充修订后的实际观察资料</p><small>来源：原项目工作记录 · 等待反馈<br>承担人：业务负责人 · 原记录保存于 2026-11-27 17:30</small><a href=\"#project\" data-project-independent=\"\" class=\"btn text\">查看原项目记录</a></article></section><section class=\"home-foundations\"><div class=\"daily-section-head\"><h2>基础建设提醒</h2><span>按需查看</span></div><button class=\"foundation-row\" data-action=\"foundation-strategy\"><strong>战略选择</strong><small>年度规划 · 季度或月度回顾</small></button><button class=\"foundation-row\" data-action=\"foundation-goal\"><strong>目标管理</strong><small>原目标 v1 已关联 · 实绩尚未核定</small></button><button class=\"foundation-row\" data-action=\"foundation-semantic\"><strong>语义资产</strong><small>按需建设业务口径</small></button><button class=\"foundation-row\" data-action=\"foundation-analysis\"><strong>分析资产</strong><small>方法候选沿原核定发布流程</small></button></section></aside></div><p class=\"daily-caption\">待处理依据原请求的承担人与回应记录汇总。普通建议、外部等待与 Task 外派状态不自动成为“你的待办”。</p></div>",
+      "css": {
+        "rail": "180px",
+        "topbar": "58px",
+        "currentGrid": null,
+        "canvas": "rgb(247, 245, 250)",
+        "mainPadding": "0px"
+      },
+      "viewport": {
+        "width": 1440,
+        "height": 1050
+      }
+    },
+    {
+      "route": "#case/current",
+      "headings": [
+        "会员资料治理",
+        "资料一致性核查"
+      ],
+      "nav": [
+        {
+          "label": "▦\n工作台首页",
+          "href": "#home"
+        },
+        {
+          "label": "◫\nDecision Case",
+          "href": "#cases"
+        },
+        {
+          "label": "▱\n四店会员资料核查",
+          "href": "#project"
+        },
+        {
+          "label": "◉\n四店资料一致性核查",
+          "href": "#task/analysis"
+        }
+      ],
+      "main": "<nav class=\"workspace-areas\" aria-label=\"Decision Case 范围\"><a href=\"#cases\" class=\"active\" data-testid=\"area-cases\">Case 总览</a><a href=\"#projects\" class=\"\" data-testid=\"area-projects\">全部项目</a></nav><header class=\"daily-case-header\"><div class=\"row between\"><div class=\"eyebrow\">▣ DECISION CASE</div><a href=\"#cases\" class=\"small muted\">← 返回 Case 总览</a></div><div class=\"row wrap\" style=\"margin-top:10px\"><h1>会员资料治理</h1><span class=\"pill gray\">分析中</span></div><div class=\"case-goals\"><button data-action=\"goal-source\"><span>G</span>形成可追溯的核查依据 <small>v1</small></button><button data-action=\"goal-source\"><span>S</span>先核对差异与未知 <small>v1</small></button><span class=\"small muted\">实绩未核定 · 业务采纳未更新</span></div></header><nav class=\"daily-case-tabs\" aria-label=\"Case 详情分区\"><a href=\"#case/current\" class=\"active\" data-testid=\"case-tab-current\">当前工作</a><a href=\"#case/projects\" class=\"\" data-testid=\"case-tab-projects\">项目与任务<small>1</small></a><a href=\"#case/artifacts\" class=\"\" data-testid=\"case-tab-artifacts\">成果与依据</a><a href=\"#case/history\" class=\"\" data-testid=\"case-tab-history\">历史</a></nav><div class=\"daily-current-layout\"><aside class=\"daily-issue-navigation\"><div class=\"issue-mobile\"><label for=\"case-issue-select\">当前事项</label><select id=\"case-issue-select\" data-testid=\"case-issue-select\"><option value=\"quality\" selected=\"\">资料一致性核查 · 第 1 轮</option><option value=\"choice\">核定资料修订范围 · 第 2 轮</option><option value=\"feedback\">修订后资料观察 · 第 1 轮</option></select></div><div class=\"issue-desktop\"><div class=\"row between\" style=\"margin-bottom:18px\"><h3>Case 内事项 <span class=\"muted small\">3</span></h3></div><div class=\"issue-mode\"><button data-action=\"case-mode\" data-mode=\"list\" aria-pressed=\"true\">列表</button><button data-action=\"case-mode\" data-mode=\"tree\" aria-pressed=\"false\">树状图</button></div><div class=\"issue-list \"><button class=\"issue-node selected\" data-select-issue=\"quality\" data-testid=\"issue-quality\"><strong>资料一致性核查</strong><small>第 1 轮 · 分析中</small><span>• 原分析任务进行中</span></button><button class=\"issue-node \" data-select-issue=\"choice\" data-testid=\"issue-choice\"><strong>核定资料修订范围</strong><small>第 2 轮 · 等待本轮取舍</small><span>• 本轮尚未作新选择</span></button><button class=\"issue-node \" data-select-issue=\"feedback\" data-testid=\"issue-feedback\"><strong>修订后资料观察</strong><small>第 1 轮 · 等待行动反馈</small><span>• 等待实际观察</span></button></div></div><details class=\"disclosure\"><summary>原事项关联与管理</summary><p>项目与任务仍沿原关联；查看不新建事项、行动或轮次。</p></details></aside><section class=\"daily-current-main\"><div class=\"row wrap small muted\"><span>当前事项 ／ 第 1 轮</span><span class=\"pill gray\">分析中</span></div><div class=\"daily-current-title\"><div><h2>资料一致性核查</h2><p>回到原分析任务核对差异及未确认映射</p></div><div class=\"row wrap\"><a href=\"#case/projects\" class=\"btn primary\">查看关联原任务 →</a></div></div><section class=\"round-summary\"><div class=\"row between wrap\"><h3>◇ 本轮概览</h3><button class=\"btn text\" data-action=\"case-source\">按已保存记录呈现 · 可查看来源</button></div><dl><dt>· 已明确</dt><dd>四店固定合成快照、原报告 v0.3 与准确口径已留存。</dd><dt>· 正在推进</dt><dd>继续原分析任务；原 Task 可在必要授权后外派一个工作片段。</dd><dt>· 接下来</dt><dd>回到原分析任务核对差异及未确认映射。</dd></dl><p>事项进展与目标结果分别记录；行动完成不代表目标已达成。 <button class=\"btn text\" data-action=\"case-source\">查看本轮原记录</button></p></section><section class=\"case-agent-existing\"><div class=\"row between wrap\"><h3><span class=\"mini-avatar\" style=\"display:inline-grid\">ϟ</span> Case Agent</h3><span class=\"small muted\">只围绕「资料一致性核查」继续</span></div><label class=\"sr-only\" for=\"case-discussion\">当前事项草稿</label><textarea id=\"case-discussion\" data-testid=\"case-discussion\" placeholder=\"想讨论当前事项的哪项取舍？草稿会保留。\"></textarea><div class=\"row between wrap\"><small class=\"muted\">草稿保留在当前事项；具体工作进入关联 Task 继续。</small><a class=\"btn\" href=\"#case/projects\">到原 Task 继续具体工作 →</a></div></section><details class=\"disclosure\"><summary>已有待回应请求（2）与原始来源</summary><p>取舍请求 demo-choice-02、观察请求 demo-observe-01 保持待回应。外部片段的接受不会回应这两项，也不会回填原始观察。</p></details></section></div>",
+      "css": {
+        "rail": "180px",
+        "topbar": "58px",
+        "currentGrid": "240px 1020px",
+        "canvas": "rgb(247, 245, 250)",
+        "mainPadding": "0px"
+      },
+      "viewport": {
+        "width": 1440,
+        "height": 1050
+      }
+    },
+    {
+      "route": "#case/projects",
+      "headings": [
+        "会员资料治理",
+        "项目与任务"
+      ],
+      "nav": [
+        {
+          "label": "▦\n工作台首页",
+          "href": "#home"
+        },
+        {
+          "label": "◫\nDecision Case",
+          "href": "#cases"
+        },
+        {
+          "label": "▱\n四店会员资料核查",
+          "href": "#project"
+        },
+        {
+          "label": "◉\n四店资料一致性核查",
+          "href": "#task/analysis"
+        }
+      ],
+      "main": "<nav class=\"workspace-areas\" aria-label=\"Decision Case 范围\"><a href=\"#cases\" class=\"active\" data-testid=\"area-cases\">Case 总览</a><a href=\"#projects\" class=\"\" data-testid=\"area-projects\">全部项目</a></nav><header class=\"daily-case-header\"><div class=\"row between\"><div class=\"eyebrow\">▣ DECISION CASE</div><a href=\"#cases\" class=\"small muted\">← 返回 Case 总览</a></div><div class=\"row wrap\" style=\"margin-top:10px\"><h1>会员资料治理</h1><span class=\"pill gray\">分析中</span></div><div class=\"case-goals\"><button data-action=\"goal-source\"><span>G</span>形成可追溯的核查依据 <small>v1</small></button><button data-action=\"goal-source\"><span>S</span>先核对差异与未知 <small>v1</small></button><span class=\"small muted\">实绩未核定 · 业务采纳未更新</span></div></header><nav class=\"daily-case-tabs\" aria-label=\"Case 详情分区\"><a href=\"#case/current\" class=\"\" data-testid=\"case-tab-current\">当前工作</a><a href=\"#case/projects\" class=\"active\" data-testid=\"case-tab-projects\">项目与任务<small>1</small></a><a href=\"#case/artifacts\" class=\"\" data-testid=\"case-tab-artifacts\">成果与依据</a><a href=\"#case/history\" class=\"\" data-testid=\"case-tab-history\">历史</a></nav><section class=\"daily-case-tab-page\"><header class=\"daily-tab-heading\"><h2>项目与任务</h2><p>在共享项目里做具体工作，保留任务原来的会话与成果。</p></header><div class=\"daily-scope\"><label for=\"case-scope\">项目范围</label><select id=\"case-scope\" data-testid=\"case-scope\"><option value=\"current\" selected=\"\">当前事项：资料一致性核查</option><option value=\"all\">全部当前 Case</option><option value=\"choice\">其他事项：核定资料修订范围</option><option value=\"feedback\">其他事项：修订后资料观察</option></select><span>只显示所选范围内明确关联的原任务与资料</span></div><div class=\"row between wrap\" style=\"margin:20px 0 12px\"><h3>▱ 四店会员资料核查 <a href=\"#project\" class=\"small muted\" data-case-project=\"\" data-testid=\"case-project-original\">原项目 · 查看全局工作</a></h3><span class=\"pill gray\">2 个原任务</span></div><div class=\"daily-task-scroll\"><table class=\"daily-task-table\"><thead><tr><th>原任务</th><th>用途</th><th>已保存记录</th><th>继续工作</th></tr></thead><tbody><tr><td><strong>明确会员资料核查范围</strong><small>原关联：会员资料治理 / 资料一致性核查</small></td><td>需求 R</td><td><span class=\"pill gray\">已完成</span><small>原会话 / 草稿 / 成果保留</small></td><td><a class=\"btn text\" href=\"#task/requirement\" data-open-task=\"requirement\" data-origin=\"case\" data-testid=\"task-requirement\">打开原任务 ↗</a></td></tr><tr><td><strong>四店会员资料一致性核查</strong><small>原关联：会员资料治理 / 资料一致性核查</small></td><td>分析 A</td><td><span class=\"pill gray\">进行中</span><small>原会话 / 草稿 / 成果保留</small></td><td><a class=\"btn text\" href=\"#task/analysis\" data-open-task=\"analysis\" data-origin=\"case\" data-testid=\"task-analysis\">打开原任务 ↗</a></td></tr></tbody></table></div><details class=\"disclosure\"><summary>项目共用信息与管理</summary><p>项目约定 v1：使用固定四店合成快照，仅核查不改生产。当前项目等待门店实际观察，和 Task 外派状态分别保存。</p><a href=\"#project\" class=\"btn text\">查看完整原项目 →</a></details><details class=\"disclosure\"><summary>六类任务分别用来做什么？</summary><p>需求、分析、计划、决策、执行、反馈按需选择，可以重复，也可以缺少。外部协作是执行方式，不增加第七类任务。</p></details></section>",
+      "css": {
+        "rail": "180px",
+        "topbar": "58px",
+        "currentGrid": null,
+        "canvas": "rgb(247, 245, 250)",
+        "mainPadding": "0px"
+      },
+      "viewport": {
+        "width": 1440,
+        "height": 1050
+      }
+    },
+    {
+      "route": "#projects",
+      "headings": [
+        "全部项目"
+      ],
+      "nav": [
+        {
+          "label": "▦\n工作台首页",
+          "href": "#home"
+        },
+        {
+          "label": "◫\nDecision Case",
+          "href": "#cases"
+        },
+        {
+          "label": "▱\n四店会员资料核查",
+          "href": "#project"
+        },
+        {
+          "label": "◉\n四店资料一致性核查",
+          "href": "#task/analysis"
+        }
+      ],
+      "main": "<nav class=\"workspace-areas\" aria-label=\"Decision Case 范围\"><a href=\"#cases\" class=\"\" data-testid=\"area-cases\">Case 总览</a><a href=\"#projects\" class=\"active\" data-testid=\"area-projects\">全部项目</a></nav><div class=\"daily-page\"><header class=\"daily-heading\"><div><div class=\"eyebrow\">PROJECTS · SHARED WORKSPACE</div><h1>全部项目</h1><p>保留原项目的工作信息、任务和归属；从这里打开不自动带入 Case 上下文。</p></div><a class=\"btn\" href=\"#home\">返回工作台首页</a></header><div class=\"project-tools\"><label>项目范围 <select id=\"project-filter\" data-testid=\"project-filter\"><option value=\"all\" selected=\"\">全部 1</option><option value=\"independent\">独立项目 0</option><option value=\"shared\">多 Case 共享 0</option><option value=\"archived\">已归档 0</option></select></label><label class=\"project-search\">⌕ <input id=\"project-search\" data-testid=\"project-search\" placeholder=\"搜索项目、Case 或工作范围\" value=\"\"></label></div><section class=\"daily-project-list\"><div class=\"daily-project-list-head\"><span>项目 / 关联 Case</span><span>工作状态</span><span>承接与下一步</span><span>任务</span></div><article class=\"daily-project-list-row\"><div><a href=\"#project\" data-project-independent=\"\" data-testid=\"open-project\"><strong>四店会员资料核查</strong></a><a href=\"#case/current\" class=\"case-chip\">会员资料治理 →</a></div><div><span class=\"pill amber\">待反馈</span></div><div><strong>业务负责人</strong><p>等待门店补充修订后的实际观察资料</p></div><span>6</span></article></section><p class=\"daily-caption\">工作状态取原项目工作记录；Task 外派状态另行展示。</p></div>",
+      "css": {
+        "rail": "180px",
+        "topbar": "58px",
+        "currentGrid": null,
+        "canvas": "rgb(247, 245, 250)",
+        "mainPadding": "0px"
+      },
+      "viewport": {
+        "width": 1440,
+        "height": 1050
+      }
+    },
+    {
+      "route": "#project",
+      "headings": [
+        "四店会员资料核查",
+        "项目共用工作信息",
+        "当前承接与下一步",
+        "项目内任务"
+      ],
+      "nav": [
+        {
+          "label": "▦\n工作台首页",
+          "href": "#home"
+        },
+        {
+          "label": "◫\nDecision Case",
+          "href": "#cases"
+        },
+        {
+          "label": "▱\n四店会员资料核查",
+          "href": "#project"
+        },
+        {
+          "label": "◉\n四店资料一致性核查",
+          "href": "#task/analysis"
+        }
+      ],
+      "main": "<nav class=\"workspace-areas\" aria-label=\"Decision Case 范围\"><a href=\"#cases\" class=\"\" data-testid=\"area-cases\">Case 总览</a><a href=\"#projects\" class=\"active\" data-testid=\"area-projects\">全部项目</a></nav><div class=\"daily-page\"><div class=\"row between wrap\"><a href=\"#projects\" class=\"daily-back\" data-testid=\"project-back-list\">← 返回全部项目 · 保留搜索与筛选</a></div><header class=\"daily-heading\"><div><div class=\"eyebrow\">PROJECT · SHARED WORKSPACE</div><div class=\"row wrap\"><h1>四店会员资料核查</h1><span class=\"pill amber\">待反馈</span></div><p>业务负责人 · 6 个原任务 · 1 个关联 Case</p></div><a href=\"#case/current\" class=\"btn\" data-testid=\"project-case\">查看关联 Case</a></header><section class=\"project-shared\"><div><h2>项目共用工作信息</h2><p>核查四店合成会员资料，保留差异、出处与未确认身份。</p><p>项目共用约定：固定四店快照，仅核查，不改生产系统。</p><small>已确认项目约定 v1 · 2026-11-27</small></div><div><h2>当前承接与下一步</h2><p>业务负责人</p><p>等待门店补充修订后的实际观察资料</p><small>原项目等待反馈记录 · 独立于本次 Task 外派</small></div><footer>关联 Case <a href=\"#case/current\" class=\"case-chip\">会员资料治理 →</a></footer></section><header class=\"daily-tab-heading\"><h2>项目内任务</h2><p>六类用途按需要使用，可重复或缺少。查看原任务不会自动带入任何 Case 或事项。</p></header><div class=\"task-filter\"><label for=\"task-type-filter\">按用途查看</label><select id=\"task-type-filter\" data-testid=\"task-type-filter\"><option value=\"all\" selected=\"\">全部 6</option><option value=\"requirement\">需求 R · 1</option><option value=\"analysis\">分析 A · 1</option><option value=\"plan\">计划 P · 1</option><option value=\"decision\">决策 D · 1</option><option value=\"do\">执行 Do · 1</option><option value=\"teach\">反馈 T · 1</option></select><span>需求 / 分析 / 计划 / 决策 / 执行 / 反馈</span></div><div class=\"daily-task-scroll\"><table class=\"daily-task-table\"><thead><tr><th>原任务</th><th>用途</th><th>已保存记录</th><th>继续工作</th></tr></thead><tbody><tr><td><strong>明确会员资料核查范围</strong><small>原关联：会员资料治理 / 资料一致性核查</small></td><td>需求 R</td><td><span class=\"pill gray\">已完成</span><small>原会话 / 草稿 / 成果保留</small></td><td><a class=\"btn text\" href=\"#task/requirement\" data-open-task=\"requirement\" data-origin=\"independent\" data-testid=\"task-requirement\">打开原任务 ↗</a></td></tr><tr><td><strong>四店会员资料一致性核查</strong><small>原关联：会员资料治理 / 资料一致性核查</small></td><td>分析 A</td><td><span class=\"pill gray\">进行中</span><small>原会话 / 草稿 / 成果保留</small></td><td><a class=\"btn text\" href=\"#task/analysis\" data-open-task=\"analysis\" data-origin=\"independent\" data-testid=\"task-analysis\">打开原任务 ↗</a></td></tr><tr><td><strong>安排资料修订与复查计划</strong><small>原关联：会员资料治理 / 核定资料修订范围</small></td><td>计划 P</td><td><span class=\"pill gray\">草稿</span><small>原会话 / 草稿 / 成果保留</small></td><td><a class=\"btn text\" href=\"#task/plan\" data-open-task=\"plan\" data-origin=\"independent\" data-testid=\"task-plan\">打开原任务 ↗</a></td></tr><tr><td><strong>核定四店会员口径处理方案</strong><small>原关联：会员资料治理 / 核定资料修订范围</small></td><td>决策 D</td><td><span class=\"pill gray\">待资料</span><small>原会话 / 草稿 / 成果保留</small></td><td><a class=\"btn text\" href=\"#task/decision\" data-open-task=\"decision\" data-origin=\"independent\" data-testid=\"task-decision\">打开原任务 ↗</a></td></tr><tr><td><strong>落实获准的资料修订</strong><small>原关联：会员资料治理 / 修订后资料观察</small></td><td>执行 Do</td><td><span class=\"pill gray\">未开始</span><small>原会话 / 草稿 / 成果保留</small></td><td><a class=\"btn text\" href=\"#task/do\" data-open-task=\"do\" data-origin=\"independent\" data-testid=\"task-do\">打开原任务 ↗</a></td></tr><tr><td><strong>复盘核查结果与业务反馈</strong><small>原关联：会员资料治理 / 修订后资料观察</small></td><td>反馈 T</td><td><span class=\"pill gray\">未开始</span><small>原会话 / 草稿 / 成果保留</small></td><td><a class=\"btn text\" href=\"#task/teach\" data-open-task=\"teach\" data-origin=\"independent\" data-testid=\"task-teach\">打开原任务 ↗</a></td></tr></tbody></table></div><details class=\"disclosure\"><summary>六类任务与外派的关系</summary><p>每类任务都可以按需外派工作片段，仍保留原用途和归属。本原型可重置后体验不同类型；不是要求六类任务全部外派。</p></details><a class=\"btn text section-space\" href=\"#task/analysis\" data-open-task=\"analysis\" data-origin=\"independent\" data-testid=\"open-analysis\">继续原分析任务 →</a></div>",
+      "css": {
+        "rail": "180px",
+        "topbar": "58px",
+        "currentGrid": null,
+        "canvas": "rgb(247, 245, 250)",
+        "mainPadding": "0px"
+      },
+      "viewport": {
+        "width": 1440,
+        "height": 1050
+      }
+    },
+    {
+      "route": "#task/analysis",
+      "headings": [
+        "四店会员资料一致性核查",
+        "四店会员资料一致性核查",
+        "⇄ 外部协作",
+        "本任务保留"
+      ],
+      "nav": [
+        {
+          "label": "▦\n工作台首页",
+          "href": "#home"
+        },
+        {
+          "label": "◫\nDecision Case",
+          "href": "#cases"
+        },
+        {
+          "label": "▱\n四店会员资料核查",
+          "href": "#project"
+        },
+        {
+          "label": "◉\n四店资料一致性核查",
+          "href": "#task/analysis"
+        }
+      ],
+      "main": "<div class=\"page-head\"><div><div class=\"eyebrow\">TASK / 分析</div><h1>四店会员资料一致性核查</h1><p>项目和任务关系保持；按需委派工作片段，由原任务 Agent 收回结果。</p></div><div class=\"head-actions\"><a class=\"btn\" href=\"#project\" data-testid=\"back-project\">← 原项目</a><a class=\"btn\" href=\"#case/current\" data-action=\"assigned-case\">查看原关联 Case</a></div></div><div class=\"task-entry-context\" data-testid=\"task-entry-context\"><div><strong>原归属：分析 Task</strong><span>项目 · 四店会员资料核查　/　原关联事项 · 资料一致性核查</span></div><span class=\"small muted\">独立打开原任务 · 未因浏览自动带入 Case 上下文</span></div><nav class=\"tabs\" aria-label=\"任务内容\"><a href=\"#task/analysis\" class=\"active\">任务对话</a><a href=\"#report\" class=\"\" data-testid=\"report-tab\">报告与成果</a><a href=\"#draft\" class=\"\" data-testid=\"draft-tab\">保留的草稿</a><a href=\"#work\" class=\"\" data-testid=\"work-tab\">外部协作</a></nav><div class=\"grid\"><section class=\"card\"><div class=\"task-overview\"><span class=\"task-glyph\">A</span><div><h2 class=\"task-title\">四店会员资料一致性核查</h2><small>合成快照 2026-11-01 · 原任务记录持续保留</small></div></div><div class=\"chat\"><div class=\"speaker\"><span class=\"mini-avatar\">你</span>业务目标 · 已有上下文</div><p>帮我核对云杉零售四家店的会员资料：字段、状态与跨店重复是否一致。先查清差异，不要修改业务系统，也不要把不确定身份自动合并。</p></div><div class=\"chat\"><div class=\"speaker\"><span class=\"mini-avatar\">O</span>OptraCall Agent <span class=\"pill gray\">合成交互</span></div><p>我保留了原报告与数据说明。四店字段名称存在差异，需按已发布口径逐项核对；其中一组跨店身份对应关系仍为 UNKNOWN。</p><div class=\"quote\">当前边界：只核查合成快照及获准依据；不改生产数据，不联系会员，不发布正式口径。</div><p>我建议将「核查四店会员字段映射与重复记录」交给外部执行者。你确认必要范围后，我会自主派单、跟进并验收。</p><div class=\"head-actions\" style=\"margin-top:15px\"><a class=\"btn\" href=\"#report\">查看原报告 ↗</a><a class=\"btn text\" href=\"#assets\">查看依据</a></div></div><div class=\"compose\"><label class=\"sr-only\" for=\"task-draft\">原任务草稿</label><textarea id=\"task-draft\" data-testid=\"task-draft\" placeholder=\"继续和原任务 Agent 沟通…\">请保留未确认的身份映射，不要自动合并会员。</textarea><div class=\"compose-foot\"><small>草稿随页面往返保留。演示发送只保存本地状态。</small><button class=\"btn primary\" data-action=\"send-draft\" data-testid=\"send-draft\">发送</button></div></div></section><aside class=\"stack\"><section class=\"card collab\"><div class=\"card-head\"><h2>⇄ 外部协作</h2><span class=\"pill gray\">待授权</span></div><div class=\"pad\"><div class=\"eyebrow\" style=\"margin-bottom:8px\">Agent 的建议</div><h3>核查四店会员字段映射与重复记录</h3><p>这段核查可交给外部执行者完成；我会准备工单、跟进进度，并核验回传。业务判断仍回到本任务。</p><div class=\"tiny-line\"></div><p><strong style=\"color:#59416f\">只需确认一次必要授权</strong><br>目标、外派范围、执行者与资产权限一起确认，范围内无需逐条审批读取。</p><button class=\"btn primary\" data-action=\"authorize\" data-testid=\"authorize-open\">查看建议并授权 →</button></div></section><section class=\"card\"><div class=\"card-head\"><h2>本任务保留</h2></div><div class=\"pad\"><div class=\"list-row\"><div><strong>原报告 · 核查初稿</strong><small>v0.3 · 包含未确认映射</small></div><a href=\"#report\" class=\"btn text\">打开 ↗</a></div><div class=\"list-row\"><div><strong>业务草稿</strong><small>跨页保留，不自动发布</small></div><a href=\"#draft\" class=\"btn text\">查看</a></div><div class=\"list-row\"><div><strong>会员资料治理 Case</strong><small>分析中 · 业务决定待后续</small></div><a href=\"#case/current\" data-action=\"assigned-case\" class=\"btn text\">打开</a></div></div></section></aside></div>",
+      "css": {
+        "rail": "180px",
+        "topbar": "58px",
+        "currentGrid": null,
+        "canvas": "rgb(247, 245, 250)",
+        "mainPadding": "28px 32px 40px"
+      },
+      "viewport": {
+        "width": 1440,
+        "height": 1050
+      }
+    }
+  ]
+}

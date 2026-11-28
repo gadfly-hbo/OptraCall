@@ -1,5 +1,7 @@
 # Agent 大脑外部协作：复用与责任边界核对
 
+**版本关系：第1–8节保留为 v0.1 历史核对（2026-11-27，基线4132a39），其中新增外派合同是设计约束，不代表当前已实现。最新 main 对齐见第9节及 [main-alignment.md](main-alignment.md)，旧行号不作为新版源码定位。**
+
 2026-11-27；设计依据为产品源码 `main@4132a39d336c22d46c5bc57ae9d9b544a7ebac5f`、讨论稿 `41264eb5c584c1cf4e09c532e8842823a870c469`。
 本记录为只读架构核对及实施约束，不表示产品代码、外部账号、官方 API 或远端服务已完成运行验收。
 规则来源：[工程规范四原则及 IN01–IN07](../../../docs/engineering-workflow.md)、[统一会话接入](../../../docs/agent-session-integration.md)；本变更的需求、授权及验收以同目录 spec 为准。
@@ -98,3 +100,20 @@ Host 从原 Task 构造真实 owner，静态注入狭窄业务 port；Extension 
 通过官方 API 提交、查询或请求取消，不接管 WorkBuddy 进程、不注入其内部对象、不改其配置/模型，也不将其内部状态当成 OptraCall 会话生命周期。
 通用协议定义工作、领取、资产访问和交付含义；WorkBuddy 适配器只映射实际已证实的能力，缺口返回明确不可用/UNKNOWN，不模拟成功或强制对方使用 Pi。
 工程验证应分别报告合成协议/恢复检查、真实官方 API 接入及真实外部 Agent/资产/业务闭环；本记录仅完成设计前只读核对。
+
+## 9. v0.2：最新 main 对齐（2026-11-28）
+
+源码依据更新为 `main@74030911ade7a9e06ad1a0213d1fcb93ecbba6dd`；准备分支已由根 Agent 合并该 main（`a194207`）。本次仅只读源码核对与文档补充，不代表新增外派能力、模型、账号或部署已验证。
+
+- 最新 UI 是 `WorkspaceHome.tsx`、`HomeDailyQuickPanel.tsx` 及 Case 四页签“当前工作 / 项目与任务 / 成果与依据 / 历史”（`CaseBoard.tsx:230`）。外派设计沿该骨架接入，不能以旧 v5 项目地图替代现有日常工作台。
+- 本期不扩首页收件/待办。`workspace-daily-routes.ts:27` 与 `home-pending.ts:133` 继续只投影原明确请求、继续工作、原项目等待及待核保存操作；内部新增 Inbox/ResumeReceipt 不接成首页队列。
+- 首页“外部等待”只来自 active、有关联 Case 的 `ProjectWork.workStatus=awaiting_feedback`（`workspace-daily-routes.ts:63`、`home-pending.ts:226`），不是 ExternalWork/claim/delivery。外派发布、收到交付、接受或取消均不直接改写 ProjectWork、Case DecisionRequest 或经营观察。
+- 本期外派摘要只出现在原 Task、其原项目准确Task行，以及按真实 `task.assignment.issue` 匹配的 Case“项目与任务”；复用 `case-board-navigation-model.ts:23` 的范围判断，不把共享项目的其他 Case/未绑定任务带入。
+- Case 明确请求只有 choose/observe，assignee 是业务文字（`case-decision-types.ts:92`）；原请求的 answered 依准确回应/版本/授权推导。外部 principal、claim 与 delivery 保持独立类型，不借原请求撤回冒充外派取消。
+- 原任务运行仍复用 `server.ts:714` 的 project-tasks 域、`:2651` 的 `startProjectMessage`；新唤醒需在 `:2106` 的指纹和 `:2771` 的提供回执补准确外派引用，并使用 `origin.userText=false`，不把外部材料当成人原话。
+- `server.ts:3842` 的现有 stop 只停止原本机公共操作和同 Task 附属资源；“stop 后暂停外部结果自动续接”是待开发增量，不能宣称最新 main 已有。cleanupRequestId 的迟到保护继续保留。
+- `project-history.ts:137` 的原生 started/settled 去重、`server.ts:2162` 的中断只读恢复和绑定配置继续复用；不自动换模型、换 requestId 重跑、续用过期 signal 或覆盖任务草稿。
+- `server.ts:2217` 的既有自动交付动作只能消费原 Agent 真实声明的交付；外部回执不能伪造 native delivery。原 Agent 新成果后续进入原 Case/候选流程时，仍受各自授权与准确来源约束。
+- `CaseBoard.tsx:197`、`TaskReportEvidence.tsx:69` 的准确成果/范围读取继续保留；接受外派不自动成为 Case 产物。项目返回原事项已有路径，但报告 sourceCase 目前仅携 Case ID，准确事项/页签/焦点返回是本期需补的最小导航信息，不能当成读取权限。
+- Interface v3、官方 Pi1.4.0/MCP1.32.2、受管 profile 拒绝、Host-only 后台读、legacy 不外露、ExternalDeliveryRef 及 UNKNOWN 跨 turn/迟到边界仍适用；当前行号及新增检查建议详见 main-alignment。
+- 最新工程规范 `:211`、`:284` 要求真正渲染/阅读冻结 Demo、DOM/CSS 到生产视图映射、逐项独立矩阵、开 PR 前真实产品截图展示及用户确认；这是工程交付门禁，不增加产品日常外派审批。

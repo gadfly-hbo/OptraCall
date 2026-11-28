@@ -1,0 +1,291 @@
+{
+  "htmlSha256": "6946bc7744365bdf19f41bb135248693372a4e1be5152bd9a7c0065984cfe060",
+  "checks": [
+    {
+      "id": "missing-policy-blocks-full",
+      "pass": true,
+      "detail": "API+Connector insufficient"
+    },
+    {
+      "id": "setup-policy-complete",
+      "pass": true,
+      "detail": "separate policy + whole test"
+    },
+    {
+      "id": "resource-snapshot-specific",
+      "pass": true,
+      "detail": "模拟已批准资源策略：1 个工作片段；最多 3 次执行者 API 触发（含修订；已提交或触发结果 UNKNOWN 均占额，不盲重试）；资源窗口上限 24 小时，本次授权仍按所选期限先到结束。费用：沿已批准的第三方账号策略；当前费用未知，不等于免费。上限是环境资源约束，不规定业务返工次数。"
+    },
+    {
+      "id": "normal-one-trigger",
+      "pass": true,
+      "detail": {
+        "schemaVersion": 4,
+        "caseUi": {
+          "tab": "current",
+          "issue": "quality",
+          "scope": "current",
+          "mode": "list"
+        },
+        "taskEntry": null,
+        "projectEntry": null,
+        "homeDraft": "",
+        "homeMatched": false,
+        "caseDrafts": {},
+        "projectSearch": "",
+        "projectFilter": "all",
+        "taskTypeFilter": "all",
+        "artifacts": {
+          "version": "v1.0",
+          "items": [
+            {
+              "key": "diff",
+              "version": "v1.0",
+              "revision": 1,
+              "name": "member-differences-v1.0.csv",
+              "local": "preserved",
+              "hash": "matched",
+              "claimed": "demo:sha256:5ac8…71d2",
+              "observed": "demo:sha256:5ac8…71d2",
+              "bytes": 4160,
+              "reason": ""
+            },
+            {
+              "key": "notes",
+              "version": "v1.0",
+              "revision": 1,
+              "name": "verification-notes-v1.0.md",
+              "local": "preserved",
+              "hash": "matched",
+              "claimed": "demo:sha256:ef92…0a18",
+              "observed": "demo:sha256:ef92…0a18",
+              "bytes": 2368,
+              "reason": ""
+            }
+          ]
+        },
+        "artifactHistory": [],
+        "theme": "light",
+        "scene": "unconfigured",
+        "task": "analysis",
+        "draft": "请保留未确认的身份映射，不要自动合并会员。",
+        "draftByTask": {
+          "analysis": "请保留未确认的身份映射，不要自动合并会员。"
+        },
+        "promptByTask": {},
+        "draftSaved": false,
+        "auth": {
+          "task": "analysis",
+          "taskType": "分析",
+          "piece": "核查四店会员字段映射与重复记录",
+          "goal": "核对四店会员资料的一致性，交回可追溯的差异表和检查说明。",
+          "executor": "WorkBuddy 本机助手 API · 模拟 / 联用未实证",
+          "repo": "yunshan-demo/private-member-audit · Private",
+          "assets": [
+            "semantic",
+            "metric",
+            "method",
+            "mapping"
+          ],
+          "hours": 24,
+          "resourcePolicy": {
+            "approved": true,
+            "simulation": true,
+            "maxFragments": 1,
+            "maxApiTriggers": 3,
+            "maxHours": 24,
+            "cost": "沿已批准的第三方账号策略；当前费用未知，不等于免费"
+          },
+          "revoked": false,
+          "expired": false,
+          "ended": true
+        },
+        "status": "accepted",
+        "history": [
+          {
+            "label": "已确认本次授权",
+            "body": "分析任务外派一个工作片段；只读 4 项准确资产版本，24 小时内有效。",
+            "source": "用户 / 授权快照",
+            "kind": "normal",
+            "time": "演示 01"
+          },
+          {
+            "label": "Host 已建立外派工作台账",
+            "body": "领取、交付与验收按此工作原子更新；GitHub Issue 与评论仅作通信和证据。",
+            "source": "Host / 模拟工作台账",
+            "kind": "normal",
+            "time": "演示 02"
+          },
+          {
+            "label": "Agent 已准备工单",
+            "body": "目标、禁做项、准确资产引用和验收要求已按授权整理；没有搬运原始资产到 GitHub。",
+            "source": "OptraCall Agent",
+            "kind": "normal",
+            "time": "演示 03"
+          },
+          {
+            "label": "发布回执已核对",
+            "body": "Issue #DEMO-42 已关联原 Task；工单发布不等于执行完成。",
+            "source": "GitHub / 模拟发布回执",
+            "kind": "normal",
+            "time": "演示 04"
+          },
+          {
+            "label": "执行者 API 触发已占额",
+            "body": "本 work 首次触发；已占用 1 / 3 次。已提交或触发 UNKNOWN 仍占额，不盲重试；费用未知不代表免费。",
+            "source": "Host / 模拟资源回执",
+            "kind": "normal",
+            "time": "演示 05"
+          },
+          {
+            "label": "触发指定本机助手",
+            "body": "通过已授权 WorkBuddy 本机助手官方 API 触发执行者，使用通用工作协议回到 Host 领取；不调用云任务。",
+            "source": "WorkBuddy 本机助手 API / 模拟触发回执",
+            "kind": "normal",
+            "time": "演示 06"
+          },
+          {
+            "label": "指定执行者领取有效",
+            "body": "Host 核对本次工作、可信执行者与当前授权，裁定一个有效领取。",
+            "source": "Host / 模拟领取裁定",
+            "kind": "normal",
+            "time": "演示 07"
+          },
+          {
+            "label": "执行者按需读取获准版本",
+            "body": "会员与有效会员定义 v2.1；跨店重复记录数 v1.3；资料一致性检查清单 v1.2；四店会员字段映射 v0.4",
+            "source": "远端资产 MCP / 模拟读取回执",
+            "kind": "normal",
+            "time": "演示 08"
+          },
+          {
+            "label": "有效领取已续租",
+            "body": "Host 仅为当前有效领取续租；租约不扩大资产、门店或任务范围。",
+            "source": "工作 MCP / 模拟续租回执",
+            "kind": "normal",
+            "time": "演示 09"
+          },
+          {
+            "label": "附件已登记，等待模拟本机保全",
+            "body": "v1.0 两件外部产物先登记为待保全；外部链接和清单不代表本机已取得字节。",
+            "source": "Host / 模拟附件回执",
+            "kind": "normal",
+            "time": "演示 10"
+          },
+          {
+            "label": "收到交付，GitHub 已关闭",
+            "body": "delivery v1.0 差异表和检查说明已写入 Host 台账；此刻仍为待验收，原任务尚未据此完成。",
+            "source": "GitHub / 模拟回传事件",
+            "kind": "normal",
+            "time": "演示 11"
+          },
+          {
+            "label": "附件模拟字节保全与摘要核对通过",
+            "body": "member-differences-v1.0.csv：模拟本机字节 4160 B；外部声明摘要与本机模拟摘要一致。未生成真实下载文件。",
+            "source": "Host / 模拟保全回执",
+            "kind": "normal",
+            "time": "演示 12"
+          },
+          {
+            "label": "附件模拟字节保全与摘要核对通过",
+            "body": "verification-notes-v1.0.md：模拟本机字节 2368 B；外部声明摘要与本机模拟摘要一致。未生成真实下载文件。",
+            "source": "Host / 模拟保全回执",
+            "kind": "normal",
+            "time": "演示 13"
+          },
+          {
+            "label": "Agent 已核验并接受这一片段",
+            "body": "核对 v1.0 清单、模拟字节保全及摘要、可核验的差异位置与实际获准引用；1 组身份仍 UNKNOWN。外部来源标记保留，未发布正式资产。",
+            "source": "OptraCall Agent",
+            "kind": "normal",
+            "time": "演示 14"
+          },
+          {
+            "label": "Agent 已沿原保存工具形成本任务成果",
+            "body": "原 Task Agent 调用既有成果保存工具，将 v1.0 验证说明、保全回执与外部交付引用保存为新增成果。外部附件本身不冒充本机正式报告，原报告未被覆盖。",
+            "source": "原任务 Agent / 模拟工具保存回执",
+            "kind": "normal",
+            "time": "演示 15"
+          }
+        ],
+        "selectedAsset": "semantic",
+        "assetError": "",
+        "assetLast": "",
+        "reads": [
+          {
+            "name": "会员与有效会员定义",
+            "v": "v2.1",
+            "ref": "SEM-021",
+            "by": "WorkBuddy 本机助手 · 指定模拟身份",
+            "reason": "本次工作实际读取回执（模拟）"
+          },
+          {
+            "name": "跨店重复记录数",
+            "v": "v1.3",
+            "ref": "MET-013",
+            "by": "WorkBuddy 本机助手 · 指定模拟身份",
+            "reason": "本次工作实际读取回执（模拟）"
+          },
+          {
+            "name": "资料一致性检查清单",
+            "v": "v1.2",
+            "ref": "MTH-012",
+            "by": "WorkBuddy 本机助手 · 指定模拟身份",
+            "reason": "本次工作实际读取回执（模拟）"
+          },
+          {
+            "name": "四店会员字段映射",
+            "v": "v0.4",
+            "ref": "MAP-004",
+            "by": "WorkBuddy 本机助手 · 指定模拟身份",
+            "reason": "本次工作实际读取回执（模拟）"
+          }
+        ],
+        "candidate": false,
+        "supplemented": false,
+        "receiptChecked": false,
+        "late": false,
+        "paused": false,
+        "modelBusy": false,
+        "setup": {
+          "api": true,
+          "connector": true,
+          "full": true,
+          "resource": true
+        },
+        "apiTriggers": 1,
+        "goal": "核对四店会员资料的一致性，交回可追溯的差异表和检查说明。",
+        "lastPrompt": "",
+        "demoReopened": false
+      }
+    },
+    {
+      "id": "preview-authorized-same-snapshot",
+      "pass": true,
+      "detail": "same resource policy before/after grant"
+    },
+    {
+      "id": "supplement-two-triggers",
+      "pass": true,
+      "detail": "one original + one revised trigger"
+    },
+    {
+      "id": "dark-main-canvas",
+      "pass": true,
+      "detail": "main v0.2 dark canvas"
+    }
+  ],
+  "screens": [
+    "missing-policy-390",
+    "authorize-resource-390",
+    "authorized-resource-390",
+    "supplement-resource-390",
+    "dark-canvas-1440",
+    "resource-dark-1440"
+  ],
+  "errors": [],
+  "network": [],
+  "startedAt": "2026-11-28T09:20:51.706Z",
+  "afterHtmlSha256": "6946bc7744365bdf19f41bb135248693372a4e1be5152bd9a7c0065984cfe060",
+  "finishedAt": "2026-11-28T09:21:14.357Z"
+}

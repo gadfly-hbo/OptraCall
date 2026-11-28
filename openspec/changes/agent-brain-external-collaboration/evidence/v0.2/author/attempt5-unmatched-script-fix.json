@@ -1,0 +1,229 @@
+{
+  "hash": "6946bc7744365bdf19f41bb135248693372a4e1be5152bd9a7c0065984cfe060",
+  "store": "optracall.external-collaboration.demo.v2",
+  "checks": [
+    {
+      "label": "default daily home matches new main",
+      "result": "PASS"
+    },
+    {
+      "label": "desktop sidebar is 180px",
+      "result": "PASS"
+    },
+    {
+      "label": "single Decision Case primary entry replaces separate map links",
+      "result": "PASS"
+    },
+    {
+      "label": "home draft survives Cases and global project browsing",
+      "result": "PASS"
+    },
+    {
+      "label": "home keeps exactly two original response requests",
+      "result": "PASS"
+    },
+    {
+      "label": "choose request opens exact original issue/round",
+      "result": "PASS"
+    },
+    {
+      "label": "request modal returns focus to actual current issue control",
+      "result": "PASS"
+    },
+    {
+      "label": "observe request keeps exact independent original issue",
+      "result": "PASS"
+    },
+    {
+      "label": "observe modal focus returns to current issue action",
+      "result": "PASS"
+    },
+    {
+      "label": "explicit issue selection defaults scope to current",
+      "result": "PASS"
+    },
+    {
+      "label": "current scope only shows explicit task associations",
+      "result": "PASS"
+    },
+    {
+      "label": "all Case scope includes six existing task records",
+      "result": "PASS"
+    },
+    {
+      "label": "manually selected other scope survives tab redraw",
+      "result": "PASS"
+    },
+    {
+      "label": "other issue empty artifact scope never substitutes analysis report",
+      "result": "PASS"
+    },
+    {
+      "label": "Case scope opens exact original Task without reassignment",
+      "result": "PASS"
+    },
+    {
+      "label": "report/draft roundtrip preserves original Task draft",
+      "result": "PASS"
+    },
+    {
+      "label": "return restores exact issue/tab/manual scope",
+      "result": "PASS"
+    },
+    {
+      "label": "return restores exact task-link focus",
+      "result": "PASS"
+    },
+    {
+      "label": "original project returns to same Case scope",
+      "result": "PASS"
+    },
+    {
+      "label": "resource policy is a fixed granted snapshot",
+      "result": "PASS"
+    },
+    {
+      "label": "granted resource/fee view equals exact prior preview",
+      "result": "PASS"
+    },
+    {
+      "label": "resource and fee preview preserves UNKNOWN/no blind retry/not free",
+      "result": "PASS"
+    },
+    {
+      "label": "optional Task card pause exists while original model idle",
+      "result": "PASS"
+    },
+    {
+      "label": "Task card pause only pauses continuation, preserves external auth",
+      "result": "PASS"
+    },
+    {
+      "label": "normal trigger consumes one of the approved API allocations",
+      "result": "PASS"
+    },
+    {
+      "label": "normal path autonomously accepts after valid per-artifact preservation",
+      "result": "PASS"
+    },
+    {
+      "label": "Case linked-task summary reflects separate external work",
+      "result": "PASS"
+    },
+    {
+      "label": "acceptance never changes Case issue and round",
+      "result": "PASS"
+    },
+    {
+      "label": "Case artifacts remain original report and original source only",
+      "result": "PASS"
+    },
+    {
+      "label": "report return restores exact artifacts tab/manual scope",
+      "result": "PASS"
+    },
+    {
+      "label": "report return restores source artifact-button focus",
+      "result": "PASS"
+    },
+    {
+      "label": "external acceptance does not remove original requests",
+      "result": "PASS"
+    },
+    {
+      "label": "external acceptance does not rewrite ProjectWork wait",
+      "result": "PASS"
+    },
+    {
+      "label": "home has no newly invented external inbox",
+      "result": "PASS"
+    },
+    {
+      "label": "global project return preserves search",
+      "result": "PASS"
+    },
+    {
+      "label": "independent task open clears browsing Case origin",
+      "result": "PASS"
+    },
+    {
+      "label": "independent task keeps original saved draft",
+      "result": "PASS"
+    },
+    {
+      "label": "independent original association opens exact assigned issue",
+      "result": "PASS"
+    },
+    {
+      "label": "history source remains bound to selected historical issue",
+      "result": "PASS"
+    },
+    {
+      "label": "v0.2 retains supplement scenario",
+      "result": "PASS"
+    },
+    {
+      "label": "revision trigger counts inside same three-call resource policy",
+      "result": "PASS"
+    },
+    {
+      "label": "v0.2 retains unknown scenario",
+      "result": "PASS"
+    },
+    {
+      "label": "UNKNOWN only checks original receipt, never redispatches",
+      "result": "PASS"
+    },
+    {
+      "label": "v0.2 retains duplicate scenario",
+      "result": "PASS"
+    },
+    {
+      "label": "v0.2 retains executorbusy scenario",
+      "result": "PASS"
+    },
+    {
+      "label": "v0.2 retains identity scenario",
+      "result": "PASS"
+    },
+    {
+      "label": "v0.2 retains offline scenario",
+      "result": "PASS"
+    },
+    {
+      "label": "v0.2 retains expired scenario",
+      "result": "PASS"
+    },
+    {
+      "label": "v0.2 retains failed scenario",
+      "result": "PASS"
+    },
+    {
+      "label": "v0.2 retains late scenario",
+      "result": "PASS"
+    },
+    {
+      "label": "late data never revives revoked authorization",
+      "result": "PASS"
+    },
+    {
+      "label": "busy original Task resumes automatic verification on idle",
+      "result": "PASS"
+    },
+    {
+      "label": "scope change still requires only necessary human decision",
+      "result": "PASS"
+    },
+    {
+      "label": "unfinished onboarding cannot claim autonomous readiness",
+      "result": "PASS"
+    },
+    {
+      "label": "unconfigured resource policy blocks autonomous setup",
+      "result": "PASS"
+    }
+  ],
+  "errors": [],
+  "requests": [],
+  "error": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('close-dialog')\u001b[22m\n\u001b[2m    - locator resolved to <button class=\"close\" aria-label=\"关闭对话框\" data-action=\"close-dialog\" data-testid=\"close-dialog\">×</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not visible\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not visible\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    58 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is not visible\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n\n    at /workspace/OptraCall/.local/agent-brain-main-update/ui/check-v02-final.mjs:19:551"
+}

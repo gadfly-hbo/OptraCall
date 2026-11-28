@@ -1,0 +1,21 @@
+{
+  "hash": "6946bc7744365bdf19f41bb135248693372a4e1be5152bd9a7c0065984cfe060",
+  "result": "PASS",
+  "checks": [
+    "narrowed preview excludes mapping source",
+    "decline grants no work/authorization/API allowance",
+    "mapping excluded from actual read citations",
+    "excluded mapping row remains unverified",
+    "D-store does not adopt unavailable mapping",
+    "candidate remains unpublished",
+    "external candidate never appears as Case artifact",
+    "other read denies and preserves original result",
+    "version read denies and preserves original result",
+    "revoked read denies and preserves original result",
+    "offline read denies and preserves original result",
+    "expired read denies and preserves original result",
+    "dark canvas is current-main canvas token",
+    "no runtime errors"
+  ],
+  "errors": []
+}

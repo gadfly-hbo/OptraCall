@@ -1,0 +1,61 @@
+{
+  "hash": "4ae0c6d8aa5a998007a286b46b34a2bb472cad68c1f213bba707b9d91655791b",
+  "store": "optracall.external-collaboration.demo.v2",
+  "checks": [
+    {
+      "label": "default daily home matches new main",
+      "result": "PASS"
+    },
+    {
+      "label": "desktop sidebar is 180px",
+      "result": "PASS"
+    },
+    {
+      "label": "single Decision Case primary entry replaces separate map links",
+      "result": "PASS"
+    },
+    {
+      "label": "home draft survives Cases and global project browsing",
+      "result": "PASS"
+    },
+    {
+      "label": "home keeps exactly two original response requests",
+      "result": "PASS"
+    },
+    {
+      "label": "choose request opens exact original issue/round",
+      "result": "PASS"
+    },
+    {
+      "label": "request modal returns focus to actual current issue control",
+      "result": "PASS"
+    },
+    {
+      "label": "observe request keeps exact independent original issue",
+      "result": "PASS"
+    },
+    {
+      "label": "observe modal focus returns to current issue action",
+      "result": "PASS"
+    },
+    {
+      "label": "explicit issue selection defaults scope to current",
+      "result": "PASS"
+    },
+    {
+      "label": "current scope only shows explicit task associations",
+      "result": "PASS"
+    },
+    {
+      "label": "all Case scope includes six existing task records",
+      "result": "PASS"
+    },
+    {
+      "label": "manually selected other scope survives tab redraw",
+      "result": "PASS"
+    }
+  ],
+  "errors": [],
+  "requests": [],
+  "error": "AssertionError [ERR_ASSERTION]: other issue empty artifact scope never substitutes analysis report\n    at ck (file:///workspace/OptraCall/.local/agent-brain-main-update/ui/check-v02.mjs:4:22)\n    at file:///workspace/OptraCall/.local/agent-brain-main-update/ui/check-v02.mjs:10:701"
+}

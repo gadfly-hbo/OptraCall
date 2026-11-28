@@ -1,45 +1,49 @@
 # 外发开发 Issue 草稿
 
-**状态：未发布；等待用户确认最终 spec/执行清单/UI Demo。** `CONFIRMED_SHA` 必须在确认版推送并读回后替换。不得以本草稿为正式可领取工单。
+v0.2 · 2026-11-28 · **未发布；等待用户整体确认更新后的 spec、任务清单和 UI Demo。** `CONFIRMED_SHA` 须在确认版推送并读回后替换，不能用本草稿领取。
 
-建议标题：`[开发任务] Agent 大脑一期：GitHub 外派、WorkBuddy 本机执行与资产远端 MCP 闭环`
+建议标题：`[开发任务] Agent 大脑一期：原任务外派、WorkBuddy 本机执行与资产远端 MCP 闭环`
 
 ## 目标、范围与当前授权
 
-PM Agent：Codex。用户已选择首期 GitHub＋资产 MCP 完整闭环、确认授权范围后自主推进、资产留实际 OptraCall 运行端，以及通用协议＋WorkBuddy 本机助手官方 API 首个适配。
+PM Agent：Codex。沿用户 D01–D04：首期 GitHub＋资产 MCP 完整闭环、一次范围授权后自主、资产留原运行端、通用协议＋WorkBuddy 本机助手官方 API。四项方向决定不替代当前 v0.2 的设计确认。
 
-【发布前填写用户对最终 spec、任务清单及 Demo 的确认记录。未确认时不发布。】
+【发布前填写用户对本版 spec／清单／Demo 的明确确认记录；未确认不发布。】
 
-交付原 Task 内的外派工作记录与授权、一次有效 GitHub 发布/修订、可信领取与回传、WorkBuddy 本机助手触发与就绪测试、受保护资产 MCP、成果保全及原任务自动续接/核验/UI。飞书/邮箱完整外派协议、WorkBuddy 云任务、远端计算/Skill分发/资产正式写入不在本期。不能把已有四服务客户端当成已实现的对外 MCP 服务端。
+在最新 Decision Case 日常工作台中，由原项目 Task 按范围派出工作，完成唯一 GitHub 发布/修订、可信领取/回传、WorkBuddy本机API触发与就绪测试、受保护资产MCP、成果保全、同Task自动续接/Agent核验及原工具保存。入口沿首页继续工作→Decision Case项目与任务或全部项目→准确原Task，不另建任务域。Case保留四页签、事项/范围/草稿/来源/返回链；外派摘要只出现在原Task、其原项目准确Task行及真实关联Case的项目与任务行，不新增首页收件。
 
-允许修改：规格限定的 Host/Agent/外派/MCP/WorkBuddy薄适配/现有资产查询接缝、实际 UI、tests、必要最小边界检查与说明。沿 Interface v3、原 project-tasks owner、官方 Pi1.4.0/MCP SDK1.32.2。Codex负责Host/Agent/SDK技术接入及整合；其他领取者按同一Issue明确模块与移交责任，不绕过IN01–IN07。新依赖/SDK升级、真实账号或业务资料、部署/端口/服务切换均另核有效授权。
+首页人的明确待回应与ProjectWork外部等待保持原权威，不把外部完成冒认取舍/原始观察回应，也不自动改变Case轮次、目标采纳、实绩、发布或经营效果。飞书/邮箱完整外派协议、WorkBuddy云任务、远端计算/Skill分发/正式资产写入不在本期；已有四服务连接保留。
 
-工程交付完成后由用户自行更新双端并配置运行采用。实号 WorkBuddy API＋Connector＋资产 MCP 联用、受保护入口与真实工作验收另记录；未通过完整测试的具体执行者配置不得展示“就绪”。
+允许修改：spec限定的Host/Agent外派、持久业务记录、收件/同owner续接、MCP/WorkBuddy薄适配、现有资产只读接缝，及真实App/Case/项目/原Task/设置相应组件、必要测试/最小边界检查/说明。Case/首页/目标权威仅复用并保护，不另写待办完成库或目标算法。沿Interface v3、project-tasks普通合格owner/profile、官方Pi1.4.0/MCP1.32.2；Codex负责Host/Agent/SDK技术接入及整合，分工在同Issue明确唯一写入者。新依赖/SDK升级、真实业务或账号、部署/端口/服务切换另核有效授权。
+
+实际WorkBuddy API＋Connector＋资产MCP联用和受保护入口仍待真实采用验证；具体配置完整测试前不得显示就绪。工程隔离测试、真实账号、设备更新、专业质量和用户完整产品验收分别留证。
 
 ## 基线与设计依据
 
-- 发单准备时 main：`4132a39d336c22d46c5bc57ae9d9b544a7ebac5f`；【发布前重核最新 origin/main，必要整合并回到用户确认的设计范围】。
-- 确认版提交：`CONFIRMED_SHA`；远端工作分支：`codex/agent-brain-external-collaboration`。
-- [确认版 spec](https://github.com/gadfly-hbo/OptraCall/blob/CONFIRMED_SHA/openspec/changes/agent-brain-external-collaboration/spec.md)。
-- [执行清单](https://github.com/gadfly-hbo/OptraCall/blob/CONFIRMED_SHA/openspec/changes/agent-brain-external-collaboration/tasks.md)、[用户决策](https://github.com/gadfly-hbo/OptraCall/blob/CONFIRMED_SHA/openspec/changes/agent-brain-external-collaboration/decisions.md)。
-- [可点击 Demo HTML](https://github.com/gadfly-hbo/OptraCall/blob/CONFIRMED_SHA/openspec/changes/agent-brain-external-collaboration/ui-demo.html)，下载为 HTML 后浏览器离线打开；[演示说明](https://github.com/gadfly-hbo/OptraCall/blob/CONFIRMED_SHA/openspec/changes/agent-brain-external-collaboration/demo-guide.md)。全部为合成资料，不联网或操作真实业务。
-- [公开组件与接缝核对](https://github.com/gadfly-hbo/OptraCall/blob/CONFIRMED_SHA/openspec/changes/agent-brain-external-collaboration/reuse-audit.md)、[官方接入依据与未验证项](https://github.com/gadfly-hbo/OptraCall/blob/CONFIRMED_SHA/openspec/changes/agent-brain-external-collaboration/integration-research.md)。
-- 【发布前补充最终 spec/HTML 摘要、准备检查与非作者复核入口。】
+- 本轮 main：`74030911ade7a9e06ad1a0213d1fcb93ecbba6dd`，含#150目标修正、#151日常工作台、#152 UI对齐及#153工程规范v1.17；本准备分支已合入。发布/领取/集成时再次核对最新origin/main并重验受影响范围。
+- 确认版完整提交：`CONFIRMED_SHA`；工作分支：`codex/agent-brain-external-collaboration`。旧v0.1 e456aa5不是本版验收依据。
+- 三个冻结基准：[spec](https://github.com/gadfly-hbo/OptraCall/blob/CONFIRMED_SHA/openspec/changes/agent-brain-external-collaboration/spec.md)、[任务清单](https://github.com/gadfly-hbo/OptraCall/blob/CONFIRMED_SHA/openspec/changes/agent-brain-external-collaboration/tasks.md)、[可点击Demo](https://github.com/gadfly-hbo/OptraCall/blob/CONFIRMED_SHA/openspec/changes/agent-brain-external-collaboration/ui-demo.html)。Demo下载为HTML后浏览器打开，全部合成且不联网；[演示说明](https://github.com/gadfly-hbo/OptraCall/blob/CONFIRMED_SHA/openspec/changes/agent-brain-external-collaboration/demo-guide.md)。
+- [用户决策](https://github.com/gadfly-hbo/OptraCall/blob/CONFIRMED_SHA/openspec/changes/agent-brain-external-collaboration/decisions.md)、[main对齐](https://github.com/gadfly-hbo/OptraCall/blob/CONFIRMED_SHA/openspec/changes/agent-brain-external-collaboration/main-alignment.md)、[UI骨架/生产映射](https://github.com/gadfly-hbo/OptraCall/blob/CONFIRMED_SHA/openspec/changes/agent-brain-external-collaboration/ui-mapping.md)、[接缝复用](https://github.com/gadfly-hbo/OptraCall/blob/CONFIRMED_SHA/openspec/changes/agent-brain-external-collaboration/reuse-audit.md)、[官方接入依据/未验证](https://github.com/gadfly-hbo/OptraCall/blob/CONFIRMED_SHA/openspec/changes/agent-brain-external-collaboration/integration-research.md)。
+- [准备逐项矩阵](https://github.com/gadfly-hbo/OptraCall/blob/CONFIRMED_SHA/openspec/changes/agent-brain-external-collaboration/preparation-matrix.md)、[实际准备结果](https://github.com/gadfly-hbo/OptraCall/blob/CONFIRMED_SHA/openspec/changes/agent-brain-external-collaboration/result.md)。准备复核只覆盖设计/合成原型，不能代替产品落地矩阵。
+- 【发布前补齐三个冻结文件摘要、最终确认记录及v0.2非作者复核入口；不得残留占位。】
 
 ## 验收与回执
 
-以 spec 的 AB01–AB18 和 E01–E07 为工程验收，真实采用 E08 单列。
+以spec AB01–AB18和E01–E07为工程验收，E08真实采用单列。逐项矩阵字段至少为「冻结基准版本/条目→预期→实际代码与真实入口/状态→截图或实跑证据→差异→结论」；全部spec条款、任务及Demo页面/状态均有映射，不能只抽查作者勾选项或以测试数量代替覆盖。
 
-- [ ] 原六类合格任务内片段外派、一次范围授权、可缩小资产、原Task/Case/报告/草稿保留；受限profile不放权。
-- [ ] work/revision级发布与触发去重、UNKNOWN只读核定、原子单人领取/租约、补充修订/迟到/取消不复活权限。
-- [ ] 通用协议与官方WorkBuddy本机API适配；实号未联通保持未验证，离线/需许可清楚等待。
-- [ ] 标准受保护远端MCP/认证、工作记录与资产只读权限分开；严格身份/显式企业/当前任务/精确版本/原资格交集，目录/正文/trace均拒越权。
-- [ ] 外部成果保全与独立来源、实际资产引用和未验证/失败/UNKNOWN；原Agent核验并沿原工具形成成果，正式资产发布分开。
-- [ ] 同owner新turn一次自动续接、busy/暂停/重启/配置变化/归档恢复正确；不重放模型、改owner或伪造native。
-- [ ] 真实App UI/键盘/亮暗/1440-1024-390及原公共消费者兼容，原项目/会话/资产/文件保全。
-- [ ] 先有有效RED/反例再实现；实际Host/Pi/标准MCP/TLS/OAuth/模拟供应商完整闭环，边界正反例及官方固定包核对。
-- [ ] 最终非作者复核、实际PR head完整Check、获授权squash、准确main push Check、同Issue结案回执齐全。
+- [ ] 原六类合格Task内片段外派及一次范围授权，新日常工作台/Case四页签/全部项目/原Task导航、范围、来源、草稿和焦点保留；授权/回看列同一资源策略/额度/时效/未知费用，默认1work/3次API触发含修订/24h、较低策略优先，无批准策略不就绪，submitted/UNKNOWN/跨turn不重置额度；受限profile不放权。
+- [ ] work/revision级发布与触发去重、UNKNOWN只读核定、原子领取/租约、补充/迟到/取消不复活权限；WorkBuddy账号游标准确关联、同连接单有效工作，人工聊天不入原Task/模型。
+- [ ] 通用协议及官方WorkBuddy本机API适配；离线/外部需许可/未实号联通不假报就绪。
+- [ ] 标准受保护MCP、工作记录与资产只读分权；身份/显式企业/任务/精确版本/原资格交集，目录/正文/trace拒越权，不写/执行资产。
+- [ ] 文件字节/摘要/版本保全、独立外部来源/实际引用/FAIL/UNKNOWN；缺件不接受；Agent核验后沿原工具保存，不伪native报告。
+- [ ] 同owner一次新turn续接；精确work/revision/delivery/hash/grant进原指纹/providedContext，外部文本非用户原话；busy/暂停/重启/配置/Case资格变化不重放模型或覆盖新稿。
+- [ ] 外部接受不消解Case取舍/观察请求，不伪ProjectWork外部等待、不推进Case轮次/G/S/实绩/发布；原历史/文件/正式资产保全。
+- [ ] UI编码前领取者亲自用浏览器渲染/操作Demo并查看截图，读取DOM/CSS骨架→生产组件/真实数据映射，在本Issue回执版本、页面/状态及证据；切片/返工同视口对照。
+- [ ] 真实App界面/交互及1440/1024/390亮暗、键盘、焦点、长内容/窄屏复验；非作者亲自查看Demo和实际产品，完成三基准逐项矩阵及四原则复核，不以innerText/功能测试替代视觉验收。
+- [ ] 先有有效RED/反例再实现；官方固定包、原公共消费者/第三合成接入、实际Host/Pi/标准MCP/TLS/OAuth/模拟供应商闭环与兼容反例通过。
+- [ ] **开PR（含draft）前** PM实际向用户展示该候选真实产品截图及已知差异，记录运行源码/构建身份、环境/数据、页面/状态/视口/原图/复现入口和用户明确确认。Demo截图/设计确认、独立PASS及CI不能替代；未取得时不得开PR。
+- [ ] 确认后若main/代码/构建/配置/输入变化影响UI，重核受影响截图/复核/用户确认；再核实际PR head全量Check、获授权squash、准确main push Check及同Issue结案回执。
 
-领取方先核正式发布人/状态/最新正文评论、AGENTS/工程规范、原工作区和最新origin/main，在本Issue留言身份/实例/分支/完整基线并回读。只提交本单范围；回执包含远端完整SHA、实际完成的AB/E项目、命令/结果/证据、FAIL/UNKNOWN/跳过/NOT_RUN、兼容及回退。首次审核可退回一次，二审终审后的问题由PM接手；最终候选按包括PM在内全部作者之外的复核者检查。
+领取前先核Open/正式发布人/最新正文评论、AGENTS/工程规范、工作树及最新origin/main，在本Issue回读「领取·实际Agent/实例·分支·完整基线」。回执列远端完整SHA、三个冻结基准及阅读/映射证据、全部AB/E完成矩阵、命令结果、产品截图/运行身份、用户截图确认已取得或待PM展示、FAIL/UNKNOWN/跳过/NOT_RUN、兼容/回退。允许按已有授权先提交推送任务分支并交接，截图确认门禁位于开PR前。
 
-PR/提交使用 `Refs #本单编号`，不使用合并自动关单关键字。PM在准确main push Check通过、回填工程证据与限制后关闭；不把部署、真实账号、专业质量或用户产品验收写成工程CI成功。
+首次审核可退回一次；二审终审后PM在同Issue接手，按包括PM在内的全部作者以外的非作者复核。PR/提交使用`Refs #本单编号`，不使用合并自动关单关键字。准确main push Check和工程回填齐备后PM关单；不把部署、实号、专业质量或完整用户体验当作工程CI成功。

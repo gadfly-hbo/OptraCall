@@ -1,0 +1,26 @@
+{
+  "result": "PASS",
+  "scope": "v0.2 spec/static HTML preparation; no product engineering or real connection result",
+  "originMain": "74030911ade7a9e06ad1a0213d1fcb93ecbba6dd",
+  "fixedInputFiles": 271,
+  "fixedInputsSha256": "all matched before/after independent review and final PM checks",
+  "independentOutputsSha256": {
+    "report.md": "0f68929816711aef29143750604fb1b8016fbb88eedee8c1f62707ae9c02e2f1",
+    "matrix.md": "ace40c8774d34da08aae6f235853547518a6772b8e9331460e3f28605144c8aa",
+    "input-manifest.json": "3ec6251766d660b3c0fd316eb3cca2996989291fedc7ad30a1e74d44d8b24b3c"
+  },
+  "textJsonReferences": {
+    "result": "PASS",
+    "files": 275,
+    "existing_relative_references": 54
+  },
+  "gitDiffCachedCheckExit": 0,
+  "stagedPathsWithinPreparationDirectory": true,
+  "stagedPathCount": 274,
+  "productExtensionsTestsDependenciesDiffAgainstMain": "empty",
+  "htmlSha256": "59b9bbdb70414a8909e0c4b9ea2386b68f56d8638d5c1c39ebff5c4922b6bb17",
+  "userDesignConfirmation": "PENDING",
+  "issuePublication": "NOT_RUN",
+  "productImplementationCiRealAccountsDeployment": "NOT_RUN",
+  "note": "Independent and PM generated outputs were excluded from the reviewed input freeze. No self-hash is claimed for this output."
+}

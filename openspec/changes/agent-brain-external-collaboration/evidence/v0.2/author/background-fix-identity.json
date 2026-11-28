@@ -1,0 +1,8 @@
+{
+  "beforeHash": "6946bc7744365bdf19f41bb135248693372a4e1be5152bd9a7c0065984cfe060",
+  "afterHash": "59b9bbdb70414a8909e0c4b9ea2386b68f56d8638d5c1c39ebff5c4922b6bb17",
+  "change": "only append :root,:root[data-theme=\"dark\"]{background:var(--canvas)} to existing inline CSS",
+  "javascriptUnchanged": true,
+  "bodyDomAndScriptUnchanged": true,
+  "inlineJavascriptHash": "30cd0c08d1199dbc999b2f4cf244baea090a7f74d77f87d258fdd455d239b473"
+}
