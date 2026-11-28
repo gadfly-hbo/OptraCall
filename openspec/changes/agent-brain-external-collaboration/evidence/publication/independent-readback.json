@@ -1,0 +1,12 @@
+{
+  "checkedAt": "2026-11-28T10:22:36.442434+00:00",
+  "head": "0ff60301fed16321b35f315f15329e415a178450",
+  "originMain": "74030911ade7a9e06ad1a0213d1fcb93ecbba6dd",
+  "sha256": {
+    "spec.md": "c00dfdf456ecb357e387dc8065b1488beaa24fa3a42ebee96ab1eb86cec57c0d",
+    "tasks.md": "f683c32d24e25cf649faff992b270ad64676a002c4a47fc208c4080d19facec7",
+    "ui-demo.html": "59b9bbdb70414a8909e0c4b9ea2386b68f56d8638d5c1c39ebff5c4922b6bb17",
+    "issue-draft.md": "4a2fa578887c0de7a3faa53b7bd45891626a1f80ca047fb727f7623e4ee2faf6"
+  },
+  "scope": "read-only publication readiness; no UI/tests/Git mutations/external writes"
+}

@@ -1,0 +1,25 @@
+{
+  "issue": 155,
+  "url": "https://github.com/gadfly-hbo/OptraCall/issues/155",
+  "stateAtReadback": "open",
+  "publisher": "gadfly-hbo",
+  "pmAgent": "Codex",
+  "confirmationDate": "2026-11-28",
+  "confirmationQuote": "确认，发布issue",
+  "confirmedCommit": "0ff60301fed16321b35f315f15329e415a178450",
+  "designFilesSha256": {
+    "spec.md": "c00dfdf456ecb357e387dc8065b1488beaa24fa3a42ebee96ab1eb86cec57c0d",
+    "tasks.md": "f683c32d24e25cf649faff992b270ad64676a002c4a47fc208c4080d19facec7",
+    "ui-demo.html": "59b9bbdb70414a8909e0c4b9ea2386b68f56d8638d5c1c39ebff5c4922b6bb17"
+  },
+  "githubFileBlobsAtConfirmedCommit": {
+    "spec.md": "e0581911857ff4086bb1e5a4b8ea40e776c6fe8a",
+    "tasks.md": "8c5eeee58728934d417687a031ac71b941a1c91b",
+    "ui-demo.html": "505100ceb03cee109d31d9d596655dbc45b24785"
+  },
+  "issueTitleAndBodyReadbackMatch": true,
+  "publishedBodySha256": "9b39632fa2fc2d83990b72a5a3165d679b5e3467a52e37f188311fc3066bece7",
+  "mainAtPublication": "74030911ade7a9e06ad1a0213d1fcb93ecbba6dd",
+  "designFilesUnchanged": true,
+  "implementationPrCiRealAccountsDeployment": "NOT_RUN"
+}
